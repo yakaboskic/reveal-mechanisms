@@ -16284,7 +16284,7 @@ paths:
                     factor: *id070
                     generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                     provenance:
-                      eaggl_import_id: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                      eaggl_import_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                       factor_id: T2D::Factor1
                       factor_key: KPN.TRAIT:0000398::Factor1
                       model: eaggl-capped-v1
@@ -16299,11 +16299,27 @@ paths:
                       total: 71
                       min: 0.0003
                       max: 0.24
-                      coverage: 'Retained per-trait projections: gene sets in the
-                        top 50 by joint or marginal loading. Search covers this retained
-                        subset, not every gene set in the source library.'
+                      coverage: 'Retained projections, ranked within each gene-set
+                        library: the gene sets in the top 50 of their library by joint
+                        or marginal loading. Search covers this retained subset, not
+                        every gene set in the source library.'
                       available: true
                     gnomad: null
+                    trait_links:
+                      n_phenotypes: 6698
+                      n_linked: 412
+                      n_linked_kpn_traits: 398
+                      n_linked_atlas_traits: 97
+                      own_trait_q: 2.1e-14
+                      top_linked:
+                      - phenotype: T2D
+                        kpn_trait_id: KPN.TRAIT:0000398
+                        name: Type 2 diabetes
+                        phewas_q: 2.1e-14
+                      - phenotype: HbA1c_example
+                        kpn_trait_id: null
+                        name: HbA1c (illustrative phenotype without a KPN id)
+                        phewas_q: 3.4e-09
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16366,8 +16382,8 @@ paths:
       summary: Search and page factor loadings
       description: Search literal gene symbols or gene-set names, library and identifier.
         Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal
-        projections retained in the top 50 by either rank. Gene scores and set scores
-        have separate scales. Missing legacy set scores stay null.
+        projections retained in the top 50 of their library by either rank. Gene scores
+        and set scores have separate scales. Missing legacy set scores stay null.
       parameters:
       - name: source_id
         in: query
@@ -16430,6 +16446,16 @@ paths:
           maxLength: 200
         example: LEPR
         description: ''
+      - name: library
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        example: GO_BP
+        description: Gene-set rows of one library only (ranks are within libraries);
+          total counts the matching rows and summary stays over every library. Genes
+          have no library, so kind=gene ignores it.
       - name: limit
         in: query
         required: false
@@ -16547,7 +16573,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&library=GO_BP&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
           -H ''Accept: application/json'''
   /v1/catalog/gene-sets/{gene_set_id}:
     get:
@@ -16602,6 +16628,10 @@ paths:
                     collection: null
                     limitations:
                     - Illustrative unavailable-object response; no provenance is fabricated.
+                    external_links:
+                    - label: Gene-set provenance on the Translator portal
+                      kind: portal_gene_set
+                      href: https://translator.broadinstitute.org/artifact_provenance/gene_set/details/id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -18355,7 +18385,7 @@ paths:
                 type: string
                 const: no-referrer
             Location:
-              schema: &id132
+              schema: &id133
                 type: string
                 format: uri
               example: https://reveal.example.org/research/connect?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
@@ -33832,7 +33862,7 @@ components:
             or eaggl-capped-v1 (KPN reference generations).'
         catalog_file:
           $ref: '#/components/schemas/DapperFile'
-        reference_generation_id: &id119
+        reference_generation_id: &id120
           type: string
           description: 'Reference generation id: 64 lowercase hex characters.'
           pattern: ^[a-f0-9]{64}$
@@ -34180,7 +34210,7 @@ components:
             $ref: '#/components/schemas/SourceRef'
         archive:
           $ref: '#/components/schemas/ReferenceArchive'
-        lightning_audit_id: &id148
+        lightning_audit_id: &id149
           type: string
           format: uuid
         lightning_context:
@@ -34718,7 +34748,7 @@ components:
           type: array
           items: *id103
           maxItems: 3
-        evidence_package_sha256: &id114
+        evidence_package_sha256: &id115
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -35799,16 +35829,16 @@ components:
       - rank
       additionalProperties: false
       description: One retained gene weight or gene-set projection. rank is the full
-        factor gene rank or the original selected-metric gene-set projection rank,
-        unchanged by search/pagination; legacy sets preserve imported rank. joint_rank
-        and marginal_rank are original projection ranks. Legacy gene-set weights are
-        null.
+        factor gene rank or the original selected-metric gene-set projection rank
+        within its library, unchanged by search, library filter or pagination; legacy
+        sets preserve imported rank. joint_rank and marginal_rank are original projection
+        ranks within the library. Legacy gene-set weights are null.
     FactorDetail:
       type: object
       properties:
         factor:
           $ref: '#/components/schemas/EagglFactor'
-        generation_id: &id112
+        generation_id: &id113
           anyOf:
           - type: string
             pattern: ^[a-f0-9]{64}$
@@ -35832,6 +35862,8 @@ components:
           - factor_key
           - model
           additionalProperties: false
+          description: 'eaggl_import_id is the reference release id: a release holds
+            the EAGGL fit with no separate import id.'
         genes:
           $ref: '#/components/schemas/LoadingSummary'
         gene_sets:
@@ -35840,6 +35872,54 @@ components:
           anyOf:
           - $ref: '#/components/schemas/GnomadImport'
           - type: 'null'
+        trait_links:
+          type: object
+          properties:
+            n_phenotypes: *id111
+            n_linked: *id111
+            n_linked_kpn_traits: *id111
+            n_linked_atlas_traits: *id111
+            own_trait_q:
+              anyOf:
+              - &id112
+                type: number
+                minimum: 0
+                maximum: 1
+              - type: 'null'
+            top_linked:
+              type: array
+              items:
+                type: object
+                properties:
+                  phenotype:
+                    type: string
+                  kpn_trait_id:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                  name:
+                    type: string
+                  phewas_q: *id112
+                required:
+                - phenotype
+                - kpn_trait_id
+                - name
+                - phewas_q
+                additionalProperties: false
+          required:
+          - n_phenotypes
+          - n_linked
+          - n_linked_kpn_traits
+          - n_linked_atlas_traits
+          - own_trait_q
+          - top_linked
+          additionalProperties: false
+          description: 'Present when the release carries factor-trait links (eaggl
+            trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes
+            tested and linked, the q of the factor''s own trait (null when none was
+            reported) and its best links by phewas_q. A phenotype without a KPN trait
+            id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold,
+            not a negative.'
       required:
       - factor
       - generation_id
@@ -35852,7 +35932,7 @@ components:
       properties:
         source_id:
           type: string
-        generation_id: *id112
+        generation_id: *id113
         kind:
           type: string
           enum:
@@ -35918,7 +35998,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
-        generation_id: *id112
+        generation_id: *id113
         name:
           type: string
         library:
@@ -35935,12 +36015,12 @@ components:
           - type: 'null'
         object:
           anyOf:
-          - &id113
+          - &id114
             type: object
             additionalProperties: true
           - type: 'null'
-        metadata: *id113
-        provenance: *id113
+        metadata: *id114
+        provenance: *id114
         collection:
           anyOf:
           - type: object
@@ -35957,7 +36037,7 @@ components:
               gene_set_count: *id111
               object:
                 anyOf:
-                - *id113
+                - *id114
                 - type: 'null'
               payload_sha256:
                 anyOf:
@@ -35976,6 +36056,29 @@ components:
           type: array
           items:
             type: string
+        external_links:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              href:
+                type: string
+                format: uri
+              kind:
+                type: string
+                enum:
+                - portal_gene_set
+                - portal_collection
+            required:
+            - label
+            - href
+            - kind
+            additionalProperties: false
+          description: Translator artifact-provenance portal pages of the gene set
+            and of its collection (the portal's collection id), built from ids and
+            never fetched.
       required:
       - id
       - generation_id
@@ -35989,10 +36092,14 @@ components:
       - collection
       - limitations
       additionalProperties: false
-      description: Imported public reference data, never an owner account graph. object
-        is the exact stored GeneSet or null; provenance preserves imported collection
-        prefixes, organizations, datasets, files and activities. Unknown/derived account
-        aliases return 404.
+      description: 'Imported public reference data, never an owner account graph.
+        object is the exact stored GeneSet or null. provenance is this gene set''s
+        own lineage in its collection''s provenance (prefixes kept whole): its generating
+        activities, their inputs, the datasets those derive from (including links
+        from REVEAL''s curated source-dataset map) and their organizations; inputs
+        of one activity that share one upstream lineage are represented by one of
+        them, and limitations say so. Gene sets the release does not reference (by
+        a projection or a beta) and unknown/derived account aliases return 404.'
     WorkspaceEvent:
       type: object
       properties:
@@ -36064,7 +36171,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id114
+        source_revision: *id115
       required:
       - id
       - source_id
@@ -36086,7 +36193,7 @@ components:
           type: string
         version_id:
           type: string
-        sha256: *id114
+        sha256: *id115
         size_bytes:
           type: integer
           minimum: 0
@@ -36111,7 +36218,7 @@ components:
         segment_count:
           type: integer
           minimum: 1
-        original_sha256: *id114
+        original_sha256: *id115
       required:
       - storage
       - format
@@ -36131,7 +36238,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id114
+        sha256: *id115
         status:
           type: string
           enum:
@@ -36182,7 +36289,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id114
+        sha256: *id115
       required:
       - draft_id
       - filename
@@ -36276,7 +36383,7 @@ components:
           - canonical_fixture
         fixture_version:
           type: string
-        content_sha256: *id114
+        content_sha256: *id115
         scientific_acceptance:
           type: string
           enum:
@@ -36294,7 +36401,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id114
+        payload_sha256: *id115
         raw:
           type: object
           additionalProperties: true
@@ -36443,7 +36550,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         duration_ms:
           anyOf:
@@ -36467,7 +36574,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id114
+              snapshot_sha256: *id115
             required:
             - scope
             - nodes
@@ -36591,7 +36698,7 @@ components:
           type: string
           const: analysis_outcome
         outcome_id: *id103
-        evidence_package_sha256: *id114
+        evidence_package_sha256: *id115
       required:
       - kind
       - outcome_id
@@ -36637,7 +36744,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id114
+        artifact_sha256: *id115
         download_url:
           anyOf:
           - type: string
@@ -36653,15 +36760,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id114
-        outcome_sha256: *id114
+        evidence_package_sha256: *id115
+        outcome_sha256: *id115
         runtime_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         execution_mode:
           type: string
@@ -36723,8 +36830,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id114
-              response_sha256: *id114
+              request_sha256: *id115
+              response_sha256: *id115
             required:
             - sequence
             - graph
@@ -36997,13 +37104,13 @@ components:
     LeaderboardDirections:
       type: object
       properties:
-        SUPPORTS: &id115
+        SUPPORTS: &id116
           type: integer
           minimum: 0
-        DISPUTES: *id115
-        MIXED: *id115
-        NEUTRAL: *id115
-        UNKNOWN: *id115
+        DISPUTES: *id116
+        MIXED: *id116
+        NEUTRAL: *id116
+        UNKNOWN: *id116
       required:
       - SUPPORTS
       - DISPUTES
@@ -37014,14 +37121,14 @@ components:
     LeaderboardMetrics:
       type: object
       properties:
-        account_count: *id115
-        upvotes: *id115
-        downvotes: *id115
-        voter_count: *id115
-        account_gap_count: *id115
-        explored_gap_count: *id115
-        claim_count: *id115
-        researcher_count: *id115
+        account_count: *id116
+        upvotes: *id116
+        downvotes: *id116
+        voter_count: *id116
+        account_gap_count: *id116
+        explored_gap_count: *id116
+        claim_count: *id116
+        researcher_count: *id116
         net_votes:
           type: integer
         overall_score:
@@ -37131,18 +37238,18 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: *id115
-        voting_participants: *id115
+        cohort_size: *id116
+        voting_participants: *id116
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id115
-            uncredited_accounts: *id115
-            conflicting_accounts: *id115
-            invalid_public_accounts: *id115
-            excluded_evidence_paths: *id115
-            fixture_explorations: *id115
-            uncredited_explorations: *id115
+            fixture_accounts: *id116
+            uncredited_accounts: *id116
+            conflicting_accounts: *id116
+            invalid_public_accounts: *id116
+            excluded_evidence_paths: *id116
+            fixture_explorations: *id116
+            uncredited_explorations: *id116
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37223,20 +37330,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id116
+        cohort_size: &id117
           type: integer
           minimum: 0
-        voting_participants: *id116
+        voting_participants: *id117
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id116
-            uncredited_accounts: *id116
-            conflicting_accounts: *id116
-            invalid_public_accounts: *id116
-            excluded_evidence_paths: *id116
-            fixture_explorations: *id116
-            uncredited_explorations: *id116
+            fixture_accounts: *id117
+            uncredited_accounts: *id117
+            conflicting_accounts: *id117
+            invalid_public_accounts: *id117
+            excluded_evidence_paths: *id117
+            fixture_explorations: *id117
+            uncredited_explorations: *id117
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37379,20 +37486,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id117
+        cohort_size: &id118
           type: integer
           minimum: 0
-        voting_participants: *id117
+        voting_participants: *id118
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id117
-            uncredited_accounts: *id117
-            conflicting_accounts: *id117
-            invalid_public_accounts: *id117
-            excluded_evidence_paths: *id117
-            fixture_explorations: *id117
-            uncredited_explorations: *id117
+            fixture_accounts: *id118
+            uncredited_accounts: *id118
+            conflicting_accounts: *id118
+            invalid_public_accounts: *id118
+            excluded_evidence_paths: *id118
+            fixture_explorations: *id118
+            uncredited_explorations: *id118
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37460,7 +37567,7 @@ components:
           $ref: '#/components/schemas/LeaderboardEvidence'
         entry:
           $ref: '#/components/schemas/LeaderboardEntry'
-        total: *id115
+        total: *id116
         items:
           type: array
           items:
@@ -45736,7 +45843,7 @@ components:
       type: object
       properties:
         job_id: *id103
-        package_sha256: *id114
+        package_sha256: *id115
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -45802,7 +45909,7 @@ components:
     KpnTrait:
       type: object
       properties:
-        id: &id118
+        id: &id119
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         name:
@@ -45861,7 +45968,7 @@ components:
           - type: 'null'
         kpn_trait_id:
           anyOf:
-          - *id118
+          - *id119
           - type: 'null'
         label:
           anyOf:
@@ -45875,7 +45982,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        archived_reference_factor_id: &id121
+        archived_reference_factor_id: &id122
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -45902,19 +46009,19 @@ components:
         reason:
           type: string
           const: reference_generation_superseded
-        archived_at: &id120
+        archived_at: &id121
           type: string
           format: date-time
-        from_reference_generation: *id119
-        to_reference_generation: *id119
+        from_reference_generation: *id120
+        to_reference_generation: *id120
         history:
           type: array
           items:
             type: object
             properties:
-              from_reference_generation: *id119
-              to_reference_generation: *id119
-              archived_at: *id120
+              from_reference_generation: *id120
+              to_reference_generation: *id120
+              archived_at: *id121
             required:
             - from_reference_generation
             - to_reference_generation
@@ -45954,7 +46061,7 @@ components:
                 - type: 'null'
               source_revision:
                 anyOf:
-                - *id121
+                - *id122
                 - type: 'null'
             required:
             - id
@@ -45967,17 +46074,17 @@ components:
           properties:
             job_id:
               anyOf:
-              - &id122
+              - &id123
                 type: string
                 format: uuid
               - type: 'null'
             request_id:
               anyOf:
-              - *id122
+              - *id123
               - type: 'null'
             evidence_package_sha256:
               anyOf:
-              - *id121
+              - *id122
               - type: 'null'
             account_id:
               anyOf:
@@ -45988,7 +46095,7 @@ components:
               - type: 'null'
             outcome_id:
               anyOf:
-              - *id122
+              - *id123
               - type: 'null'
           required:
           - job_id
@@ -46022,8 +46129,8 @@ components:
         format:
           type: string
           const: reveal.archived-reference-factor/1
-        archive_id: *id121
-        generation_id: *id119
+        archive_id: *id122
+        generation_id: *id120
         model:
           type: string
           enum:
@@ -46040,7 +46147,7 @@ components:
           type: string
         kpn_trait_id:
           anyOf:
-          - *id118
+          - *id119
           - type: 'null'
         label:
           type: string
@@ -46073,7 +46180,7 @@ components:
             properties:
               symbol:
                 type: string
-              loading: &id123
+              loading: &id124
                 type: number
             required:
             - symbol
@@ -46109,15 +46216,15 @@ components:
                 - type: 'null'
               joint_loading:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
               marginal_loading:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
               score:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
             required:
             - rank
@@ -46130,8 +46237,8 @@ components:
             - marginal_loading
             - score
             additionalProperties: false
-        generation_manifest_sha256: *id121
-        captured_at: *id120
+        generation_manifest_sha256: *id122
+        captured_at: *id121
       required:
       - format
       - archive_id
@@ -46194,7 +46301,7 @@ components:
     LocalWorkCreate:
       type: object
       properties:
-        draft_id: &id124
+        draft_id: &id125
           type: string
           format: uuid
         draft_version:
@@ -46207,15 +46314,15 @@ components:
     LocalWorkGrant:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: &id125
+        grant_id: *id125
+        expires_at: &id126
           type: string
           format: date-time
         revoked_at:
           anyOf:
-          - *id125
+          - *id126
           - type: 'null'
-        created_at: *id125
+        created_at: *id126
       required:
       - grant_id
       - expires_at
@@ -46223,7 +46330,7 @@ components:
     LocalResearchOperation:
       type: object
       properties:
-        id: *id124
+        id: *id125
         kind:
           type: string
           enum:
@@ -46243,13 +46350,13 @@ components:
           - rejected
           - failed
           - cancelled
-        local_work_id: *id124
-        created_at: *id125
-        completed_at: *id125
-        result: &id126
+        local_work_id: *id125
+        created_at: *id126
+        completed_at: *id126
+        result: &id127
           type: object
           additionalProperties: true
-        error: &id128
+        error: &id129
           anyOf:
           - type: object
             properties:
@@ -46262,7 +46369,7 @@ components:
             - detail
             additionalProperties: false
           - type: 'null'
-        report: *id126
+        report: *id127
         account_ids:
           type: array
           items:
@@ -46288,8 +46395,8 @@ components:
     LocalWork:
       type: object
       properties:
-        id: *id124
-        research_request_id: *id124
+        id: *id125
+        research_request_id: *id125
         request:
           $ref: '#/components/schemas/ResearchRequest'
         state:
@@ -46299,12 +46406,12 @@ components:
           - ready
           - preparation_failed
           - closed
-        created_at: *id125
-        last_activity: *id125
+        created_at: *id126
+        last_activity: *id126
         last_action:
           type: string
-        expires_at: *id125
-        reference_generation_id: &id127
+        expires_at: *id126
+        reference_generation_id: &id128
           type: string
           pattern: ^[a-f0-9]{64}$
         package_id:
@@ -46313,11 +46420,11 @@ components:
           - type: 'null'
         package_sha256:
           anyOf:
-          - *id127
+          - *id128
           - type: 'null'
-        last_error: *id128
-        closed_at: *id125
-        preparation_operation_id: *id124
+        last_error: *id129
+        closed_at: *id126
+        preparation_operation_id: *id125
         submissions:
           type: array
           items:
@@ -46331,7 +46438,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: &id129
+        instructions: &id130
           type: object
           properties:
             codex:
@@ -46342,7 +46449,7 @@ components:
           - codex
           - claude_code
           additionalProperties: false
-        local_work_id: *id124
+        local_work_id: *id125
       required:
       - id
       - research_request_id
@@ -46375,9 +46482,9 @@ components:
     LocalWorkGrantIssued:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: *id125
-        local_work_id: *id124
+        grant_id: *id125
+        expires_at: *id126
+        local_work_id: *id125
         token:
           type: string
           pattern: ^rvlm_
@@ -46387,7 +46494,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: *id129
+        instructions: *id130
       required:
       - grant_id
       - expires_at
@@ -46408,7 +46515,7 @@ components:
           type: string
         filename:
           type: string
-        sha256: *id127
+        sha256: *id128
         size_bytes:
           type: integer
           minimum: 0
@@ -46432,7 +46539,7 @@ components:
           type: string
         path:
           type: string
-        sha256: *id127
+        sha256: *id128
         size_bytes:
           type: integer
           minimum: 0
@@ -46459,9 +46566,9 @@ components:
           type: string
           enum:
           - reveal.context-manifest/2
-        seed_sha256: *id127
-        package_sha256: *id127
-        context_sha256: *id127
+        seed_sha256: *id128
+        package_sha256: *id128
+        context_sha256: *id128
         files:
           type: array
           items:
@@ -46483,9 +46590,9 @@ components:
           type: string
           enum:
           - reveal.validation-context-export/2
-        seed_sha256: *id127
-        package_sha256: *id127
-        context_sha256: *id127
+        seed_sha256: *id128
+        package_sha256: *id128
+        context_sha256: *id128
         receipt_ids:
           type: array
           items:
@@ -46545,8 +46652,8 @@ components:
           type: string
           enum:
           - progressive
-        research_request_id: *id124
-        reference_generation_id: *id127
+        research_request_id: *id125
+        reference_generation_id: *id128
       required:
       - package_version
       - seed_version
@@ -46565,10 +46672,10 @@ components:
         properties:
           package_id:
             type: string
-          package_sha256: *id127
+          package_sha256: *id128
           package:
             $ref: '#/components/schemas/ResearchSeed'
-          manifest: *id126
+          manifest: *id127
           artifacts:
             type: array
             items:
@@ -46589,7 +46696,7 @@ components:
             type: string
             enum:
             - preparing
-          operation_id: *id124
+          operation_id: *id125
         required:
         - state
         - operation_id
@@ -46612,7 +46719,7 @@ components:
           type: string
           pattern: ^rvls_[A-Za-z0-9_-]{43}$
           writeOnly: true
-        token_sha256: *id127
+        token_sha256: *id128
       required:
       - ticket
       - token_sha256
@@ -46624,10 +46731,10 @@ components:
     ResearchSetupConnection:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: *id125
-        local_work_id: *id124
-        package_sha256: *id127
+        grant_id: *id125
+        expires_at: *id126
+        local_work_id: *id125
+        package_sha256: *id128
         mcp_url:
           type: string
           format: uri
@@ -46654,19 +46761,19 @@ components:
           enum:
           - codex
           - claude_code
-        local_work_id: &id130
+        local_work_id: &id131
           type: string
           format: uuid
-        research_request_id: *id130
-        reference_generation_id: &id131
+        research_request_id: *id131
+        reference_generation_id: &id132
           type: string
           pattern: ^[a-f0-9]{64}$
-        package_sha256: *id131
-        mcp_url: *id132
-        device_authorization_url: *id132
-        token_url: *id132
-        revocation_url: *id132
-        return_url: *id132
+        package_sha256: *id132
+        mcp_url: *id133
+        device_authorization_url: *id133
+        token_url: *id133
+        revocation_url: *id133
+        return_url: *id133
         files:
           type: array
           items:
@@ -46674,7 +46781,7 @@ components:
             properties:
               path:
                 type: string
-              sha256: *id131
+              sha256: *id132
               size_bytes:
                 type: integer
                 minimum: 0
@@ -46729,15 +46836,15 @@ components:
     ResearchOAuthRegistration:
       type: object
       properties:
-        client_name: &id133
+        client_name: &id134
           type: string
           maxLength: 120
-        redirect_uris: &id134
+        redirect_uris: &id135
           type: array
-          items: *id132
+          items: *id133
           maxItems: 10
           uniqueItems: true
-        grant_types: &id135
+        grant_types: &id136
           type: array
           items:
             type: string
@@ -46747,17 +46854,17 @@ components:
             - urn:ietf:params:oauth:grant-type:device_code
           minItems: 1
           uniqueItems: true
-        response_types: &id136
+        response_types: &id137
           type: array
           items:
             type: string
             enum:
             - code
-        token_endpoint_auth_method: &id137
+        token_endpoint_auth_method: &id138
           type: string
           enum:
           - none
-        scope: &id138
+        scope: &id139
           type: string
       required: []
       additionalProperties: false
@@ -46770,12 +46877,12 @@ components:
     ResearchOAuthClient:
       type: object
       properties:
-        client_name: *id133
-        redirect_uris: *id134
-        grant_types: *id135
-        response_types: *id136
-        token_endpoint_auth_method: *id137
-        scope: *id138
+        client_name: *id134
+        redirect_uris: *id135
+        grant_types: *id136
+        response_types: *id137
+        token_endpoint_auth_method: *id138
+        scope: *id139
         client_id:
           type: string
         client_id_issued_at:
@@ -46796,10 +46903,10 @@ components:
       properties:
         client_id:
           type: string
-        resource: *id132
+        resource: *id133
         scope:
           type: string
-        local_work_id: *id130
+        local_work_id: *id131
       required:
       - client_id
       - resource
@@ -46812,8 +46919,8 @@ components:
           writeOnly: false
         user_code:
           type: string
-        verification_uri: *id132
-        verification_uri_complete: *id132
+        verification_uri: *id133
+        verification_uri_complete: *id133
         expires_in:
           type: integer
           const: 600
@@ -46832,9 +46939,9 @@ components:
       oneOf:
       - type: object
         properties:
-          client_id: &id139
+          client_id: &id140
             type: string
-          resource: *id132
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46842,7 +46949,7 @@ components:
           code:
             type: string
             writeOnly: true
-          redirect_uri: *id132
+          redirect_uri: *id133
           code_verifier:
             type: string
             minLength: 43
@@ -46858,8 +46965,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id139
-          resource: *id132
+          client_id: *id140
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46875,8 +46982,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id139
-          resource: *id132
+          client_id: *id140
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46909,11 +47016,11 @@ components:
           maximum: 900
         scope:
           type: string
-        resource: *id132
-        local_work_id: *id130
-        package_sha256: *id131
-        mcp_url: *id132
-        grant_id: *id130
+        resource: *id133
+        local_work_id: *id131
+        package_sha256: *id132
+        mcp_url: *id133
+        grant_id: *id131
       required:
       - access_token
       - token_type
@@ -46949,7 +47056,7 @@ components:
     ResearchOAuthConsent:
       type: object
       properties:
-        request_id: *id130
+        request_id: *id131
         kind:
           type: string
           enum:
@@ -46959,7 +47066,7 @@ components:
           type: string
         client_name:
           type: string
-        scopes: &id140
+        scopes: &id141
           type: array
           items:
             type: string
@@ -46968,16 +47075,16 @@ components:
             - research:write
           minItems: 1
           uniqueItems: true
-        resource: *id132
+        resource: *id133
         requested_local_work_id:
           anyOf:
-          - *id130
+          - *id131
           - type: 'null'
         redirect_uri:
           anyOf:
-          - *id132
+          - *id133
           - type: 'null'
-        expires_at: &id141
+        expires_at: &id142
           type: string
           format: date-time
         status:
@@ -47004,10 +47111,10 @@ components:
     ResearchOAuthDecision:
       type: object
       properties:
-        request_id: *id130
+        request_id: *id131
         user_code:
           type: string
-        local_work_id: *id130
+        local_work_id: *id131
         approve:
           type: boolean
       required:
@@ -47035,7 +47142,7 @@ components:
       oneOf:
       - type: object
         properties:
-          redirect_url: *id132
+          redirect_url: *id133
         required:
         - redirect_url
         additionalProperties: false
@@ -47043,19 +47150,19 @@ components:
         properties:
           approved:
             type: boolean
-          local_work_id: *id130
+          local_work_id: *id131
         required:
         - approved
         additionalProperties: false
     ResearchAuthorizationMetadata:
       type: object
       properties:
-        issuer: *id132
-        authorization_endpoint: *id132
-        token_endpoint: *id132
-        registration_endpoint: *id132
-        device_authorization_endpoint: *id132
-        revocation_endpoint: *id132
+        issuer: *id133
+        authorization_endpoint: *id133
+        token_endpoint: *id133
+        registration_endpoint: *id133
+        device_authorization_endpoint: *id133
+        revocation_endpoint: *id133
         response_types_supported:
           type: array
           items:
@@ -47097,11 +47204,11 @@ components:
     ResearchProtectedResourceMetadata:
       type: object
       properties:
-        resource: *id132
+        resource: *id133
         authorization_servers:
           type: array
-          items: *id132
-        scopes_supported: *id140
+          items: *id133
+        scopes_supported: *id141
         bearer_methods_supported:
           type: array
           items:
@@ -47122,7 +47229,7 @@ components:
       properties:
         path:
           type: string
-        sha256: *id131
+        sha256: *id132
         size_bytes:
           type: integer
           minimum: 0
@@ -47130,12 +47237,12 @@ components:
           type: string
           enum:
           - application/json
-        download_url: *id132
+        download_url: *id133
         authentication:
           type: string
           enum:
           - none
-        expires_at: *id141
+        expires_at: *id142
       required:
       - path
       - sha256
@@ -47152,15 +47259,15 @@ components:
           type: string
           enum:
           - reveal.public-reference-capture/1
-        capture_id: *id131
-        expires_at: *id141
+        capture_id: *id132
+        expires_at: *id142
         reference_generation_id:
           anyOf:
-          - *id131
+          - *id132
           - type: 'null'
         operation:
           type: string
-        arguments: &id142
+        arguments: &id143
           type: object
           additionalProperties: true
         reader_version:
@@ -47173,15 +47280,15 @@ components:
           - imported_reference
           - bioindex_small_phenotype
           - external_kg
-        source: *id142
-        result: *id142
-        raw_sha256: *id131
-        metric_definitions: *id142
-        dapper_context: *id142
-        source_artifacts: *id142
+        source: *id143
+        result: *id143
+        raw_sha256: *id132
+        metric_definitions: *id143
+        dapper_context: *id143
+        source_artifacts: *id143
         source_ref:
           anyOf:
-          - *id142
+          - *id143
           - type: 'null'
         dapper_file_id:
           anyOf:
@@ -47189,7 +47296,7 @@ components:
           - type: 'null'
         object_resolution:
           type: array
-          items: *id142
+          items: *id143
         artifacts:
           type: array
           items:
@@ -47228,7 +47335,7 @@ components:
               type: 'null'
         else:
           properties:
-            reference_generation_id: *id131
+            reference_generation_id: *id132
       description: MCP get_public_capture/data/connected-KG response. Exact server-retained
         public bytes and context; no researcher prompts, work IDs or private scientific
         closures. Default retention 7 days; use the explicit expires_at, never assume
@@ -47242,13 +47349,13 @@ components:
     AdminAccountSummary:
       type: object
       properties:
-        record_id: &id143
+        record_id: &id144
           type: string
           pattern: ^[a-f0-9]{64}$
-        owner_user_id: &id144
+        owner_user_id: &id145
           type: string
           format: uuid
-        summary: &id145
+        summary: &id146
           $ref: '#/components/schemas/AccountSummary'
       required:
       - record_id
@@ -47262,9 +47369,9 @@ components:
     AdminAccountDetail:
       type: object
       properties:
-        record_id: *id143
-        owner_user_id: *id144
-        summary: *id145
+        record_id: *id144
+        owner_user_id: *id145
+        summary: *id146
         result:
           $ref: '#/components/schemas/AccountResult'
         paragraph:
@@ -47288,9 +47395,9 @@ components:
     AdminExplorationSummary:
       type: object
       properties:
-        record_id: *id144
-        owner_user_id: *id144
-        summary: &id146
+        record_id: *id145
+        owner_user_id: *id145
+        summary: &id147
           $ref: '#/components/schemas/AnalysisOutcomeSummary'
       required:
       - record_id
@@ -47303,9 +47410,9 @@ components:
     AdminExplorationDetail:
       type: object
       properties:
-        record_id: *id144
-        owner_user_id: *id144
-        summary: *id146
+        record_id: *id145
+        owner_user_id: *id145
+        summary: *id147
         result:
           $ref: '#/components/schemas/AnalysisOutcome'
       required:
@@ -47509,10 +47616,10 @@ components:
     CfdeAssessment:
       type: object
       properties:
-        id: &id147
+        id: &id148
           type: string
           format: uuid
-        draft_id: *id147
+        draft_id: *id148
         draft_version:
           type: integer
           minimum: 1
@@ -47627,7 +47734,7 @@ components:
     LightningAuditInput:
       type: object
       properties:
-        draft_id: *id148
+        draft_id: *id149
         draft_version:
           type: integer
           minimum: 1
@@ -47677,7 +47784,7 @@ components:
                   its relevance; distinguish stored evidence from a proposed interpretation.'
               evidence_refs:
                 type: array
-                items: &id149
+                items: &id150
                   type: string
                 minItems: 1
                 description: Exact evidence_ref IDs in this package that support this
@@ -47695,20 +47802,20 @@ components:
             experimental program.'
         missing_evidence:
           type: array
-          items: *id149
+          items: *id150
           description: 'At most 2 items of 25 words each: specific missing observations
             or assumptions needed to test the proposed explanation, not claims that
             missing entities do not exist.'
         next_steps:
           type: array
-          items: *id149
+          items: *id150
           minItems: 1
           description: 'At most 2 items of 25 words each: prioritized concrete checks
             an agent could perform next to test the direction. State these as future
             work; at least one actionable check is required.'
         limitations:
           type: array
-          items: *id149
+          items: *id150
           minItems: 1
           description: 'At most 2 items of 25 words each: required scope caveats for
             this bounded package, including relevant coverage omissions, source/species
@@ -47789,9 +47896,9 @@ components:
           enum:
           - online
           - local
-        id: *id148
-        research_request_id: *id148
-        created_at: &id150
+        id: *id149
+        research_request_id: *id149
+        created_at: &id151
           type: string
           format: date-time
       required:
@@ -47828,7 +47935,7 @@ components:
     LightningAudit:
       type: object
       properties:
-        id: *id148
+        id: *id149
         kind:
           type: string
           const: lightning_audit
@@ -47840,8 +47947,8 @@ components:
           - succeeded
           - failed
           - interrupted
-        research_request_id: *id148
-        source_draft_id: *id148
+        research_request_id: *id149
+        source_draft_id: *id149
         source_draft_version:
           type: integer
           minimum: 1
@@ -47859,14 +47966,14 @@ components:
           - id
           - text
           additionalProperties: false
-        created_at: *id150
-        updated_at: *id150
+        created_at: *id151
+        updated_at: *id151
         completed_at:
           anyOf:
-          - *id150
+          - *id151
           - type: 'null'
-        continuation_expires_at: *id150
-        reference_generation_id: &id151
+        continuation_expires_at: *id151
+        reference_generation_id: &id152
           type: string
           pattern: ^[a-f0-9]{64}$
         result:
@@ -47888,9 +47995,9 @@ components:
               type: string
             prompt_version:
               type: string
-            source_state_sha256: *id151
-            request_sha256: *id151
-            response_sha256: *id151
+            source_state_sha256: *id152
+            request_sha256: *id152
+            response_sha256: *id152
           required:
           - model
           - prompt_version
@@ -47974,16 +48081,16 @@ components:
     ProvenanceAnnotation:
       type: object
       properties:
-        trace_count: &id152
+        trace_count: &id153
           type: integer
           minimum: 0
-        page_trace_count: *id152
-        trace_ids: &id153
+        page_trace_count: *id153
+        trace_ids: &id154
           type: array
           items:
             type: string
-        dataset_ids: *id153
-        organization_ids: *id153
+        dataset_ids: *id154
+        organization_ids: *id154
         resolution:
           type: string
           enum:
@@ -48078,8 +48185,8 @@ components:
             - evidence_derivation
             - inherited_source_claim
             - factor_projection
-        input_roles: *id153
-        organization_ids: *id153
+        input_roles: *id154
+        organization_ids: *id154
         organization_attributions:
           type: array
           items:
@@ -48091,7 +48198,7 @@ components:
                 type: string
               path_steps:
                 type: array
-                items: &id154
+                items: &id155
                   type: object
                   properties:
                     edge_id:
@@ -48112,8 +48219,8 @@ components:
             additionalProperties: false
         path_steps:
           type: array
-          items: *id154
-        path_edge_ids: *id153
+          items: *id155
+        path_edge_ids: *id154
         direction:
           type: string
           enum:
@@ -48192,12 +48299,12 @@ components:
           type: string
         observations:
           type: array
-          items: &id155
+          items: &id156
             type: object
             additionalProperties: true
         provenance_source:
           type: array
-          items: *id155
+          items: *id156
       required:
       - id
       - subject
@@ -48210,23 +48317,10 @@ components:
       properties:
         dataset_id:
           type: string
-        claim_count: *id152
-        claim_ids: *id153
-        trace_count: *id152
+        claim_count: *id153
+        claim_ids: *id154
+        trace_count: *id153
         classification_claim_counts:
-          type: object
-          properties:
-            proposition_reference: *id152
-            evidence_derivation: *id152
-            inherited_source_claim: *id152
-            factor_projection: *id152
-          required:
-          - proposition_reference
-          - evidence_derivation
-          - inherited_source_claim
-          - factor_projection
-          additionalProperties: false
-        classification_claim_ids:
           type: object
           properties:
             proposition_reference: *id153
@@ -48239,7 +48333,20 @@ components:
           - inherited_source_claim
           - factor_projection
           additionalProperties: false
-        input_roles: *id153
+        classification_claim_ids:
+          type: object
+          properties:
+            proposition_reference: *id154
+            evidence_derivation: *id154
+            inherited_source_claim: *id154
+            factor_projection: *id154
+          required:
+          - proposition_reference
+          - evidence_derivation
+          - inherited_source_claim
+          - factor_projection
+          additionalProperties: false
+        input_roles: *id154
       required:
       - dataset_id
       - claim_count
@@ -48257,21 +48364,21 @@ components:
       properties:
         organization_id:
           type: string
-        claim_count: *id152
-        claim_ids: *id153
-        dataset_count: *id152
-        dataset_ids: *id153
-        claim_dataset_count: *id152
+        claim_count: *id153
+        claim_ids: *id154
+        dataset_count: *id153
+        dataset_ids: *id154
+        claim_dataset_count: *id153
         roles:
           type: object
           additionalProperties:
             type: object
             properties:
-              claim_count: *id152
-              claim_ids: *id153
-              dataset_count: *id152
-              dataset_ids: *id153
-              claim_dataset_count: *id152
+              claim_count: *id153
+              claim_ids: *id154
+              dataset_count: *id153
+              dataset_ids: *id154
+              claim_dataset_count: *id153
             required:
             - claim_count
             - claim_ids
@@ -48293,34 +48400,34 @@ components:
     ProvenanceCoverage:
       type: object
       properties:
-        status: &id156
+        status: &id157
           type: string
           enum:
           - complete
           - incomplete
         counts_are_lower_bounds:
           type: boolean
-        claim_count: *id152
-        resolved_claim_count: *id152
-        trace_count: *id152
+        claim_count: *id153
+        resolved_claim_count: *id153
+        trace_count: *id153
         lineage_resolution:
           type: object
           properties:
-            status: *id156
-            issue_count: *id152
+            status: *id157
+            issue_count: *id153
           required:
           - status
           - issue_count
           additionalProperties: false
         retained_projection_coverage:
           type: array
-          items: *id155
+          items: *id156
         recovery_status:
           type: array
-          items: *id155
+          items: *id156
         issues:
           type: array
-          items: *id155
+          items: *id156
       required:
       - status
       - counts_are_lower_bounds
@@ -48351,9 +48458,9 @@ components:
           type: string
         document_sha256:
           type: string
-        publication_version: *id152
-        reference_generation_ids: *id153
-        supplement_ids: *id153
+        publication_version: *id153
+        reference_generation_ids: *id154
+        supplement_ids: *id154
         source_observations:
           type: array
           items:
@@ -48429,8 +48536,8 @@ components:
               type: integer
               minimum: 1
               maximum: 250
-            offset: *id152
-            total: *id152
+            offset: *id153
+            total: *id153
             next_cursor:
               anyOf:
               - type: string

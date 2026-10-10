@@ -997,7 +997,7 @@ export interface paths {
         };
         /**
          * Search and page factor loadings
-         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
+         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 of their library by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
          */
         get: operations["getFactorLoadings"];
         put?: never;
@@ -4611,7 +4611,7 @@ export interface components {
             coverage: string;
             available: boolean;
         };
-        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null. */
+        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank within its library, unchanged by search, library filter or pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks within the library. Legacy gene-set weights are null. */
         FactorLoading: {
             id: string;
             label: string;
@@ -4629,6 +4629,7 @@ export interface components {
         FactorDetail: {
             factor: components["schemas"]["EagglFactor"];
             generation_id: string | null;
+            /** @description eaggl_import_id is the reference release id: a release holds the EAGGL fit with no separate import id. */
             provenance: {
                 eaggl_import_id: string;
                 factor_id: string;
@@ -4638,6 +4639,20 @@ export interface components {
             genes: components["schemas"]["LoadingSummary"];
             gene_sets: components["schemas"]["LoadingSummary"];
             gnomad?: components["schemas"]["GnomadImport"] | null;
+            /** @description Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes tested and linked, the q of the factor's own trait (null when none was reported) and its best links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative. */
+            trait_links?: {
+                n_phenotypes: number;
+                n_linked: number;
+                n_linked_kpn_traits: number;
+                n_linked_atlas_traits: number;
+                own_trait_q: number | null;
+                top_linked: {
+                    phenotype: string;
+                    kpn_trait_id: string | null;
+                    name: string;
+                    phewas_q: number;
+                }[];
+            };
         };
         /** @description Bounded loading page. sort=loading (default) orders by descending score; alphabetical orders case-insensitive labels. Gene-only gnomad_pli and gnomad_mis_z sort descending; gnomad_loeuf sorts ascending, all with missing values last and stable symbol ties. Sorting applies globally before pagination. Ranks and heatmap score ranges always remain original factor loadings. Pin generation_id, source_revision, and gnomad_import_id returned by FactorDetail. */
         FactorLoadings: {
@@ -4657,7 +4672,7 @@ export interface components {
             summary: components["schemas"]["LoadingSummary"];
             gnomad?: components["schemas"]["GnomadImport"] | null;
         };
-        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404. */
+        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null. provenance is this gene set's own lineage in its collection's provenance (prefixes kept whole): its generating activities, their inputs, the datasets those derive from (including links from REVEAL's curated source-dataset map) and their organizations; inputs of one activity that share one upstream lineage are represented by one of them, and limitations say so. Gene sets the release does not reference (by a projection or a beta) and unknown/derived account aliases return 404. */
         CatalogGeneSet: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
@@ -4687,6 +4702,14 @@ export interface components {
                 payload_sha256: string | null;
             } | null;
             limitations: string[];
+            /** @description Translator artifact-provenance portal pages of the gene set and of its collection (the portal's collection id), built from ids and never fetched. */
+            external_links?: {
+                label: string;
+                /** Format: uri */
+                href: string;
+                /** @enum {string} */
+                kind: "portal_gene_set" | "portal_collection";
+            }[];
         };
         /** @description Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization. */
         WorkspaceEvent: {
@@ -13587,6 +13610,11 @@ export interface operations {
                 gnomad_import_id?: string;
                 /** @example LEPR */
                 q?: string;
+                /**
+                 * @description Gene-set rows of one library only (ranks are within libraries); total counts the matching rows and summary stays over every library. Genes have no library, so kind=gene ignores it.
+                 * @example GO_BP
+                 */
+                library?: string;
                 /** @example 200 */
                 limit?: number;
                 /** @example 0 */

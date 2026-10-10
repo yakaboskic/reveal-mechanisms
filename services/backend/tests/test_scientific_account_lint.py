@@ -55,6 +55,30 @@ class ReferenceSourceLineageTests(unittest.TestCase):
             with self.assertRaisesRegex(EvidenceBuildError, 'checksum changed'):
                 cfde_source_files(package, root / 'package.json')
 
+    def test_release_captures_bind_to_the_release_tables_and_id(self):
+        release = 'a' * 64
+        package = {'pigean': {'model': 'eaggl-capped-v1', 'mechanisms': {'factor': {'fit': {'upstream_build': release}}}},
+                   'source_artifacts': {}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def add(key, *, kind='mysql', names=('reveal_ref_factor_genes',), field='release_id', version='2', **changes):
+                body = {'format': f"reveal.reference-evidence.{'mysql-capture' if kind == 'mysql' else 'derived-capture'}/{version}",
+                        field: release, 'model': 'eaggl-capped-v1',
+                        'source': {'kind': kind, 'tables' if kind == 'mysql' else 'derived_from': list(names)}, 'data': [], **changes}
+                raw = canonical_json(body); (root / key).write_bytes(raw)
+                package['source_artifacts'][key] = {'path': key, 'format': 'json', 'sha256': sha256(raw),
+                    'origin': f"{kind}:{'+'.join(names)}?{field}={release}", 'dapper_file_id': 'file:' + key}
+            add('release', names=('reveal_ref_release',))
+            add('betas', names=('reveal_ref_trait_gene_sets', 'reveal_ref_phenotypes'))
+            add('links', names=('reveal_ref_factor_trait_links',))
+            add('derived', kind='mysql-derived', names=('release', 'betas'))
+            add('generation-keyed', field='generation_id')
+            add('generation-tables', names=('eaggl_gene_loadings',))
+            add('dapper-tables', names=('reveal_ref_dapper_nodes',))
+            add('other-release', release_id='b' * 64)
+            self.assertEqual(cfde_source_files(package, root / 'package.json'),
+                             {'file:release', 'file:betas', 'file:links', 'file:derived'})
+
 
 class DraftIdCollisionTests(unittest.TestCase):
     def test_unminted_ids_inside_longer_node_ids_collide_like_dapper_references(self):

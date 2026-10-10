@@ -25984,7 +25984,7 @@
                       },
                       "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
                       "provenance": {
-                        "eaggl_import_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+                        "eaggl_import_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
                         "factor_id": "T2D::Factor1",
                         "factor_key": "KPN.TRAIT:0000398::Factor1",
                         "model": "eaggl-capped-v1"
@@ -26000,10 +26000,31 @@
                         "total": 71,
                         "min": 0.0003,
                         "max": 0.24,
-                        "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
+                        "coverage": "Retained projections, ranked within each gene-set library: the gene sets in the top 50 of their library by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
                         "available": true
                       },
-                      "gnomad": null
+                      "gnomad": null,
+                      "trait_links": {
+                        "n_phenotypes": 6698,
+                        "n_linked": 412,
+                        "n_linked_kpn_traits": 398,
+                        "n_linked_atlas_traits": 97,
+                        "own_trait_q": 2.1e-14,
+                        "top_linked": [
+                          {
+                            "phenotype": "T2D",
+                            "kpn_trait_id": "KPN.TRAIT:0000398",
+                            "name": "Type 2 diabetes",
+                            "phewas_q": 2.1e-14
+                          },
+                          {
+                            "phenotype": "HbA1c_example",
+                            "kpn_trait_id": null,
+                            "name": "HbA1c (illustrative phenotype without a KPN id)",
+                            "phewas_q": 3.4e-09
+                          }
+                        ]
+                      }
                     }
                   }
                 }
@@ -26145,7 +26166,7 @@
           "Mechanisms"
         ],
         "summary": "Search and page factor loadings",
-        "description": "Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.",
+        "description": "Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 of their library by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.",
         "parameters": [
           {
             "name": "source_id",
@@ -26224,6 +26245,17 @@
             },
             "example": "LEPR",
             "description": ""
+          },
+          {
+            "name": "library",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "example": "GO_BP",
+            "description": "Gene-set rows of one library only (ranks are within libraries); total counts the matching rows and summary stays over every library. Genes have no library, so kind=gene ignores it."
           },
           {
             "name": "limit",
@@ -26440,7 +26472,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&library=GO_BP&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550' -H 'Accept: application/json'"
           }
         ]
       }
@@ -26502,6 +26534,13 @@
                       "collection": null,
                       "limitations": [
                         "Illustrative unavailable-object response; no provenance is fabricated."
+                      ],
+                      "external_links": [
+                        {
+                          "label": "Gene-set provenance on the Translator portal",
+                          "kind": "portal_gene_set",
+                          "href": "https://translator.broadinstitute.org/artifact_provenance/gene_set/details/id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                        }
                       ]
                     }
                   }
@@ -53086,7 +53125,7 @@
           "rank"
         ],
         "additionalProperties": false,
-        "description": "One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null."
+        "description": "One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank within its library, unchanged by search, library filter or pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks within the library. Legacy gene-set weights are null."
       },
       "FactorDetail": {
         "type": "object",
@@ -53134,7 +53173,8 @@
               "factor_key",
               "model"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "eaggl_import_id is the reference release id: a release holds the EAGGL fit with no separate import id."
           },
           "genes": {
             "$ref": "#/components/schemas/LoadingSummary"
@@ -53151,6 +53191,85 @@
                 "type": "null"
               }
             ]
+          },
+          "trait_links": {
+            "type": "object",
+            "properties": {
+              "n_phenotypes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "n_linked": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "n_linked_kpn_traits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "n_linked_atlas_traits": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "own_trait_q": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "top_linked": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "phenotype": {
+                      "type": "string"
+                    },
+                    "kpn_trait_id": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "phewas_q": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    }
+                  },
+                  "required": [
+                    "phenotype",
+                    "kpn_trait_id",
+                    "name",
+                    "phewas_q"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "n_phenotypes",
+              "n_linked",
+              "n_linked_kpn_traits",
+              "n_linked_atlas_traits",
+              "own_trait_q",
+              "top_linked"
+            ],
+            "additionalProperties": false,
+            "description": "Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes tested and linked, the q of the factor's own trait (null when none was reported) and its best links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative."
           }
         },
         "required": [
@@ -53398,6 +53517,35 @@
             "items": {
               "type": "string"
             }
+          },
+          "external_links": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "href": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "portal_gene_set",
+                    "portal_collection"
+                  ]
+                }
+              },
+              "required": [
+                "label",
+                "href",
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Translator artifact-provenance portal pages of the gene set and of its collection (the portal's collection id), built from ids and never fetched."
           }
         },
         "required": [
@@ -53414,7 +53562,7 @@
           "limitations"
         ],
         "additionalProperties": false,
-        "description": "Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404."
+        "description": "Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null. provenance is this gene set's own lineage in its collection's provenance (prefixes kept whole): its generating activities, their inputs, the datasets those derive from (including links from REVEAL's curated source-dataset map) and their organizations; inputs of one activity that share one upstream lineage are represented by one of them, and limitations say so. Gene sets the release does not reference (by a projection or a beta) and unknown/derived account aliases return 404."
       },
       "WorkspaceEvent": {
         "type": "object",

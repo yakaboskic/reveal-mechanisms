@@ -23,6 +23,15 @@ from reveal_backend.source_validation import source_findings, ledger_sources, ex
 
 ACCEPTANCE_POLICY = 'reveal.scientific-account/2'
 MINTED = re.compile(r'dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}')
+# Frozen reference-evidence capture formats (reveal.reference-evidence.mysql-capture/<version>): version -> (the capture's
+# identity key, the tables a SQL capture may read). /1 read a reference generation's tables; /2 reads the environment's
+# reference release (reference_evidence, and the release tables later readers capture). scientific_reuse shares it.
+REFERENCE_CAPTURES = {
+    '1': ('generation_id', frozenset({'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes', 'eaggl_gene_loadings',
+                                      'factor_gene_set_projections', 'cfde_gene_sets', 'cfde_gene_set_collections'})),
+    '2': ('release_id', frozenset({'reveal_ref_release', 'reveal_ref_factors', 'reveal_ref_traits', 'reveal_ref_factor_genes',
+                                   'reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections', 'reveal_ref_trait_gene_sets',
+                                   'reveal_ref_factor_trait_links', 'reveal_ref_phenotypes'}))}
 
 
 class AccountValidationError(ValueError):
@@ -48,12 +57,6 @@ def cfde_source_files(package, package_path):
     if pigean.get('model') == 'eaggl-capped-v1' and len(generations) == 1:
         generation = next(iter(generations))
         if isinstance(generation, str) and re.fullmatch(r'[a-f0-9]{64}', generation):
-            # Capture format version -> (identity key, tables it may read).
-            versions = {'1': ('generation_id', {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
-                                                'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
-                                                'cfde_gene_set_collections'}),
-                        '2': ('release_id', {'reveal_ref_release', 'reveal_ref_factors', 'reveal_ref_traits', 'reveal_ref_factor_genes',
-                                             'reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections'})}
             reference, derived = set(), {}
             root = Path(package_path).resolve().parent
             for key, source in sources.items():
@@ -69,8 +72,8 @@ def cfde_source_files(package, package_path):
                 kind = provenance.get('kind')
                 names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
                 version = capture.get('format').rsplit('/', 1)[-1] if isinstance(capture.get('format'), str) else None
-                if version not in versions: continue
-                field, tables = versions[version]
+                if version not in REFERENCE_CAPTURES: continue
+                field, tables = REFERENCE_CAPTURES[version]
                 if (capture.get(field) != generation or capture.get('model') != 'eaggl-capped-v1'
                         or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
                         or origin != f"{kind}:{'+'.join(names)}?{field}={generation}"):

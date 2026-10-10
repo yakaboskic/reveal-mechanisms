@@ -26,7 +26,8 @@ Capture formats (JSON artifacts; numbers are the MySQL values, never rescaled)
   gene-set-payloads         reveal_ref_gene_sets rows of the gene-set candidates (metadata JSON)
   gene-set-collections      their reveal_ref_collections; of the payload only `provenance` (the
                             collection YAML's prefixes and its retained DAPPER provenance groups:
-                            provenance_schema.PROVENANCE_NODES and PROVENANCE_EDGES)
+                            provenance_schema.PROVENANCE_NODES and PROVENANCE_EDGES) and
+                            `curated_provenance` (the curated lineage of its raw files, or null)
   contextual-gene-set-projections  retained candidate factors x retained gene sets
 BioIndex-compatible captures add {index, q, limit: null, continuation: null, scope}, so the
 builder binds them like its BioIndex queries. `limit` is null because each is a complete SQL
@@ -58,7 +59,8 @@ package's trait observations (ascertained via a mechanism) have empty reported_m
       The top `limit` by aggregate_score descending, then node id ascending.
   contextual            every factor->gene, factor->gene set, factor->trait and shared-gene edge
                         among the retained nodes (anchors and retained factor candidates)
-  gene-set-resolution   per gene-set candidate: exact CFDE DAPPER GeneSet, or alias only and why
+  gene-set-resolution   per gene-set candidate: exact CFDE DAPPER GeneSet, or alias only and why, and the
+                        inputs its lineage represents by one (collapsed_inputs, lineage_closure's groups)
 
 Format /1 captures (reference generations) carried generation_id instead of release_id and read
 the generation-scoped tables; packages built from them keep validating (scientific_account_lint).
@@ -81,14 +83,18 @@ is stored:
   - its generating Activity (and any other dependency) joins the DAPPER context too;
   - the alias gains was_derived_from: [CFDE id], and membership_status is 'loaded'.
 Otherwise the alias stands alone (membership_status 'not_loaded') and gene-set-resolution
-records why. Dependencies are looked up in the collection's payload.provenance node lists
-(provenance_schema.PROVENANCE_NODES: activities, files, datasets, organizations, persons, ...) and in
-metadata['dapper_dependencies']. Retained provenance edges (PROVENANCE_EDGES groups) reached from
-the GeneSet and its dependencies join the DAPPER context with them (a File reached only as a
-Dataset member does not pull in its other parent Datasets). A release whose payload.provenance
-lacks a group contributes no objects of that group. CURIE
-prefixes come from payload.provenance.prefixes or metadata['dapper_prefixes'], with
-HGNC.SYMBOL as the default; only prefixes the included objects use join the package.
+records why. Dependencies are looked up in the collection's lineage, reference_lineage.collection_lineage
+of its payload: payload.provenance merged with payload.curated_provenance, so the Datasets and
+Organizations that lap/config/source_datasets.yaml links to LINCS, IDG and GlyGen raw files join the
+package (node lists provenance_schema.PROVENANCE_NODES: activities, files, datasets, organizations,
+persons, ...), and in metadata['dapper_dependencies']. Retained provenance edges (PROVENANCE_EDGES
+groups) reached from the GeneSet and its dependencies join the DAPPER context with them (a File reached
+only as a Dataset member does not pull in its other parent Datasets). An activity's used inputs that
+share one upstream lineage are represented by one of them, as reference_lineage.lineage_closure keeps
+them (GlyGen HZ2's 6,620 cached API responses become one path to the GlyGen release); the others and
+their used edges stay out. A release whose lineage lacks a group contributes no objects of that group.
+CURIE prefixes come from the lineage's prefixes or metadata['dapper_prefixes'], with HGNC.SYMBOL as the
+default; only prefixes the included objects use join the package.
 """
 from __future__ import annotations
 
@@ -102,6 +108,7 @@ import re
 import time
 
 from .provenance_schema import PROVENANCE_NODES, PROVENANCE_EDGES
+from .reference_lineage import EDGE_KEY, collection_lineage, lineage_closure
 from .evidence_collector import CaptureStore, add_source_prefixes, deepcopy_record, gz_records
 from .evidence_package import (BUILD_VERSION, INPUT_VERSION, TARGETS, EvidenceBuildError, build_package, canonical_json,
                                decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
@@ -147,11 +154,12 @@ ANCHOR_PROJECTION_SQL = ('SELECT ' + ','.join('p.' + c for c in PROJECTION_COLUM
                          ' JOIN reveal_ref_collections c ON c.collection_id=s.collection_id WHERE p.factor_key=%s')
 GENE_SET_SQL = ('SELECT gene_set_id,collection_id,gene_set_name,library,n_genes,n_genes_in_eaggl_universe,legacy_source_key,metadata'
                 ' FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})')
-COLLECTION_SQL = ("SELECT collection_id,cfde_label,library,n_sets,JSON_EXTRACT(payload,'$.provenance') FROM reveal_ref_collections"
-                  ' WHERE collection_id IN ({marks})')
+COLLECTION_SQL = ("SELECT collection_id,cfde_label,library,n_sets,JSON_EXTRACT(payload,'$.provenance'),JSON_EXTRACT(payload,'$.curated_provenance')"
+                  ' FROM reveal_ref_collections WHERE collection_id IN ({marks})')
+COLLECTION_COLUMNS = ('collection_id', 'cfde_label', 'library', 'n_sets', 'provenance', 'curated_provenance')
 # Retained provenance node groups of a collection payload (provenance_schema); edge groups are PROVENANCE_EDGES.
 PROVENANCE_GROUPS = tuple(PROVENANCE_NODES)
-JSON_COLUMNS = ('manifest', 'metadata', 'provenance')
+JSON_COLUMNS = ('manifest', 'metadata', 'provenance', 'curated_provenance')
 
 
 # --------------------------------------------------------------------------------------
@@ -617,17 +625,28 @@ def _class_of(identity):
     return DAPPER_REFERENCE.fullmatch(identity).group(1)
 
 
-def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, edge_groups=None):
-    """(exact GeneSet, dependency objects, extra prefixes, reason); reason is None when exact."""
+def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, edge_groups=None, collapsed=None):
+    """(exact GeneSet, dependency objects, extra prefixes, reason); reason is None when exact. collection: a
+    gene-set-collections row ({provenance, curated_provenance}); collapsed, a list, receives lineage_closure's groups of
+    inputs represented by one when the GeneSet is exact."""
     metadata = row['metadata'] if isinstance(row.get('metadata'), dict) else {}
     payload = metadata.get('dapper_gene_set')
     if not isinstance(payload, dict): return None, [], {}, 'reveal_ref_gene_sets.metadata.dapper_gene_set is not stored'
     node = {key: value for key, value in payload.items() if key not in NON_IDENTITY_GENE_SET_SLOTS}
     if node.get('id') != row['gene_set_id']: return None, [], {}, 'Stored GeneSet payload id differs from gene_set_id'
-    provenance = (collection or {}).get('provenance')
-    provenance = provenance if isinstance(provenance, dict) else {}
+    collection = collection if isinstance(collection, dict) else {}
+    producer = collection['provenance'] if isinstance(collection.get('provenance'), dict) else {}
+    curated = {'curated_provenance': collection['curated_provenance']} if isinstance(collection.get('curated_provenance'), dict) else {}
+    # The producer's provenance plus the curated lineage of its raw files. collection_lineage keeps the first of two nodes
+    # with one id, so a stored conflict or a malformed edge is still judged on the producer's own groups too.
+    provenance = collection_lineage({'provenance': producer, **curated})
+    # The used edges the gene set's closure keeps of each activity whose inputs it represents by one.
+    closure = lineage_closure(node, provenance)
+    grouped = {item['activity'] for item in closure['collapsed']}
+    kept = {tuple(edge[key] for key in EDGE_KEY) for edge in closure['provenance'].get('used_edges') or []}
     pool = {}
-    for source in (metadata.get('dapper_dependencies'), *(provenance.get(group) for group in PROVENANCE_GROUPS)):
+    for source in (metadata.get('dapper_dependencies'), *(producer.get(group) for group in PROVENANCE_GROUPS),
+                   *(provenance.get(group) for group in PROVENANCE_GROUPS)):
         for item in source if isinstance(source, list) else []:
             if isinstance(item, dict) and isinstance(item.get('id'), str):
                 if item['id'] in pool and pool[item['id']] != item:
@@ -635,9 +654,11 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, e
                 pool[item['id']] = item
     retained_edges, outgoing, memberships = {}, {}, {}
     for group in PROVENANCE_EDGES:
+        if any(not isinstance(edge, dict) or any(not isinstance(edge.get(k), str) for k in EDGE_KEY)
+               for edge in [*(producer.get(group) or []), *(provenance.get(group) or [])]):
+            return None, [], {}, 'Malformed stored provenance edge'
         for edge in provenance.get(group) or []:
-            if not isinstance(edge, dict) or any(not isinstance(edge.get(k), str) for k in ('subject', 'predicate', 'object')):
-                return None, [], {}, 'Malformed stored provenance edge'
+            if group == 'used_edges' and edge['subject'] in grouped and tuple(edge[key] for key in EDGE_KEY) not in kept: continue
             target = memberships if group == 'has_file_edges' else outgoing
             target.setdefault(edge['object'] if group == 'has_file_edges' else edge['subject'], []).append((group, edge))
     file_ids = {identity for identity in pool if DAPPER_REFERENCE.fullmatch(identity)
@@ -687,6 +708,7 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, e
     except (EvidenceBuildError, ValueError, KeyError, TypeError) as exc:
         return None, [], {}, ('DAPPER validation failed: ' + str(exc))[:500]
     if edge_groups is not None: edge_groups.update(retained_edges)
+    if collapsed is not None: collapsed.extend(closure['collapsed'])
     return node, dependencies, used, None
 
 
@@ -702,8 +724,7 @@ def _gene_set_objects(evidence, base_prefixes):
     _add_rows(store, 'gene-set-payloads', release_id, ['reveal_ref_gene_sets'], statements, rows)
     identities = sorted({row['collection_id'] for row in rows})
     statements = []
-    collections = reader.batched(statements, COLLECTION_SQL, [], identities,
-                                 ('collection_id', 'cfde_label', 'library', 'n_sets', 'provenance')) if identities else []
+    collections = reader.batched(statements, COLLECTION_SQL, [], identities, COLLECTION_COLUMNS) if identities else []
     collections.sort(key=lambda row: row['collection_id'])
     _add_rows(store, 'gene-set-collections', release_id, ['reveal_ref_collections'], statements, collections)
     by_id = {row['gene_set_id']: (i, row) for i, row in enumerate(rows)}
@@ -712,10 +733,11 @@ def _gene_set_objects(evidence, base_prefixes):
     class_groups, shared, resolution, objects = _class_groups(dapper), {}, [], {}
     for gene_set_id in wanted:
         i, row = by_id[gene_set_id]; node_id = 'gene_set:' + gene_set_id
-        edges = {}
-        exact, dependencies, used, reason = _resolve_gene_set(dapper, row, by_collection.get(row['collection_id']), base_prefixes, class_groups, edge_groups=edges)
+        edges, collapsed = {}, []
+        exact, dependencies, used, reason = _resolve_gene_set(dapper, row, by_collection.get(row['collection_id']), base_prefixes, class_groups,
+                                                              edge_groups=edges, collapsed=collapsed)
         if exact and any(shared.get(item['id'], item) != item for item in dependencies):
-            exact, dependencies, used, reason = None, [], {}, 'A stored DAPPER dependency conflicts with another gene set'
+            exact, dependencies, used, reason, collapsed = None, [], {}, 'A stored DAPPER dependency conflicts with another gene set', []
         if exact: shared.update({item['id']: item for item in dependencies})
         alias = {'name': row['gene_set_name'], 'member_type': 'gene', 'alternate_identifier': [node_id]}
         if exact: alias['was_derived_from'] = [exact['id']]
@@ -728,11 +750,13 @@ def _gene_set_objects(evidence, base_prefixes):
                         'provenance_refs': [ref('gene-set-payloads', f'/data/{i}'), ref('gene-set-resolution', f'/gene_sets/{len(resolution)}')]}}
         resolution.append({'node_id': node_id, 'gene_set_id': gene_set_id, 'alias_dapper_id': alias['id'],
                            'status': 'exact_dapper_gene_set' if exact else 'alias_only', 'reason': reason,
-                           'dapper_gene_set_id': exact['id'] if exact else None, 'dependency_ids': sorted(item['id'] for item in dependencies)})
+                           'dapper_gene_set_id': exact['id'] if exact else None, 'dependency_ids': sorted(item['id'] for item in dependencies),
+                           'collapsed_inputs': collapsed})
     _add_derived(store, 'gene-set-resolution', release_id, ['gene-set-payloads', 'gene-set-collections'],
                  {'policy': 'Each gene-set candidate binds an alias GeneSet whose alternate_identifier is the candidate id. The exact CFDE '
-                            'GeneSet (identity slots only, id recomputed) and its dependencies are added when stored; the alias then '
-                            'was_derived_from it.', 'gene_sets': resolution})
+                            'GeneSet (identity slots only, id recomputed) and its dependencies in its collection\'s producer and curated '
+                            'lineage are added when stored; the alias then was_derived_from it. Inputs of one activity that share an '
+                            'upstream lineage are represented by one (collapsed_inputs).', 'gene_sets': resolution})
     return objects
 
 
