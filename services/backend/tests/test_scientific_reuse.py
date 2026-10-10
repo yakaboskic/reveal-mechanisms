@@ -250,7 +250,6 @@ class ScientificReuseTests(unittest.TestCase):
             self.assertEqual(failure.exception.code,'PRIVATE_RESEARCH_INPUTS')
 
 
-
 class ReferenceCaptureSourceTests(unittest.TestCase):
     """_legacy_sql_source rebinds a retained reference-evidence capture to the package's fit: a generation's tables (/1) or
     the environment's reference release (/2), with the table sets the account lint uses."""
