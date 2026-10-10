@@ -1,0 +1,116 @@
+# Curated source datasets for the CFDE collections whose producer provenance ends at raw files.
+#
+# What: DAPPER Dataset nodes (and the Organizations behind them) that the reference release build links to the raw
+# input files of collection documents, as extra was_derived_from edges (raw File -> Dataset). The producer document
+# itself is never changed: the build stores the curated nodes and edges beside it (payload.curated_provenance).
+#
+# Why: in the 2026-10-05 snapshot only 146 of the 532 collection documents reach a Dataset through a was_derived_from
+# edge. The other 386 (LINCS_L1000 HZ3 and the 383 HZ4 collections, IDG HZ2, GlyGen HZ2) end at a raw file whose
+# name pigean's raw/cfde_source_datasets.yaml does not know, so their gene sets trace to no dataset or organization.
+#
+# How the release build applies it:
+#   * only to collections whose producer provenance reaches no Dataset; a collection that does is left alone;
+#   * a link applies to the collections of its `libraries`; its `files` are regular expressions (anchored, so search
+#     and full match agree) tried on each raw file's `filename`, or its `name` when it has no filename;
+#   * a raw file is a File or C2M2File node (sections files, c2m2_files) that is never the subject of a
+#     was_generated_by edge; every match gets one was_derived_from edge to the link's dataset.
+#
+# organizations: key -> an existing DAPPER Organization node, copied verbatim (id and every field) from a producer
+#   collection document.
+# datasets: key -> either an existing Dataset node copied verbatim (with its id; publisher and was_attributed_to are
+#   Organization ids), or a new node without an id, which the build mints (runtime.compute_id(node, 'Dataset', schema))
+#   from name, description, version, alternate_identifier, publisher (an organizations key) and attributed_to
+#   (organizations keys; -> was_attributed_to); location is not hashed.
+# links: which raw files of which libraries derive from which dataset.
+#
+# glygen_v1_12_1 is a patch, not lineage the producer recorded: GlyGen HZ2's raw files are cached api.glygen.org
+# glycan-detail responses, which the producer does not tie to a release.
+#
+# Checked 2026-10-10 against all 532 documents of the snapshot: every collection that reaches no Dataset has a raw
+# file matched by a link of its library (LINCS 384 collections / 384 files, IDG 1 / 1, GlyGen 1 / 6,620).
+
+organizations:
+  mount_sinai:
+    id: dapper:Organization.s7ZiFrRo5dASjGgt6Zm84Xpm0TGWWmKk
+    name: Icahn School of Medicine at Mount Sinai
+    ror: ror:04a9tmd77
+  maayan_lab:
+    id: dapper:Organization.gSVB_XHO-9R20bTxmgC5_UPAxvvV7qfP
+    name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
+  idg_consortium:
+    id: dapper:Organization.ic8Yn_vIpNAplGx72eTJpEjhXHYVmDqo
+    name: Illuminating the Druggable Genome Consortium
+  gwu:
+    id: dapper:Organization.vVagl1Seli0Dbd6efYzfOxM1w5ZHuTuj
+    name: George Washington University
+    ror: ror:00y4zzh67
+  glygen_consortium:
+    id: dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
+    name: GlyGen Consortium
+
+datasets:
+  lincs_l1000_level5_cp_2020:
+    name: LINCS L1000 2020 Level-5 chemical-perturbation characteristic-direction coefficient signatures (cp_coeff_mat.gctx)
+    description: >-
+      The individual Level-5 chemical-perturbation signatures of the LINCS L1000 2020 data release as
+      characteristic-direction (CD) coefficient vectors over genes (718,157 signature columns, 718,055 unique LINCS
+      signature ids), distributed by the LINCS Data Coordination and Integration Center (Ma'ayan Laboratory) as the
+      SigCom LINCS release matrix cp_coeff_mat.gctx (LINCS-sigs-2021). The CFDE LINCS_L1000 HZ4 workflow writes, for
+      every signature, its top and bottom 250 gene symbols by CD coefficient to l1000_cp.gmt (383 collections, split
+      by a cell-line and time-point plan). Per the extractor's geneset.provenance.json, the HZ3 consensus-median GMT
+      (lincs_l1000_consensus_median.gmt: per perturbagen with at least 10 signatures, the top and bottom 200 genes of
+      the coordinate-wise median CD coefficients) is computed from the same matrix. Unlike the consensus mean
+      matrices (cp_mean_coeff_mat), this matrix holds every individual signature.
+    version: LINCS 2020 release
+    alternate_identifier:
+      - https://maayanlab.cloud/sigcom-lincs/
+      - https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/
+    publisher: mount_sinai
+    attributed_to: [maayan_lab]
+    location: https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx
+
+  enrichr_archs4_idg_coexp:
+    name: Enrichr library ARCHS4_IDG_Coexp
+    description: >-
+      The Enrichr gene-set library "ARCHS4_IDG_Coexp" (Ma'ayan Laboratory): for each of 352 Illuminating the
+      Druggable Genome target genes (131 kinases, 111 ion channels, 110 GPCRs), the genes most co-expressed with it
+      across the ARCHS4 uniformly processed RNA-seq samples (299 per set). Served by the Enrichr geneSetLibrary API
+      and imported unchanged by the extractor (IDG HZ2), which recorded the sha256 of its copy as the version.
+    version: sha256:ef0b0ffa8e24412c31a8e8b0551b37359acafdfaccc1786292921592141ee995
+    alternate_identifier:
+      - https://maayanlab.cloud/Enrichr/#libraries
+    publisher: mount_sinai
+    attributed_to: [maayan_lab, idg_consortium]
+    location: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ARCHS4_IDG_Coexp
+
+  glygen_v1_12_1:
+    id: dapper:Dataset.24rIPEPqvvrf-YevTjjIC_T1plGhGrb6
+    name: GlyGen data release v1.12.1 (human glycosylation annotations and protein master list)
+    description: GlyGen's reviewed human proteoform glycosylation citation tables (UniCarbKB, Harvard, GlyConnect
+      sources) and the human protein master list from data release v1.12.1, grouped by GlyTouCan accession
+      into glycosylated-protein gene sets by the extractor.
+    version: v1.12.1
+    alternate_identifier:
+      - https://data.glygen.org/ln2data/releases/data/v1.12.1/
+      - https://glygen.org/
+    location: https://data.glygen.org/ln2data/releases/data/v1.12.1/reviewed/
+    publisher: dapper:Organization.vVagl1Seli0Dbd6efYzfOxM1w5ZHuTuj
+    was_attributed_to:
+      - dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
+
+links:
+  - dataset: lincs_l1000_level5_cp_2020
+    libraries: [LINCS_L1000]
+    files: ['^l1000_cp\.gmt$', '^lincs_l1000_consensus_median\.gmt$']
+    note: >-
+      LINCS_L1000 HZ4 (l1000_cp.gmt, one per collection) and HZ3 (lincs_l1000_consensus_median.gmt), both role
+      streamed_lincs_cp_gmt: 384 collections, one edge each. The existing consensus Dataset
+      (cp_mean_coeff_mat.tsv.gz) is the wrong upstream for these.
+  - dataset: enrichr_archs4_idg_coexp
+    libraries: [IDG]
+    files: ['^ARCHS4_IDG_Coexp\.gmt$']
+    note: IDG HZ2 (352 gene sets) reads the Enrichr library ARCHS4_IDG_Coexp (role enrichr_gmt); one edge.
+  - dataset: glygen_v1_12_1
+    libraries: [GlyGen]
+    files: ['^G\d{5}[A-Z]{2}\.json$']
+    note: "Patch: the producer provenance records cached api.glygen.org glycan-detail responses, not this release; linked so GlyGen HZ2 gene sets trace to GlyGen."

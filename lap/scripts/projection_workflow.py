@@ -2045,6 +2045,83 @@ def cmd_provenance_audit(args):
                                                   len(release), n_release, n_missing, portal_only, dict(sorted(statuses.items()))))
 
 
+# The portal's GWAS bottom-line artifacts of every trait (one per ancestry), for the release build
+BOTTOM_LINE_COLUMNS = ["kpn_trait_id", "portal_trait_id", "trait_name", "ancestry_code", "ancestry_name", "artifact_id"]
+BOTTOM_LINE_ROW_RE = re.compile(r'data-app-route="artifact/([^"]+)">.*?</a>\s*</td>\s*<td>(.*?)</td>', re.S)
+BOTTOM_LINE_ARTIFACT_RE = re.compile(r"^dig-open-bottom-line-analysis-stg_bottom-line_([A-Za-z0-9]+)_(.+)\.sumstats\.tsv\.gz$")
+PORTAL_RESULTS_RE = re.compile(r"([0-9,]+) results? found")
+
+
+def portal_bottom_line(page, legacy_id):
+    """[(ancestry code, ancestry name, artifact id)] of one trait's bottom_line page. The page links each artifact as
+    artifact/<quoted id>; an id must be the trait's own (..._bottom-line_<ancestry code>_<legacy id>.sumstats.tsv.gz)."""
+    import html
+    import urllib.parse
+    found = PORTAL_RESULTS_RE.search(page)
+    check(found, "The bottom_line page of %s states no result count" % legacy_id)
+    rows = []
+    for route, ancestry in BOTTOM_LINE_ROW_RE.findall(page):
+        artifact = urllib.parse.unquote(html.unescape(route))
+        parsed = BOTTOM_LINE_ARTIFACT_RE.match(artifact)
+        check(parsed and parsed.group(2) == legacy_id, "Artifact %s of trait %s is not "
+              "dig-open-bottom-line-analysis-stg_bottom-line_<ancestry>_%s.sumstats.tsv.gz" % (artifact, legacy_id, legacy_id))
+        rows.append((parsed.group(1), portal_text(ancestry), artifact))
+    check(len(rows) == int(found.group(1).replace(",", "")), "The bottom_line page of %s states %s results but lists %d"
+          % (legacy_id, found.group(1), len(rows)))
+    check(len({r[2] for r in rows}) == len(rows), "The bottom_line page of %s lists an artifact twice" % legacy_id)
+    return rows
+
+
+def cmd_provenance_bottom_line(args):
+    """Every portal trait's GWAS bottom-line artifacts (one per ancestry), from the Translator artifact-provenance portal.
+
+    Reads the portal's trait list (`traits`, JSON: kpn_id, legacy_id, name, description) and each trait's
+    `bottom_line/<legacy id>` page, with --workers requests at a time. One row per artifact; a page saying "0 results
+    found" (also the answer for an unknown id) lists none. The portal repeats the legacy id as kpn_id when it has no KPN
+    id; kpn_trait_id is then blank. Nothing is written unless every page was read and some trait has an artifact.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    import json
+    import urllib.parse
+    check(args.workers >= 1, "--workers must be positive")
+    context = https_context()
+    status, body = portal_get(args.portal_url, "traits", context)
+    check(status == 200, "The portal's trait list returned HTTP %d" % status)
+    try:
+        traits = json.loads(body)
+    except ValueError as error:
+        raise WorkflowError("The portal's trait list is not JSON: %s" % error)
+    check(isinstance(traits, list) and traits and all(isinstance(t, dict) and t.get("legacy_id") and isinstance(t["legacy_id"], str)
+                                                      for t in traits), "The portal's trait list is not a list of traits with legacy ids")
+    check(len({t["legacy_id"] for t in traits}) == len(traits), "The portal lists a trait twice")
+    kpn_ids = {}
+    for trait in traits:
+        kpn = trait.get("kpn_id") or ""
+        check(isinstance(kpn, str) and (not kpn or KPN_TRAIT_ID_RE.match(kpn) or kpn == trait["legacy_id"]),
+              "Trait %s has KPN id %r" % (trait["legacy_id"], kpn))
+        kpn_ids[trait["legacy_id"]] = kpn if KPN_TRAIT_ID_RE.match(kpn) else ""
+
+    def fetch(trait):
+        status, page = portal_get(args.portal_url, "bottom_line/" + urllib.parse.quote(trait["legacy_id"], safe=""), context)
+        check(status == 200, "The bottom_line page of %s returned HTTP %d" % (trait["legacy_id"], status))
+        return portal_bottom_line(page, trait["legacy_id"])
+    rows, empty = [], 0
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for trait, artifacts in zip(traits, pool.map(fetch, traits)):
+            empty += not artifacts
+            rows.extend({"kpn_trait_id": kpn_ids[trait["legacy_id"]], "portal_trait_id": trait["legacy_id"],
+                         "trait_name": " ".join(str(trait.get("name") or "").split()), "ancestry_code": code,
+                         "ancestry_name": name, "artifact_id": artifact} for code, name, artifact in artifacts)
+    check(rows, "No portal trait has a bottom-line artifact")
+    rows.sort(key=lambda r: (r["portal_trait_id"], r["ancestry_code"], r["artifact_id"]))
+    partial = "%s.partial%s" % os.path.splitext(args.output_file)
+    write_tsv(partial, BOTTOM_LINE_COLUMNS, rows)
+    os.replace(partial, args.output_file)
+    print("Portal bottom line: %d traits (%d with KPN ids), %d with artifacts, %d without; %d artifacts (%s)"
+          % (len(traits), sum(1 for k in kpn_ids.values() if k), len(traits) - empty, empty, len(rows),
+             ", ".join("%s %d" % item for item in sorted(Counter(r["ancestry_code"] for r in rows).items()))), file=sys.stderr)
+
+
 # -------------------------------------------------------------------------------------------------
 
 
@@ -2199,6 +2276,12 @@ def build_parser():
         p.add_argument("--" + name, required=True)
     p.add_argument("--workers", type=int, default=4, help="Portal requests at a time")
     p.set_defaults(func=cmd_provenance_audit)
+
+    p = sub.add_parser("provenance-bottom-line", help="Each Translator portal trait's GWAS bottom-line artifacts")
+    for name in ("portal-url", "output-file"):
+        p.add_argument("--" + name, required=True)
+    p.add_argument("--workers", type=int, default=4, help="Portal requests at a time")
+    p.set_defaults(func=cmd_provenance_bottom_line)
 
     p = sub.add_parser("compare-global", help="Compare per-trait and all-factor projections (manual check)")
     p.add_argument("--trait-long-file", action="append", required=True)

@@ -16,6 +16,7 @@ import tempfile
 import time
 import unittest
 from collections import OrderedDict
+from unittest import mock
 from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -1300,6 +1301,109 @@ class ProvenanceAuditTest(unittest.TestCase):
         listed = {r["collection_id"]: r for r in read_rows(self.p("portal", "portal_collections.tsv"))}
         self.assertEqual((listed[self.C4]["list_status"], listed[self.C1]["description"]), ("http_404", "About 'Shared & listed'"))
         self.assertEqual(len(read_rows(self.p("portal", "portal_gene_sets.tsv"))), 6)  # G1 is listed twice
+
+
+class ProvenanceBottomLineTest(unittest.TestCase):
+    """provenance-bottom-line against a local stand-in for the portal's `traits` JSON and `bottom_line/<trait>` pages."""
+    FI = "Female_infertility_(all_causes)"
+
+    @staticmethod
+    def artifact(code, legacy_id):
+        return "dig-open-bottom-line-analysis-stg_bottom-line_%s_%s.sumstats.tsv.gz" % (code, legacy_id)
+
+    @staticmethod
+    def page(artifacts, count=None):
+        import urllib.parse
+        rows = "".join('<tr>\n  <td>\n    <a href="#" data-app-route="artifact/%s">Published open-data bottom-line result</a>\n'
+                       '  </td>\n  <td>%s</td>\n</tr>' % (urllib.parse.quote(aid), name) for aid, name in artifacts)
+        body = ("<table><tbody>%s</tbody></table>" % rows if artifacts else
+                '<div class="empty">No bottom-line artifacts were found for this trait.</div>')
+        return ('<html><body><a class="back-link" href="#" data-app-route="">Back to artifacts</a>\n<p class="muted">%d results '
+                'found.</p>%s</body></html>' % (len(artifacts) if count is None else count, body))
+
+    def setUp(self):
+        import http.server
+        import json
+        import threading
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.out = os.path.join(self.tmp.name, "bottom_line_artifacts.tsv")
+        a, fi = self.artifact, self.FI
+        self.traits = [{"kpn_id": "KPN.TRAIT:0000507", "legacy_id": "2hrFFA", "name": "2hr plasma  free fatty acids", "description": "x"},
+                       {"kpn_id": fi, "legacy_id": fi, "name": fi, "description": None},  # no KPN id: the portal repeats the legacy id
+                       {"kpn_id": None, "legacy_id": "t2d", "name": "t2d", "description": None}]
+        self.pages = {"/bl/bottom_line/2hrFFA": self.page([(a("EU", "2hrFFA"), "European"), (a("Mixed", "2hrFFA"), "Mixed")]),
+                      "/bl/bottom_line/Female_infertility_%28all_causes%29": self.page([(a("SSAF", fi), "Sub-Saharan &amp; African"),
+                                                                                       (a("Mixed", fi), "Mixed")]),
+                      "/bl/bottom_line/t2d": self.page([])}  # the portal's answer for a wrong-case id too
+        self.status, self.hits = {}, []
+        test = self
+
+        class Portal(http.server.BaseHTTPRequestHandler):
+            def do_GET(handler):
+                test.hits.append(handler.path)
+                body = json.dumps(test.traits) if handler.path == "/bl/traits" else test.pages.get(handler.path)
+                handler.send_response(test.status.get(handler.path, 200 if body else 404))
+                handler.end_headers()
+                handler.wfile.write((body or '{"error":"not_found"}').encode())
+
+            def log_message(handler, *args):
+                pass
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Portal)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        self.url = "http://127.0.0.1:%d/bl" % server.server_address[1]
+
+    def bottom_line(self):
+        return run(["provenance-bottom-line", "--portal-url", self.url, "--workers", "2", "--output-file", self.out])
+
+    def test_lists_each_traits_artifacts_by_ancestry(self):
+        code, err = self.bottom_line()
+        self.assertEqual(code, 0, err)
+        self.assertIn("3 traits (1 with KPN ids), 2 with artifacts, 1 without; 4 artifacts (EU 1, Mixed 2, SSAF 1)", err)
+        self.assertEqual([tuple(r[c] for c in pw.BOTTOM_LINE_COLUMNS) for r in read_rows(self.out)], [
+            ("KPN.TRAIT:0000507", "2hrFFA", "2hr plasma free fatty acids", "EU", "European", self.artifact("EU", "2hrFFA")),
+            ("KPN.TRAIT:0000507", "2hrFFA", "2hr plasma free fatty acids", "Mixed", "Mixed", self.artifact("Mixed", "2hrFFA")),
+            ("", self.FI, self.FI, "Mixed", "Mixed", self.artifact("Mixed", self.FI)),
+            ("", self.FI, self.FI, "SSAF", "Sub-Saharan & African", self.artifact("SSAF", self.FI))])
+        self.assertEqual(os.listdir(self.tmp.name), ["bottom_line_artifacts.tsv"])
+
+    def test_a_failed_page_fails_the_stage_and_writes_nothing(self):
+        self.traits.append({"kpn_id": "KPN.TRAIT:0000398", "legacy_id": "T2D", "name": "Type 2 diabetes", "description": None})
+        for status, message in ((404, "The bottom_line page of T2D returned HTTP 404"),
+                                (500, "The bottom_line page of T2D returned HTTP 500")):
+            with self.subTest(status=status):
+                self.status["/bl/bottom_line/T2D"] = status
+                with mock.patch.object(pw.time, "sleep"):
+                    code, err = self.bottom_line()
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+                self.assertEqual(os.listdir(self.tmp.name), [])
+        self.assertEqual(self.hits.count("/bl/bottom_line/T2D"), 1 + 3)  # a 404 is read once, a 500 three times
+        self.status["/bl/traits"] = 503
+        with mock.patch.object(pw.time, "sleep"):
+            self.assertIn("The portal's trait list returned HTTP 503", self.bottom_line()[1])
+
+    def test_refuses_a_foreign_artifact_a_miscount_or_no_artifacts(self):
+        page = "/bl/bottom_line/2hrFFA"
+        cases = [(self.page([(self.artifact("EU", "2hrFFAx"), "European")]), "is not dig-open-bottom-line-analysis-stg_bottom-line_"),
+                 (self.page([("dig-open-bottom-line-analysis-stg_bottom-line_E_U_2hrFFA.sumstats.tsv.gz", "European")]), "is not "),
+                 (self.page([(self.artifact("EU", "2hrFFA"), "European")], count=2), "states 2 results but lists 1"),
+                 (self.page([(self.artifact("EU", "2hrFFA"), "European")] * 2), "lists an artifact twice"),
+                 ("<html>Bottom-line Results</html>", "states no result count")]
+        for body, message in cases:
+            with self.subTest(message=message):
+                self.pages[page] = body
+                code, err = self.bottom_line()
+                self.assertEqual(code, 1)
+                self.assertIn(message, err)
+                self.assertFalse(os.path.exists(self.out))
+        self.pages[page] = self.pages["/bl/bottom_line/Female_infertility_%28all_causes%29"] = self.page([])
+        self.assertIn("No portal trait has a bottom-line artifact", self.bottom_line()[1])
+        self.traits[0]["kpn_id"] = "KPN:507"
+        self.assertIn("Trait 2hrFFA has KPN id 'KPN:507'", self.bottom_line()[1])
+        self.assertFalse(os.path.exists(self.out))
 
 
 if __name__ == "__main__":
