@@ -1330,12 +1330,12 @@ def scientific(identity,request,kind='object'):
 def account(dapper_id:str,request:Request): return scientific(dapper_id,request,'account')
 
 @app.get('/v1/accounts/{account_id}/provenance')
-def account_provenance(account_id:str,request:Request):
-    from .provenance_api import read
-    with repo.read_transaction() as tx:
-        user=optional_identity(tx,request)
-        source=scientific_source(tx,account_id,user,'account',request.query_params.get('payload_sha256'),verify_payload=True)
-        return read(tx,account_id,source,request.query_params)
+async def account_provenance(account_id:str,request:Request):
+    # Three phases (provenance_api.trace): no database lease is held while the portal is awaited.
+    from .provenance_api import trace
+    def resolve(tx):
+        return scientific_source(tx,account_id,optional_identity(tx,request),'account',request.query_params.get('payload_sha256'),verify_payload=True)
+    return await trace(repo,account_id,resolve,request.query_params,archived=getattr(catalog,'archived_for_mechanism',None))
 
 @app.get('/v1/claims/{dapper_id}')
 @app.get('/v1/objects/{dapper_id}')
@@ -1451,15 +1451,18 @@ _routes_lifespan = app.router.lifespan_context
 @asynccontextmanager
 async def background_lifespan(application):
     """The API process warms the catalog (REVEAL_CATALOG_WARMUP) and runs the readiness monitor
-    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off."""
-    from . import readiness
+    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off. Shutdown closes the
+    provenance portal client of this loop."""
+    from . import provenance_portal, readiness
     async with _routes_lifespan(application) as state:
         warmup = getattr(catalog, 'start_warmup', None)
         if warmup and os.getenv('REVEAL_CATALOG_WARMUP', '1') != '0': warmup()
         monitor = readiness.start(lambda: repo, lambda: catalog) if os.getenv('REVEAL_READINESS_MONITOR', '1') != '0' else None
         try: yield state
         finally:
-            if monitor: readiness.stop(monitor)
+            try:
+                if monitor: readiness.stop(monitor)
+            finally: await provenance_portal.aclose()
 
 app.router.lifespan_context = background_lifespan
 

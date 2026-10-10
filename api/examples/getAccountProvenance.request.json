@@ -2323,7 +2323,7 @@
             ]
           },
           "snapshot": {
-            "policy_version": "account-provenance-v1",
+            "policy_version": "account-provenance-v2",
             "account_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
             "account_payload_sha256": "9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66",
             "document_sha256": "accbb338a0d8ca9f6241ce9e43d125ba6816c8cd1d014de781a612b289c4ee32",
@@ -2331,7 +2331,7 @@
             "reference_generation_ids": [],
             "supplement_ids": [],
             "source_observations": [],
-            "id": "b88dc188a9faeee76174717939e17e31b5b6e69108a28573f60a7c8bb22e59bd"
+            "id": "47a319c7efb9eb8823cfe9242611d4519d2930e173dd06c692644df2a2cdfa0a"
           },
           "page": {
             "limit": 100,

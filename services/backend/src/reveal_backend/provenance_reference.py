@@ -1,16 +1,36 @@
-"""Generation-pinned reference hydration for an already authorized account graph.
+"""Generation- and release-pinned reference hydration for an already authorized account graph.
 
 Only the caller's retained artifact descriptors confer authority. This module never
 looks up an owner's research jobs, active reference selections, or remote URLs.
+
+Trusted captures bind opaque ids to the reference they were read from: research
+captures (their source names a reference generation, or a release by release_id with
+source_kind 'reference_release') and the reference-release captures of Box evidence
+packages (reveal.reference-evidence.mysql-capture/2: reference-release, reference-factors,
+candidate-factors), checksum-verified and their Mechanisms re-minted from the captured
+rows. A release is read from the <prefix>_ref_* tables after reference_pin's ref_release
+read on the same connection: ref_factors, ref_projections (every per-library row), ref_gene_sets
+and ref_collections through reference_lineage (collection_lineage, lineage_closure). Gene sets
+the document reaches get their full node; gene sets reached only by a projection get their
+name, collection_id and generating activity. A capture pinned to a release that is no longer
+published is the coverage issue reference_release_superseded: that work is hydrated only from
+capture bytes and archived snapshots (archived(mechanism_id)), never from the current tables.
+Every reached KPN trait (a bound Mechanism's fitted trait, or one a proposition cites) gets a
+`traits` record named from ref_phenotypes / ref_traits; metadata['traits'] carries its
+bottom-line GWAS artifact (metadata.bottom_line) for the trace's portal phase. Missing tables
+(MySQL 1146: reload-era tables after cleanup) are coverage issues, not errors.
 """
-from collections import defaultdict, deque
+from collections import OrderedDict, defaultdict, deque
 from copy import deepcopy
 from decimal import Decimal
 import json
+import threading
 
 from .auth import Problem
 from .evidence_package import canonical_json, sha256
 from .reference_generation import GENERATION_RE, KPN_MODEL, LEGACY_MODEL, mechanism_node, parse_public_id
+from .reference_pin import NO_TABLE, SUPERSEDED, current_release
+from .repository import application_prefix, application_sql
 
 BATCH = 250
 MAX_NODES = 10_000
@@ -20,22 +40,48 @@ GENERATION_COLUMNS = ('generation_id', 'model', 'status', 'eaggl_import_id', 'le
 PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'joint_loading', 'marginal_loading',
                       'joint_rank', 'marginal_rank')
 NODE_GROUPS = ('gene_sets', 'mechanisms', 'activities', 'files', 'datasets', 'organizations',
-               'persons', 'software', 'c2m2_files')
+               'persons', 'software', 'c2m2_files', 'traits')
 STRIP_GENE_SET = ('in_gene_set_collection', 'in_gmt_file', 'gmt_entry', 'has_embedding')
+RELEASE = 'reference_release'  # a valid generation that is the published release (its model in `valid`)
+RELEASE_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label')
+RELEASE_PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_rank', 'marginal_rank')
+# A Box package's reference-release captures (reference_evidence): filename -> the tables its source names.
+BOX_FORMAT = 'reveal.reference-evidence.mysql-capture/2'
+BOX_CAPTURES = {'reference-release.json': ['reveal_ref_release'], 'reference-factors.json': ['reveal_ref_factors', 'reveal_ref_traits'],
+                'candidate-factors.json': ['reveal_ref_factors', 'reveal_ref_traits']}
+LINEAGE_CACHE_BYTES = 128 << 20
+KPN_PAGE = 'https://broadinstitute.github.io/kpn-data-models/kpn.trait/{}/'
 
 
 def _limit():
     raise Problem(422, 'PROVENANCE_LIMIT_EXCEEDED', 'Scientific provenance exceeds the processing bound; no rankings were returned.')
 
 
+def _missing(error):
+    return bool(getattr(error, 'args', None)) and error.args[0] == NO_TABLE
+
+
 def _json(value):
     return json.loads(value) if isinstance(value, (str, bytes)) else value
+
+
+def _json_value(value):
+    """A JSON_EXTRACT result: JSON text (MySQL), or a bare string (SQLite) for a string value."""
+    if isinstance(value, bytes): value = value.decode()
+    if not isinstance(value, str): return value
+    try: return json.loads(value)
+    except ValueError: return value
 
 
 def _value(value):
     if isinstance(value, bytes): return value.decode()
     if isinstance(value, Decimal): return float(value)
     return value
+
+
+def _ref(sql):
+    """A reveal_ref_* statement for this environment's application prefix."""
+    return application_sql(sql, application_prefix())
 
 
 def _rows(connection, sql, params, columns):
@@ -64,6 +110,37 @@ def _batched(connection, sql, prefix, identities, columns):
     return result
 
 
+class _LineageCache:
+    """Collection lineage of the published release by (release_id, collection_id, document_sha256): collection_lineage and
+    its reference_lineage index, shared read-only by every trace (never copied: merge copies what it keeps). Bounded by the
+    payload JSON bytes read (LINEAGE_CACHE_BYTES), least recently used first; emptied when another release is read. Only a
+    caller that has just read that release from ref_release on its connection may use it."""
+    def __init__(self, limit=LINEAGE_CACHE_BYTES):
+        self.limit, self.items, self.size, self.release, self.lock = limit, OrderedDict(), 0, None, threading.Lock()
+
+    def _release(self, release_id):
+        if release_id != self.release: self.items.clear(); self.size = 0; self.release = release_id
+
+    def get(self, release_id, collection_id, document_sha256):
+        with self.lock:
+            self._release(release_id)
+            entry = self.items.get((collection_id, document_sha256))
+            if entry: self.items.move_to_end((collection_id, document_sha256))
+            return entry and entry[:2]
+
+    def put(self, release_id, collection_id, document_sha256, lineage, index, size):
+        with self.lock:
+            self._release(release_id)
+            prior = self.items.pop((collection_id, document_sha256), None)
+            if prior: self.size -= prior[2]
+            if size > self.limit: return
+            self.items[(collection_id, document_sha256)] = (lineage, index, size); self.size += size
+            while self.size > self.limit: self.size -= self.items.popitem(last=False)[1][2]
+
+
+_LINEAGE = _LineageCache()
+
+
 def _read_capture(record):
     # Source records use the same immutable storage shape as publication/reuse.
     from .research_execution import _read_record
@@ -81,7 +158,7 @@ def _compute_mechanism(item, source):
             raise ValueError('Captured factor identifiers disagree')
         node = mechanism_node(item['public_id'], trait['phenotype_name'], item['kpn_trait_id'], fit['factor'],
             item['label'], identity_version=source.get('mechanism_identity_version', 1),
-            eaggl_import_id=source['eaggl_import_id'])
+            eaggl_import_id=source.get('eaggl_import_id'))
     elif source['model'] == LEGACY_MODEL:
         parts = item['public_id'].split(':')
         raw = _json(item['mapping'])['raw']
@@ -95,17 +172,34 @@ def _compute_mechanism(item, source):
     return node
 
 
+def _released(source):
+    """Whether a capture source names a reference release (not a reload-era generation)."""
+    return source.get('source_kind') == RELEASE or source.get('kind') == 'box_capture'
+
+
+def _box_rows(raw, tables):
+    """(release_id, rows) of a Box package's reference-release capture whose source names these tables."""
+    capture = json.loads(raw)
+    release_id = capture.get('release_id')
+    if (capture.get('format') != BOX_FORMAT or capture.get('model') != KPN_MODEL or not isinstance(release_id, str)
+            or not GENERATION_RE.fullmatch(release_id) or (capture.get('source') or {}).get('tables') != tables
+            or not isinstance(capture.get('data'), list) or not all(isinstance(row, dict) for row in capture['data'])):
+        raise ValueError('Not a reference-release capture')
+    return release_id, capture['data']
+
+
 def _observed_sets(capture):
     # Search results and retrieval candidates are deliberately not scientific-use
     # roots. A precise query observation can bind an already referenced GeneSet.
     operation = capture.get('operation')
-    if operation not in ('get_gene_set', 'get_gene_set_members', 'get_gene_gene_sets', 'get_factor_loadings'):
+    if operation not in ('get_gene_set', 'get_gene_set_members', 'get_gene_gene_sets', 'get_factor_loadings',
+                         'get_trait_gene_sets', 'get_gene_set_traits'):
         return set()
     args = capture.get('arguments') or {}
     if operation == 'get_factor_loadings' and args.get('kind', 'gene') != 'gene_set': return set()
     result = {item['gene_set_id'] for item in capture.get('result', {}).get('items', [])
               if isinstance(item, dict) and isinstance(item.get('gene_set_id'), str)}
-    if operation in ('get_gene_set', 'get_gene_set_members') and isinstance(args.get('gene_set_id'), str):
+    if operation in ('get_gene_set', 'get_gene_set_members', 'get_gene_set_traits') and isinstance(args.get('gene_set_id'), str):
         result.add(args['gene_set_id'])
     return result
 
@@ -161,14 +255,33 @@ def _relevant_graph(graph, roots, blocked):
     return result
 
 
-def expand(document, artifact_records, *, tx, connection_factory=None, blocked_ids=(), account_id=None):
+def _closure(node, lineage, index):
+    """lineage_closure of one gene set; a collapsed group's kept used edge observes collapsed_inputs (a used relation the
+    activity states as a node field becomes such an edge record)."""
+    from .reference_lineage import lineage_closure
+    closure = lineage_closure(node, lineage, index=index)
+    graph = dict(closure['provenance'])
+    for item in closure['collapsed']:
+        edges = graph.get('used_edges') or []
+        kept = [edge for edge in edges if edge.get('subject') == item['activity'] and edge.get('object') == item['representative']]
+        observed = {'subject': item['activity'], 'predicate': 'prov:used', 'object': item['representative']}
+        graph['used_edges'] = ([edge for edge in edges if edge not in kept] +
+                               [{**edge, 'collapsed_inputs': item['collapsed_inputs']} for edge in kept or [observed]])
+    return graph
+
+
+def expand(document, artifact_records, *, tx, connection_factory=None, blocked_ids=(), account_id=None, archived=None):
     """Return (enriched copy, observations) without mutating any scientific record.
 
     ``artifact_records`` is keyed by checksum and must contain ONLY records which
     the HTTP source resolver already authorized. ``blocked_ids`` are revoked
     dependencies and may never be restored by catalog or recovery hydration.
+    ``tx`` serves registered recovery supplements to the legacy-generation path only.
+    ``archived(mechanism_id)`` (the catalog's archive lookup) is called only after the
+    reference connection is closed, for Mechanisms of a superseded release.
     """
-    from .account_provenance import eligible_reference_ids
+    from .account_provenance import eligible_reference_ids, kpn_trait
+    from .provenance_portal import bottom_line_href
     from .provenance_supplements import load_supplement
     from .runtime_config import reference_mysql_connection
 
@@ -177,15 +290,18 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
     eligible = eligible_reference_ids(document, account_id=account_id) - blocked
     wanted_mechanisms = {value for value in eligible if value.startswith('dapper:Mechanism.')}
     wanted_sets = {value for value in eligible if value.startswith('dapper:GeneSet.')}
+    wanted_traits = {value for value in eligible if kpn_trait(value)}
+    cited_sets = set(wanted_sets)
     files = {node['id']: node for node in document.get('files', []) if isinstance(node, dict) and 'id' in node}
     metadata = {'reference_generation_ids': [], 'supplement_ids': [], 'source_observations': [], 'issues': [],
-                'retained_projection_coverage': [], 'recovery_status': [], 'blocked_reference_ids': []}
+                'retained_projection_coverage': [], 'recovery_status': [], 'blocked_reference_ids': [], 'traits': {}}
     issues, observations, conflicts = {}, {}, set()
     bindings, set_generations = defaultdict(dict), defaultdict(set)
     capture_sources, candidate_nodes = {}, {}
-    captured_graphs = []
+    captured_graphs, box_manifests, box_rows = [], {}, []
     node_pool = {node['id']: node for group, rows in document.items() if isinstance(rows, list)
                  for node in rows if isinstance(node, dict) and isinstance(node.get('id'), str)}
+    merged = defaultdict(set)  # canonical JSON of each row merge added, by group
 
     def issue(code, identity=None):
         if identity in blocked: return
@@ -199,6 +315,12 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
         if isinstance(value, list): value = sorted(value, key=canonical_json)
         item = {'kind': kind, 'key': key, 'sha256': sha256(canonical_json(value))}
         observations[(kind, key, item['sha256'])] = item
+
+    def append(group, value):
+        target = enriched.setdefault(group, [])
+        if not merged[group] and target: merged[group].update(canonical_json(row) for row in target)
+        key = canonical_json(value)
+        if key not in merged[group]: merged[group].add(key); target.append(value)
 
     def merge(graph, source):
         from .account_provenance import FIELDS, ORG_ROLES, _refs
@@ -225,12 +347,9 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                             if target_id not in blocked:
                                 field_edges[field + '_edges'].append({'subject': identity, 'predicate': FIELDS[field],
                                     'object': target_id, 'source_field': field, 'provenance_source': source})
-                target = enriched.setdefault(group, [])
-                if value not in target: target.append(value)
+                append(group, value)
         for group, rows in field_edges.items():
-            target = enriched.setdefault(group, [])
-            for row in rows:
-                if row not in target: target.append(row)
+            for row in rows: append(group, row)
         if len(node_pool) > MAX_NODES or sum(len(rows) for group, rows in enriched.items()
                 if group.endswith('_edges') and isinstance(rows, list)) > MAX_EDGES: _limit()
 
@@ -255,29 +374,55 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                     if len(set_generations[identity]) > 1:
                         conflicts.add(identity); issue('ambiguous_reference_binding', identity)
 
+    def bind(identity, generation, source, item, node):
+        wanted_mechanisms.add(identity)
+        binding = {'generation_id': generation, 'source': source, 'item': item, 'node': node}
+        key = (generation, item.get('public_id'), item.get('eaggl_factor_id'))
+        prior = bindings[identity].get(key)
+        if prior is not None and prior != binding: conflicts.add(identity)
+        bindings[identity][key] = binding
+        candidate_nodes[identity] = node
+
+    def fitted(identity, kpn, name, generation):
+        # A bound Mechanism's fitted KPN trait (a node named as the release or the capture names it).
+        traits.setdefault(kpn, {'id': kpn, 'name': name, 'kpn_trait_id': kpn, 'href': KPN_PAGE.format(kpn[-7:])})
+        merge({'mechanisms': [candidate_nodes[identity]],
+               'fitted_on_trait_edges': [{'subject': identity, 'predicate': 'reveal:fittedOnTrait', 'object': kpn}]},
+              {'kind': 'reference_binding', 'reference_generation_id': generation})
+
+    traits, trait_info = {}, {}
+
     # Only verified capture envelopes may bind opaque scientific IDs to a model
     # generation. Names, prose and current catalog selections never do so.
     for checksum, record in sorted(artifact_records.items()):
         descriptor = record.get('research_source') or {}
         source = descriptor.get('research_capture')
-        if not isinstance(source, dict) or descriptor.get('source_mode') != 'imported_reference': continue
         file = record.get('file') or {}
         file_id = file.get('id')
+        box = not isinstance(source, dict) and file.get('filename') in BOX_CAPTURES
+        if not box and (not isinstance(source, dict) or descriptor.get('source_mode') != 'imported_reference'): continue
         if file_id in blocked: continue
         # An authorized snapshot can contain captures that bind an eligible
         # Mechanism even when that capture File is not cited by a claim.
         if not wanted_mechanisms and not wanted_sets: continue
-        if (record.get('sha256') != checksum or descriptor.get('sha256') != checksum
-                or descriptor.get('dapper_file_id') != file_id or file.get('sha256') != checksum
-                or (file_id in files and files[file_id] != file)):
+        if (record.get('sha256') != checksum or file.get('sha256') != checksum or (file_id in files and files[file_id] != file)
+                or not box and (descriptor.get('sha256') != checksum or descriptor.get('dapper_file_id') != file_id)):
             issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
         raw = _read_capture(record)  # Storage failures are not empty scientific results.
         if sha256(raw) != checksum:
             raise Problem(409, 'SOURCE_UNAVAILABLE', 'Retained scientific capture bytes changed.')
+        if box:
+            try: release_id, rows = _box_rows(raw, BOX_CAPTURES[file['filename']])
+            except (ValueError, TypeError, AttributeError):
+                issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
+            if file['filename'] == 'reference-release.json': box_manifests.setdefault(release_id, []).append((checksum, rows))
+            else: box_rows.append((release_id, checksum, file_id, rows))
+            continue
         try:
             capture = json.loads(raw)
             if (capture.get('source') != source or capture.get('source_mode') != 'imported_reference'
-                    or not GENERATION_RE.fullmatch(source.get('generation_id', ''))):
+                    or not GENERATION_RE.fullmatch(source.get('generation_id', ''))
+                    or _released(source) and source.get('release_id') != source['generation_id']):
                 raise ValueError('Capture source binding differs')
             if capture.get('result', {}).get('status') not in ('complete', 'partial'): continue
         except (ValueError, TypeError, AttributeError):
@@ -291,15 +436,9 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                     issue('invalid_factor_capture', file_id if file_id in eligible else None); continue
                 identity = node['id']
                 if identity in blocked or identity not in wanted_mechanisms: continue
-                wanted_mechanisms.add(identity)
                 item = deepcopy(item)
                 if 'mapping' in item: item['mapping'] = _json(item['mapping'])
-                binding = {'generation_id': generation, 'source': source, 'item': item, 'node': node}
-                key = (generation, item.get('public_id'), item.get('eaggl_factor_id'))
-                prior = bindings[identity].get(key)
-                if prior is not None and prior != binding: conflicts.add(identity)
-                bindings[identity][key] = binding
-                candidate_nodes[identity] = node
+                bind(identity, generation, source, item, node)
                 touched = True
         for identity in _observed_sets(capture):
             if identity in blocked or identity not in wanted_sets: continue
@@ -338,6 +477,31 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
             capture_sources.setdefault(generation, []).append(source)
             observe('research_capture', checksum, capture)
 
+    # A Box package's factors are minted as its builder minted them: from the captured rows and the captured release
+    # manifest (reference_evidence._Evidence.anchors).
+    for release_id, checksum, file_id, rows in box_rows:
+        captured = box_manifests.get(release_id, [])
+        manifests = [_json(rows_[0].get('manifest')) for _, rows_ in captured if len(rows_) == 1 and rows_[0].get('release_id') == release_id]
+        if len(manifests) != 1 or not isinstance(manifests[0], dict):
+            issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
+        manifest = manifests[0]
+        source = {'kind': 'box_capture', 'source_kind': RELEASE, 'release_id': release_id, 'generation_id': release_id,
+                  'model': KPN_MODEL, 'generation_manifest_sha256': sha256(canonical_json(manifest)),
+                  'mechanism_identity_version': manifest.get('mechanism_identity_version', 1), 'eaggl_import_id': manifest.get('eaggl_import_id')}
+        touched = False
+        for row in rows:
+            item = {key: row.get(key) for key in RELEASE_FACTOR_COLUMNS}
+            item['trait_metadata'] = {'kpn_trait_id': row.get('kpn_trait_id'), 'phenotype_name': row.get('phenotype_name')}
+            try: node = _compute_mechanism(item, source)
+            except (ValueError, KeyError, TypeError):
+                issue('invalid_factor_capture', file_id if file_id in eligible else None); continue
+            if node['id'] in blocked or node['id'] not in wanted_mechanisms: continue
+            bind(node['id'], release_id, source, item, node); touched = True
+        if touched:
+            capture_sources.setdefault(release_id, []).append(source)
+            observe('box_capture', checksum, rows)
+            for manifest_checksum, manifest_rows in captured: observe('box_capture', manifest_checksum, manifest_rows)
+
     chosen = {}
     for identity in sorted(wanted_mechanisms):
         candidates = list(bindings[identity].values())
@@ -349,7 +513,8 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
         else:
             chosen[identity] = candidates[0]
     generations = sorted(set(capture_sources))
-    if not generations:
+    released = {generation for generation in generations if any(_released(source) for source in capture_sources[generation])}
+    if not generations and not wanted_traits:
         metadata['issues'] = list(issues.values())
         metadata['source_observations'] = list(observations.values())
         metadata['blocked_reference_ids'] = sorted(conflicts)
@@ -364,20 +529,41 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
         inherit_set_bindings(selected, generation)
         merge(selected, {'kind': 'research_capture', 'sha256': checksum, 'reference_generation_id': generation})
 
+    superseded, current = set(), None
     connection = (connection_factory or reference_mysql_connection)()
     try:
-        generation_rows = _batched(connection, 'SELECT ' + ','.join(GENERATION_COLUMNS) +
-            ' FROM reference_generations WHERE generation_id IN ({marks})', [], generations, GENERATION_COLUMNS)
+        # A release reader's first statement: the publisher's RENAME waits on it (reference_pin).
+        release = current_release(connection) if released or wanted_traits else None
+        valid = {}
+        legacy = [generation for generation in generations if generation not in released]
+        try:
+            generation_rows = _batched(connection, 'SELECT ' + ','.join(GENERATION_COLUMNS) +
+                ' FROM reference_generations WHERE generation_id IN ({marks})', [], legacy, GENERATION_COLUMNS) if legacy else []
+        except Exception as error:
+            if not _missing(error): raise
+            issue('reference_tables_unavailable'); generation_rows = []
         generation_map = defaultdict(list)
         for row in generation_rows: generation_map[row['generation_id']].append(row)
-        valid = {}
         for generation in generations:
+            sources = capture_sources[generation]
+            if generation in released:
+                observe('reference_release', generation, [{'release_id': release['release_id'], 'manifest': release['manifest']}] if release else [])
+                if any(not _released(source) for source in sources):
+                    issue('reference_generation_conflict'); continue
+                if not release or release['release_id'] != generation:
+                    superseded.add(generation); issue(SUPERSEDED); continue
+                manifest = release['manifest']
+                if any(source.get('model') != KPN_MODEL or source.get('eaggl_import_id') != manifest.get('eaggl_import_id')
+                       or source.get('generation_manifest_sha256', sha256(canonical_json(manifest))) != sha256(canonical_json(manifest))
+                       or source.get('mechanism_identity_version', 1) != manifest.get('mechanism_identity_version', 1) for source in sources):
+                    issue('reference_generation_conflict'); continue
+                valid[generation] = {'model': RELEASE, 'release': release}
+                continue
             rows = generation_map[generation]
             observe('reference_generation', generation, rows)
             if len(rows) != 1 or rows[0]['status'] not in ('complete', 'superseded'):
                 issue('reference_generation_unavailable'); continue
             gen = rows[0]
-            sources = capture_sources[generation]
             if any(source.get('model') != gen['model'] or source.get('eaggl_import_id') != gen['eaggl_import_id']
                    or source.get('generation_manifest_sha256') != sha256(canonical_json(gen['manifest']))
                    or (gen['model'] == KPN_MODEL and source.get('mechanism_identity_version', 1) !=
@@ -386,71 +572,103 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                        or source.get('gene_set_import_id') != gen['legacy_gene_set_import_id'])) for source in sources):
                 issue('reference_generation_conflict'); continue
             valid[generation] = gen
+        # Cited traits are read from the published release unless the account's work is pinned only to a superseded one: work
+        # bound to the published release keeps its fitted traits, their names and GWAS routes, beside superseded work.
+        if release and (not superseded or release['release_id'] in valid): current = release['release_id']
         projections = []
         for generation, gen in sorted(valid.items()):
-            current = {identity: binding for identity, binding in chosen.items() if binding['generation_id'] == generation}
-            if gen['model'] == KPN_MODEL:
-                keys = {binding['item']['factor_key'] for binding in current.values()}
-                columns = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label')
-                rows = _batched(connection, 'SELECT ' + ','.join(columns) +
-                    ' FROM reference_factors WHERE generation_id=%s AND factor_key IN ({marks})', [generation], keys, columns)
-                observe('reference_factors', generation, rows)
-                by_key = defaultdict(list)
-                for row in rows: by_key[row['factor_key']].append(row)
-                exact = {}
-                for identity, binding in current.items():
-                    item = binding['item']; matches = by_key[item['factor_key']]
-                    if len(matches) != 1 or any(matches[0][key] != item.get(key) for key in columns):
-                        issue('factor_binding_conflict', identity); conflicts.add(identity); continue
-                    exact[item['factor_key']] = identity
-                projection_rows = _batched(connection, 'SELECT ' + ','.join(PROJECTION_COLUMNS) +
-                    ' FROM factor_gene_set_projections WHERE generation_id=%s AND scope=%s AND factor_key IN ({marks})',
-                    [generation, 'per_trait'], exact, PROJECTION_COLUMNS)
-                observe('factor_gene_set_projections', generation, projection_rows)
-                for row in projection_rows:
-                    identity = exact[row['factor_key']]
-                    projections.append((generation, identity, row['gene_set_id'], row))
-                counts = defaultdict(int)
-                for row in projection_rows: counts[row['factor_key']] += 1
-                for key, identity in exact.items():
-                    metadata['retained_projection_coverage'].append({'mechanism_id': identity,
-                        'reference_generation_id': generation, 'status': 'retained_rows_loaded', 'known_factor_binding': True,
-                        'retained_rows': counts[key], 'model_construction_provenance': 'not_established'})
-            elif gen['model'] == LEGACY_MODEL:
-                columns = ('factor_index', 'eaggl_factor_id', 'public_id', 'mapping')
-                rows = _batched(connection, 'SELECT e.factor_index,e.factor_id,l.cfde_node_id,l.payload FROM eaggl_factors e'
-                    ' JOIN eaggl_cfde_factor_links l ON l.run_id=%s AND l.factor_index=e.factor_index'
-                    ' WHERE e.import_id=%s AND l.cfde_node_id IN ({marks})',
-                    [gen['legacy_mapping_run_id'], gen['eaggl_import_id']],
-                    [binding['item']['public_id'] for binding in current.values()], columns)
-                observe('legacy_factor_bindings', generation, rows)
-                exact = {}
-                for identity, binding in current.items():
-                    item = binding['item']; matches = [row for row in rows if row['public_id'] == item['public_id']]
-                    if len(matches) != 1 or any(matches[0][key] != item.get(key) for key in columns):
-                        issue('factor_binding_conflict', identity); conflicts.add(identity); continue
-                    exact[matches[0]['factor_index']] = identity
-                projection_rows = _batched(connection, 'SELECT l.factor_index,l.node_id,l.source_key,l.gene_set_rank,a.dapper_id'
-                    ' FROM eaggl_cfde_gene_set_links l LEFT JOIN cfde_gene_set_aliases a'
-                    ' ON a.import_id=l.gene_set_import_id AND a.node_id_sha256=l.resolved_alias_sha256'
-                    ' WHERE l.run_id=%s AND l.factor_index IN ({marks})', [gen['legacy_mapping_run_id']], exact,
-                    ('factor_index', 'node_id', 'source_key', 'gene_set_rank', 'dapper_id'))
-                observe('legacy_gene_set_links', generation, projection_rows)
-                counts = defaultdict(int)
-                for row in projection_rows:
-                    identity = exact[row['factor_index']]; counts[row['factor_index']] += 1
-                    if row['dapper_id']: projections.append((generation, identity, row['dapper_id'], row))
-                    else: issue('legacy_gene_set_binding_unavailable', identity)
-                for index, identity in exact.items():
-                    metadata['retained_projection_coverage'].append({'mechanism_id': identity,
-                        'reference_generation_id': generation, 'status': 'retained_legacy_links_loaded', 'known_factor_binding': True,
-                        'retained_rows': counts[index], 'model_construction_provenance': 'not_established'})
+            current_bindings = {identity: binding for identity, binding in chosen.items() if binding['generation_id'] == generation}
+            try:
+                if gen['model'] == RELEASE:
+                    keys = {binding['item']['factor_key'] for binding in current_bindings.values()}
+                    rows = _batched(connection, _ref('SELECT ' + ','.join(RELEASE_FACTOR_COLUMNS) +
+                        ' FROM reveal_ref_factors WHERE factor_key IN ({marks})'), [], keys, RELEASE_FACTOR_COLUMNS)
+                    observe('ref_factors', generation, rows)
+                    by_key = defaultdict(list)
+                    for row in rows: by_key[row['factor_key']].append(row)
+                    exact = {}
+                    for identity, binding in current_bindings.items():
+                        item = binding['item']; matches = by_key[item['factor_key']]
+                        if len(matches) != 1 or any(matches[0][key] != item.get(key) for key in RELEASE_FACTOR_COLUMNS):
+                            issue('factor_binding_conflict', identity); conflicts.add(identity); continue
+                        exact[item['factor_key']] = identity
+                    projection_rows = _batched(connection, _ref('SELECT ' + ','.join(RELEASE_PROJECTION_COLUMNS) +
+                        ' FROM reveal_ref_projections WHERE factor_key IN ({marks})'), [], exact, RELEASE_PROJECTION_COLUMNS)
+                    observe('ref_projections', generation, projection_rows)
+                    counts = defaultdict(int)
+                    for row in projection_rows:
+                        projections.append((generation, exact[row['factor_key']], row['gene_set_id'], row)); counts[row['factor_key']] += 1
+                    for key, identity in exact.items():
+                        metadata['retained_projection_coverage'].append({'mechanism_id': identity,
+                            'reference_generation_id': generation, 'status': 'retained_rows_loaded', 'known_factor_binding': True,
+                            'retained_rows': counts[key], 'model_construction_provenance': 'not_established'})
+                        fitted(identity, current_bindings[identity]['item']['kpn_trait_id'], None, generation)
+                elif gen['model'] == KPN_MODEL:
+                    keys = {binding['item']['factor_key'] for binding in current_bindings.values()}
+                    columns = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label')
+                    rows = _batched(connection, 'SELECT ' + ','.join(columns) +
+                        ' FROM reference_factors WHERE generation_id=%s AND factor_key IN ({marks})', [generation], keys, columns)
+                    observe('reference_factors', generation, rows)
+                    by_key = defaultdict(list)
+                    for row in rows: by_key[row['factor_key']].append(row)
+                    exact = {}
+                    for identity, binding in current_bindings.items():
+                        item = binding['item']; matches = by_key[item['factor_key']]
+                        if len(matches) != 1 or any(matches[0][key] != item.get(key) for key in columns):
+                            issue('factor_binding_conflict', identity); conflicts.add(identity); continue
+                        exact[item['factor_key']] = identity
+                    projection_rows = _batched(connection, 'SELECT ' + ','.join(PROJECTION_COLUMNS) +
+                        ' FROM factor_gene_set_projections WHERE generation_id=%s AND scope=%s AND factor_key IN ({marks})',
+                        [generation, 'per_trait'], exact, PROJECTION_COLUMNS)
+                    observe('factor_gene_set_projections', generation, projection_rows)
+                    for row in projection_rows:
+                        identity = exact[row['factor_key']]
+                        projections.append((generation, identity, row['gene_set_id'], row))
+                    counts = defaultdict(int)
+                    for row in projection_rows: counts[row['factor_key']] += 1
+                    for key, identity in exact.items():
+                        metadata['retained_projection_coverage'].append({'mechanism_id': identity,
+                            'reference_generation_id': generation, 'status': 'retained_rows_loaded', 'known_factor_binding': True,
+                            'retained_rows': counts[key], 'model_construction_provenance': 'not_established'})
+                elif gen['model'] == LEGACY_MODEL:
+                    columns = ('factor_index', 'eaggl_factor_id', 'public_id', 'mapping')
+                    rows = _batched(connection, 'SELECT e.factor_index,e.factor_id,l.cfde_node_id,l.payload FROM eaggl_factors e'
+                        ' JOIN eaggl_cfde_factor_links l ON l.run_id=%s AND l.factor_index=e.factor_index'
+                        ' WHERE e.import_id=%s AND l.cfde_node_id IN ({marks})',
+                        [gen['legacy_mapping_run_id'], gen['eaggl_import_id']],
+                        [binding['item']['public_id'] for binding in current_bindings.values()], columns)
+                    observe('legacy_factor_bindings', generation, rows)
+                    exact = {}
+                    for identity, binding in current_bindings.items():
+                        item = binding['item']; matches = [row for row in rows if row['public_id'] == item['public_id']]
+                        if len(matches) != 1 or any(matches[0][key] != item.get(key) for key in columns):
+                            issue('factor_binding_conflict', identity); conflicts.add(identity); continue
+                        exact[matches[0]['factor_index']] = identity
+                    projection_rows = _batched(connection, 'SELECT l.factor_index,l.node_id,l.source_key,l.gene_set_rank,a.dapper_id'
+                        ' FROM eaggl_cfde_gene_set_links l LEFT JOIN cfde_gene_set_aliases a'
+                        ' ON a.import_id=l.gene_set_import_id AND a.node_id_sha256=l.resolved_alias_sha256'
+                        ' WHERE l.run_id=%s AND l.factor_index IN ({marks})', [gen['legacy_mapping_run_id']], exact,
+                        ('factor_index', 'node_id', 'source_key', 'gene_set_rank', 'dapper_id'))
+                    observe('legacy_gene_set_links', generation, projection_rows)
+                    counts = defaultdict(int)
+                    for row in projection_rows:
+                        identity = exact[row['factor_index']]; counts[row['factor_index']] += 1
+                        if row['dapper_id']: projections.append((generation, identity, row['dapper_id'], row))
+                        else: issue('legacy_gene_set_binding_unavailable', identity)
+                    for index, identity in exact.items():
+                        metadata['retained_projection_coverage'].append({'mechanism_id': identity,
+                            'reference_generation_id': generation, 'status': 'retained_legacy_links_loaded', 'known_factor_binding': True,
+                            'retained_rows': counts[index], 'model_construction_provenance': 'not_established'})
+            except Exception as error:
+                if not _missing(error): raise
+                issue('reference_tables_unavailable'); valid.pop(generation)
         for generation, identity, gene_set, row in projections:
             if gene_set not in blocked: set_generations[gene_set].add(generation)
         for identity, contexts in set_generations.items():
             if len(contexts) > 1:
                 conflicts.add(identity); issue('ambiguous_reference_binding', identity)
         loaded = defaultdict(set)
+        closures = {}  # (collection, its generating activities) -> merged: one closure serves a collection's sibling sets
 
         for depth in range(129):
             progressed = False
@@ -462,84 +680,154 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                 progressed = True
                 loaded[generation].update(sets)
                 if sum(map(len, loaded.values())) > MAX_NODES: _limit()
-                if gen['model'] == KPN_MODEL:
-                    rows = _batched(connection, 'SELECT gene_set_id,collection_id,metadata FROM cfde_gene_sets'
-                        ' WHERE generation_id=%s AND gene_set_id IN ({marks})', [generation], sets,
-                        ('gene_set_id', 'collection_id', 'metadata'))
-                    observe('gene_sets', generation, rows)
-                    collections = _batched(connection, 'SELECT collection_id,payload FROM cfde_gene_set_collections'
-                        ' WHERE generation_id=%s AND collection_id IN ({marks})', [generation],
-                        [row['collection_id'] for row in rows], ('collection_id', 'payload'))
-                    observe('gene_set_collections', generation, collections)
-                    collection_map = {row['collection_id']: row['payload'] for row in collections}
-                    found = set()
-                    graphs, roots = {}, defaultdict(set)
-                    for collection_id, payload in sorted(collection_map.items()):
-                        source = {'kind': 'reference_collection', 'reference_generation_id': generation,
-                                  'collection_id': collection_id}
-                        graph = deepcopy(payload.get('provenance') or {})
-                        for group, edges in graph.items():
-                            if group.endswith('_edges') and isinstance(edges, list):
-                                for edge in edges:
-                                    if isinstance(edge, dict): edge['provenance_source'] = source
-                        checksum = payload.get('document_sha256')
-                        supplement = load_supplement(tx, generation, collection_id, checksum) if checksum else None
-                        recovery = {'reference_generation_id': generation, 'collection_id': collection_id,
-                                    'status': 'supplement_loaded' if supplement else 'no_registered_supplement'}
-                        if supplement:
-                            registry = supplement['registry']; supplement_id = registry['id']
-                            metadata['supplement_ids'].append(supplement_id)
-                            observe('provenance_supplement', supplement_id,
-                                {key: value for key, value in registry.items() if key != 'storage'})
-                            for group, values in supplement['graph'].items():
-                                if not isinstance(values, list): continue
-                                for value in values:
-                                    value = deepcopy(value)
-                                    if group.endswith('_edges'):
-                                        value['provenance_source'] = {'kind': 'recovery_supplement', 'supplement_id': supplement_id,
-                                            'reference_generation_id': generation, 'collection_id': collection_id}
-                                    if value not in graph.setdefault(group, []): graph[group].append(value)
-                        metadata['recovery_status'].append(recovery)
-                        graphs[collection_id] = graph
-                    from .acceptance import public_runtime
-                    groups = {cls: group for group, cls in public_runtime().groups.items()}
-                    for row in rows:
-                        identity = row['gene_set_id']; found.add(identity)
-                        node = (row['metadata'] or {}).get('dapper_gene_set')
-                        if not isinstance(node, dict) or node.get('id') != identity:
-                            issue('gene_set_definition_unavailable', identity); continue
-                        node = {key: value for key, value in node.items() if key not in STRIP_GENE_SET}
-                        collection_id = row['collection_id']
-                        if collection_id not in graphs:
-                            issue('collection_provenance_unavailable', identity)
-                        graph = graphs.setdefault(collection_id, {})
-                        graph.setdefault('gene_sets', []).append(node)
-                        roots[collection_id].add(identity)
-                        for dependency in (row['metadata'] or {}).get('dapper_dependencies') or []:
-                            cls = dependency.get('id', '').split(':')[-1].split('.')[0]
-                            if cls in groups: graph.setdefault(groups[cls], []).append(dependency)
-                    for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
-                    for collection_id, graph in sorted(graphs.items()):
-                        selected = _relevant_graph(graph, roots[collection_id], blocked)
-                        inherit_set_bindings(selected, generation)
-                        merge(selected, {'kind': 'reference_collection', 'reference_generation_id': generation, 'collection_id': collection_id})
-                elif gen['model'] == LEGACY_MODEL:
-                    rows = _batched(connection, 'SELECT a.dapper_id,o.payload,a.provenance FROM cfde_gene_set_aliases a'
-                        ' JOIN dapper_objects o ON o.id=a.dapper_id WHERE a.import_id=%s AND a.dapper_id IN ({marks})',
-                        [gen['legacy_gene_set_import_id']], sets, ('dapper_id', 'payload', 'provenance'))
-                    observe('legacy_gene_sets', generation, rows)
-                    found = set()
-                    for row in rows:
-                        identity = row['dapper_id']; found.add(identity)
-                        if not isinstance(row['payload'], dict) or row['payload'].get('id') != identity:
-                            issue('gene_set_definition_unavailable', identity); continue
-                        source = {'kind': 'legacy_reference', 'reference_generation_id': generation}
-                        graph = deepcopy(row['provenance'] or {})
-                        graph.setdefault('gene_sets', []).append(row['payload'])
-                        selected = _relevant_graph(graph, {identity}, blocked)
-                        inherit_set_bindings(selected, generation)
-                        merge(selected, source)
-                    for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
+                try:
+                    if gen['model'] == RELEASE:
+                        # Gene sets the document reaches get their full node (conflicts with its own are detected); a gene set
+                        # reached only by a projection gets its name, collection and generating activity, never its members.
+                        full = _batched(connection, _ref('SELECT gene_set_id,collection_id,metadata FROM reveal_ref_gene_sets'
+                            ' WHERE gene_set_id IN ({marks})'), [], [identity for identity in sets if identity in cited_sets],
+                            ('gene_set_id', 'collection_id', 'metadata'))
+                        light = _batched(connection, _ref("SELECT gene_set_id,collection_id,gene_set_name,"
+                            "JSON_EXTRACT(metadata,'$.dapper_gene_set.was_generated_by'),JSON_EXTRACT(metadata,'$.dapper_gene_set.was_derived_from')"
+                            ' FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})'), [], [identity for identity in sets if identity not in cited_sets],
+                            ('gene_set_id', 'collection_id', 'gene_set_name', 'was_generated_by', 'was_derived_from'))
+                        observe('ref_gene_sets', generation, full + light)
+                        found, nodes = set(), {}
+                        for row in full:
+                            node = (row['metadata'] or {}).get('dapper_gene_set')
+                            if not isinstance(node, dict) or node.get('id') != row['gene_set_id']:
+                                issue('gene_set_definition_unavailable', row['gene_set_id']); continue
+                            nodes[row['gene_set_id']] = (row['collection_id'], {key: value for key, value in node.items() if key not in STRIP_GENE_SET},
+                                                         (row['metadata'] or {}).get('dapper_dependencies') or [], True)
+                        for row in light:
+                            node = {'id': row['gene_set_id'], 'name': row['gene_set_name'], 'collection_id': row['collection_id'],
+                                    **{key: _json_value(row[key]) for key in ('was_generated_by', 'was_derived_from') if row[key] is not None}}
+                            nodes[row['gene_set_id']] = (row['collection_id'], node, [], row['gene_set_id'] not in node_pool)
+                        found.update(row['gene_set_id'] for row in full + light)
+                        for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
+                        collections = sorted({collection for collection, _, _, _ in nodes.values()})
+                        shas = {row['collection_id']: _json_value(row['document_sha256']) for row in _batched(connection, _ref(
+                            "SELECT collection_id,JSON_EXTRACT(payload,'$.document_sha256') FROM reveal_ref_collections"
+                            ' WHERE collection_id IN ({marks})'), [], collections, ('collection_id', 'document_sha256'))}
+                        observe('ref_collections', generation, [[collection, sha] for collection, sha in shas.items()])
+                        lineages = {collection: _LINEAGE.get(generation, collection, sha) for collection, sha in shas.items()}
+                        missing = [collection for collection, cached in lineages.items() if cached is None]
+                        if missing:
+                            from .reference_lineage import collection_lineage, lineage_index
+                            for row in _batched(connection, _ref('SELECT collection_id,payload AS raw FROM reveal_ref_collections'
+                                    ' WHERE collection_id IN ({marks})'), [], missing, ('collection_id', 'raw')):
+                                raw = row['raw'] if isinstance(row['raw'], str) else json.dumps(row['raw'])
+                                lineage = collection_lineage(json.loads(raw))
+                                lineages[row['collection_id']] = (lineage, lineage_index(lineage))
+                                _LINEAGE.put(generation, row['collection_id'], shas[row['collection_id']], *lineages[row['collection_id']], len(raw))
+                        from .acceptance import public_runtime
+                        groups = {cls: group for group, cls in public_runtime().groups.items()}
+                        for identity, (collection, node, dependencies, add) in sorted(nodes.items()):
+                            source = {'kind': RELEASE, 'reference_generation_id': generation, 'collection_id': collection}
+                            if not lineages.get(collection):
+                                issue('collection_provenance_unavailable', identity)
+                                if add: merge({'gene_sets': [node]}, source)
+                                continue
+                            lineage, index = lineages[collection]
+                            if add: merge({'gene_sets': [node]}, source)
+                            # Sibling sets generated by the same activities share one closure; a set the lineage itself
+                            # relates (was_generated_by edges) has its own.
+                            from .account_provenance import _refs
+                            own = bool(index.targets('was_generated_by', identity))
+                            key = (collection, tuple(sorted(_refs(node.get('was_generated_by')))), identity if own else None)
+                            if key not in closures:
+                                closures[key] = _closure({'was_generated_by': list(key[1]), **({'id': identity} if own else {})}, lineage, index)
+                                inherit_set_bindings(closures[key], generation)
+                                merge(closures[key], source)
+                            extra = defaultdict(list)
+                            for dependency in dependencies:
+                                cls = dependency.get('id', '').split(':')[-1].split('.')[0] if isinstance(dependency, dict) else None
+                                if cls in groups: extra[groups[cls]].append(dependency)
+                            extra['gene_sets'] = [node]
+                            inherit_set_bindings(extra, generation)
+                            extra.pop('gene_sets')
+                            if extra: merge(extra, source)
+                    elif gen['model'] == KPN_MODEL:
+                        rows = _batched(connection, 'SELECT gene_set_id,collection_id,metadata FROM cfde_gene_sets'
+                            ' WHERE generation_id=%s AND gene_set_id IN ({marks})', [generation], sets,
+                            ('gene_set_id', 'collection_id', 'metadata'))
+                        observe('gene_sets', generation, rows)
+                        collections = _batched(connection, 'SELECT collection_id,payload FROM cfde_gene_set_collections'
+                            ' WHERE generation_id=%s AND collection_id IN ({marks})', [generation],
+                            [row['collection_id'] for row in rows], ('collection_id', 'payload'))
+                        observe('gene_set_collections', generation, collections)
+                        collection_map = {row['collection_id']: row['payload'] for row in collections}
+                        found = set()
+                        graphs, roots = {}, defaultdict(set)
+                        for collection_id, payload in sorted(collection_map.items()):
+                            source = {'kind': 'reference_collection', 'reference_generation_id': generation,
+                                      'collection_id': collection_id}
+                            graph = deepcopy(payload.get('provenance') or {})
+                            for group, edges in graph.items():
+                                if group.endswith('_edges') and isinstance(edges, list):
+                                    for edge in edges:
+                                        if isinstance(edge, dict): edge['provenance_source'] = source
+                            checksum = payload.get('document_sha256')
+                            supplement = load_supplement(tx, generation, collection_id, checksum) if checksum else None
+                            recovery = {'reference_generation_id': generation, 'collection_id': collection_id,
+                                        'status': 'supplement_loaded' if supplement else 'no_registered_supplement'}
+                            if supplement:
+                                registry = supplement['registry']; supplement_id = registry['id']
+                                metadata['supplement_ids'].append(supplement_id)
+                                observe('provenance_supplement', supplement_id,
+                                    {key: value for key, value in registry.items() if key != 'storage'})
+                                for group, values in supplement['graph'].items():
+                                    if not isinstance(values, list): continue
+                                    for value in values:
+                                        value = deepcopy(value)
+                                        if group.endswith('_edges'):
+                                            value['provenance_source'] = {'kind': 'recovery_supplement', 'supplement_id': supplement_id,
+                                                'reference_generation_id': generation, 'collection_id': collection_id}
+                                        if value not in graph.setdefault(group, []): graph[group].append(value)
+                            metadata['recovery_status'].append(recovery)
+                            graphs[collection_id] = graph
+                        from .acceptance import public_runtime
+                        groups = {cls: group for group, cls in public_runtime().groups.items()}
+                        for row in rows:
+                            identity = row['gene_set_id']; found.add(identity)
+                            node = (row['metadata'] or {}).get('dapper_gene_set')
+                            if not isinstance(node, dict) or node.get('id') != identity:
+                                issue('gene_set_definition_unavailable', identity); continue
+                            node = {key: value for key, value in node.items() if key not in STRIP_GENE_SET}
+                            collection_id = row['collection_id']
+                            if collection_id not in graphs:
+                                issue('collection_provenance_unavailable', identity)
+                            graph = graphs.setdefault(collection_id, {})
+                            graph.setdefault('gene_sets', []).append(node)
+                            roots[collection_id].add(identity)
+                            for dependency in (row['metadata'] or {}).get('dapper_dependencies') or []:
+                                cls = dependency.get('id', '').split(':')[-1].split('.')[0]
+                                if cls in groups: graph.setdefault(groups[cls], []).append(dependency)
+                        for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
+                        for collection_id, graph in sorted(graphs.items()):
+                            selected = _relevant_graph(graph, roots[collection_id], blocked)
+                            inherit_set_bindings(selected, generation)
+                            merge(selected, {'kind': 'reference_collection', 'reference_generation_id': generation, 'collection_id': collection_id})
+                    elif gen['model'] == LEGACY_MODEL:
+                        rows = _batched(connection, 'SELECT a.dapper_id,o.payload,a.provenance FROM cfde_gene_set_aliases a'
+                            ' JOIN dapper_objects o ON o.id=a.dapper_id WHERE a.import_id=%s AND a.dapper_id IN ({marks})',
+                            [gen['legacy_gene_set_import_id']], sets, ('dapper_id', 'payload', 'provenance'))
+                        observe('legacy_gene_sets', generation, rows)
+                        found = set()
+                        for row in rows:
+                            identity = row['dapper_id']; found.add(identity)
+                            if not isinstance(row['payload'], dict) or row['payload'].get('id') != identity:
+                                issue('gene_set_definition_unavailable', identity); continue
+                            source = {'kind': 'legacy_reference', 'reference_generation_id': generation}
+                            graph = deepcopy(row['provenance'] or {})
+                            graph.setdefault('gene_sets', []).append(row['payload'])
+                            selected = _relevant_graph(graph, {identity}, blocked)
+                            inherit_set_bindings(selected, generation)
+                            merge(selected, source)
+                        for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
+                except Exception as error:
+                    if not _missing(error): raise
+                    issue('reference_tables_unavailable')
             if not progressed: break
         else:
             _limit()
@@ -549,15 +837,69 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
             merge({'factor_projection_edges': [{'subject': identity, 'predicate': 'reveal:factorProjection',
                 'object': gene_set, 'reference_generation_id': generation, **row}]},
                 {'kind': 'retained_projection', 'reference_generation_id': generation})
+        kpns = {kpn_trait(identity) for identity in wanted_traits} | set(traits)
+        if current and kpns:
+            try:
+                trait_rows = _batched(connection, _ref('SELECT kpn_trait_id,phenotype_name,metadata FROM reveal_ref_traits'
+                    ' WHERE kpn_trait_id IN ({marks})'), [], kpns, ('kpn_trait_id', 'phenotype_name', 'metadata'))
+                phenotype_rows = _batched(connection, _ref('SELECT kpn_trait_id,display_name,metadata FROM reveal_ref_phenotypes'
+                    ' WHERE kpn_trait_id IN ({marks})'), [], kpns, ('kpn_trait_id', 'display_name', 'metadata'))
+            except Exception as error:
+                if not _missing(error): raise
+                issue('reference_tables_unavailable'); trait_rows = phenotype_rows = []
+            observe('ref_traits', current, trait_rows); observe('ref_phenotypes', current, phenotype_rows)
+            atlas = {row['kpn_trait_id']: row for row in trait_rows}
+            phenotypes = {row['kpn_trait_id']: row for row in phenotype_rows}
+            for identity in sorted(wanted_traits | set(traits)):
+                kpn = kpn_trait(identity)
+                row, phenotype = atlas.get(kpn), phenotypes.get(kpn)
+                if not row and not phenotype:
+                    traits.pop(identity, None); issue('trait_unavailable', identity); continue
+                bottom = ((row or phenotype)['metadata'] or {}).get('bottom_line') or {}
+                portal = bottom.get('portal_trait_id')
+                traits[identity] = {'id': identity, 'name': phenotype['display_name'] if phenotype else row['phenotype_name'],
+                                    'kpn_trait_id': kpn, 'href': bottom_line_href(portal) if portal else KPN_PAGE.format(kpn[-7:])}
+                trait_info[identity] = {'kpn_trait_id': kpn, 'portal_trait_id': portal, 'gwas_artifact': bottom.get('gwas_artifact'),
+                                        'gwas_reason': bottom.get('gwas_reason') or (None if bottom.get('gwas_artifact') else 'not_on_portal')}
         covered = {row['mechanism_id'] for row in metadata['retained_projection_coverage']}
         for identity in sorted(wanted_mechanisms - covered):
+            if chosen.get(identity, {}).get('generation_id') in superseded: continue
             metadata['retained_projection_coverage'].append({'mechanism_id': identity, 'status': 'unresolved',
                 'known_factor_binding': bool(bindings[identity])})
-        metadata['retained_projection_coverage'].sort(key=lambda row: row['mechanism_id'])
-        metadata['reference_generation_ids'] = generations
+        metadata['reference_generation_ids'] = sorted(set(generations) | ({current} if current and kpns else set()))
     finally:
         try: connection.rollback()
         finally: connection.close()
+    # Superseded release: the frozen snapshot the environment archived for the Mechanism (its top gene sets per library),
+    # and the trait its capture names. Never the current tables.
+    for identity, binding in sorted(chosen.items()):
+        if binding['generation_id'] not in superseded or identity in conflicts: continue
+        item, generation = binding['item'], binding['generation_id']
+        snapshot = archived(identity) if archived else None
+        if (isinstance(snapshot, dict) and snapshot.get('generation_id') == generation and snapshot.get('source_id') == item.get('public_id')
+                and (snapshot.get('mechanism') or {}).get('id') == identity and isinstance(snapshot.get('top_gene_sets'), list)):
+            observe('archived_reference_factor', identity, snapshot)
+            rows = [row for row in snapshot['top_gene_sets'] if isinstance(row, dict) and isinstance(row.get('gene_set_id'), str)
+                    and row['gene_set_id'] not in blocked]
+            merge({'mechanisms': [candidate_nodes[identity]], 'factor_projection_edges': [
+                {'subject': identity, 'predicate': 'reveal:factorProjection', 'object': row['gene_set_id'],
+                 'reference_generation_id': generation, 'library': row.get('library'), 'joint_rank': row.get('rank'),
+                 'joint_loading': row.get('joint_loading'), 'marginal_loading': row.get('marginal_loading')} for row in rows]},
+                {'kind': 'archived_snapshot', 'reference_generation_id': generation})
+            metadata['retained_projection_coverage'].append({'mechanism_id': identity, 'reference_generation_id': generation,
+                'status': 'archived_snapshot_loaded', 'known_factor_binding': True, 'retained_rows': len(rows),
+                'model_construction_provenance': 'not_established'})
+        else:
+            metadata['retained_projection_coverage'].append({'mechanism_id': identity, 'reference_generation_id': generation,
+                'status': 'unresolved', 'known_factor_binding': True})
+        fitted(identity, item['kpn_trait_id'], (item.get('trait_metadata') or {}).get('phenotype_name'), generation)
+    metadata['retained_projection_coverage'].sort(key=lambda row: row['mechanism_id'])
+    if not current:  # nothing published, or superseded work: cited traits only as a capture names them
+        for identity in sorted(wanted_traits - set(traits)): issue('trait_unavailable', identity)
+    for identity, record in sorted(traits.items()):
+        if record['name'] is None: record.pop('name')
+        merge({'traits': [record]}, {'kind': RELEASE})
+    metadata['traits'] = {identity: trait_info[identity] for identity in sorted(trait_info) if identity in traits}
     metadata['issues'] = [issues[key] for key in sorted(issues)]
     metadata['source_observations'] = [observations[key] for key in sorted(observations)]
     metadata['supplement_ids'] = sorted(set(metadata['supplement_ids']))

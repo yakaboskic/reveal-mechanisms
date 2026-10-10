@@ -1612,9 +1612,89 @@ export interface paths {
         };
         /**
          * Expand scientific account provenance and dataset reuse
-         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
+         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. A reached KPN trait (a factor's fitted trait or one a proposition cites) adds its published GWAS: route trait_gwas to the bottom-line Dataset of the Translator provenance portal, read within a 15 s budget (an unreachable portal is coverage external_provenance_unavailable, never an error); the GWAS raw inputs are shown on reveal:portalTransitiveInput edges and never traversed. An activity's inputs sharing one onward lineage are followed through one representative past 25 (collapsed_inputs). Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
          */
         get: operations["getAccountProvenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/traits/{kpn_trait_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a reference trait
+         * @description Public reference data of the published release: an atlas trait with its fitted factors, per-library gene-set beta counts and linked factors of other traits, or a non-atlas phenotype the factor-trait linkage reached (is_atlas false). GWAS links point to the Translator provenance portal and are built from stored ids; the portal is never called. Unknown or malformed ids return 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["getTrait"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trait-gene-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page gene-set betas of a trait or of a gene set
+         * @description Give exactly one of trait_id (the trait's gene sets) or gene_set_id (the traits of one gene set); otherwise 422. Values are the release's PIGEAN betas mode, distinct from the BioIndex small-model values. A release without betas returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["listTraitGeneSets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/factor-trait-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page factor-trait links of a factor or of a trait
+         * @description Give exactly one of source_id (the phenotypes a factor is linked to) or trait_id (the factors linked to a trait: the gap use case); otherwise 422. Only links at BH q <= 0.05 are stored: an absent phenotype is unlinked at this threshold, not a negative result. An unknown source_id, or a release without links, returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["listFactorTraitLinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mechanism-objects/{dapper_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve a minted Mechanism id to its factor
+         * @description A DAPPER Mechanism id the catalog minted for a served factor resolves to that factor's source_id. A Mechanism of a factor a superseded release served returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor; other ids return 404. The example factor is from an illustrative eaggl-capped-v1 release.
+         */
+        get: operations["getMechanismObject"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9189,7 +9269,7 @@ export interface components {
             source_field: string;
             source_id: string;
             dataset_id: string;
-            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas")[];
             input_roles: string[];
             organization_ids: string[];
             organization_attributions: {
@@ -9219,6 +9299,7 @@ export interface components {
             sha256?: string | null;
             filename?: string | null;
             ror?: string | null;
+            href?: string | null;
         };
         ProvenanceEdge: {
             id: string;
@@ -9245,12 +9326,14 @@ export interface components {
                 evidence_derivation: number;
                 inherited_source_claim: number;
                 factor_projection: number;
+                trait_gwas: number;
             };
             classification_claim_ids: {
                 proposition_reference: string[];
                 evidence_derivation: string[];
                 inherited_source_claim: string[];
                 factor_projection: string[];
+                trait_gwas: string[];
             };
             input_roles: string[];
         };
@@ -9272,7 +9355,7 @@ export interface components {
                 };
             };
         };
-        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. */
+        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait's portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account's captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage). */
         ProvenanceCoverage: {
             /** @enum {string} */
             status: "complete" | "incomplete";
@@ -9294,6 +9377,14 @@ export interface components {
             issues: {
                 [key: string]: unknown;
             }[];
+            /** @description Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete. */
+            upstream_gaps?: {
+                /** @enum {string} */
+                route: "proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas";
+                /** @description not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), or no_upstream_organizations (the reached Dataset names no organization). */
+                code: string;
+                object_ids: string[];
+            }[];
         };
         ProvenanceSnapshot: {
             id: string;
@@ -9305,6 +9396,7 @@ export interface components {
             publication_version: number;
             reference_generation_ids: string[];
             supplement_ids: string[];
+            /** @description Hashes of every source read. kind portal_bottom_line: key is the portal URL read, sha256 that of the compacted GWAS graph (canonical JSON); a changed portal graph expires cursors. */
             source_observations: {
                 kind: string;
                 key: string;
@@ -9329,6 +9421,129 @@ export interface components {
                 total: number;
                 next_cursor: string | null;
             };
+        };
+        /** @description A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected, with its best 5 nonzero gene sets of each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors counts factors of other traits linked to this trait. */
+        TraitDetail: {
+            kpn_trait_id: string;
+            phenotype: string;
+            name: string;
+            category: string | null;
+            is_atlas: boolean;
+            legacy_phenotype_id: string | null;
+            trait_group: string | null;
+            trait_type: string | null;
+            description: string | null;
+            /** Format: uri */
+            kpn_url: string;
+            /** @description The Translator provenance portal's bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace's GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal. */
+            gwas: {
+                /** @enum {string} */
+                status: "available" | "not_a_gwas_trait" | "not_on_portal";
+                portal_trait_id: string | null;
+                gwas_artifact_id: string | null;
+                portal_href: string | null;
+                artifacts: {
+                    ancestry_code: string;
+                    ancestry_name: string;
+                    artifact_id: string;
+                    /** Format: uri */
+                    href: string;
+                }[];
+            };
+            factors: {
+                source_id: string;
+                label: string;
+                factor_number: number;
+            }[];
+            gene_set_libraries: {
+                library: string;
+                n_gene_sets: number;
+                n_nonzero: number;
+                top_gene_sets: components["schemas"]["TraitGeneSet"][];
+            }[];
+            linked_factors: {
+                n_factors: number;
+            };
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description One trait x gene-set row of the release's PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs). beta_uncorrected is the gene set's uncorrected effect, beta its effect corrected for the library's other gene sets, avg_postp its average posterior inclusion probability; library_rank orders the trait's gene sets within the library by beta_uncorrected. These are not the BioIndex small-model values. */
+        TraitGeneSet: {
+            kpn_trait_id: string;
+            trait_name: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            gene_set_id: string;
+            gene_set_name: string;
+            library: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            collection_id: string;
+            n_genes: number;
+            beta_uncorrected: number;
+            beta: number;
+            avg_postp: number;
+            library_rank: number;
+        };
+        /** @description Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort with zero values last (below the few negative corrected betas), ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0. */
+        TraitGeneSets: {
+            trait_id: string | null;
+            gene_set_id: string | null;
+            library: string | null;
+            /** @enum {string} */
+            sort: "beta_uncorrected" | "beta" | "avg_postp";
+            items: components["schemas"]["TraitGeneSet"][];
+            total: number;
+            next_offset: number | null;
+            coverage: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description A factor linked to a PIGEAN phenotype at BH q <= 0.05. nnls_loading is the factor's non-negative least-squares loading in eaggl's trait linkage; phewas_beta, phewas_p_onesided and phewas_q are the factor-PheWAS effect, its one-sided p value and its Benjamini-Hochberg q over all factor x phenotype tests. is_own_trait marks the phenotype the factor was fitted on; is_atlas_trait a phenotype that is an atlas trait. phenotype_name is the display name; phenotypes without a KPN id have a null phenotype_kpn_trait_id. */
+        FactorTraitLink: {
+            source_id: string;
+            factor_label: string;
+            fitted_kpn_trait_id: string;
+            fitted_trait_name: string;
+            phenotype: string;
+            phenotype_kpn_trait_id: string | null;
+            phenotype_name: string;
+            is_own_trait: boolean;
+            is_atlas_trait: boolean;
+            nnls_loading: number;
+            phewas_beta: number;
+            phewas_p_onesided: number;
+            phewas_q: number;
+        };
+        /** @description Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait's own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor's linkage over every phenotype tested: own_trait_q is null when its own trait was not tested. */
+        FactorTraitLinks: {
+            source_id: string | null;
+            trait_id: string | null;
+            /** @enum {string} */
+            scope: "atlas" | "all";
+            /** @enum {string} */
+            sort: "phewas_q" | "phewas_beta" | "nnls_loading";
+            summary: {
+                n_phenotypes: number;
+                n_linked: number;
+                n_linked_kpn_traits: number;
+                n_linked_atlas_traits: number;
+                own_trait_q: number | null;
+            } | null;
+            items: components["schemas"]["FactorTraitLink"][];
+            total: number;
+            next_offset: number | null;
+            coverage: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description The served factor whose minted DAPPER Mechanism this id is. Resolve the factor at /v1/mechanisms/{source_id}. */
+        MechanismObject: {
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            dapper_id: string;
+            /** @constant */
+            status: "current";
+            source_id: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
         };
     };
     responses: never;
@@ -16389,6 +16604,252 @@ export interface operations {
             };
             /** @description Invalid Input */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getTrait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example KPN.TRAIT:0000398 */
+                kpn_trait_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraitDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTraitGeneSets: {
+        parameters: {
+            query?: {
+                /**
+                 * @description A KPN trait id: list its gene sets. Exclusive with gene_set_id.
+                 * @example KPN.TRAIT:0000398
+                 */
+                trait_id?: string;
+                /**
+                 * @description A gene set: list the traits it has a beta for. Exclusive with trait_id.
+                 * @example dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                 */
+                gene_set_id?: string;
+                /**
+                 * @description Keep one CFDE library.
+                 * @example GTEx
+                 */
+                library?: string;
+                /**
+                 * @description Descending with zero values last; ties by library_rank, then gene_set_id.
+                 * @example beta_uncorrected
+                 */
+                sort?: "beta_uncorrected" | "beta" | "avg_postp";
+                /** @example 50 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraitGeneSets"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listFactorTraitLinks: {
+        parameters: {
+            query?: {
+                /**
+                 * @description A served factor: list its linked phenotypes. Exclusive with trait_id.
+                 * @example factor:kpn:0000398:eaggl-capped-v1:Factor1
+                 */
+                source_id?: string;
+                /**
+                 * @description A KPN trait id: list the factors linked to it. Exclusive with source_id.
+                 * @example KPN.TRAIT:0001360
+                 */
+                trait_id?: string;
+                /**
+                 * @description atlas keeps links whose phenotype is an atlas trait.
+                 * @example all
+                 */
+                scope?: "atlas" | "all";
+                /**
+                 * @description phewas_q ascends; phewas_beta and nnls_loading descend; ties by phenotype, then factor.
+                 * @example phewas_q
+                 */
+                sort?: "phewas_q" | "phewas_beta" | "nnls_loading";
+                /** @example 50 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorTraitLinks"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMechanismObject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MechanismObject"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Reference Generation Superseded */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };

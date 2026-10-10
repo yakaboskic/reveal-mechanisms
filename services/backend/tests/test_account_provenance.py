@@ -31,7 +31,7 @@ class AccountProvenanceTests(unittest.TestCase):
         self.assertEqual(result['coverage']['claim_count'], 1)
         self.assertEqual(result['dataset_reuse'][0]['claim_count'], 1)
         self.assertEqual(result['dataset_reuse'][0]['classification_claim_counts'], {
-            'proposition_reference': 1, 'evidence_derivation': 1, 'inherited_source_claim': 0, 'factor_projection': 0})
+            'proposition_reference': 1, 'evidence_derivation': 1, 'inherited_source_claim': 0, 'factor_projection': 0, 'trait_gwas': 0})
         self.assertEqual(result['organization_reuse'][0]['claim_dataset_count'], 1)
         self.assertEqual(result['organization_reuse'][0]['roles']['attribution']['claim_count'], 1)
         self.assertEqual(result['coverage']['status'], 'complete')
@@ -339,6 +339,108 @@ class AccountProvenanceTests(unittest.TestCase):
                 start, end = (edge['subject'], edge['object']) if step['direction'] == 'forward' else (edge['object'], edge['subject'])
                 self.assertEqual(start, current); current = end
             self.assertEqual(current, trace['dataset_id'])
+
+    def test_trait_gwas_route_counts_claims_and_shows_but_never_walks_portal_inputs(self):
+        trait = 'KPN.TRAIT:0000398'
+        source = document()
+        source['propositions'][0]['object_entity'] = 'https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/'
+        source['scientific_accounts'][0]['component_claims'] = ['claim', 'claim-2']
+        source['claims'].append({'id': 'claim-2', 'proposition': 'prop-2'})
+        source['propositions'].append({'id': 'prop-2', 'subject_entity': 'mechanism'})
+        source['mechanisms'] = [{'id': 'mechanism'}]
+        page = 'https://portal.test/artifact/T2D.sumstats.tsv.gz'
+        source['traits'] = [{'id': trait, 'name': 'Type 2 diabetes', 'href': 'https://portal.test/bottom_line/T2D'},
+                            {'id': source['propositions'][0]['object_entity'], 'name': 'Type 2 diabetes', 'kpn_trait_id': trait}]
+        source['fitted_on_trait_edges'] = [{'subject': 'mechanism', 'predicate': 'reveal:fittedOnTrait', 'object': trait}]
+        source['datasets'].append({'id': 'gwas', 'name': 'Published bottom-line result', 'href': page})
+        source['c2m2_files'] = [{'id': 'raw-' + letter, 'href': page} for letter in 'ab']
+        source['published_gwas_edges'] = [{'subject': identity, 'predicate': 'reveal:publishedGwas', 'object': 'gwas'}
+                                          for identity in (trait, source['propositions'][0]['object_entity'])]
+        source['portal_transitive_input_edges'] = [{'subject': 'gwas', 'predicate': 'reveal:portalTransitiveInput', 'object': 'raw-' + letter,
+                                                    'path_length': 10, 'portal_url': 'u', 'document_sha256': 'd' * 64} for letter in 'ab']
+        result = provenance.collect(source, 'account')
+        gwas = next(row for row in result['dataset_reuse'] if row['dataset_id'] == 'gwas')
+        self.assertEqual((gwas['claim_ids'], gwas['classification_claim_counts']['trait_gwas']), (['claim', 'claim-2'], 2))
+        self.assertEqual(gwas['classification_claim_counts']['proposition_reference'], 2)
+        self.assertEqual(gwas['classification_claim_counts']['factor_projection'], 0)
+        self.assertTrue(all('trait_gwas' in row['route_classifications'] for row in result['traces'] if row['dataset_id'] == 'gwas'))
+        self.assertFalse(any(row['dataset_id'].startswith('raw-') for row in result['traces']))
+        self.assertEqual(result['coverage']['status'], 'complete')
+        self.assertEqual(result['coverage']['upstream_gaps'], [{'route': 'trait_gwas', 'code': 'no_upstream_organizations', 'object_ids': ['gwas']}])
+        nodes = {node['id']: node for node in result['nodes']}
+        self.assertEqual((nodes['raw-a']['href'], nodes['gwas']['href'], nodes[trait]['kind']), (page, page, 'trait'))
+        inputs = [edge for edge in result['edges'] if edge['relation'] == 'portal_transitive_input']
+        self.assertEqual(len(inputs), 2)
+        self.assertEqual(inputs[0]['observations'], [{'document_sha256': 'd' * 64, 'path_length': 10, 'portal_url': 'u'}])
+        self.assertIn(trait, provenance.eligible_reference_ids(source, 'account'))
+
+    def test_a_trait_without_a_record_is_terminal_and_without_gwas_records_no_gap(self):
+        source = document()
+        source['propositions'][0]['object_entity'] = 'KPN.TRAIT:0000999'
+        result = provenance.collect(source, 'account')
+        self.assertEqual(result['coverage']['status'], 'complete')
+        self.assertEqual(next(node for node in result['nodes'] if node['id'] == 'KPN.TRAIT:0000999')['status'], 'unresolved')
+        self.assertNotIn('upstream_gaps', result['coverage'])
+        self.assertIn('KPN.TRAIT:0000999', provenance.eligible_reference_ids(source, 'account'))
+        source['_provenance_coverage'] = {'issues': [{'code': 'trait_unavailable', 'object_id': 'KPN.TRAIT:0000999'}],
+            'upstream_gaps': [{'route': 'trait_gwas', 'code': 'not_a_gwas_trait', 'object_ids': ['KPN.TRAIT:0000123']}]}
+        result = provenance.collect(source, 'account')
+        self.assertEqual(result['propositions'][0]['provenance']['resolution'], 'incomplete')
+        self.assertEqual(result['coverage']['upstream_gaps'], [{'route': 'trait_gwas', 'code': 'not_a_gwas_trait', 'object_ids': ['KPN.TRAIT:0000123']}])
+
+    def glygen(self, seeds=15, inputs=6620, *, lineage=True):
+        """GlyGen HZ2: one extractor used thousands of cached API responses, each (by a curated edge) derived from the GlyGen
+        release; every claim cites a different gene set it generated."""
+        responses = [f'dapper:File.{index:0>32}' for index in range(inputs)]
+        claims = [f'claim-{index}' for index in range(seeds)]
+        return {'scientific_accounts': [{'id': 'account', 'component_claims': claims, 'conclusion_claims': claims[:1]}],
+                'claims': [{'id': claim, 'proposition': 'prop-' + claim} for claim in claims],
+                'propositions': [{'id': 'prop-' + claim, 'subject_entity': 'set-' + claim} for claim in claims],
+                'gene_sets': [{'id': 'set-' + claim, 'was_generated_by': 'extract'} for claim in claims],
+                'activities': [{'id': 'extract'}], 'files': [{'id': identity} for identity in responses],
+                'used_edges': [{'subject': 'extract', 'predicate': 'prov:used', 'object': identity, 'edge_role': 'data_input'} for identity in responses],
+                'was_derived_from_edges': [{'subject': identity, 'predicate': 'prov:wasDerivedFrom', 'object': 'glygen'}
+                                           for identity in responses] if lineage else [],
+                'datasets': [{'id': 'glygen', 'name': 'GlyGen data release v1.12.1', 'publisher': 'gwu'}],
+                'organizations': [{'id': 'gwu', 'name': 'George Washington University'}]}
+
+    def test_a_glygen_hz2_fan_in_with_15_seeds_stays_in_bounds_and_reaches_the_dataset(self):
+        from reveal_backend.reference_lineage import GROUP_THRESHOLD
+        self.assertEqual(provenance.GROUP_THRESHOLD, GROUP_THRESHOLD)
+        source = self.glygen()
+        result = provenance.collect(source, 'account')
+        self.assertEqual([(row['dataset_id'], row['claim_count']) for row in result['dataset_reuse']], [('glygen', 15)])
+        self.assertEqual(result['organization_reuse'][0]['organization_id'], 'gwu')
+        self.assertEqual(result['coverage']['status'], 'complete')
+        used = [edge for edge in result['edges'] if edge['relation'] == 'used']
+        self.assertEqual([edge['object'] for edge in used], ['dapper:File.' + '0' * 32])
+        self.assertIn({'collapsed_inputs': 6620}, used[0]['observations'])
+        self.assertEqual(len(result['nodes']), 1 + 15 * 3 + 4)  # account, claims, propositions, sets; activity, file, dataset, organization
+        # Without the bound the same account exceeds the processing limit.
+        with patch.object(provenance, 'GROUP_THRESHOLD', 10 ** 6), self.assertRaises(Problem) as caught:
+            provenance.collect(source, 'account')
+        self.assertEqual(caught.exception.code, 'PROVENANCE_LIMIT_EXCEEDED')
+
+    def test_inputs_without_any_lineage_are_one_coverage_entry(self):
+        result = provenance.collect(self.glygen(seeds=2, inputs=30, lineage=False), 'account')
+        self.assertEqual(result['dataset_reuse'], [])
+        self.assertEqual([row for row in result['coverage']['issues'] if row['code'] == 'unlinked_inputs'],
+                         [{'code': 'unlinked_inputs', 'activity': 'extract', 'count': 30}])
+        self.assertNotIn('MISSING_LINEAGE', {row['code'] for row in result['coverage']['issues']})
+        self.assertEqual(result['claims'][0]['provenance']['resolution'], 'incomplete')
+        # At or under the bound every input is followed: each is then its own missing lineage.
+        small = provenance.collect(self.glygen(seeds=1, inputs=25, lineage=False), 'account')
+        self.assertEqual({row['code'] for row in small['coverage']['issues']}, {'MISSING_LINEAGE'})
+
+    def test_inputs_a_retained_closure_collapsed_are_not_reported_missing(self):
+        source = self.glygen(seeds=1, inputs=40)
+        kept = source['files'][0]['id']
+        source['files'] = source['files'][:1]
+        source['was_derived_from_edges'] = source['was_derived_from_edges'][:1]
+        source['used_edges'][0]['collapsed_inputs'] = 40
+        result = provenance.collect(source, 'account')
+        self.assertEqual(result['coverage']['status'], 'complete')
+        self.assertEqual([edge['object'] for edge in result['edges'] if edge['relation'] == 'used'], [kept])
 
 
 if __name__ == '__main__':
