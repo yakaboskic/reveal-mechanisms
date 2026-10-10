@@ -2832,6 +2832,15 @@
             "null"
           ]
         },
+        "drs_representation_edges": {
+          "items": {
+            "$ref": "#/$defs/DrsRepresentation"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "embeddings": {
           "items": {
             "$ref": "#/$defs/Embedding"
@@ -2859,6 +2868,15 @@
             "null"
           ]
         },
+        "funded_by_edges": {
+          "items": {
+            "$ref": "#/$defs/FundedBy"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "gene_programs": {
           "items": {
             "$ref": "#/$defs/GeneProgram"
@@ -2880,6 +2898,105 @@
         "gene_sets": {
           "items": {
             "$ref": "#/$defs/GeneSet"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_agentic_workspace_edges": {
+          "items": {
+            "$ref": "#/$defs/HasAgenticWorkspace"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_contributor_edges": {
+          "items": {
+            "$ref": "#/$defs/HasContributor"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_creator_edges": {
+          "items": {
+            "$ref": "#/$defs/HasCreator"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_data_use_term_edges": {
+          "items": {
+            "$ref": "#/$defs/HasDataUseTerm"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_drs_object_edges": {
+          "items": {
+            "$ref": "#/$defs/HasDrsObject"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_file_edges": {
+          "items": {
+            "$ref": "#/$defs/HasFile"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_lineage_step_edges": {
+          "items": {
+            "$ref": "#/$defs/HasLineageStep"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_mirror_provenance_edges": {
+          "items": {
+            "$ref": "#/$defs/HasMirrorProvenance"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_recommended_citation_edges": {
+          "items": {
+            "$ref": "#/$defs/HasRecommendedCitation"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "has_workflow_provenance_edges": {
+          "items": {
+            "$ref": "#/$defs/HasWorkflowProvenance"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "is_described_by_edges": {
+          "items": {
+            "$ref": "#/$defs/IsDescribedBy"
           },
           "type": [
             "array",
@@ -2994,6 +3111,15 @@
             "null"
           ]
         },
+        "packaged_as_edges": {
+          "items": {
+            "$ref": "#/$defs/PackagedAs"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "paragraphs": {
           "items": {
             "$ref": "#/$defs/Paragraph"
@@ -3084,6 +3210,42 @@
         "sets": {
           "items": {
             "$ref": "#/$defs/Set"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "used_edges": {
+          "items": {
+            "$ref": "#/$defs/Used"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "was_attributed_to_edges": {
+          "items": {
+            "$ref": "#/$defs/WasAttributedTo"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "was_derived_from_edges": {
+          "items": {
+            "$ref": "#/$defs/WasDerivedFrom"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "was_generated_by_edges": {
+          "items": {
+            "$ref": "#/$defs/WasGeneratedBy"
           },
           "type": [
             "array",

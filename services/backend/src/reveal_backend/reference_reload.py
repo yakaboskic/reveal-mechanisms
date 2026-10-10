@@ -60,7 +60,7 @@ APPROVAL_FORMAT = 'reveal.reference-reload-approval/1'
 # 2: exports also hold every row purge-retired deletes for the generation: the Activity and unaliased
 # GeneSet dapper_objects rows, every embedding run of its EAGGL import and their DisMech context runs.
 EXPORT_FORMAT = 'reveal.reference-cold-export/2'
-BUNDLE_SCHEMA_VERSION = 2  # 2: cfde_gene_sets.metadata.dapper_gene_set holds the exact CFDE GeneSet node
+BUNDLE_SCHEMA_VERSION = 3  # 3: retain collection provenance relationship groups as well as nodes
 DEFAULT_LAP_PROJECT = ROOT / 'lap/out/projects/eaggl_capped__cfde_2026_09_28'
 DEFAULT_EMBEDDINGS = Path('/humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-09-28/embeddings')
 DEFAULT_DAPPER = CURRENT_DAPPER_SNAPSHOT
@@ -363,19 +363,44 @@ def lap_inputs(project_dir):
 
 
 def collection_header(path, *, limit=32 << 20):
-    """Collection-level fields of a DAPPER GeneSetCollection document, never parsing its gene sets."""
+    """Retain bounded collection provenance before or after the streamed GeneSet list.
+
+    Large GeneSet/embedding sections are skipped without YAML parsing or buffering.
+    Only known provenance sections are decoded; the aggregate retained text is bounded.
+    """
     import yaml
-    lines, size, seen = [], 0, False
+    from .provenance_schema import PROVENANCE_GROUPS, PROVENANCE_EDGES, validate_provenance_edges
+    wanted = {'gene_set_collections', *PROVENANCE_GROUPS}
+    sections, seen, group, size = {}, set(), None, 0
     with open(path, encoding='utf-8') as stream:
         for line in stream:
-            if line.startswith('gene_sets:'): break
-            seen = seen or line.startswith('gene_set_collections:')
-            size += len(line)
-            if size > limit: raise Refused(f'{Path(path).name}: collection header exceeds {limit} bytes')
-            lines.append(line)
-        else: raise Refused(f'{Path(path).name}: no top-level gene_sets list')
-    if not seen: raise Refused(f'{Path(path).name}: gene_set_collections must precede gene_sets')
-    header = _jsonable(yaml.safe_load(''.join(lines)) or {})
+            match = re.match(r'^([A-Za-z_][A-Za-z_0-9]*):(?:\s|$)', line)
+            if match:
+                group = match[1]
+                if group in seen: raise Refused(f'{Path(path).name}: duplicate collection section {group}')
+                seen.add(group)
+                if group in wanted: sections[group] = []
+            if group in wanted:
+                size += len(line.encode('utf-8'))
+                if size > limit: raise Refused(f'{Path(path).name}: collection provenance exceeds {limit} bytes')
+                sections[group].append(line)
+    if 'gene_sets' not in seen: raise Refused(f'{Path(path).name}: no top-level gene_sets list')
+    header = {}
+    for group, lines in sections.items():
+        try: value = yaml.safe_load(''.join(lines))
+        except yaml.YAMLError as error: raise Refused(f'{Path(path).name}: invalid {group} YAML') from error
+        if not isinstance(value, dict): raise Refused(f'{Path(path).name}: malformed {group}')
+        header[group] = _jsonable(value[group])
+    for group in wanted - {'prefixes'}:
+        items = header.get(group)
+        if items is None: continue
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            raise Refused(f'{Path(path).name}: {group} must be a list of objects')
+        if group in PROVENANCE_EDGES:
+            for item in items:
+                if any(not isinstance(item.get(key), str) or not item[key] for key in ('subject', 'predicate', 'object')):
+                    raise Refused(f'{Path(path).name}: malformed provenance edge in {group}')
+    validate_provenance_edges(header)
     collections = header.get('gene_set_collections') or []
     if len(collections) != 1: raise Refused(f'{Path(path).name}: expected exactly one GeneSetCollection')
     return header, {key: value for key, value in collections[0].items() if key != 'members'}
@@ -538,7 +563,7 @@ def build_bundle(project_dir, out_dir, *, kpn_release=None):
         nodes.update(found)
         collections.append({'collection_id': collection_id, 'cfde_label': row['label'], 'library': row['library'],
                             'n_sets': members[collection_id], 'payload': {'collection': document, 'index': row, 'document_sha256': documents[row['label']],
-                            'provenance': {key: header.get(key) for key in ('prefixes', 'organizations', 'datasets', 'files', 'activities')}}})
+                            'provenance': {key: value for key, value in header.items() if key != 'gene_set_collections'}}})
     identity = {'format': BUNDLE_FORMAT, 'schema_version': BUNDLE_SCHEMA_VERSION, 'kind': rg.KPN_KIND, 'model': rg.KPN_MODEL,
                 'projection_scope': rg.PROJECTION_SCOPE, 'kpn_release': release, 'kpn_release_commit': release_commit,
                 'pigean_commit': pigean_commit, 'inputs': {role: _sha256_file(path) for role, path in sorted(paths.items())},

@@ -525,6 +525,22 @@ class ReferenceEvidenceTests(unittest.TestCase):
             self.assertEqual([item['id'] for item in dependencies], [node['was_generated_by']])
             self.assertEqual(used, {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:'})
 
+    def test_collected_package_retains_shared_anonymous_provenance_edges(self):
+        database = self.root / 'with-provenance.sqlite3'
+        shutil.copyfile(self.database, database)
+        dataset = {'name': 'raw measurements'}
+        dataset['id'] = self.runtime.compute_id(dataset, 'Dataset', self.runtime.schema)
+        edge = {'subject': self.activity['id'], 'predicate': 'prov:used', 'object': dataset['id'], 'edge_role': 'data_input'}
+        with sqlite3.connect(database) as db:
+            payload = json.loads(db.execute('SELECT payload FROM cfde_gene_set_collections').fetchone()[0])
+            payload['provenance'].update(datasets=[dataset], used_edges=[edge])
+            db.execute('UPDATE cfde_gene_set_collections SET payload=?', (json.dumps(payload),))
+        package = self.collect('preserved-edges', [ANCHOR], database=database).package
+        self.assertEqual(package['dapper_context']['used_edges'], [edge])
+        self.assertEqual(package['dapper_context']['datasets'], [dataset])
+        self.runtime.validate(package['dapper_context'])
+        validate_package_shape(package, SCHEMA)
+
     def test_selection_provenance_is_frozen_like_collect_package(self):
         metadata = {'origins': {ANCHOR: 'automatic'}, 'dismissed_eaggl_ids': [SIBLING],
                     'semantic_retrieval': {'status': 'not_computed', 'embedding_run_id': None}, 'frozen_binding': {'anchors': []}}

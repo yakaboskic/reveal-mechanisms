@@ -149,9 +149,10 @@ Read closing remarks; open associated claims on demand.
 
 **Request:** Exact account/claim/GeneSet/object ID and optional payload/traversal bounds.
 
-**Response:** DAPPER document, payload checksums, coverage, artifacts and research_statement state.
+**Response:** DAPPER document, payload checksums, coverage, artifacts and research_statement state; provenance wrappers, traces and distinct claim reuse totals.
 
 - `GET /v1/accounts/{dapper_id}` — [request request/response](examples/getAccount.request.json)
+- `GET /v1/accounts/{account_id}/provenance` — [request request/response](examples/getAccountProvenance.request.json)
 - `GET /v1/claims/{dapper_id}` — [request request/response](examples/getClaim.request.json)
 - `GET /v1/gene-sets/{dapper_id}` — [request request/response](examples/getGeneSet.request.json)
 - `GET /v1/objects/{dapper_id}` — [request request/response](examples/resolveDapperObject.request.json)
@@ -166,6 +167,7 @@ Read closing remarks; open associated claims on demand.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
 - Partial provenance and unavailable downloads remain explicit.
 - Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.
+- Account provenance is a REST application view over unchanged scientific records. Trace pages repeat full-account totals; incomplete lineage produces explicit lower-bound counts.
 
 ### 7. Generate the cited statement automatically
 
@@ -527,4 +529,4 @@ Explicitly request one preliminary completion, review the saved direction, then 
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 91 operations and all 114 exchanges. OpenAPI SHA-256: `a3834b0dd1fbebfc27a46a6040cc7ac2cdee0962dd5293bf99becae00051a962`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 92 operations and all 115 exchanges. OpenAPI SHA-256: `5dddbccd8c7ef60325ba21641b023c330d5f9cb15be3e0430829d86c85a50c52`. No endpoints or payloads were changed to build this diagram.

@@ -107,9 +107,10 @@
       "route": "GET /v1/accounts/{id}",
       "action": "Read closing remarks; open associated claims on demand.",
       "incoming": "Exact account/claim/GeneSet/object ID and optional payload/traversal bounds.",
-      "outgoing": "DAPPER document, payload checksums, coverage, artifacts and research_statement state.",
+      "outgoing": "DAPPER document, payload checksums, coverage, artifacts and research_statement state; provenance wrappers, traces and distinct claim reuse totals.",
       "cases": [
         "getAccount.request",
+        "getAccountProvenance.request",
         "getClaim.request",
         "getGeneSet.request",
         "resolveDapperObject.request",
@@ -124,7 +125,8 @@
         "An account built on a superseded reference generation carries archive: show its original anchors from the frozen reference factors and offer a new analysis on the gap with current factors.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
         "Partial provenance and unavailable downloads remain explicit.",
-        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
+        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.",
+        "Account provenance is a REST application view over unchanged scientific records. Trace pages repeat full-account totals; incomplete lineage produces explicit lower-bound counts."
       ]
     },
     {

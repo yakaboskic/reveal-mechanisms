@@ -740,6 +740,8 @@ def main():
     openapi_cfde_assessment.extend(module, fixture, examples)
     import openapi_lightning
     openapi_lightning.extend(module, fixture, examples)
+    import openapi_provenance
+    openapi_provenance.extend(module, fixture, examples)
     # Pair representation-specific inputs with the correct output, and include
     # paragraph polling under its own job ID in the portable exchange library.
     def extra_exchange(operation_id, case, *, query=None, path=None, media=None, response_name=None, value=None):

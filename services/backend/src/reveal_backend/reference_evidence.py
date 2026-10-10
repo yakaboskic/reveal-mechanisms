@@ -82,6 +82,7 @@ HGNC.SYMBOL as the default; only prefixes the included objects use join the pack
 """
 from __future__ import annotations
 
+from collections import deque
 from copy import deepcopy
 import json
 import math
@@ -89,6 +90,7 @@ from pathlib import Path
 import re
 import time
 
+from .provenance_schema import PROVENANCE_NODES, PROVENANCE_EDGES
 from .evidence_collector import CaptureStore, add_source_prefixes, deepcopy_record, gz_records
 from .evidence_package import (BUILD_VERSION, INPUT_VERSION, TARGETS, EvidenceBuildError, build_package, canonical_json,
                                decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
@@ -132,7 +134,7 @@ GENE_SET_SQL = ('SELECT gene_set_id,collection_id,gene_set_name,library,n_genes,
                 ' FROM cfde_gene_sets WHERE generation_id=%s AND gene_set_id IN ({marks})')
 COLLECTION_SQL = ("SELECT collection_id,cfde_label,library,n_sets,JSON_EXTRACT(payload,'$.provenance') FROM cfde_gene_set_collections"
                   ' WHERE generation_id=%s AND collection_id IN ({marks})')
-PROVENANCE_GROUPS = ('activities', 'files', 'datasets', 'organizations')
+PROVENANCE_GROUPS = tuple(PROVENANCE_NODES)
 JSON_COLUMNS = ('manifest', 'metadata', 'provenance')
 
 
@@ -610,7 +612,7 @@ def _class_of(identity):
     return DAPPER_REFERENCE.fullmatch(identity).group(1)
 
 
-def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups):
+def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, edge_groups=None):
     """(exact GeneSet, dependency objects, extra prefixes, reason); reason is None when exact."""
     metadata = row['metadata'] if isinstance(row.get('metadata'), dict) else {}
     payload = metadata.get('dapper_gene_set')
@@ -622,27 +624,64 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups):
     pool = {}
     for source in (metadata.get('dapper_dependencies'), *(provenance.get(group) for group in PROVENANCE_GROUPS)):
         for item in source if isinstance(source, list) else []:
-            if isinstance(item, dict) and isinstance(item.get('id'), str): pool.setdefault(item['id'], item)
-    dependencies, pending, seen = [], sorted(_references(node, set())), {node['id']}
+            if isinstance(item, dict) and isinstance(item.get('id'), str):
+                if item['id'] in pool and pool[item['id']] != item:
+                    return None, [], {}, 'Conflicting stored DAPPER dependency'
+                pool[item['id']] = item
+    retained_edges, outgoing, memberships = {}, {}, {}
+    for group in PROVENANCE_EDGES:
+        for edge in provenance.get(group) or []:
+            if not isinstance(edge, dict) or any(not isinstance(edge.get(k), str) for k in ('subject', 'predicate', 'object')):
+                return None, [], {}, 'Malformed stored provenance edge'
+            target = memberships if group == 'has_file_edges' else outgoing
+            target.setdefault(edge['object'] if group == 'has_file_edges' else edge['subject'], []).append((group, edge))
+    file_ids = {identity for identity in pool if DAPPER_REFERENCE.fullmatch(identity)
+                and _class_of(identity) in ('File', 'C2M2File')}
+    native_parents = {}
+    for dataset_id, dataset in pool.items():
+        if not DAPPER_REFERENCE.fullmatch(dataset_id) or _class_of(dataset_id) != 'Dataset': continue
+        for field in ('has_file', 'had_member'):
+            values = dataset.get(field) or []
+            for child in values if isinstance(values, list) else [values]:
+                if isinstance(child, str) and child in file_ids: native_parents.setdefault(child, []).append(dataset_id)
+    dependencies, pending, seen, inverse_seen = [], deque([(node['id'], True)]), set(), set()
     while pending:
-        identity = pending.pop(0)
+        identity, inverse = pending.popleft()
+        # Membership alone does not make a sibling File another inverse traversal root.
+        if inverse and identity in file_ids and identity not in inverse_seen:
+            inverse_seen.add(identity)
+            pending.extend((parent, True) for parent in native_parents.get(identity, []))
+            for group, edge in memberships.get(identity, []):
+                parent = edge.get('subject')
+                if parent not in pool or not DAPPER_REFERENCE.fullmatch(parent) or _class_of(parent) != 'Dataset': continue
+                if edge not in retained_edges.setdefault(group, []): retained_edges[group].append(edge)
+                pending.extend((ref, True) for ref in sorted(_references(edge, set())))
         if identity in seen: continue
         seen.add(identity)
-        if identity not in pool: return None, [], {}, f'DAPPER dependency is not stored: {identity}'
+        item = node if identity == node['id'] else pool.get(identity)
+        if item is None: return None, [], {}, f'DAPPER dependency is not stored: {identity}'
         if _class_of(identity) not in class_groups: return None, [], {}, f'Unsupported DAPPER dependency class: {identity}'
-        dependencies.append(pool[identity]); pending.extend(sorted(_references(pool[identity], set())))
+        if identity != node['id']: dependencies.append(item)
+        member_fields = ('has_file', 'had_member') if _class_of(identity) == 'Dataset' else ()
+        ordinary = {key: value for key, value in item.items() if key not in member_fields}
+        pending.extend((ref, True) for ref in sorted(_references(ordinary, set())))
+        pending.extend((ref, False) for ref in sorted(_references({key: item[key] for key in member_fields if key in item}, set())))
+        for group, edge in outgoing.get(identity, []):
+            if edge not in retained_edges.setdefault(group, []): retained_edges[group].append(edge)
+            pending.extend((ref, True) for ref in sorted(_references(edge, set())))
     declared = dict(DEFAULT_GENE_SET_PREFIXES)
     for source in (provenance.get('prefixes'), metadata.get('dapper_prefixes')):
         if isinstance(source, dict): declared.update({k: v for k, v in source.items() if isinstance(k, str) and isinstance(v, str)})
-    values = [value for item in [node, *dependencies] for value in _strings(item)]
+    values = [value for item in [node, *dependencies, retained_edges] for value in _strings(item)]
     used = {name: uri for name, uri in sorted(declared.items()) if any(value.startswith(name + ':') for value in values)}
     if any(base_prefixes.get(name, uri) != uri for name, uri in used.items()): return None, [], {}, 'GeneSet CURIE prefix conflicts with package prefixes'
-    document = {'prefixes': {**base_prefixes, **used}, 'gene_sets': [node]}
+    document = {'prefixes': {**base_prefixes, **used}, 'gene_sets': [node], **retained_edges}
     for item in dependencies: document.setdefault(class_groups[_class_of(item['id'])], []).append(item)
     try:
         canonical_json(document); dapper.validate(document)
     except (EvidenceBuildError, ValueError, KeyError, TypeError) as exc:
         return None, [], {}, ('DAPPER validation failed: ' + str(exc))[:500]
+    if edge_groups is not None: edge_groups.update(retained_edges)
     return node, dependencies, used, None
 
 
@@ -668,7 +707,8 @@ def _gene_set_objects(evidence, base_prefixes):
     class_groups, shared, resolution, objects = _class_groups(dapper), {}, [], {}
     for gene_set_id in wanted:
         i, row = by_id[gene_set_id]; node_id = 'gene_set:' + gene_set_id
-        exact, dependencies, used, reason = _resolve_gene_set(dapper, row, by_collection.get(row['collection_id']), base_prefixes, class_groups)
+        edges = {}
+        exact, dependencies, used, reason = _resolve_gene_set(dapper, row, by_collection.get(row['collection_id']), base_prefixes, class_groups, edge_groups=edges)
         if exact and any(shared.get(item['id'], item) != item for item in dependencies):
             exact, dependencies, used, reason = None, [], {}, 'A stored DAPPER dependency conflicts with another gene set'
         if exact: shared.update({item['id']: item for item in dependencies})
@@ -677,7 +717,7 @@ def _gene_set_objects(evidence, base_prefixes):
         alias['id'] = dapper.compute_id(alias, 'GeneSet', dapper.schema)
         activity = any(_class_of(item['id']) == 'Activity' for item in dependencies)
         objects[node_id] = {'prefixes': used,
-            'objects': [('gene_sets', alias)] + ([('gene_sets', exact)] + [(class_groups[_class_of(item['id'])], item) for item in dependencies] if exact else []),
+            'objects': [('gene_sets', alias)] + ([('gene_sets', exact)] + [(class_groups[_class_of(item['id'])], item) for item in dependencies] + [(group, edge) for group, items in edges.items() for edge in items] if exact else []),
             'binding': {'dapper_id': alias['id'], 'import_id': generation_id, 'membership_status': 'loaded' if exact else 'not_loaded',
                         'construction_provenance_status': 'generating_activity_loaded' if activity else 'not_loaded',
                         'provenance_refs': [ref('gene-set-payloads', f'/data/{i}'), ref('gene-set-resolution', f'/gene_sets/{len(resolution)}')]}}
@@ -772,7 +812,9 @@ def collect_reference_package(*, gap_id, factor_ids, output, dapper, project_roo
                 if identity not in gene_sets: continue
                 bindings[identity] = gene_sets[identity]['binding']; package_prefixes.update(gene_sets[identity]['prefixes'])
                 for group, node in gene_sets[identity]['objects']:
-                    if node['id'] not in known: known.add(node['id']); document.setdefault(group, []).append(node)
+                    if 'id' not in node:
+                        if node not in document.setdefault(group, []): document[group].append(node)
+                    elif node['id'] not in known: known.add(node['id']); document.setdefault(group, []).append(node)
             document['prefixes'] = package_prefixes
             return {'input_version': INPUT_VERSION, 'prefixes': package_prefixes,
                     'identifier_policy': {'source_local_prefixes': ['factor', 'gene', 'gene_set', 'trait', 'cfde'],
