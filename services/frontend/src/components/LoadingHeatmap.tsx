@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { loadingAppearance, loadingColors, loadingLevel, loadingMembershipCounts, loadingNavigation, loadingValue, type LoadingCell } from "@/lib/loading-visual";
+import { loadingAppearance, loadingColors, loadingLevel, loadingMembershipCounts, loadingNavigation, loadingRank, loadingValue, type LoadingCell } from "@/lib/loading-visual";
 import "./loading-heatmap.css";
 
 export type { LoadingCell } from "@/lib/loading-visual";
@@ -69,7 +69,7 @@ export function LoadingHeatmap({ items, min, max, label, orderingLabel = "rank",
               <button type="button" ref={element => { if (element) buttons.current.set(item.id, element); else buttons.current.delete(item.id); }}
                 className={`loading-heatmap-tile${level === null ? " loading-heatmap-tile-unknown" : ""}${membership ? ` loading-heatmap-tile-${membership === "unknown" ? "membership-unknown" : membership}` : ""}`}
                 style={level === null ? undefined : { backgroundColor: loadingColors[level] }} tabIndex={item.id === tabStop ? 0 : -1}
-                aria-label={`${item.label}; loading ${loadingValue(item.loading)}; rank ${item.rank}${membershipLabel ? `; ${membershipLabel}` : ""}`}
+                aria-label={`${item.label}; loading ${loadingValue(item.loading)}; rank ${loadingRank(item)}${membershipLabel ? `; ${membershipLabel}` : ""}`}
                 aria-pressed={item.id === pinned} aria-describedby={inspected?.id === item.id ? `${identity}-tooltip` : undefined}
                 onPointerEnter={event => { if (event.pointerType !== "touch") setHover(point(item.id, event.currentTarget)); }} onPointerLeave={() => setHover(null)}
                 onFocus={event => { setFocused(item.id); setFocus(point(item.id, event.currentTarget)); }} onBlur={() => setFocus(null)}
@@ -80,7 +80,7 @@ export function LoadingHeatmap({ items, min, max, label, orderingLabel = "rank",
         </div>)}
       </div>
       {inspected && active && <div className="loading-heatmap-tooltip" role="tooltip" id={`${identity}-tooltip`} style={{ left: active.left, top: active.top }}>
-        <strong>{inspected.label}</strong><span>Loading {loadingValue(inspected.loading)} <span aria-hidden="true">·</span> Rank {inspected.rank}</span>
+        <strong>{inspected.label}</strong><span>Loading {loadingValue(inspected.loading)} <span aria-hidden="true">·</span> Rank {loadingRank(inspected)}</span>
         {inspectedMembership && <span className="loading-heatmap-membership">{inspectedMembership}</span>}
         {inspected.details?.length ? <dl className="loading-heatmap-details">{inspected.details.map(detail => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
         {inspected.description && <small>{inspected.description}</small>}
@@ -95,7 +95,7 @@ export function LoadingHeatmap({ items, min, max, label, orderingLabel = "rank",
       <span><i className="loading-heatmap-member-key" aria-hidden="true" />Members</span><span><i className="loading-heatmap-nonmember-key" aria-hidden="true" />Nonmembers use smaller squares</span>{membershipCounts.unknown > 0 && <span><i className="loading-heatmap-membership-unknown-key" aria-hidden="true" />Membership unknown</span>}<span className="loading-heatmap-overlay-note">Colors still show loading on the same scale.</span>
     </div>}
     {selected && <div className="loading-heatmap-selection" aria-live="polite">
-      <div><strong>{selected.label}</strong><span>Loading <b>{loadingValue(selected.loading)}</b> <span aria-hidden="true">·</span> Rank {selected.rank}</span>{selectedMembership && <span className="loading-heatmap-membership">{selectedMembership}</span>}{selected.description && <small>{selected.description}</small>}
+      <div><strong>{selected.label}</strong><span>Loading <b>{loadingValue(selected.loading)}</b> <span aria-hidden="true">·</span> Rank {loadingRank(selected)}</span>{selectedMembership && <span className="loading-heatmap-membership">{selectedMembership}</span>}{selected.description && <small>{selected.description}</small>}
         {selected.details?.length ? <dl className="loading-heatmap-details">{selected.details.map(detail => <div key={detail.label}><dt>{detail.label}</dt><dd>{detail.value}</dd></div>)}</dl> : null}
         {(selected.href || selected.links?.length || (onAction && actionLabel)) && <div className="loading-heatmap-selection-actions">
           {selected.href && <Link href={selected.href}>View gene set and provenance <span aria-hidden="true">↗</span></Link>}

@@ -10,7 +10,7 @@ export const factorApi = {
   detail: (source_id: string, source_revision?: string, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/factors/{source_id}", {
     params: { path: { source_id }, query: { source_revision } }, signal: combined(signal, caller),
   })), "The factor is taking longer than expected to load. Please retry."),
-  loadings: (query: { source_id: string; source_revision?: string; generation_id?: string; gnomad_import_id?: string; kind: "gene" | "gene_set"; metric: "joint" | "marginal"; sort?: Schema<"FactorLoadings">["sort"]; q?: string; offset?: number; limit?: number }, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/factor-loadings", {
+  loadings: (query: { source_id: string; source_revision?: string; generation_id?: string; gnomad_import_id?: string; kind: "gene" | "gene_set"; metric: "joint" | "marginal"; sort?: Schema<"FactorLoadings">["sort"]; q?: string; library?: string; offset?: number; limit?: number }, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/factor-loadings", {
     params: { query }, signal: combined(signal, caller),
   })), "The factor loadings are taking longer than expected to load. Please retry."),
   geneSet: (gene_set_id: string, generation_id?: string, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/catalog/gene-sets/{gene_set_id}", {
@@ -19,4 +19,16 @@ export const factorApi = {
   savedGeneSet: (dapper_id: string, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/gene-sets/{dapper_id}", {
     params: { path: { dapper_id } }, signal: combined(signal, caller),
   })), "The saved gene set is taking longer than expected to load. Please retry."),
+  trait: (kpn_trait_id: string, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/traits/{kpn_trait_id}", {
+    params: { path: { kpn_trait_id } }, signal: combined(signal, caller),
+  })), "The trait is taking longer than expected to load. Please retry."),
+  traitGeneSets: (query: { trait_id?: string; gene_set_id?: string; library?: string; sort: Schema<"TraitGeneSets">["sort"]; offset?: number; limit?: number }, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/trait-gene-sets", {
+    params: { query }, signal: combined(signal, caller),
+  })), "The gene-set betas are taking longer than expected to load. Please retry."),
+  traitLinks: (query: { source_id?: string; trait_id?: string; scope?: Schema<"FactorTraitLinks">["scope"]; sort: Schema<"FactorTraitLinks">["sort"]; offset?: number; limit?: number }, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/factor-trait-links", {
+    params: { query }, signal: combined(signal, caller),
+  })), "The linked traits are taking longer than expected to load. Please retry."),
+  mechanismObject: (dapper_id: string, caller?: AbortSignal) => withRequestDeadline(async signal => unwrap(await client.GET("/v1/mechanism-objects/{dapper_id}", {
+    params: { path: { dapper_id } }, signal: combined(signal, caller),
+  }))),
 };

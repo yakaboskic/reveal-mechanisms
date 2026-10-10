@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { factorHref, geneSetHref, referenceReturnPath, returnLabel, traitHref } from "../src/lib/factor-links";
+import { factorHref, geneSetHref, referenceReturnPath, returnLabel, traitHref, traitPageHref } from "../src/lib/factor-links";
 
 test("trait links use the KPN catalog and preserve leading zeroes", () => {
   assert.equal(traitHref("KPN.TRAIT:0001360"), "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/");
@@ -34,4 +34,17 @@ test("an opened gap without a draft yet returns to its question", () => {
   assert.equal(back, "/?gap=dismech%3Agap");
   assert.equal(returnLabel(back), "Back to knowledge gap");
   assert.equal(returnLabel("/drafts/draft-1"), "Back to draft"); assert.equal(returnLabel("/"), "Explore knowledge gaps");
+});
+
+test("trait pages are in-app, carry their return path and accept only KPN trait ids", () => {
+  const factor = factorHref("factor:kpn:0000398:eaggl-capped-v1:Factor1", "abc");
+  const url = new URL(traitPageHref("KPN.TRAIT:0000398", factor)!, "http://localhost");
+  assert.equal(decodeURIComponent(url.pathname), "/traits/KPN.TRAIT:0000398");
+  assert.equal(url.searchParams.get("from"), factor);
+  assert.equal(traitPageHref("KPN.TRAIT:0000398", "https://example.com"), "/traits/KPN.TRAIT%3A0000398");
+  for (const id of ["KPN.TRAIT:398", "T2D", "KPN.TRAIT:0000398/x"]) assert.equal(traitPageHref(id), null);
+  const back = referenceReturnPath(url.pathname + url.search);
+  assert.equal(returnLabel(back), "Back to trait");
+  assert.equal(returnLabel("/gene-sets/dapper%3AGeneSet.x"), "Back to gene set");
+  assert.equal(returnLabel("/accounts/dapper%3AScientificAccount.x?view=lineage"), "Back to scientific account");
 });

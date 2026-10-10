@@ -14,6 +14,13 @@ export function factorHref(sourceId: string, revision?: string | null, options: 
   return `/factors/${encodeURIComponent(sourceId)}${query.size ? `?${query}` : ""}`;
 }
 
+/** The in-app trait page; the KPN catalog page stays a secondary link. */
+export function traitPageHref(id: string, from?: string | null) {
+  if (!/^KPN\.TRAIT:\d{7}$/.test(id)) return null;
+  const back = referenceReturnPath(from);
+  return `/traits/${encodeURIComponent(id)}${back ? `?${new URLSearchParams({ from: back })}` : ""}`;
+}
+
 export function geneSetHref(id: string, generation?: string | null, from?: string | null) {
   const query = new URLSearchParams();
   if (generation) query.set("generation_id", generation);
@@ -27,13 +34,16 @@ export function referenceReturnPath(value?: string | null): string | null {
   if (!value || !value.startsWith("/") || value.startsWith("//") || /[\\\r\n]/.test(value)) return null;
   try {
     const url = new URL(value, "https://reveal.invalid");
-    if (url.origin !== "https://reveal.invalid" || !/^(\/|\/(factors|gene-sets|runs|drafts|accounts|claims|knowledge-gaps)\/[^/]+\/?|\/workspace)$/.test(url.pathname)) return null;
+    if (url.origin !== "https://reveal.invalid" || !/^(\/|\/(factors|gene-sets|traits|runs|drafts|accounts|claims|knowledge-gaps)\/[^/]+\/?|\/workspace)$/.test(url.pathname)) return null;
     return url.pathname + url.search + url.hash;
   } catch { return null; }
 }
 
 export function returnLabel(path?: string | null) {
   if (path?.startsWith("/factors/")) return "Back to factor";
+  if (path?.startsWith("/traits/")) return "Back to trait";
+  if (path?.startsWith("/gene-sets/")) return "Back to gene set";
+  if (path?.startsWith("/accounts/")) return "Back to scientific account";
   if (path?.startsWith("/runs/") || path?.includes("?job=")) return "Back to research run";
   if (path?.startsWith("/drafts/")) return "Back to draft";
   if (path?.startsWith("/?gap=")) return "Back to knowledge gap";
