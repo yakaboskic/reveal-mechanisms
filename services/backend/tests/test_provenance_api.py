@@ -166,6 +166,44 @@ class ProvenanceApiTests(unittest.TestCase):
         self.assertEqual(response.json()['code'], 'PROVENANCE_SOURCE_UNAVAILABLE')
         self.assertNotIn('dataset_reuse', response.json())
 
+    def test_box_account_mechanism_binds_by_identity_end_to_end(self):
+        # A hosted (Box) account cites a KPN Mechanism with no research capture; the endpoint binds it by
+        # recomputed identity and traces its projected GeneSet through the stored collection lineage.
+        from types import SimpleNamespace
+        import sqlite3
+        import test_research_data as references
+        from reveal_backend import provenance_reference
+        reference = SimpleNamespace(addCleanup=self.addCleanup)
+        references.ReferenceQueryTests.setUp(reference)
+        capture = reference.service.query('get_factor', {'factor_id': references.FACTOR}, generation_id=references.GEN)
+        mechanism = provenance_reference._compute_mechanism(capture.result['items'][0], capture.source)
+        activity, dataset, org = identifier('Activity', 'x'), identifier('Dataset', 'x'), identifier('Organization', 'x')
+        graph = {'activities': [{'id': activity, 'name': 'extraction'}],
+                 'datasets': [{'id': dataset, 'name': 'source', 'publisher': org}],
+                 'organizations': [{'id': org, 'name': 'publisher'}],
+                 'used_edges': [{'subject': activity, 'predicate': 'prov:used', 'object': dataset, 'edge_role': 'data_input'}]}
+        with sqlite3.connect(reference.path) as c:
+            c.execute('UPDATE cfde_gene_sets SET metadata=? WHERE generation_id=?', (json.dumps({'dapper_gene_set':
+                {'id': references.SET, 'name': 'stored set', 'members': ['HGNC.SYMBOL:GENE_A'], 'was_generated_by': activity}}), references.GEN))
+            c.execute('UPDATE cfde_gene_set_collections SET payload=? WHERE generation_id=?',
+                      (json.dumps({'provenance': graph, 'document_sha256': 'd' * 64}), references.GEN))
+        claim, prop = identifier('Claim', 'm'), identifier('Proposition', 'm')
+        document = {'scientific_accounts': [dict(self.base_account, id=self.account_id, component_claims=[claim], conclusion_claims=[claim])],
+                    'claims': [{'id': claim, 'proposition': prop, 'statement': 'A mechanism claim', 'direction': 'SUPPORTS', 'status': 'proposed'}],
+                    'propositions': [{'id': prop, 'subject_entity': mechanism['id'], 'statement': 'The factor is involved.',
+                                      'proposition_kind': 'RESULT'}],
+                    'mechanisms': [mechanism]}
+        self.install_document(document)
+        connect = lambda *args, **kwargs: references.Connection(reference.path, reference.queries)
+        with patch('reveal_backend.runtime_config.reference_mysql_connection', side_effect=connect):
+            response = self.request('get', self.provenance_route, self.owner)
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()  # contract conformance: test_response_conforms_to_generated_contract
+        coverage = body['coverage']['retained_projection_coverage'][0]
+        self.assertEqual((coverage['mechanism_id'], coverage['binding_origin']), (mechanism['id'], 'document_identity'))
+        self.assertEqual([row['dataset_id'] for row in body['dataset_reuse']], [dataset])
+        self.assertEqual(body['organization_reuse'][0]['organization_id'], org)
+
     def test_response_conforms_to_generated_contract(self):
         self.install_document(deepcopy(self.fixture['account']['document']))
         response = self.request('get', self.provenance_route, self.owner)
