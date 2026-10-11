@@ -601,7 +601,8 @@ def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
     """(items, public rerank status, audit fields): Jev order over every eligible disease identity plus the
     top cosine factors, or today's disease-then-cosine policy over that pool when Jev cannot answer."""
     disease_items=getattr(catalog,'disease_factors',lambda *_: [])(gap,gap_rerank.DISEASE_POOL_SIZE,exclude)
-    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,**index)
+    # Rank the wide pool by the vector search's own similarities: exact re-scoring would download every candidate's vectors.
+    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,search_scores=True,**index)
     entries=gap_rerank.pool(disease_items,cosine_items)
     mechanisms=[catalog.mechanisms[identity] for identity,_ in contexts if identity in catalog.mechanisms]
     factors=[(entry['item']['record']['source_id'],gap_rerank.factor_view(entry['item']['record'])) for entry in entries]
@@ -616,7 +617,7 @@ def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
             logging.getLogger('reveal').error('Suggestion rerank failed (%s)', type(error).__name__)
         scores,meta={},{}
         items,public['status'],public['reason']=gap_rerank.fallback(entries,disease_items,remaining),'fallback',getattr(error,'reason','internal_error')
-    audit={**public,**meta,'elapsed_ms':round((monotonic()-started)*1000)}
+    audit={**public,**meta,'pool_scores':'vector_search','elapsed_ms':round((monotonic()-started)*1000)}
     return items,public,{'rerank':audit,'rerank_pool':gap_rerank.pool_rows(entries,scores)}
 
 def build_suggestions(body):

@@ -13,7 +13,7 @@ from reveal_backend.auth import Problem
 from reveal_backend.repository import Repository, digest
 from reveal_backend.vector_ingestion import VectorRegistry, import_batch, save_export, verify_snapshot
 from reveal_backend.vector_retrieval import (POLICY_VERSION, UpstashFactorIndex, VectorUnavailable, check_snapshot_readiness,
-    cosine_score, embedding_space, metadata, query_vector_provenance, retrieve_native, vector_checksum)
+    cosine_score, embedding_space, metadata, query_vector_provenance, retrieve_by_search_scores, retrieve_native, vector_checksum)
 
 
 class Provider:
@@ -192,6 +192,36 @@ class RetrievalTests(unittest.TestCase):
         bare = retrieve_native(index, records, vectors, 3, provenance=False)
         self.assertEqual([(row['record'], row['value']) for row in bare], [(row['record'], row['value']) for row in rows])
         self.assertTrue(all('retrieval' not in row for row in bare))
+
+    def test_search_score_pool_downloads_no_vectors_and_leaves_unreturned_contexts_empty(self):
+        class SearchOnly:
+            run, candidate_limit = {'dimensions': 2}, 1000
+            factors = [{'factor_id': 'a'}, {'factor_id': 'b'}, {'factor_id': 'b2'}]
+            def candidates(self, vectors, top_k, *, exclude=()):
+                return [[{'factor_id': 'a', 'cosine_similarity': .9}, {'factor_id': 'b', 'cosine_similarity': .4}],
+                        [{'factor_id': 'b2', 'cosine_similarity': .7}]]
+            def fetch_vectors(self, factor_ids): raise AssertionError('the search-score pool downloads no vectors')
+        records = {'a': {'source_id': 'A'}, 'b': {'source_id': 'B'}, 'b2': {'source_id': 'B'}}
+        rows = retrieve_by_search_scores(SearchOnly(), records, np.array([[1., 0.], [0., 1.]]), 2)
+        self.assertEqual([(row['record']['source_id'], row['value']) for row in rows], [('A', .9), ('B', .7)])
+        self.assertEqual(rows[0]['scores'][0], .9); self.assertTrue(np.isnan(rows[0]['scores'][1]))  # never estimated
+        np.testing.assert_array_equal(rows[1]['scores'], [.4, .7])  # best returned alias per context
+
+    def test_search_score_pool_matches_exact_ranking_and_records_its_source(self):
+        snapshot, client, records = fixture()
+        index = UpstashFactorIndex(snapshot, client=client)
+        vectors = np.array([[1., 0.], [0., 1.], [-1., 0.]])
+        exact = retrieve_native(index, records, vectors, 3)
+        client.fetches.clear()
+        searched = retrieve_by_search_scores(index, records, vectors, 3)
+        self.assertEqual(client.fetches, [])
+        self.assertEqual([row['record'] for row in searched], [row['record'] for row in exact])
+        for left, right in zip(searched, exact):   # every alias is in every window here, so the scores agree
+            np.testing.assert_allclose(left['scores'], right['scores'], atol=1e-12)
+        self.assertEqual(searched[0]['retrieval']['score_source'], 'vector_search')
+        self.assertEqual(searched[0]['retrieval']['aggregation'], 'maximum_per_context_over_returned_search_aliases')
+        self.assertEqual([alias['id'] for alias in searched[1]['retrieval']['aliases']],
+                         [alias['id'] for alias in exact[1]['retrieval']['aliases']])
 
     def test_duplicate_alias_underfill_expands_before_cutoff(self):
         snapshot, client, records = fixture(many=True)

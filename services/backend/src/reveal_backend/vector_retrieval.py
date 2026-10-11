@@ -315,10 +315,11 @@ class UpstashFactorIndex:
             'dismech_import_id': self.snapshot.get('dismech_import'), 'roundtrip_tolerance': {'atol': ROUNDTRIP_ATOL, 'rtol': ROUNDTRIP_RTOL}}
 
 
-def retrieve_native(index, factor_legacy, vectors, limit, exclude=(), *, provenance=True):
-    """Shared exact/reference and ANN retrieval contract, with bounded expansion. provenance=False (search
-    responses, which never return it) skips building each hit's retrieval record."""
-    if not limit or not len(vectors): return []
+def _candidate_windows(index, factor_legacy, vectors, limit, exclude):
+    """The bounded ANN windows both retrievals share: (vectors, {native: alias ids}, target, depth, batches, per-context
+    natives), or None when nothing can match. Depth starts at max(32, 4 x target) and doubles until every context
+    window holds target distinct natives."""
+    if not limit or not len(vectors): return None
     vectors = np.asarray(vectors, dtype=np.float64)
     validate_vectors(vectors, len(vectors), index.run['dimensions'])
     if not np.allclose(np.linalg.norm(vectors, axis=1), 1):
@@ -329,7 +330,7 @@ def retrieve_native(index, factor_legacy, vectors, limit, exclude=(), *, provena
         record = factor_legacy.get(factor['factor_id'])
         if record and record['source_id'] not in exclude:
             aliases[record['source_id']].append(factor['factor_id'])
-    if not aliases: return []
+    if not aliases: return None
     target = min(limit, len(aliases))
     ceiling = min(len(index.factors), index.candidate_limit)
     depth = min(ceiling, max(32, target * 4))
@@ -341,6 +342,48 @@ def retrieve_native(index, factor_legacy, vectors, limit, exclude=(), *, provena
                        for batch in batches]
         if all(len(found) >= target for found in per_context) or depth == ceiling or all(len(batch) < depth for batch in batches): break
         depth = min(ceiling, depth * 2)
+    return vectors, aliases, target, depth, batches, per_context
+
+
+def retrieve_by_search_scores(index, factor_legacy, vectors, limit, exclude=(), *, provenance=True):
+    """The top natives ranked by the similarities the vector search itself returned; no vector is downloaded.
+
+    For the wide candidate pools of reranked suggestions, where downloading every candidate's vectors for exact
+    re-scoring costs seconds. A native's score for a context is its best alias among that context's search results
+    (provider scores agree with exact cosines within the import gate's 5e-4); a context whose window did not return
+    the native has no score (NaN), never an estimate."""
+    windows = _candidate_windows(index, factor_legacy, vectors, limit, exclude)
+    if windows is None: return []
+    vectors, aliases, target, depth, batches, _ = windows
+    grouped = {}
+    for position, batch in enumerate(batches):
+        for row in batch:
+            record = factor_legacy.get(row['factor_id'])
+            if not record or record['source_id'] not in aliases: continue
+            scores = grouped.setdefault(record['source_id'], np.full(len(batches), np.nan))
+            score = float(np.clip(row['cosine_similarity'], -1, 1))
+            if np.isnan(scores[position]) or score > scores[position]: scores[position] = score
+    shared = ({**index.provenance(), 'aggregation': 'maximum_per_context_over_returned_search_aliases',
+               'score_source': 'vector_search', 'candidate_depth': depth, 'candidate_count': len(grouped),
+               **query_vector_provenance(vectors), 'candidate_hits': [[dict(row) for row in batch] for batch in batches]}
+              if provenance and hasattr(index, 'provenance') else None)
+    result = []
+    for native, scores in grouped.items():
+        item = {'record': factor_legacy[aliases[native][0]], 'scores': scores, 'value': float(np.nanmax(scores))}
+        if shared is not None:
+            item['retrieval'] = {**shared,
+                'aliases': [{'id': index.by_id[identity]['id'], 'original_vector_sha256': index.by_id[identity]['original_vector_sha256']}
+                            for identity in aliases[native]]}
+        result.append(item)
+    return sorted(result, key=lambda item: (-item['value'], item['record']['source_id']))[:target]
+
+
+def retrieve_native(index, factor_legacy, vectors, limit, exclude=(), *, provenance=True):
+    """Shared exact/reference and ANN retrieval contract, with bounded expansion. provenance=False (search
+    responses, which never return it) skips building each hit's retrieval record."""
+    windows = _candidate_windows(index, factor_legacy, vectors, limit, exclude)
+    if windows is None: return []
+    vectors, aliases, target, depth, batches, per_context = windows
     selected = set().union(*per_context)
     # Fetch every alias of selected native identities, including aliases absent
     # from ANN results. This also supplies non-winning context similarities.

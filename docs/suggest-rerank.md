@@ -40,7 +40,12 @@ A failed rerank never fails the suggestion. Unexpected errors are also logged as
 
 The pool contains every eligible disease identity (at most 50) plus the top 100 cosine factors, de-duplicated by native id.
 
-Disease identities are not excluded from cosine retrieval. As a result, a fallback reproduces today's disease-first, then cosine order. With the exact (legacy) index the output is identical. With Upstash the cosine top five come from a deeper approximate-nearest-neighbour candidate window (`max(32, 4 × 100)` per context), as recorded in each hit's retrieval provenance.
+The pool is ranked by the similarities the vector search itself returns (`vector_retrieval.retrieve_by_search_scores`). No factor vectors are downloaded and no retrieval record is built. Exact re-scoring would download every alias vector of every candidate in the search windows: at a depth of 400 per mechanism context that is 700–900 vectors, which took 10–25 seconds from Upstash. Search scores agree with exact cosines to within the import gate's 5e-4.
+
+- A factor's score for a mechanism context is its best alias among that context's search results.
+- A context whose search results did not return the factor has no similarity; it is never estimated.
+
+Disease identities are not excluded from cosine retrieval, so a fallback applies today's policy to the same pool: disease identities first (native id order), then the top factors by search-score cosine.
 
 In the Jev order, disease identities compete on their rating and are no longer pinned first.
 
@@ -71,6 +76,7 @@ In the Jev order, disease identities compete on their rating and are no longer p
 - **Deadline:** `REVEAL_SUGGEST_RERANK_TIMEOUT_SECONDS`, default 12, covering all chunks. Each chunk is one attempt with no retries or redirects, and the response is capped at 256 KB.
 - **Transport:** `jev_batch.post_systemone`, the bounded transport shared with the CFDE assessment.
 - **Validation:** responses pass `jev_batch.validate_response`. Live probability sums of 0.99 are kept and recorded as `validation_warnings`. The returned model must equal `jev-1.13.0`.
+- **Latency:** measured on the local stack against live Upstash and Jev on October 11, 2026 (four gaps, zero to three linked mechanisms). Suggestions took 1.0–2.9 s when Jev was called, 0.5–1.2 s when its answers were cached, and 0.8–1.1 s with the rerank off.
 - **Cache:** answers are cached in process for 1 hour, keyed by model, rubric, state and the factor's own question text. Questions are independent, so a repeated or partially changed pool sends only unscored factors. After a dismissal, only the one newly admitted factor is sent. The cache does no database I/O, so the suggest round-trip budget remains one audit append.
 - **Pricing:** $0.042 per million input tokens; output tokens are free.
 
@@ -78,12 +84,12 @@ In the Jev order, disease identities compete on their rating and are no longer p
 
 The `suggestion` row adds two fields:
 
-- **`rerank`:** status, reason, model, rubric, `pool_size`, `state_sha256`, per-request `request_sha256` and `factor_count`, token `usage`, `cached_factor_count`, `validation_warnings` and `elapsed_ms`.
+- **`rerank`:** status, reason, model, rubric, `pool_size`, `pool_scores` (`vector_search`), `state_sha256`, per-request `request_sha256` and `factor_count`, token `usage`, `cached_factor_count`, `validation_warnings` and `elapsed_ms`.
 - **`rerank_pool`:** compact rows `[native id, cosine|null, disease identity, relevance|null, addresses|null]` for the whole pool.
 
 Each returned hit also keeps the following:
 
-- its ranking, `context_similarities` and retrieval provenance
+- its ranking and `context_similarities` (search-score cosines; no retrieval record, query vectors or alias checksums)
 - its `jev` answers (score, confidence, probabilities)
 - `cosine_rank`
 - for a factor that is also a disease identity, `disease_identity`
