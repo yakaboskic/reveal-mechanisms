@@ -770,6 +770,14 @@ export default function Home() {
   const [searched, setSearched] = useState(false);
   const [gapListMode, setGapListMode] = useState<"search" | "trending" | "selected" | null>(null);
   const [suggesting, setSuggesting] = useState(false);
+  // A research-context search waits for the embedding service to start when it has been idle; say so after a few seconds.
+  const [suggestSlow, setSuggestSlow] = useState(false);
+  useEffect(() => {
+    setSuggestSlow(false);
+    if (!suggesting) return;
+    const timer = setTimeout(() => setSuggestSlow(true), 6000);
+    return () => clearTimeout(timer);
+  }, [suggesting]);
   const [suggestion, setSuggestion] = useState<Schema<"Suggestions"> | null>(null);
   const [factors, setFactors] = useState<Record<string, Factor>>({});
   const [factorMisses, setFactorMisses] = useState<Record<string, true>>({});
@@ -1685,7 +1693,7 @@ export default function Home() {
             <h2 className="step-heading"><span className="step-number">1</span>Choose a knowledge gap</h2>
             <p className="step-guide">Find an existing scientific question that evidence still leaves unexplained. The gap you select becomes the question this investigation will try to ground.</p>
             <div className="step-body"><form className="search-control" autoComplete="off" onSubmit={event => { event.preventDefault(); void search(); }}><label className="sr-only" htmlFor="gap-search">Search knowledge gaps</label><input id="gap-search" name="reveal-gap-search" type="text" inputMode="search" autoComplete="off" autoCorrect="off" spellCheck={false} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search a disease or research question" /><button type="submit" className="secondary" disabled={searching}>{searching ? "Searching…" : "Search"}</button></form>
-              <label className="research-context" htmlFor="research-context"><span className="research-context-heading"><span>Research context (optional)</span><span className="research-context-note">This context is included in the mechanism search and the investigation.</span></span><input id="research-context" type="text" maxLength={2000} value={composer.mechanism_subquery || ""} onChange={event => setComposer(current => ({ ...current, mechanism_subquery: event.target.value }))} onBlur={() => { if (composer.source_gap && (composer.mechanism_subquery || "") !== (suggestedSubquery.current ?? "")) void suggest(composer, true); }} disabled={!mutable} autoComplete="off" /></label>
+              <label className="research-context" htmlFor="research-context"><span className="research-context-heading"><span>Research context (optional)</span><span className="research-context-note">This context is included in the mechanism search and the investigation.</span></span><input id="research-context" type="text" maxLength={2000} value={composer.mechanism_subquery || ""} onChange={event => setComposer(current => ({ ...current, mechanism_subquery: event.target.value }))} onFocus={() => api.warmSearch()} onBlur={() => { if (composer.source_gap && (composer.mechanism_subquery || "") !== (suggestedSubquery.current ?? "")) void suggest(composer, true); }} disabled={!mutable} autoComplete="off" /></label>
               {gaps.length > 0 && <div className="gap-results"><p className="gap-guide">{gapListMode === "selected" ? "The knowledge gap selected for this draft." : `${query.trim() ? `${gaps.length} knowledge gap${gaps.length === 1 ? "" : "s"} found.` : `${gaps.length} trending knowledge gaps.`} Use Select to choose one for the next step.`}</p><div className="gap-list" aria-label="Knowledge gap search results">{gaps.map(value => <GapOption key={value.source.source_id} gap={value} maxAccounts={maxGapAccounts} selected={composer.source_gap?.source_id === value.source.source_id} disabled={!mutable} onSelect={() => selectGap(value)} onInspect={() => void openInspect(value)} />)}</div><ul className="gap-legend"><li><span className="gap-swatch accounts" aria-hidden="true" />Accounts</li><li><span className="gap-swatch up" aria-hidden="true" />Upvotes</li><li><span className="gap-swatch down" aria-hidden="true" />Downvotes</li></ul></div>}
               {searched && !searching && !gaps.length && <p className="empty">No matching gaps. Try a broader disease name.</p>}
             </div>
@@ -1700,7 +1708,8 @@ export default function Home() {
                   const cosine = suggested?.ranking.metric === "cosine_similarity" ? suggested.ranking.value : null;
                   return { sourceId, title, subtitle: factor?.cfde_anchor.subtitle || "", mechanisms: matchedMechanisms(gap, suggested?.matched_context_ids || []), cosine, selected, selectDisabled: !mutable || (!selected && composer.eaggl_anchors.length >= 10), onToggle: () => setComposer(current => selected ? { ...current, eaggl_anchors: current.eaggl_anchors.filter(value => value.reference.source_id !== sourceId) } : factor && suggestion ? withFactors(current, [factor], suggestion.suggestion_id) : current), onInspect: factor ? () => void openFactorInspect(sourceId) : null };
                 })} />}
-                {!suggestedIds.length && (suggesting ? <p role="status" className="loading">Finding relevant mechanisms…</p> : <button type="button" className="quiet suggestion-refresh" disabled={!mutable} onClick={() => void suggest(composer, false)}>Show suggestions</button>)}
+                {suggesting ? <p role="status" className="loading">{suggestedIds.length ? "Updating suggested mechanisms…" : "Finding relevant mechanisms…"}{suggestSlow && (composer.mechanism_subquery || "").trim() ? " The search service is starting up, so a search with research context can take up to a minute." : ""}</p>
+                  : !suggestedIds.length && <button type="button" className="quiet suggestion-refresh" disabled={!mutable} onClick={() => void suggest(composer, false)}>Show suggestions</button>}
                 {pending && <div className="notice"><span>A submission needs confirmation. Recover it with the original request key before starting another.</span><button className="quiet small" onClick={discardSubmission} disabled={!!busy}>Discard recovery</button></div>}
               </>}
             </div>

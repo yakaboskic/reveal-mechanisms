@@ -15,12 +15,12 @@ export async function responseError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, code, referenceCopy[code] || value?.detail || `Request failed (${response.status}).`);
 }
 let expectedWorkspace: string | null = null;
-export async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal } = {}): Promise<T> {
+export async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal; timeoutMs?: number } = {}): Promise<T> {
   const headers = new Headers({ Accept: "application/json" });
   if (expectedWorkspace && path.startsWith("/api/backend/")) headers.set("X-Reveal-Workspace-ID", expectedWorkspace);
   if (options.body !== undefined) headers.set("Content-Type", "application/json");
   if (options.key) headers.set("Idempotency-Key", options.key);
-  const timeout = AbortSignal.timeout(30000);
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? 30000);
   const response = await fetch(path, { method: options.method || "GET", credentials: "same-origin", cache: "no-store", headers,
     body: options.body === undefined ? undefined : JSON.stringify(options.body), signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout });
   if (!response.ok) throw await responseError(response);
@@ -28,6 +28,11 @@ export async function request<T>(path: string, options: { method?: string; body?
   return response.json();
 }
 export const backend = (path: string) => "/api/backend/v1/" + path;
+// A research context is embedded by a service that scales to zero when idle. The API waits out its cold start (up to
+// three 30-second attempts, about 50 seconds in practice), so factor suggestions get more time than other requests.
+const SUGGEST_TIMEOUT_MS = 120000;
+const WARM_INTERVAL_MS = 5 * 60000;
+let warmedAt = -Infinity;
 export type CfdeAssessment = {
   id: string;
   draft_id: string;
@@ -115,9 +120,19 @@ export const api = {
   createLightningAudit: (body: { draft_id: string; draft_version: number }, key: string) => request<LightningAudit>(backend("lightning-audits"), { method: "POST", key, body }),
   lightningAudit: (auditId: string) => request<LightningAudit>(backend("lightning-audits/" + encodeURIComponent(auditId))),
   suggest: (composer: Composer, signal?: AbortSignal) => request<Schema<"Suggestions">>(backend("mechanisms/suggest"), {
-    method: "POST", signal, body: { source_gap: composer.source_gap, manual_eaggl_anchors: [], dismissed_source_ids: [],
+    method: "POST", signal, timeoutMs: SUGGEST_TIMEOUT_MS, body: { source_gap: composer.source_gap, manual_eaggl_anchors: [], dismissed_source_ids: [],
       subquery: composer.mechanism_subquery, mode: "semantic", model: composer.model },
   }),
+  /** Starts the embedding service while a research context is being written, so its search does not wait for a cold start:
+   * one semantic search at most every five minutes, writing nothing. Each uses new text, since the API caches query
+   * vectors by text and a cached text never reaches the service. */
+  warmSearch: () => {
+    const now = Date.now();
+    if (now - warmedAt < WARM_INTERVAL_MS) return;
+    warmedAt = now;
+    const params = new URLSearchParams({ q: "research context " + now.toString(36), mode: "semantic", source: "eaggl", limit: "1" });
+    void request(backend("mechanisms/search?" + params), { timeoutMs: SUGGEST_TIMEOUT_MS }).catch(() => { warmedAt = -Infinity; });
+  },
   save: (draft: Draft | null, composer: Composer, name: string, key: string) => request<Draft>(backend("drafts" + (draft ? "/" + encodeURIComponent(draft.id) : "")), {
     method: draft ? "PATCH" : "POST", key, body: { composer, ...(name.trim() ? { name: name.trim() } : {}), ...(draft ? { expected_version: draft.version } : {}) },
   }),
