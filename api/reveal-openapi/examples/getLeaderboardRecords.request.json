@@ -4,7 +4,7 @@
   "method": "GET",
   "path_template": "/v1/leaderboard/{view}/{entry_id}/records",
   "request": {
-    "url": "https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20",
+    "url": "https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&scope=published&limit=20",
     "path": {
       "view": "accounts",
       "entry_id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd"
@@ -12,6 +12,7 @@
     "query": {
       "metric": "votes",
       "evidence": "all",
+      "scope": "published",
       "limit": 20
     },
     "headers": {
@@ -53,12 +54,14 @@
             "scope": "Currently public frozen snapshots only; all time.",
             "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
             "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+            "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
           },
           "view": "accounts",
           "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
           "metric": "votes",
           "evidence": "all",
+          "scope": "published",
           "entry": {
             "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
             "kind": "account",
@@ -74,7 +77,9 @@
               "account_count": 1,
               "account_gap_count": 1,
               "explored_gap_count": 1,
-              "claim_count": 12
+              "claim_count": 12,
+              "traced_claim_count": 0,
+              "traced_account_count": 0
             },
             "components": {
               "accounts": 0,
@@ -98,6 +103,7 @@
             }
           },
           "total": 1,
+          "withheld": 0,
           "items": [
             {
               "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
@@ -141,5 +147,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
 }

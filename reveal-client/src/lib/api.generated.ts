@@ -637,7 +637,7 @@ export interface paths {
         };
         /**
          * Rank public community contributions
-         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.
          */
         get: operations["getLeaderboard"];
         put?: never;
@@ -4993,11 +4993,16 @@ export interface components {
         /** @enum {string} */
         LeaderboardView: "researchers" | "accounts" | "datasets";
         /** @enum {string} */
-        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
         /** @enum {string} */
-        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
         /** @enum {string} */
         LeaderboardEvidence: "all" | "supporting";
+        /**
+         * @description Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.
+         * @enum {string}
+         */
+        LeaderboardScope: "published" | "all";
         LeaderboardAttribution: {
             id: string;
             label: string;
@@ -5019,6 +5024,8 @@ export interface components {
             explored_gap_count: number;
             claim_count: number;
             researcher_count: number;
+            traced_claim_count: number;
+            traced_account_count: number;
             net_votes: number;
             overall_score: number;
         };
@@ -5044,7 +5051,7 @@ export interface components {
             attribution: components["schemas"]["LeaderboardAttribution"] | null;
             directions: components["schemas"]["LeaderboardDirections"];
         };
-        /** @description Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
+        /** @description Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
         LeaderboardMetadata: {
             /** Format: date-time */
             as_of: string;
@@ -5076,6 +5083,7 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
         };
         LeaderboardList: {
@@ -5109,10 +5117,12 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             sort: components["schemas"]["LeaderboardSort"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             items: components["schemas"]["LeaderboardEntry"][];
             page: components["schemas"]["Page"];
         };
@@ -5129,6 +5139,7 @@ export interface components {
             directions: components["schemas"]["LeaderboardDirections"];
             value: number;
         };
+        /** @description total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed. */
         LeaderboardRecords: {
             /** Format: date-time */
             as_of: string;
@@ -5160,13 +5171,16 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             id: string;
             metric: components["schemas"]["LeaderboardMetric"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             entry: components["schemas"]["LeaderboardEntry"];
             total: number;
+            withheld: number;
             items: components["schemas"]["LeaderboardRecord"][];
             page: components["schemas"]["Page"];
         };
@@ -12008,9 +12022,11 @@ export interface operations {
                 /** @example researchers */
                 view?: "researchers" | "accounts" | "datasets";
                 /** @example overall */
-                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -12089,9 +12105,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example votes */
-                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**

@@ -74,6 +74,35 @@ class LeaderboardTests(unittest.TestCase):
         api.validate(response.json(), 'LeaderboardRecords')
         return response.json()
 
+    def trace(self, identity, claims):
+        """A stored account data sources record: claim name -> the dataset names its trace reaches."""
+        from reveal_backend import account_data_sources as sources
+        from reveal_backend.account_provenance import TRACING_POLICY_VERSION
+        names = sorted({name for values in claims.values() for name in values})
+        return {'format': sources.FORMAT, 'policy_version': TRACING_POLICY_VERSION, 'account_id': identity, 'status': 'complete',
+            'claims': [{'claim_id': scientific('Claim', claim), 'resolution': 'complete', 'datasets': [{'dataset_id': scientific('Dataset', name),
+                'input_roles': ['data_input'], 'routes': ['factor_projection'], 'via_ids': [], 'organizations': [], 'curation_ids': [],
+                'trace_count': 1} for name in values]} for claim, values in claims.items()],
+            'datasets': [{'id': scientific('Dataset', name), 'name': name} for name in names]}
+
+    def publish_trace(self, identity, claims, **change):
+        from reveal_backend import account_data_sources as sources
+        with self.repo.transaction() as tx:
+            pub = next(row for row in tx.list('publication') if row['data']['account_id'] == identity)
+            tx.put(sources.KIND, sources.publication_key(pub['data']['snapshot_id']), pub['owner'], {**self.trace(identity, claims), **change})
+
+    def private_account(self, owner, name, claims, *, fixture=False):
+        """A saved, unpublished account with its stored trace."""
+        from reveal_backend import account_data_sources as sources
+        identity = scientific('ScientificAccount', name)
+        account = {'id': identity, 'name': name, 'component_claims': [scientific('Claim', claim) for claim in claims]}
+        with self.repo.transaction() as tx:
+            tx.put('account', digest([owner, identity]), owner, {'result': {'fixture_origin': {'kind': 'canonical_fixture'}} if fixture else {},
+                                                                 'summary': {'account': account}})
+            tx.put('account_membership', digest([owner, identity]), owner, {'account_id': identity, 'summary': {'account': account}})
+            tx.put(sources.KIND, sources.owner_key(owner, identity), owner, self.trace(identity, claims))
+        return identity
+
     def seed_demo(self):
         """Isolated SQLite browser fixture only; never called by application code."""
         third = self.principal(); voter = self.principal()
@@ -262,6 +291,50 @@ class LeaderboardTests(unittest.TestCase):
         for view in ('researchers', 'accounts', 'datasets'):
             result = self.client.get('/v1/leaderboard/' + view + '/missing/records')
             self.assertEqual(result.status_code, 404)
+
+
+    def test_traced_claims_rank_published_traces_and_all_accounts_add_private_totals_unlisted(self):
+        published_id = self.publish_account('Lipid regulation', self.owner)   # its evidence reaches 'Shared dataset'
+        self.publish_trace(published_id, {'Lipid regulation': ['GTEx V8', 'NCBI gene_info']})
+        private_id = self.private_account(self.other, 'Private analysis', {'Private claim one': ['GTEx V8'], 'Private claim two': ['GTEx V8', 'LINCS L1000']})
+        self.private_account(self.other, 'Fixture analysis', {'Fixture claim': ['LINCS L1000']}, fixture=True)
+        published = self.browse(view='datasets', sort='traced_claims')
+        self.assertEqual(published['scope'], 'published')
+        self.assertEqual({row['label']: row['metrics']['traced_claim_count'] for row in published['items']}, {'GTEx V8': 1, 'NCBI gene_info': 1})
+        # Evidence rankings list only datasets reached by evidence; traced rankings only traced ones.
+        self.assertEqual([row['label'] for row in self.browse(view='datasets')['items']], ['Shared dataset'])
+        everything = self.browse(view='datasets', sort='traced_claims', scope='all')
+        self.assertEqual(everything['scope'], 'all')
+        self.assertEqual({row['label']: (row['metrics']['traced_claim_count'], row['metrics']['traced_account_count']) for row in everything['items']},
+                         {'GTEx V8': (3, 2), 'NCBI gene_info': (1, 1), 'LINCS L1000': (1, 1)})
+        gtex = everything['items'][0]
+        self.assertEqual((gtex['label'], gtex['rank']), ('GTEx V8', 1))
+        claims = self.detail('datasets', gtex['id'], 'traced_claims', scope='all')
+        self.assertEqual((claims['total'], claims['withheld'], [item['id'] for item in claims['items']]), (1, 2, [scientific('Claim', 'Lipid regulation')]))
+        accounts = self.detail('datasets', gtex['id'], 'traced_accounts', scope='all')
+        self.assertEqual((accounts['total'], accounts['withheld'], [item['id'] for item in accounts['items']]), (1, 1, [published_id]))
+        self.assertEqual(self.detail('datasets', gtex['id'], 'traced_claims')['withheld'], 0)
+        text = str(everything) + str(claims) + str(accounts)
+        for secret in ('Private analysis', private_id, scientific('Claim', 'Private claim one'), self.other, 'Fixture'):
+            self.assertNotIn(secret, text)
+
+    def test_stale_traces_and_foreign_records_do_not_count(self):
+        from reveal_backend import account_data_sources as sources
+        published_id = self.publish_account('Stale trace', self.owner)
+        self.publish_trace(published_id, {'Stale trace': ['GTEx V8']}, policy_version='account-provenance-v0')
+        private_id = self.private_account(self.other, 'Moved analysis', {'Moved claim': ['LINCS L1000']})
+        with self.repo.transaction() as tx:   # a record under another owner's key never credits this account
+            row = tx.get(sources.KIND, sources.owner_key(self.other, private_id))
+            tx.put(sources.KIND, sources.owner_key(self.other, private_id), self.owner, row['data'])
+        self.assertEqual(self.browse(view='datasets', sort='traced_claims', scope='all')['items'], [])
+
+    def test_all_accounts_scope_ranks_datasets_by_traced_claims_only(self):
+        for query in ({'view': 'researchers', 'scope': 'all'}, {'view': 'datasets', 'scope': 'all', 'sort': 'claims'},
+                      {'view': 'datasets', 'scope': 'everyone'}):
+            self.assertEqual(self.client.get('/v1/leaderboard?' + urlencode(query)).status_code, 422, query)
+        self.assertEqual(self.browse(view='datasets', scope='all')['sort'], 'traced_claims')
+        response = self.client.get('/v1/leaderboard/datasets/' + quote(scientific('Dataset', 'x'), safe='') + '/records?' + urlencode({'metric': 'files', 'scope': 'all'}))
+        self.assertEqual(response.status_code, 422)
 
 
 if __name__ == '__main__': unittest.main()

@@ -19,13 +19,17 @@ from .repository import digest, now
 SCORE_VERSION = 'public-contribution-v1'
 DIRECTIONS = ('SUPPORTS', 'DISPUTES', 'MIXED', 'NEUTRAL', 'UNKNOWN')
 SORTS = {'researchers': ('overall', 'accounts', 'votes', 'gaps', 'explored'),
-         'accounts': ('votes',), 'datasets': ('accounts', 'claims', 'gaps', 'researchers')}
+         'accounts': ('votes',), 'datasets': ('accounts', 'claims', 'traced_claims', 'gaps', 'researchers')}
 METRICS = {'researchers': ('accounts', 'votes', 'gaps', 'explored'),
            'accounts': ('accounts', 'votes', 'claims', 'gaps', 'researchers'),
-           'datasets': ('accounts', 'claims', 'gaps', 'researchers', 'files')}
+           'datasets': ('accounts', 'claims', 'traced_claims', 'traced_accounts', 'gaps', 'researchers', 'files')}
 METRIC_KEYS = {'overall': 'overall_score', 'accounts': 'account_count', 'votes': 'net_votes',
                'gaps': 'account_gap_count', 'explored': 'explored_gap_count',
-               'claims': 'claim_count', 'researchers': 'researcher_count'}
+               'claims': 'claim_count', 'researchers': 'researcher_count',
+               'traced_claims': 'traced_claim_count', 'traced_accounts': 'traced_account_count'}
+# Dataset rankings over stored account traces (account_data_sources). scope=all adds every saved account.
+SCOPES = ('published', 'all')
+TRACED = ('traced_claims', 'traced_accounts')
 DEFINITIONS = [
     {'id': 'overall', 'label': 'Overall contribution', 'description': '30% account percentile + 40% community-vote percentile + 30% account-gap percentile. Relative contribution, not scientific validity or expertise.'},
     {'id': 'accounts', 'label': 'Public scientific accounts', 'description': 'Distinct currently public accepted canonical accounts. Dataset counts require explicit evidence paths.'},
@@ -35,19 +39,24 @@ DEFINITIONS = [
     {'id': 'claims', 'label': 'Claims informed', 'description': 'Distinct component claims linked to a dataset through evidence targeting the claim’s proposition. Supporting and disputing evidence both inform a claim.'},
     {'id': 'researchers', 'label': 'Researcher adoption', 'description': 'Distinct eligible original registered contributors with qualifying public accounts using the dataset as evidence.'},
     {'id': 'files', 'label': 'Files reached by evidence', 'description': 'Only concrete files reached by a qualifying evidence path and explicitly associated with this dataset. Other dataset members and direct analysis inputs do not count.'},
+    {'id': 'traced_claims', 'label': 'Claims traced', 'description': 'Distinct component claims whose stored provenance trace reaches the dataset: through cited evidence, a gene set or mechanism the claim names, or a mechanism’s projected gene sets. Lineage reach, not evidential support. With all accounts, private accounts add anonymous totals and are never listed.'},
+    {'id': 'traced_accounts', 'label': 'Accounts traced', 'description': 'Distinct accounts with at least one claim whose stored provenance trace reaches the dataset. With all accounts, private accounts add anonymous totals and are never listed.'},
 ]
 METHODOLOGY = {'weights': {'accounts': .3, 'votes': .4, 'gaps': .3},
     'scope': 'All time; currently public frozen accounts and published explorations only. Canonical identities are deduplicated. Demo/test fixtures are excluded. Original registered attribution is used; missing, anonymous and conflicting attribution earns no researcher credit.',
     'score': 'For x > 0, P(x) = 100 × (contributors below x + 0.5 × contributors tied at x) / cohort size. Otherwise P(x) = 0. A sole contributor receives 50 for a positive component. Scores rank before rounding, equal values share rank, and the cohort includes contributors with only published explorations.',
     'own_votes': 'Researchers’ recognition excludes their own ballots on their credited accounts. Individual-account rankings retain the existing canonical totals. Voting participants are distinct voters with an active ballot on an eligible public account; identities are never returned.',
-    'evidence': 'Only explicit evidence interpretations targeting a component claim’s proposition count. SUPPORTS concerns that proposition, not endorsement of the claim assessment. Direction counts deduplicate claims within each direction and can overlap. Analysis inputs, ambiguous and missing paths do not imply evidence support. Dataset identity is canonical, never inferred from names or storage prefixes.'}
+    'evidence': 'Only explicit evidence interpretations targeting a component claim’s proposition count. SUPPORTS concerns that proposition, not endorsement of the claim assessment. Direction counts deduplicate claims within each direction and can overlap. Analysis inputs, ambiguous and missing paths do not imply evidence support. Dataset identity is canonical, never inferred from names or storage prefixes.',
+    'traced': 'Claims and accounts traced read each account’s stored data sources: its provenance trace, taken once when the account was saved and frozen with each publication. Published accounts count by default; the all-accounts option adds every saved account, private ones as anonymous totals that are never listed. Demo/test fixtures are excluded, and the evidence filter does not apply to traced lineage.'}
 
 
-def options(view, sort=None, evidence='all', metric=None):
-    if view not in SORTS or evidence not in ('all', 'supporting'):
-        raise Problem(422, 'INVALID_QUERY', 'Choose a leaderboard view and evidence filter.')
-    sort = sort or SORTS[view][0]
-    if sort not in SORTS[view] or metric is not None and metric not in METRICS[view]:
+def options(view, sort=None, evidence='all', metric=None, scope='published'):
+    if view not in SORTS or evidence not in ('all', 'supporting') or scope not in SCOPES or (scope == 'all' and view != 'datasets'):
+        raise Problem(422, 'INVALID_QUERY', 'Choose a leaderboard view, evidence filter and account scope.')
+    # All saved accounts rank datasets only by their stored traces: evidence metrics stay public-only.
+    sorts, metrics = (('traced_claims',), TRACED) if scope == 'all' else (SORTS[view], METRICS[view])
+    sort = sort or sorts[0]
+    if sort not in sorts or metric is not None and metric not in metrics:
         raise Problem(422, 'INVALID_QUERY', 'Choose a ranking or record metric available for this view.')
     return sort
 
@@ -97,7 +106,8 @@ def directions(): return dict.fromkeys(DIRECTIONS, 0)
 def row(identity, kind, label):
     return {'id': identity, 'kind': kind, 'label': label, 'rank': 0,
         'metrics': {key: 0 for key in ('overall_score', 'account_count', 'net_votes', 'upvotes', 'downvotes',
-                    'voter_count', 'account_gap_count', 'explored_gap_count', 'claim_count', 'researcher_count')},
+                    'voter_count', 'account_gap_count', 'explored_gap_count', 'claim_count', 'researcher_count',
+                    'traced_claim_count', 'traced_account_count')},
         'components': {'accounts': 0, 'votes': 0, 'gaps': 0}, 'orcid': None,
         'account_id': None, 'gap_id': None, 'gap': None, 'attribution': None, 'directions': directions()}
 
@@ -115,13 +125,15 @@ def record(identity, kind, label, *, account_ids=(), claim_ids=(), evidence_ids=
         'evidence_ids': sorted(set(evidence_ids)), 'directions': direction or directions(), 'value': value}
 
 
-def build(tx, evidence='all'):
-    """Return the complete public projection and its matching inspectable units."""
+def build(tx, evidence='all', scope='published'):
+    """Return the complete public projection and its matching inspectable units. scope='all' adds every saved
+    account's stored trace to the traced dataset metrics, as anonymous totals; nothing private is ever listed."""
     from .leaderboard_sources import collect
-    options('researchers', evidence=evidence)
+    options('datasets' if scope == 'all' else 'researchers', evidence=evidence, scope=scope)
     exclusions = dict.fromkeys(('fixture_accounts', 'uncredited_accounts', 'conflicting_accounts',
         'invalid_public_accounts', 'excluded_evidence_paths', 'fixture_explorations', 'uncredited_explorations'), 0)
     copies, fixture_ids, invalid_ids = defaultdict(list), set(), set()
+    frozen_sources = defaultdict(list)   # identity -> (owner, snapshot id) of each public copy
     for pub in publication.published(tx):
         data = pub['data']; identity = data.get('account_id'); snapshot = tx.get('publication_snapshot', data['snapshot_id'])
         if not snapshot or snapshot['owner'] != pub['owner']:
@@ -132,7 +144,7 @@ def build(tx, evidence='all'):
         if (frozen.get('account_id') != identity or len(roots) != 1 or summary.get('account') != roots[0]
                 or not roots[0].get('component_claims') or roots[0].get('question') != summary.get('knowledge_gap', {}).get('id')):
             invalid_ids.add(identity); continue
-        copies[identity].append(frozen)
+        copies[identity].append(frozen); frozen_sources[identity].append((pub['owner'], data['snapshot_id']))
     # A flagged canonical identity must not gain credit through an unflagged copy.
     for identity in fixture_ids: copies.pop(identity, None)
     exclusions.update(fixture_accounts=len(fixture_ids), invalid_public_accounts=len(invalid_ids))
@@ -251,6 +263,8 @@ def build(tx, evidence='all'):
                 details[metric].append(record(key, kind, label(key), account_ids=[use['account_id'] for use in selected],
                     claim_ids=[use['claim_id'] for use in selected], evidence_ids=[use['evidence_id'] for use in selected], direction=detail_directions))
 
+    traced_datasets(tx, scope, copies, frozen_sources, fixture_ids, datasets, records, accounts, claim_labels)
+
     cohort = len(researchers)
     for item in researchers.values():
         components = {}
@@ -272,9 +286,55 @@ def build(tx, evidence='all'):
     return {'rows': rows, 'records': records, 'metadata': metadata, 'revision': revision}
 
 
+def traced_datasets(tx, scope, copies, frozen_sources, fixture_ids, datasets, records, accounts, claim_labels):
+    """Add the traced dataset metrics from stored account data sources. Public copies use the record frozen with their
+    snapshot; scope='all' adds each other saved account's own record. Private units count but are never listed."""
+    from .account_data_sources import KIND, current, owner_key, publication_key
+    uses, names = [], {}
+
+    def add(data, account_id, public):
+        if not data or not current(data) or not isinstance(data.get('claims'), list): return
+        for item in data.get('datasets') or []: names.setdefault(item['id'], item.get('name'))
+        uses.extend((connection['dataset_id'], claim['claim_id'], account_id, public)
+                    for claim in data['claims'] for connection in claim.get('datasets') or [])
+
+    for identity in sorted(copies):
+        for owner, snapshot_id in sorted(frozen_sources[identity]):
+            frozen = tx.get(KIND, publication_key(snapshot_id))
+            if frozen and frozen['owner'] == owner and current(frozen['data']): add(frozen['data'], identity, True); break
+    if scope == 'all':
+        saved = {}
+        for member in sorted(tx.list('account_membership'), key=lambda value: (value['data'].get('account_id') or '', value['owner'])):
+            identity = member['data'].get('account_id')
+            if isinstance(identity, str) and identity not in copies and identity not in fixture_ids: saved.setdefault(identity, member['owner'])
+        found = tx.get_records([key for identity, owner in saved.items()
+                                for key in (('account', digest([owner, identity])), (KIND, owner_key(owner, identity)))])
+        for identity, owner in sorted(saved.items()):
+            account, stored = found.get(('account', digest([owner, identity]))), found.get((KIND, owner_key(owner, identity)))
+            if not account or account['owner'] != owner or not stored or stored['owner'] != owner: continue
+            if fixture(account['data'].get('result'), account['data'].get('summary')): continue
+            add(stored['data'], identity, False)
+    by_dataset = defaultdict(list)
+    for dataset, claim, account, public in uses: by_dataset[dataset].append((claim, account, public))
+    for identity, entries in sorted(by_dataset.items()):
+        item = datasets.setdefault(identity, row(identity, 'dataset', names.get(identity) or identity))
+        claims, linked = {claim for claim, _, _ in entries}, {account for _, account, _ in entries}
+        item['metrics'].update(traced_claim_count=len(claims), traced_account_count=len(linked))
+        public_claims = sorted({claim for claim, _, public in entries if public})
+        public_accounts = sorted({account for _, account, public in entries if public})
+        details = records[('datasets', identity)]
+        details['traced_claims'] = [record(claim, 'claim', claim_labels.get(claim, claim), claim_ids=[claim],
+            account_ids=[account for value, account, public in entries if public and value == claim]) for claim in public_claims]
+        details['traced_accounts'] = [record(account, 'account', accounts[account]['label'], account_ids=[account],
+            claim_ids=[claim for claim, value, public in entries if public and value == account]) for account in public_accounts]
+        details['withheld'] = {'traced_claims': len(claims) - len(public_claims), 'traced_accounts': len(linked) - len(public_accounts)}
+
+
 def ranking(projection, view, sort):
     metric = METRIC_KEYS[sort]
     items = sorted(deepcopy(projection['rows'][view]), key=lambda item: (-item['metrics'][metric], item['id']))
+    # A dataset is ranked only by measures it has: a traced-only dataset has no evidence ranking, and vice versa.
+    if view == 'datasets': items = [item for item in items if item['metrics'][metric] > 0]
     previous, rank = None, 0
     for index, item in enumerate(items, 1):
         value = item['metrics'][metric]
@@ -284,6 +344,9 @@ def ranking(projection, view, sort):
 
 
 def details(projection, view, identity, metric):
-    entry = next((item for item in ranking(projection, view, SORTS[view][0]) if item['id'] == identity), None)
+    """(entry, the public records counted by metric, the number of private units it also counts)."""
+    sort = 'traced_claims' if metric in TRACED else SORTS[view][0]
+    entry = next((item for item in ranking(projection, view, sort) if item['id'] == identity), None)
     if entry is None: raise Problem(404, 'NOT_FOUND', 'The public leaderboard contribution is unavailable.')
-    return entry, projection['records'].get((view, identity), {}).get(metric, [])
+    detail = projection['records'].get((view, identity), {})
+    return entry, detail.get(metric, []), detail.get('withheld', {}).get(metric, 0)

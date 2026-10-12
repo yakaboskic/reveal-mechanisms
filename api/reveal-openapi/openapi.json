@@ -16758,7 +16758,7 @@
           "Scientific content"
         ],
         "summary": "Rank public community contributions",
-        "description": "All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.",
+        "description": "All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.",
         "parameters": [
           {
             "name": "view",
@@ -16789,7 +16789,8 @@
                 "gaps",
                 "explored",
                 "claims",
-                "researchers"
+                "researchers",
+                "traced_claims"
               ]
             },
             "example": "overall",
@@ -16808,6 +16809,21 @@
               "default": "all"
             },
             "example": "all",
+            "description": ""
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "published",
+                "all"
+              ],
+              "default": "published"
+            },
+            "example": "published",
             "description": ""
           },
           {
@@ -16876,11 +16892,13 @@
                         "scope": "Currently public frozen snapshots only; all time.",
                         "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
                         "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+                        "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
                       },
                       "view": "researchers",
                       "sort": "overall",
                       "evidence": "all",
+                      "scope": "published",
                       "items": [],
                       "page": {
                         "next_cursor": null,
@@ -17049,7 +17067,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -17096,7 +17114,9 @@
                 "explored",
                 "claims",
                 "researchers",
-                "files"
+                "files",
+                "traced_claims",
+                "traced_accounts"
               ],
               "default": "accounts"
             },
@@ -17116,6 +17136,21 @@
               "default": "all"
             },
             "example": "all",
+            "description": ""
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "published",
+                "all"
+              ],
+              "default": "published"
+            },
+            "example": "published",
             "description": ""
           },
           {
@@ -17184,12 +17219,14 @@
                         "scope": "Currently public frozen snapshots only; all time.",
                         "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
                         "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+                        "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
                       },
                       "view": "accounts",
                       "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
                       "metric": "votes",
                       "evidence": "all",
+                      "scope": "published",
                       "entry": {
                         "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
                         "kind": "account",
@@ -17205,7 +17242,9 @@
                           "account_count": 1,
                           "account_gap_count": 1,
                           "explored_gap_count": 1,
-                          "claim_count": 12
+                          "claim_count": 12,
+                          "traced_claim_count": 0,
+                          "traced_account_count": 0
                         },
                         "components": {
                           "accounts": 0,
@@ -17229,6 +17268,7 @@
                         }
                       },
                       "total": 1,
+                      "withheld": 0,
                       "items": [
                         {
                           "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
@@ -17454,7 +17494,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -55391,7 +55431,8 @@
           "gaps",
           "explored",
           "claims",
-          "researchers"
+          "researchers",
+          "traced_claims"
         ]
       },
       "LeaderboardMetric": {
@@ -55403,7 +55444,9 @@
           "explored",
           "claims",
           "researchers",
-          "files"
+          "files",
+          "traced_claims",
+          "traced_accounts"
         ]
       },
       "LeaderboardEvidence": {
@@ -55412,6 +55455,14 @@
           "all",
           "supporting"
         ]
+      },
+      "LeaderboardScope": {
+        "type": "string",
+        "enum": [
+          "published",
+          "all"
+        ],
+        "description": "Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed."
       },
       "LeaderboardAttribution": {
         "type": "object",
@@ -55509,6 +55560,14 @@
             "type": "integer",
             "minimum": 0
           },
+          "traced_claim_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "traced_account_count": {
+            "type": "integer",
+            "minimum": 0
+          },
           "net_votes": {
             "type": "integer"
           },
@@ -55527,6 +55586,8 @@
           "explored_gap_count",
           "claim_count",
           "researcher_count",
+          "traced_claim_count",
+          "traced_account_count",
           "net_votes",
           "overall_score"
         ],
@@ -55786,6 +55847,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -55793,7 +55857,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           }
@@ -55808,7 +55873,7 @@
           "methodology"
         ],
         "additionalProperties": false,
-        "description": "Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed."
+        "description": "Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed."
       },
       "LeaderboardList": {
         "type": "object",
@@ -55931,6 +55996,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -55938,7 +56006,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           },
@@ -55950,6 +56019,9 @@
           },
           "evidence": {
             "$ref": "#/components/schemas/LeaderboardEvidence"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/LeaderboardScope"
           },
           "items": {
             "type": "array",
@@ -55972,6 +56044,7 @@
           "view",
           "sort",
           "evidence",
+          "scope",
           "items",
           "page"
         ],
@@ -56160,6 +56233,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -56167,7 +56243,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           },
@@ -56183,10 +56260,17 @@
           "evidence": {
             "$ref": "#/components/schemas/LeaderboardEvidence"
           },
+          "scope": {
+            "$ref": "#/components/schemas/LeaderboardScope"
+          },
           "entry": {
             "$ref": "#/components/schemas/LeaderboardEntry"
           },
           "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "withheld": {
             "type": "integer",
             "minimum": 0
           },
@@ -56212,12 +56296,15 @@
           "id",
           "metric",
           "evidence",
+          "scope",
           "entry",
           "total",
+          "withheld",
           "items",
           "page"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed."
       },
       "ExplorationInput": {
         "type": "object",

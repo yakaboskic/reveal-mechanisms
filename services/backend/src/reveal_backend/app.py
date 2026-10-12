@@ -1112,28 +1112,29 @@ def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=N
         return page(items,(viewer or '') if scope=='public' else user,limit,cursor,listing_scope(['accounts',gap_id,query,scope,sort],reference_state))
 
 @app.get('/v1/leaderboard')
-def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',limit:int=20,cursor:str|None=None):
+def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    sort=leaderboard.options(view,sort,evidence)
+    sort=leaderboard.options(view,sort,evidence,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)  # Invalid supplied credentials never downgrade to public.
-        projection=leaderboard.build(tx,evidence)
+        projection=leaderboard.build(tx,evidence,scope)
     items=leaderboard.ranking(projection,view,sort)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence}
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence,'scope':scope}
 
 @app.get('/v1/leaderboard/{view}/{entry_id}/records')
-def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',limit:int=20,cursor:str|None=None):
+def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    leaderboard.options(view,evidence=evidence,metric=metric)
+    leaderboard.options(view,evidence=evidence,metric=metric,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)
-        projection=leaderboard.build(tx,evidence)
-    entry,items=leaderboard.details(projection,view,entry_id,metric)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'entry':entry,'total':len(items)}
+        projection=leaderboard.build(tx,evidence,scope)
+    entry,items,withheld=leaderboard.details(projection,view,entry_id,metric)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'scope':scope,'entry':entry,
+        'total':len(items),'withheld':withheld}
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):

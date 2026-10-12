@@ -57,7 +57,7 @@ export function AccountGraph({ result: initial, onReload, inspector }: Props) {
       if (!active || !container.current) return;
       const claimLabels = new Map(root.children.map((claim, index) => [claim.objectId, `C${index + 1}`]));
       const elements: ElementDefinition[] = layout.map(node => ({ group: "nodes", position: { x: node.x, y: node.y },
-        data: { id: node.data.id, objectId: node.data.objectId, diameter: node.r * 2, depth: node.depth, color: colors[node.data.kind], label: node.depth === 0 ? "Scientific account" : node.data.kind === "claim" ? claimLabels.get(node.data.objectId) || "" : "", labelOffset: -node.r + (node.depth === 0 ? 30 : 20) },
+        data: { id: node.data.id, objectId: node.data.objectId, diameter: node.r * 2, depth: node.depth, color: colors[node.data.kind], label: node.depth === 0 ? "Scientific account" : node.data.kind === "claim" ? claimLabels.get(node.data.objectId) || "" : "", labelOffset: -node.r + (node.depth === 0 ? 30 : 20), leaf: !node.data.children.length },
         classes: [node.data.kind, node.data.missing ? "missing" : ""].join(" "), locked: true }));
       instance = cytoscape({ container: container.current, elements, layout: { name: "preset", fit: true, padding: 50 },
         minZoom: 0.15, maxZoom: 5, wheelSensitivity: 0.2, autoungrabify: true, boxSelectionEnabled: false, selectionType: "single",
@@ -81,11 +81,13 @@ export function AccountGraph({ result: initial, onReload, inspector }: Props) {
           instance.nodes(".claim, .dataset, .file").forEach(node => {
             const kind: IconKind = node.hasClass("claim") ? "claim" : node.hasClass("dataset") ? "dataset" : "file";
             const diameter = node.renderedHeight(), position = node.renderedPosition();
+            // Circles with nothing inside carry their symbol at the center; a dataset holding files keeps it at the top.
+            const centered = kind === "file" || (kind === "dataset" && node.data("leaf"));
             // Keep small source circles quiet; zoom reveals their line symbols.
-            if (kind !== "claim" && diameter < (kind === "dataset" ? 40 : 24)) return;
+            if (kind !== "claim" && diameter < (centered ? 24 : 40)) return;
             const size = kind === "claim" ? diameter < 42 ? 0 : 13 : Math.max(11, Math.min(17, diameter * 0.2));
             markers.push({ id: node.id(), kind, text: node.data("label"), x: position.x, size,
-              y: kind === "file" ? position.y - size / 2 : position.y - diameter / 2 + (kind === "claim" ? Math.max(4, Math.min(10, diameter * 0.07)) : 3) });
+              y: centered ? position.y - size / 2 : position.y - diameter / 2 + (kind === "claim" ? Math.max(4, Math.min(10, diameter * 0.07)) : 3) });
           });
           setCircleMarkers(markers);
         });
