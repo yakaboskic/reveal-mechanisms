@@ -8,7 +8,7 @@ import { LoadingSurface } from "../LoadingSurface";
 import { OrganizationBadge } from "../OrganizationBadge";
 import { publicSourceHref } from "@/lib/provenance-view";
 import { onPageReturn } from "@/lib/page-return";
-import { formatLeaderboardNumber as number, leaderboardHref, LeaderboardPageChangedError, leaderboardScopes, leaderboardSorts, leaderboardViews, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, sortsFor, verifiedOrcidHref, type LeaderboardEntry, type LeaderboardMetric, type LeaderboardQuery, type LeaderboardScope, type LeaderboardSort, type LeaderboardView } from "@/lib/leaderboard";
+import { formatLeaderboardNumber as number, leaderboardHref, LeaderboardPageChangedError, leaderboardReturn, leaderboardScopes, leaderboardSorts, leaderboardViews, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, sortsFor, verifiedOrcidHref, type LeaderboardEntry, type LeaderboardMetric, type LeaderboardQuery, type LeaderboardScope, type LeaderboardSort, type LeaderboardView } from "@/lib/leaderboard";
 
 type Column = { key: keyof LeaderboardEntry["metrics"]; label: string; metric: LeaderboardMetric; sort?: LeaderboardSort; score?: boolean };
 const columns: Record<LeaderboardView, Column[]> = {
@@ -156,27 +156,35 @@ function Records({ query, onTitle }: { query: LeaderboardQuery; onTitle: (label:
   const [loaded, setLoaded] = useState<{ binding: string; data: Schema<"LeaderboardRecords"> } | null>(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [restart, setRestart] = useState(false);
-  const request = useRef<AbortController | null>(null), sequence = useRef(0);
+  const request = useRef<AbortController | null>(null), sequence = useRef(0), loadedAt = useRef(0);
   const visible = loaded?.binding === binding ? loaded.data : null;
-  async function load(append = false) {
+  async function load(append = false, quiet = false) {
     if (!query.selected) return;
     request.current?.abort(); const controller = new AbortController(); request.current = controller;
-    const serial = ++sequence.current; setBusy(true); setError(""); setRestart(false); if (!append) { setLoaded(null); onTitle(""); }
+    const serial = ++sequence.current;
+    if (!quiet) { setBusy(true); setError(""); setRestart(false); if (!append) { setLoaded(null); onTitle(""); } }
     try {
       const result = await api.leaderboardRecords(query.view, query.selected, { metric: query.metric, evidence: query.evidence, scope: query.scope, limit: 20, ...(append && visible?.page.next_cursor ? { cursor: visible.page.next_cursor } : {}) }, controller.signal);
       if (controller.signal.aborted || serial !== sequence.current) return;
       if (result.view !== query.view || result.id !== query.selected || result.metric !== query.metric || result.evidence !== query.evidence || result.scope !== query.scope) throw new Error("These records do not match the selected contribution. Please retry.");
       if (append && visible?.page.snapshot_id !== result.page.snapshot_id) throw new LeaderboardPageChangedError("The public contributions changed. Reload this view.");
       if (result.page.has_more && (!result.page.next_cursor || (append && result.page.next_cursor === visible?.page.next_cursor))) throw new LeaderboardPageChangedError("The next contribution page could not be verified. Please reload.");
+      if (!append) loadedAt.current = Date.now();
+      // A quiet revalidation keeps every shown record, and the reader's place, while the rankings are unchanged.
+      if (quiet && visible?.page.snapshot_id === result.page.snapshot_id) return;
       const items = new Map<string, Schema<"LeaderboardRecord">>();
       for (const item of [...(append ? visible?.items || [] : []), ...result.items]) items.set(`${item.kind}:${item.id}`, item);
       setLoaded({ binding, data: { ...result, items: [...items.values()] } }); onTitle(result.entry.label);
     } catch (failure) {
-      if (!controller.signal.aborted && serial === sequence.current) { setError(messageOf(failure)); if (failure instanceof LeaderboardPageChangedError || failure instanceof ApiError && failure.status === 409) { setLoaded(null); setRestart(true); } else if (failure instanceof ApiError && failure.status === 404) setLoaded(null); }
+      // A failed quiet revalidation keeps the shown records; the next return retries.
+      if (!quiet && !controller.signal.aborted && serial === sequence.current) { setError(messageOf(failure)); if (failure instanceof LeaderboardPageChangedError || failure instanceof ApiError && failure.status === 409) { setLoaded(null); setRestart(true); } else if (failure instanceof ApiError && failure.status === 404) setLoaded(null); }
     } finally { if (serial === sequence.current) setBusy(false); }
   }
   useEffect(() => { void load(); return () => { sequence.current++; request.current?.abort(); }; }, [binding]);
-  usePublicRevalidation(() => { void load(); });
+  usePublicRevalidation(() => {
+    const next = leaderboardReturn({ busy, shown: !!visible, failed: !!error || restart, loadedAt: loadedAt.current, now: Date.now() });
+    if (next !== "none") void load(false, next === "revalidate");
+  });
   return <div className="leaderboard-records">
     <MetricDefinition view={query.view} metric={query.metric} />
     {query.view === "datasets" && <p className="leaderboard-filter-note">{traced ? `Traced lineage across ${query.scope === "all" ? "all saved accounts" : "published accounts"}; the evidence filter does not apply.` : query.evidence === "supporting" ? "Explicit supporting evidence only." : "All qualifying evidence directions."}</p>}
@@ -203,24 +211,31 @@ export function Leaderboard() {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [restart, setRestart] = useState(false);
   const [detailTitle, setDetailTitle] = useState("");
-  const request = useRef<AbortController | null>(null), sequence = useRef(0), opener = useRef<HTMLElement | null>(null);
+  const request = useRef<AbortController | null>(null), sequence = useRef(0), loadedAt = useRef(0), opener = useRef<HTMLElement | null>(null);
   const dialog = useRef<HTMLDialogElement>(null), tabId = useId(), dialogTitleId = useId();
   const visible = loaded?.binding === binding ? loaded.data : null;
   const titleBinding = `${query.view}:${query.selected}`;
   useEffect(() => { setDetailTitle(""); }, [titleBinding]);
-  async function load(append = false) {
+  async function load(append = false, quiet = false) {
     request.current?.abort(); const controller = new AbortController(); request.current = controller;
-    const serial = ++sequence.current; setBusy(true); setError(""); setRestart(false); if (!append) setLoaded(null);
+    const serial = ++sequence.current;
+    if (!quiet) { setBusy(true); setError(""); setRestart(false); if (!append) setLoaded(null); }
     try {
       const result = await api.leaderboard({ view: query.view, sort: query.sort, evidence: query.evidence, scope: query.scope, limit: 20, ...(append && visible?.page.next_cursor ? { cursor: visible.page.next_cursor } : {}) }, controller.signal);
       if (controller.signal.aborted || serial !== sequence.current) return;
-      setLoaded({ binding, data: mergeLeaderboardPages(append ? visible : null, result, query) });
+      // A quiet revalidation keeps every shown row, further pages and the reader's place included, while the rankings are unchanged.
+      if (!quiet || visible?.page.snapshot_id !== result.page.snapshot_id) setLoaded({ binding, data: mergeLeaderboardPages(append ? visible : null, result, query) });
+      if (!append) loadedAt.current = Date.now();
     } catch (failure) {
-      if (!controller.signal.aborted && serial === sequence.current) { setError(messageOf(failure)); if (failure instanceof LeaderboardPageChangedError || failure instanceof ApiError && failure.status === 409) { setLoaded(null); setRestart(true); } }
+      // A failed quiet revalidation keeps the shown rows; the next return retries.
+      if (!quiet && !controller.signal.aborted && serial === sequence.current) { setError(messageOf(failure)); if (failure instanceof LeaderboardPageChangedError || failure instanceof ApiError && failure.status === 409) { setLoaded(null); setRestart(true); } }
     } finally { if (serial === sequence.current) setBusy(false); }
   }
   useEffect(() => { void load(); return () => { sequence.current++; request.current?.abort(); }; }, [binding]);
-  usePublicRevalidation(() => { void load(); });
+  usePublicRevalidation(() => {
+    const next = leaderboardReturn({ busy, shown: !!visible, failed: !!error || restart, loadedAt: loadedAt.current, now: Date.now() });
+    if (next !== "none") void load(false, next === "revalidate");
+  });
   useEffect(() => {
     if (query.selected) { if (!dialog.current?.open) dialog.current?.showModal(); }
     else if (dialog.current?.open) dialog.current.close();

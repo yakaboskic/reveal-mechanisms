@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { formatLeaderboardNumber, leaderboardHref, LeaderboardPageChangedError, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, sortsFor, verifiedOrcidHref } from "../src/lib/leaderboard";
+import { formatLeaderboardNumber, leaderboardHref, LeaderboardPageChangedError, leaderboardReturn, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, sortsFor, verifiedOrcidHref } from "../src/lib/leaderboard";
 import type { Schema } from "../src/lib/client";
 
 // Invented local projection records; never inserted into the community database.
@@ -68,4 +68,14 @@ test("all accounts rank datasets only by traced claims, drop the evidence filter
   assert.equal(published.scope, "published"); assert.equal(published.sort, "traced_claims");
   assert.equal(leaderboardHref(all, { view: "researchers", sort: "overall", scope: "published", selected: null }), "/leaderboard?view=researchers&sort=overall");
   assert.throws(() => mergeLeaderboardPages(null, { ...page([]), view: "datasets", sort: "traced_claims" }, all), /selected view/);
+});
+
+test("returning to the page keeps fresh rows, revalidates older ones quietly, and fully reloads only when nothing current is shown", () => {
+  const shown = { busy: false, shown: true, failed: false, loadedAt: 1_000 };
+  assert.equal(leaderboardReturn({ ...shown, now: 1_000 + 59_999 }), "none");
+  assert.equal(leaderboardReturn({ ...shown, now: 1_000 + 60_000 }), "revalidate");
+  assert.equal(leaderboardReturn({ ...shown, busy: true, now: 1_000 + 600_000 }), "none");
+  assert.equal(leaderboardReturn({ ...shown, shown: false, now: 1_001 }), "load");
+  assert.equal(leaderboardReturn({ ...shown, failed: true, now: 1_001 }), "load");
+  assert.equal(leaderboardReturn({ ...shown, shown: false, busy: true, now: 1_001 }), "none");
 });

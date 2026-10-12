@@ -1,4 +1,5 @@
 import type { Schema } from "./client";
+import { publicFreshMs } from "./page-return";
 
 export type LeaderboardView = Schema<"LeaderboardView">;
 export type LeaderboardSort = Schema<"LeaderboardSort">;
@@ -59,6 +60,15 @@ export function mergeLeaderboardPages(previous: Schema<"LeaderboardList"> | null
     rows.set(row.id, row);
   }
   return { ...incoming, items: [...rows.values()] };
+}
+
+/** What returning to the page (from a dataset's source, an organization's record, another tab) does to rankings or
+ * drilldown records: nothing while a load is in flight or the rows are fresh; a full load when nothing current is shown;
+ * otherwise a quiet revalidation, which keeps the rows and the reader's place unless the rankings changed. */
+export function leaderboardReturn(state: { busy: boolean; shown: boolean; failed: boolean; loadedAt: number; now: number }): "none" | "load" | "revalidate" {
+  if (state.busy) return "none";
+  if (!state.shown || state.failed) return "load";
+  return state.now - state.loadedAt >= publicFreshMs ? "revalidate" : "none";
 }
 
 /** Public drilldowns must stay on known scientific pages, never arbitrary URLs. */
