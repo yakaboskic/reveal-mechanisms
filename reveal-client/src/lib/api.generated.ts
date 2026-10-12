@@ -145,7 +145,7 @@ export interface paths {
         };
         /**
          * Browse knowledge gaps
-         * @description Browse imported DisMech gaps ordered by distinct scientific-account count descending. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Equal-count gaps shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=votes orders by net gap vote score, then account count, then the same seeded tie order. sort=accounts is the default. Vote changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.
+         * @description Browse imported DisMech gaps using scientific-account or vote ranking. Public scope (default) counts only explicitly published snapshots across users; workspace scope requires a session and counts owned saved accounts. Gaps tied on all ranking measures shuffle on each new browse; a server seed in the signed continuation cursor preserves tie order across pages. Exact gap digests only: no text matching, attempts, paragraph jobs or implicit source-revision rollup. Invalid supplied credentials are rejected even for public reads. Filters apply before pagination; count or corpus changes expire cursors. sort=accounts (default) orders by current accessible account count, then the number of distinct resolved DisMech Mechanisms, then the same seeded tie order. sort=votes orders by net gap vote score, then the same mechanism count, then account count and seeded ties. Mechanism counts deduplicate canonical dapper:Mechanism identities and exclude unresolved, non-DisMech and non-Mechanism attachments. Vote changes, attachment changes, sort changes and registered-viewer changes expire cursors. Account votes do not contribute to gap vote totals. Counts include current accounts only: accounts archived by a reference reload stay listed but are not counted.
          */
         get: operations["listKnowledgeGaps"];
         put?: never;
@@ -227,7 +227,7 @@ export interface paths {
         put?: never;
         /**
          * Suggest five EAGGL anchors total
-         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
+         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev), semantic requests without a subquery instead pool every eligible disease identity with the top 100 cosine factors, ask Jev to rate the label and trait of each factor (no genes or loadings) for relevance to the gap and ability to help answer it, and return the top five by that rating; any provider failure falls back to the disease-then-cosine policy, and the rerank field of the response reports which order was used. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
          */
         post: operations["suggestMechanisms"];
         delete?: never;
@@ -598,8 +598,8 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Retry independent review on saved output
-         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Never launch the research agent. Scientific rejection, incomplete capture and active or successful jobs cannot use this route. Current configured review budget applies to each explicit retry. Normal account acceptance and paragraph generation follow a passing review. An analysis frozen on a superseded reference generation cannot retry review (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Analysis review retry waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).
+         * Validate and save retained output
+         * @description Owner-only, idempotent retry for REVIEW_UNAVAILABLE or REVIEW_BUDGET_EXCEEDED. Require the latest job event ID and a checksum-verified completed authoring capture. Requeue the same job with a new validation attempt; preserve original evidence, authoring model, artifacts and activity. Run deterministic validation and normal saving, without another research or AI review call. Historical scientific rejection, incomplete capture and active or successful jobs cannot use this route. Normal account acceptance and paragraph generation follow passing validation. An analysis frozen on a superseded reference generation cannot validate and save retained output (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors). Saved-output validation waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS).
          */
         post: operations["retryJobReview"];
         delete?: never;
@@ -637,7 +637,7 @@ export interface paths {
         };
         /**
          * Rank public community contributions
-         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.
          */
         get: operations["getLeaderboard"];
         put?: never;
@@ -968,6 +968,661 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/factors/{source_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a factor and its loading coverage
+         * @description Read the active imported factor and score ranges. Requests never run research or model inference. Pass source_revision from the anchor to prevent a same-id factor silently changing across reference reloads.
+         */
+        get: operations["getFactorDetail"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/factor-loadings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search and page factor loadings
+         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
+         */
+        get: operations["getFactorLoadings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/catalog/gene-sets/{gene_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect imported gene-set provenance
+         * @description Returns exact imported reference GeneSet and collection provenance. This route does not expose private scientific-account objects; /v1/gene-sets retains its existing publication/owner permissions.
+         */
+        get: operations["getCatalogGeneSet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List owned local research
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Returns retained local runs, including closed work. Hosted research contexts are excluded.
+         */
+        get: operations["listLocalWork"];
+        put?: never;
+        /**
+         * Prepare local agent research
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Freeze the exact saved draft revision and retain its reference generation. Prepare a small seed as a durable bounded operation; do not enqueue a paid hosted job.
+         */
+        post: operations["createLocalWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read local research and results
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Read readiness, original frozen request, visible grants and validation/submission status. Reconnect later using the same work ID. Closing a browser does not close work.
+         */
+        get: operations["getLocalWork"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the seed and artifact manifest
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Returns preparation status or the immutable seed and artifact descriptors. Download large artifacts separately with authorized transfers; a metadata path is not a download URL.
+         */
+        get: operations["getLocalWorkPackage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Close local research
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Prevents new retrieval/upload/submission operations; already received work may finish. Release the generation pin only after all operations settle. Does not delete accepted accounts.
+         */
+        post: operations["closeLocalWork"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/grants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Connect a local agent
+         * @deprecated
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Deprecated manual bearer issuance requires a currently registered browser/API principal; anonymous issuance returns 403 SIGN_IN_REQUIRED. Prefer browser-consented OAuth for new local connections. Old anonymous-issued or unmarked manual grants return 403 REGISTERED_CONSENT_REQUIRED on protected MCP access even after principal promotion; reconnect with fresh registered consent. Issue a scoped expiring credential once. Repeated issuance with the same key returns conflict rather than exposing an old secret. The example credential is fictional.
+         */
+        post: operations["issueLocalResearchGrant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/grants/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an agent connection
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Revocation blocks future calls and pending-operation commits that require this credential. Retained scientific records remain accessible to their owner.
+         */
+        delete: operations["revokeLocalResearchGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/setup-kit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Download an agent-ready workspace
+         * @description Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Return a credential-free reveal.local-setup/2 ZIP of exact retained seed/source and authoring bytes, both project-local stdio agent configurations, setup-manifest.json and a Python launcher. No setup ticket, setup.json secret, bearer, grant, hosted job or model call is created by download. The browser owner may be anonymous or registered; the downloaded private research inputs still require careful sharing. Default launch uses public MCP anonymously and does not require the backend to be online. Explicit --login uses browser device consent; --logout disables authenticated access and revokes only this installation. Requires ready, unexpired owned local work; scientific inputs stay unchanged on repeat download.
+         */
+        post: operations["downloadLocalWorkspace"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research-setup/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeem a local workspace setup ticket
+         * @deprecated
+         * @description Deprecated compatibility endpoint only for already-issued reveal.local-setup/1 tickets whose persisted issued_principal_kind is registered. Anonymous-issued or unmarked tickets return 403 SIGN_IN_REQUIRED even after identity promotion; a copied ticket cannot establish fresh consent. Download a credential-free v2 workspace and authorize through OAuth instead. New v2 downloads issue no ticket and use OAuth instead. The body ticket authorizes exactly one local connection for its original owner, work and package. No browser session is required. Generate and securely retain the rvlm_ bearer locally, then send only its hash. Repeating the same ticket and hash returns the same metadata; another hash conflicts. Closed, revoked or transferred authority fails; unconsumed expired tickets fail. Same-hash metadata replay after ticket expiry is allowed only while its grant is active and the work remains authorized. An optional Authorization: Bearer <current-research-token> rotates only that same-work local connection, preserving other installations. Lost-acknowledgement replay remains valid after the old connection was rotated. Never log the ticket or Authorization value.
+         */
+        post: operations["exchangeResearchSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/local-work/{work_id}/setup-tickets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke unconsumed local setup tickets
+         * @deprecated
+         * @description Legacy compatibility: Owner-scoped browser operation using the existing workspace API bearer. Research credentials are separate, bound to one work/request and do not authorize other work. Invalidates every unconsumed setup download for this work. Existing connections and scientific results stay available; revoke a grant separately to disconnect an installed agent. New credential-free v2 downloads create no setup tickets.
+         */
+        delete: operations["revokeLocalSetupTickets"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-authorization-server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover Reveal OAuth endpoints
+         * @description Public RFC8414 metadata for the canonical backend origin/path prefix. Direct backend route; the browser v1 gateway does not proxy this path.
+         */
+        get: operations["getResearchAuthorizationMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover the protected MCP resource
+         * @description Public metadata. Public MCP reads need no bearer. Protected operations return a Bearer challenge pointing to this metadata; invalid supplied credentials never fall back to anonymous.
+         */
+        get: operations["getResearchProtectedResourceMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Discover the protected MCP resource
+         * @description Public metadata. Public MCP reads need no bearer. Protected operations return a Bearer challenge pointing to this metadata; invalid supplied credentials never fall back to anonymous.
+         */
+        get: operations["getResearchMcpProtectedResourceMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register a public MCP OAuth client
+         * @description Rate-limited dynamic public-client registration. Exact registered callbacks, S256 PKCE and resource binding are mandatory for authorization codes. The fixed reveal-local-launcher client already supports device+refresh; downloads do not register or authorize a client.
+         */
+        post: operations["registerResearchOAuthClient"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/authorize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start authorization-code browser consent
+         * @description Validates exact client callback, response_type=code, S256 PKCE and exact MCP resource, then 303 redirects to /research/connect?request_id=... on the canonical Reveal web app. This does not grant access. Authorization requests expire after 600 seconds; approved codes expire after 60 seconds and may be exchanged once.
+         */
+        get: operations["authorizeResearchOAuthClient"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/device_authorization": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start optional launcher sign-in
+         * @description Explicit sign-in only; default workspace launch does not call this endpoint. Supply exact MCP resource, public client and optional work hint. A hint fixes the permitted selection but confers no ownership. Return a user code/browser link plus a secret device code; keep the device code in secure storage. Poll no faster than interval; slow_down adds five seconds.
+         */
+        post: operations["startResearchDeviceAuthorization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange an approved code or rotate refresh credentials
+         * @description Public clients use form-encoded authorization_code+S256 verifier, device_code grant, or refresh_token. client_id and exact resource are required. Returns authorization_pending/slow_down while device approval is pending, expired_token/access_denied on expiry/denial. Each code is single-use; refresh rotates on every use, and old-token replay revokes its family. Lost token acknowledgements require safe reauthorization, not blind reuse of a consumed refresh token. Owner, open work, package, scope and family are rechecked. No client secret or provider token is accepted.
+         */
+        post: operations["exchangeResearchOAuthToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke this client connection
+         * @description Revoke the matched access/refresh token family, including its active access grants. An unknown token returns 200 without revealing ownership. Other client connections and local files remain intact. Logout disables local use immediately and retries server revocation if offline.
+         */
+        post: operations["revokeResearchOAuthConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research-oauth/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a pending agent connection request
+         * @description Requires a registered Reveal browser principal from the existing Google/ORCID gateway. An anonymous browser must sign in, and may explicitly claim its existing anonymous workspace through the session gateway. Codes, URLs and work IDs never establish ownership. Provider tokens and cookies are not forwarded. Supply exactly one request_id or user_code. Reading or refreshing never approves access. The UI displays the trusted request, self-reported client name/ID, scopes, resource, callback and work before a decision.
+         */
+        get: operations["getResearchOAuthConsent"];
+        put?: never;
+        /**
+         * Approve or decline an agent connection
+         * @description Requires a registered Reveal browser principal from the existing Google/ORCID gateway. An anonymous browser must sign in, and may explicitly claim its existing anonymous workspace through the session gateway. Codes, URLs and work IDs never establish ownership. Provider tokens and cookies are not forwarded. Explicit consent selects one owned, ready, unexpired local run. A device work hint cannot be switched. Approving a generic PKCE request requires an explicit work selection. Denial needs no work ID. Only navigate the backend-returned exact registered callback carrying code/error,state and issuer; never a query-supplied callback. Device approval returns a status for the launcher to poll. Repeated decisions return 409.
+         */
+        post: operations["decideResearchOAuthConsent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/public-research/captures/{capture_id}/artifacts/{artifact_sha256}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download exact retained public reference bytes
+         * @description Anonymous bounded download of one artifact belonging to a verified public reference or connected-KG capture. Default capture retention is 7 days (explicit expires_at on MCP descriptors). Expired captures return 410 PUBLIC_CAPTURE_EXPIRED; missing/foreign artifact hashes return 404. This route never serves user uploads, private packages, prompts or scientific reuse closures. Verify length/SHA-256 against the retained descriptor. Authenticated attachment checks the same frozen generation for reference captures or the frozen selected graph for generation-independent external-KG captures, and retains exact bytes beyond public expiry without re-querying the source.
+         */
+        get: operations["downloadPublicResearchArtifact"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List retained accounts across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. visibility=private (default) selects currently unpublished records; public selects currently published records; all includes both. Public records with unpublished statement changes are found using all and publication.has_unpublished_changes, not the private filter. Returns current owner records, never substitutes frozen public snapshots. Results are ordered newest first with stable record identity tie-breaking. Cursors bind the administrator credential, resource, filter and collection revision; rotation, filter changes or changed records require restarting pagination.
+         */
+        get: operations["listAdminAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/accounts/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a retained account across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. Use the owner-specific record_id from its administrator list. Private and public records are readable. Returns 404 if this resource has no matching retained record.
+         */
+        get: operations["getAdminAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/explorations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List retained explorations across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. visibility=private (default) selects currently unpublished records; public selects currently published records; all includes both. Public records with unpublished statement changes are found using all and publication.has_unpublished_changes, not the private filter. Returns current owner records, never substitutes frozen public snapshots. Results are ordered newest first with stable record identity tie-breaking. Cursors bind the administrator credential, resource, filter and collection revision; rotation, filter changes or changed records require restarting pagination.
+         */
+        get: operations["listAdminExplorations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/explorations/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a retained exploration across owners
+         * @description Requires the separately issued administrator read key with fixed science:read scope. Normal workspace API keys, gateway assertions, service tokens and anonymous requests are rejected. Reads retained scientific results across owners, including archived records and records of expired owners. No scientific mutation, publication, job execution, source query or artifact transfer occurs. Responses and authorization errors use Cache-Control: private, no-store and Vary: Authorization. Use the owner-specific record_id from its administrator list. Private and public records are readable. Returns 404 if this resource has no matching retained record.
+         */
+        get: operations["getAdminExploration"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{draft_id}/cfde-assessments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assess CFDE support before research
+         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Create an assessment receipt for the supplied composer without saving its unsaved edits. The editor sends this POST automatically after the selected gap and mechanism suggestions are ready and edits have settled for 1.5 seconds, with at most one automatic attempt per input binding. Failed or interrupted assessments require an explicit retry; the editor does not automatically resubmit the same inputs after failure. Only this POST can dispatch assessment work; reading a draft or polling an assessment cannot start a provider call. The trusted service selects the model and rubric, retains exact pinned factor and GeneSet source state for audit, and makes the assessment asynchronously from a simple scientific projection of the question, selected factors, names, loadings, source labels and researcher context. The model does not receive DAPPER identifiers, hashes, provenance records or audit encoding rules. The operation is bounded by a 120-second deadline and an owner daily quota. Source preparation and any cold catalog load happen asynchronously after acceptance. Public default inputs share forecasts when the source gap, selected factor references, reference model and selected graphs match and no researcher direction, context, hypotheses or uploads are present. Identical concurrent defaults share pending work; successful default forecasts can be reused for up to seven days, unless the active reference generation, assessment model or rubric changes. Each owner still receives a separate owned assessment UUID and independent draft revision binding. Composers containing notes or uploads use private caching only. No other owner identity, assessment ID or private context is exposed. A changed body with the same Idempotency-Key returns 409. Failed or interrupted work needs an explicit retry with a new key; retrying the original key recovers the original result. Process restart never automatically repeats provider calls.
+         */
+        post: operations["createCfdeAssessment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/drafts/{draft_id}/cfde-assessments/{assessment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a CFDE support assessment
+         * @description Requires a valid existing registered or anonymous workspace principal that owns the draft. An administrator science-read key cannot authorize this operation. This advisory prediction never launches research or creates scientific records and is not a prerequisite for local or hosted research. CFDE grounding remains encouraged, not mandatory. Predictions must not be cited as evidence or used as scientific validation. All response and error bodies are private and no-store, with Vary: Authorization. Examples are synthetic contract fixtures; no model or scientific source was queried. Read only this owner/draft-bound assessment. Polling makes no remote calls and never starts or retries preparation, model work or research. With wait=N (1-20 seconds) a pending, current receipt is long-polled: the response is read again and returned once its status changes, its deadline passes or N seconds elapse, whichever comes first, so clients need not poll every two seconds. No result after failure is replaced by a no verdict. Pending work past its deadline is reported as interrupted; completed results remain readable. Shared work is projected through this owner receipt: created_at is this receipt creation, updated_at remains the original forecast update, and expires_at remains its operation deadline. An unavailable assessment returns 404; inspect stale input pins before displaying a saved prediction for the current editor.
+         */
+        get: operations["getCfdeAssessment"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lightning-audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List private initial audits
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Saved results remain independent of mutable or deleted drafts. Listing never starts inference.
+         */
+        get: operations["listLightningAudits"];
+        put?: never;
+        /**
+         * Create an initial evidence audit
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED. Freezes the owned draft and starts at most one Claude completion. Same-key replays recover the original audit even if the draft is later changed or removed. Changed inputs with the same key conflict. Source preparation and inference execute outside write transactions. The request has a 100,000-byte limit, a 3,000-output-token cap and a 120-second overall deadline. Failed or interrupted calls are not automatically retried; an explicit new submission creates a new audit.
+         */
+        post: operations["createLightningAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lightning-audits/{audit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an initial audit
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Reading never dispatches or retries model work. Pending results may long-poll without holding a database connection. Terminal results return immediately. Optional after_revision returns immediately for a newer preview; otherwise a pending read waits. Assessing reads check stored progress at least once per second across API processes. Preview text is unvalidated; only succeeded results can continue. Audits remain inspectable after their continuation window expires.
+         */
+        get: operations["getLightningAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/lightning-audits/{audit_id}/continue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Continue an audit with an agent
+         * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED, a completed audit and an unexpired continuation window. All assessment categories may continue. Clones a new frozen request and independent generation pin, preserving original inputs separately from the edited direction. Uses ordinary online/local quotas and authorization. Retained superseded generations are allowed; unavailable generations require a fresh audit. Audit artifacts enter the agent seed as preliminary context, never eligible evidence.
+         */
+        post: operations["continueLightningAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/{account_id}/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Expand scientific account provenance and dataset reuse
+         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
+         */
+        get: operations["getAccountProvenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1007,6 +1662,8 @@ export interface components {
             generated_at_time?: string | null;
             /** @description AgenticWorkspace id(s) from which this activity can be re-run by an AI agent. Complements `command` / `container_image`: those are the machine replay path, this is the agentic one. Multivalued because the same analysis may be reproducible in more than one workspace. */
             has_agentic_workspace?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description LineageStep CURIEs making up this activity's ordered provenance lineage. */
             has_lineage_step?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -1042,6 +1699,8 @@ export interface components {
             agent_model?: string | null;
             /** @description The software agent acting in this workspace — an npx:SoftwareAgent, which is also how a nanopublication attributes an assertion to a non-human author. */
             agent_role?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /**
@@ -1108,6 +1767,8 @@ export interface components {
             funder_name?: string | null;
             /** @description NIH institute/center administering the grant (e.g. NHLBI). */
             grant_administering_institute?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -1130,6 +1791,8 @@ export interface components {
             etag?: string | null;
             /** @description Reference to the BCO's execution domain (script, software prerequisites, environment). */
             execution_domain?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Reference to the BCO's I/O domain (input and output files). */
@@ -1160,6 +1823,8 @@ export interface components {
             drs_representation?: string[] | null;
             /** @description The file's name. */
             filename?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Source-assigned identifier retained from a C2M2 record, represented here as a URI or CURIE. Put current storage paths in inherited location instead. Native C2M2 local_id suffixes require their source namespace to form this reference; this profile does not model that two-column key separately. */
@@ -1204,6 +1869,8 @@ export interface components {
              * @description Deep link to the entry on https://dismech.monarchinitiative.org, for human review.
              */
             dismech_source_url?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Known intervening mechanisms, required in spirit when `causal_link_type` is INDIRECT_KNOWN_INTERMEDIATES. */
@@ -1274,6 +1941,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -1413,6 +2082,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Evidence uses bearing on this claim's proposition. Each evidence item's target_proposition must match this proposition when supplied. Source claims, rationale and assumptions describe an explicit interpretation; computational input lineage remains in PROV links. */
             has_evidence?: string[] | null;
             /** @description CURIE/URI of the License node. */
@@ -1449,6 +2120,8 @@ export interface components {
          * @description One explicitly typed quantitative assessment. A Claim links the score to its proposition and provenance. Values are not interchangeable across metrics, and a factor loading must not be relabeled as a probability.
          */
         DapperClaimScore: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description What is estimated, its scale, and (for probabilities) the event and conditioning data/model. A posterior for a latent variable is not automatically a probability that a biological mechanism is true. */
@@ -1519,6 +2192,8 @@ export interface components {
             duo_id?: string | null;
             /** @description Human-readable DUO term label (e.g. "general research use"). */
             duo_label?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description The data use modifier, if this term is a modifier. */
@@ -1564,6 +2239,8 @@ export interface components {
             has_data_use_term?: string[] | null;
             /** @description GA4GH DrsObject CURIEs (file-level identity) making up this dataset. */
             has_drs_object?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description File or C2M2File records carrying a distribution of this dataset. Links the logical dataset to concrete files without requiring DRS registration. An S3 prefix is a dataset location, not a single File; enumerate its files or link an actual manifest when available. */
             has_file?: string[] | null;
             /** @description CURIE/URI of the License node. */
@@ -1631,6 +2308,8 @@ export interface components {
             checksum_sha256?: string | null;
             /** @description GA4GH DRS object identifier. */
             drs_id?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description MIME type of the object. */
@@ -1667,6 +2346,80 @@ export interface components {
             subject?: string | null;
         };
         /**
+         * Embedding
+         * @description A fixed-length numeric vector representing another DAPPER node, computed by an embedding model from text derived from that node. `embedding_of` names the represented node; the target's inverse `has_embedding` list is unhashable, so embedding a node never changes the node's own identifier. The vector itself is stored as a row of a shared matrix File and located by `has_vector_file` plus `vector_row`; those locators are unhashable and must be supplied together. `vector_sha256` binds the identifier to the stored bytes; `was_generated_by` (ProvenancedResource) names the Activity that ran the model.
+         */
+        DapperEmbedding: {
+            /** @description Access tier for the resource (e.g. public, controlled). */
+            access_level?: components["schemas"]["DapperAccessLevelEnum"];
+            /** @description Externally-assigned persistent identifiers for this resource — a DOI, an accession, a Handle, an ARK. `id` is DAPPER's own computed content address (`dapper:{ClassName}.{digest}`), which answers "what exactly is this record?". A DOI answers "what does the publisher call this, and how do I cite it?". Both are worth keeping, so neither displaces the other. `identifier_type` names the scheme. */
+            alternate_identifier?: string[] | null;
+            /** @description Whether obtaining this resource requires a controlled-access request/review. */
+            controlled_access?: boolean | null;
+            /** @description Number of elements in the vector. */
+            dimensions?: number | null;
+            /** @description Element type of the stored vector; the type `vector_sha256` was computed over. */
+            dtype?: components["schemas"]["DapperEmbeddingDtypeEnum"];
+            /** @description The exact text given to the model. Recording it makes the embedding reproducible and lets a reader judge what the vector represents. */
+            embedded_text?: string | null;
+            /** @description Model identifier as published by its provider, e.g. a Hugging Face repository id such as `pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb`. */
+            embedding_model?: string | null;
+            /** @description Model revision, tag, or commit, if known. */
+            embedding_model_version?: string | null;
+            /** @description Identifier of the node this vector represents (a GeneSet, GeneSetCollection, Dataset, Claim, ...). Contributes to identity: the same text embedded on behalf of a different node is a different embedding. */
+            embedding_of?: string | null;
+            /** @description Provider or runtime that served the model, e.g. huggingface, openai. */
+            embedding_provider?: string | null;
+            /** @description Authoritative Award CURIEs supporting this resource. */
+            funded_by?: string[] | null;
+            /** @description Contributing agents (Person/Organization CURIEs), distinct from the authoritative creators. */
+            has_contributor?: string[] | null;
+            /** @description Authoritative creators (Person/Organization CURIEs). */
+            has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
+            /** @description CURIE/URI of the License node. */
+            has_license?: string | null;
+            /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
+            has_mirror_provenance?: string[] | null;
+            /** @description The authoritative RecommendedCitation node. */
+            has_recommended_citation?: string | null;
+            /** @description File holding the matrix this vector is a row of. Reference the local File record by its DAPPER identifier; the File's description should state the array layout (e.g. NumPy `.npy`, rows x dimensions, dtype). */
+            has_vector_file?: string | null;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            id: string;
+            /** @description Authoritative primary Publication CURIEs. */
+            is_described_by?: string[] | null;
+            /** @description Human-readable name/label for a node. */
+            name?: string | null;
+            /** @description Normalization applied before storage. */
+            normalization?: components["schemas"]["DapperEmbeddingNormalizationEnum"];
+            /** @description Versioned name of the rule that built `embedded_text` from the target node, e.g. `cfde-geneset-v1`. */
+            text_template?: string | null;
+            /** @description Zero-based row index of this vector within `has_vector_file`. */
+            vector_row?: number | null;
+            /** @description Hex SHA-256 of the vector's bytes in `dtype`, little-endian, C order. Two embeddings with different values are different records even when model and text agree. */
+            vector_sha256?: string | null;
+            /** @description Agent(s) (CURIEs) this resource is attributed to. */
+            was_attributed_to?: string[] | null;
+            /** @description Upstream resource(s) (CURIEs) this one was derived from. */
+            was_derived_from?: string[] | null;
+            /** @description The Activity that generated/packaged this returned result. */
+            was_generated_by?: string | null;
+        } & (unknown & unknown);
+        /**
+         * EmbeddingDtypeEnum
+         * @description Element type of the stored embedding vector. Names follow NumPy dtype spelling; the bytes hashed into `Embedding.vector_sha256` are the row in this type, little-endian, C order.
+         * @enum {string}
+         */
+        DapperEmbeddingDtypeEnum: "float16" | "float32" | "float64" | "bfloat16" | "int8";
+        /**
+         * EmbeddingNormalizationEnum
+         * @description Normalization applied to the stored vector after the model produced it. `none` stores the model output as returned; `l2` stores the unit-length vector, so a dot product is a cosine similarity.
+         * @enum {string}
+         */
+        DapperEmbeddingNormalizationEnum: "none" | "l2";
+        /**
          * EvidenceDirectionEnum
          * @description Direction of an assessment relative to its target proposition.
          * @enum {string}
@@ -1701,6 +2454,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -1743,6 +2498,8 @@ export interface components {
             drs_representation?: string[] | null;
             /** @description The file's name. */
             filename?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Current filesystem path, retrieval URI, or document-declared CURIE (e.g. /work/intermediate.tsv or s3://bucket/intermediate.tsv). Moving the file does not change its DAPPER identity. This is distinct from C2M2File.local_id, which is the source system's identifier and retains its hashable semantics. */
@@ -1808,6 +2565,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -1895,6 +2654,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Reference to a GMT file exporting this single gene set. For a row within a shared GMT use in_gmt_file and gmt_entry instead. Accepts File and any subclass, including C2M2File. Retrieval locations and checksums belong on the referenced file record. In a provenance document, use the local file record's content-derived DAPPER identifier (CURIE or full URI), not a bare checksum or retrieval URL. */
             has_gmt_file?: string | null;
             /** @description CURIE/URI of the License node. */
@@ -1964,6 +2725,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description File serializing this collection as GMT rows. Use the local File or C2M2File record's DAPPER identifier; file location and checksums belong on that record. No C2M2 registration is required by this class. */
             has_gmt_file?: string | null;
             /** @description CURIE/URI of the License node. */
@@ -2087,6 +2850,18 @@ export interface components {
             subject?: string | null;
         };
         /**
+         * HasEmbedding
+         * @description Any Node → an Embedding computed from it. Reifies the node's `has_embedding` list (the inverse of Embedding.embedding_of). This is a representation relationship, not a derivation: the embedded node is not upstream of anything by virtue of having been embedded.
+         */
+        DapperHasEmbedding: {
+            /** @description The object node of an Edge (its `id`/CURIE). */
+            object?: string | null;
+            /** @description The predicate (relationship type) of an Edge. */
+            predicate?: string | null;
+            /** @description The subject node of an Edge (its `id`/CURIE). */
+            subject?: string | null;
+        };
+        /**
          * HasEvidence
          * @description Claim → EvidenceItem.
          */
@@ -2188,6 +2963,8 @@ export interface components {
          *     The digest covers hashable slots ONLY. Timestamps, signatures, mirror observations, workspace locations, and back-references are marked `unhashable` so that re-running, re-signing, mirroring, or re-hosting an artifact never changes what it is. See schema/identity/README.md for the DAPPER-ID-1 profile and schema/trusty-identifiers.md for why this is deliberately NOT a Trusty URI `RA` code.
          */
         DapperHashableNode: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2234,6 +3011,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2262,6 +3041,8 @@ export interface components {
          * @description License and usage terms for the dataset.
          */
         DapperLicense: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2278,6 +3059,8 @@ export interface components {
         DapperLineageStep: {
             /** @description What happened in this step. */
             activity?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2306,6 +3089,8 @@ export interface components {
              * @description Deep link to the entry on https://dismech.monarchinitiative.org, for human review.
              */
             dismech_source_url?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2345,6 +3130,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2375,6 +3162,8 @@ export interface components {
          * @description Provenance appended by a mirror/cache. APPEND-ONLY: a mirror may add a MirrorProvenance record but must never rewrite authoritative NIH provenance (see the mirroring invariant at the top of this schema).
          */
         DapperMirrorProvenance: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description sha256 of the mirrored object. */
@@ -2404,6 +3193,8 @@ export interface components {
             as_sentence?: string | null;
             /** @description The scientific object carried by this graph: a Claim or ScientificAccount id. */
             asserts?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2418,6 +3209,8 @@ export interface components {
             derived_from?: string[] | null;
             /** @description DAPPER Activity id that produced the assertion. */
             generated_by_activity?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2432,6 +3225,8 @@ export interface components {
          * @description The publication-info graph — metadata about the NANOPUB itself: who published it, when, under what licence, with what signature. Overlaps almost exactly with the DAPPER attribution core.
          */
         DapperNanopubPublicationInfo: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2446,6 +3241,8 @@ export interface components {
         DapperNanopubSignature: {
             /** @description Signature algorithm, e.g. "RSA". */
             has_algorithm?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Base64 public key of the signer. */
             has_public_key?: string | null;
             /** @description Base64 signature value. */
@@ -2481,6 +3278,8 @@ export interface components {
             creator?: string[] | null;
             /** @description The assertion graph. REQUIRED: nanopublication well-formedness demands exactly one `np:hasAssertion` quad in the Head. */
             has_assertion?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description The provenance graph — where the ASSERTION came from (not where the nanopub came from; that is pubinfo). REQUIRED: exactly one, same as the assertion. A nanopub carrying only an assertion is malformed. */
             has_provenance?: string | null;
             /** @description The publication-info graph — where the NANOPUB itself came from. REQUIRED: exactly one. */
@@ -2515,6 +3314,8 @@ export interface components {
          * @description Abstract base for all DAPPER entities (datasets, agents, awards, publications, licenses, activities, mirror records, ...). Not used directly.
          */
         DapperNode: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2529,6 +3330,8 @@ export interface components {
             contributor_role?: components["schemas"]["DapperContributorRoleEnum"];
             /** @description The role this agent played as a creator of the resource. */
             creator_role?: components["schemas"]["DapperCreatorRoleEnum"];
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2567,6 +3370,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2611,6 +3416,8 @@ export interface components {
             family_name?: string | null;
             /** @description Given (first) name. */
             given_name?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2633,6 +3440,8 @@ export interface components {
          * @description The content being asserted or evaluated, independent of a particular assessment, score, or execution. A text statement is required; a structured subject-predicate-object form is optional. DAPPER identifiers address the representation, not a guarantee of semantic equivalence between paraphrases.
          */
         DapperProposition: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Optional mechanistic structure elaborating this proposition's content. */
@@ -2707,6 +3516,8 @@ export interface components {
             citation?: string | null;
             /** @description Digital Object Identifier for the publication. */
             doi?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2743,6 +3554,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2773,6 +3586,8 @@ export interface components {
         DapperRecommendedCitation: {
             /** @description The recommended human-readable citation text. */
             citation_text?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2793,6 +3608,8 @@ export interface components {
         DapperRoCratePackage: {
             /** @description RO-Crate spec/profile the crate conforms to. */
             conforms_to?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -2829,6 +3646,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2876,6 +3695,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -2978,6 +3799,7 @@ export interface components {
             activities?: components["schemas"]["DapperActivity"][];
             gene_sets?: components["schemas"]["DapperGeneSet"][];
             gene_set_collections?: components["schemas"]["DapperGeneSetCollection"][];
+            embeddings?: components["schemas"]["DapperEmbedding"][];
             gene_programs?: components["schemas"]["DapperGeneProgram"][];
             cell_states?: components["schemas"]["DapperCellState"][];
             datasets?: components["schemas"]["DapperDataset"][];
@@ -3022,6 +3844,7 @@ export interface components {
             has_lineage_step_edges?: components["schemas"]["DapperHasLineageStep"][];
             has_recommended_citation_edges?: components["schemas"]["DapperHasRecommendedCitation"][];
             has_mirror_provenance_edges?: components["schemas"]["DapperHasMirrorProvenance"][];
+            has_embedding_edges?: components["schemas"]["DapperHasEmbedding"][];
             has_data_use_term_edges?: components["schemas"]["DapperHasDataUseTerm"][];
             has_file_edges?: components["schemas"]["DapperHasFile"][];
             has_drs_object_edges?: components["schemas"]["DapperHasDrsObject"][];
@@ -3178,6 +4001,10 @@ export interface components {
             object_class: "Mechanism";
             object: components["schemas"]["DapperMechanism"];
             disease_label: string;
+            /** @description Pinned imported pathophysiology record, source locator, hash and import/commit provenance; omitted when not materialized. */
+            source_detail?: {
+                [key: string]: unknown;
+            };
         };
         /** @description An EAGGL factor is a DAPPER Mechanism, with exact native CFDE identity/model and a separate File for captured catalog bytes. Initial retrieval joins existing EAGGL label embeddings through the populated exact-trait/factor-number crosswalk, ignoring label/gene differences. Return the resolved native CFDE source_id and anchor; cfde_anchor.label may carry the friendly EAGGL display label without changing the scientific object. Preserve source hit, embedding and mapping runs in server-owned selection/request provenance. Each deployment serves the factors of one active reference generation. In an eaggl-capped-v1 generation, source_id is factor:kpn:{NNNNNNN}:eaggl-capped-v1:{FactorN}, the record adds reference_generation_id and kpn_trait, cfde_anchor.label is the EAGGL factor label, and catalog_file identifies the canonical factor metadata bytes. Legacy cfde-inc-v2 records omit both fields. */
         EagglFactor: {
@@ -3322,6 +4149,12 @@ export interface components {
             originating_saved_draft_version?: number;
             linked_dismech_context: components["schemas"]["SourceRef"][];
             archive?: components["schemas"]["ReferenceArchive"];
+            /** Format: uuid */
+            lightning_audit_id?: string;
+            /** @description Private frozen preliminary audit context, preserved separately from original researcher instructions; never eligible scientific evidence. */
+            lightning_context?: {
+                [key: string]: unknown;
+            };
         };
         GapSource: {
             /** @enum {string} */
@@ -3354,7 +4187,7 @@ export interface components {
         Rank: {
             value: number;
             /** @enum {string} */
-            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion";
+            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion" | "eligible_disease_identity" | "jev_gap_relevance";
             rank: number;
         };
         SearchProvenance: {
@@ -3402,8 +4235,9 @@ export interface components {
             factor: components["schemas"]["EagglFactor"];
             ranking: components["schemas"]["Rank"];
             matched_context_ids: string[];
+            reason?: string;
         };
-        /** @description At most five unique automatic EAGGL factors TOTAL across context, ranked by maximum per-mechanism cosine for semantic mode. Excludes manual selections and dismissals. Removal does not trigger silent refill; reset suggestions is explicit. */
+        /** @description At most five unique automatic EAGGL factors TOTAL across context. Eligible versioned exact disease mappings are proposed first, followed by semantic/hybrid context retrieval. Reasons establish relevance to inspect, not biological support. Excludes manual selections and dismissals. Removal does not trigger silent refill; reset suggestions is explicit. */
         Suggestions: {
             /** Format: uuid */
             suggestion_id: string;
@@ -3412,6 +4246,16 @@ export interface components {
             automatic_target_count: 5;
             search: components["schemas"]["SearchProvenance"];
             limitations: string[];
+            /** @description Present only where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev). applied: automatic anchors are ordered by Jev ratings (metric jev_gap_relevance) of factor names against the gap, over every eligible disease identity plus the top cosine factors. fallback: the provider could not answer, so the disease-identity-then-cosine policy was used over the same pool (not_configured: no provider key, retrieval was unchanged). not_applicable: subquery or hybrid requests, or no open anchor slots. Ratings order candidates for inspection; they are not evidence. */
+            rerank?: {
+                /** @enum {string} */
+                status: "applied" | "fallback" | "not_applicable";
+                /** @enum {string} */
+                reason?: "not_configured" | "timeout" | "too_large" | "unavailable" | "invalid" | "internal_error" | "subquery" | "hybrid_mode" | "no_open_slots";
+                model?: string;
+                rubric_version?: string;
+                pool_size?: number;
+            };
         };
         JobBudgets: {
             /** @default 3 */
@@ -3595,6 +4439,7 @@ export interface components {
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
             archive?: components["schemas"]["ReferenceArchive"];
+            data_sources?: components["schemas"]["AccountDataSources"];
         };
         ClaimResult: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -3736,6 +4581,114 @@ export interface components {
             items: components["schemas"]["Job"][];
             page: components["schemas"]["Page"];
         };
+        /** @description Immutable gnomAD constraint source active for this environment. Independent of the factor reference generation. Pin import_id for paginated gene reads. */
+        GnomadImport: {
+            import_id: string;
+            version: string;
+            source_sha256: string;
+            source_url: string | null;
+            selection_policy: string;
+        };
+        /** @description Exact-symbol gnomAD constraint annotation. A unique Ensembl MANE Select transcript is preferred, otherwise a unique canonical transcript. pLI is probability of loss-of-function intolerance (higher = stronger constraint); LOEUF is the LoF observed/expected upper confidence bound (lower = stronger constraint); mis_z is the missense Z score. Missing or ambiguous metrics stay null. Source quality flags are retained. */
+        GnomadGeneConstraint: {
+            symbol: string;
+            gene_id: string | null;
+            transcript: string | null;
+            /** @enum {string} */
+            status: "selected" | "ambiguous_gene" | "ambiguous_transcript" | "no_primary_transcript" | "no_ensembl_gene";
+            selection_method: ("mane_select" | "canonical") | null;
+            selection_reason: string;
+            pli: number | null;
+            loeuf: number | null;
+            mis_z: number | null;
+            lof_oe: number | null;
+            flags: string[];
+        };
+        /** @description Statistics over the entire retained factor loading set, unaffected by search or pagination. available means numeric scores are stored. Missing values are not zero. */
+        LoadingSummary: {
+            total: number;
+            min: number | null;
+            max: number | null;
+            coverage: string;
+            available: boolean;
+        };
+        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null. */
+        FactorLoading: {
+            id: string;
+            label: string;
+            loading: number | null;
+            rank: number;
+            gene_set_id?: string | null;
+            library?: string;
+            gene_count?: number;
+            joint_loading?: number;
+            marginal_loading?: number;
+            joint_rank?: number;
+            marginal_rank?: number;
+            gnomad?: components["schemas"]["GnomadGeneConstraint"] | null;
+        };
+        FactorDetail: {
+            factor: components["schemas"]["EagglFactor"];
+            generation_id: string | null;
+            provenance: {
+                eaggl_import_id: string;
+                factor_id: string;
+                factor_key: string | null;
+                model: string;
+            };
+            genes: components["schemas"]["LoadingSummary"];
+            gene_sets: components["schemas"]["LoadingSummary"];
+            gnomad?: components["schemas"]["GnomadImport"] | null;
+        };
+        /** @description Bounded loading page. sort=loading (default) orders by descending score; alphabetical orders case-insensitive labels. Gene-only gnomad_pli and gnomad_mis_z sort descending; gnomad_loeuf sorts ascending, all with missing values last and stable symbol ties. Sorting applies globally before pagination. Ranks and heatmap score ranges always remain original factor loadings. Pin generation_id, source_revision, and gnomad_import_id returned by FactorDetail. */
+        FactorLoadings: {
+            source_id: string;
+            generation_id: string | null;
+            /** @enum {string} */
+            kind: "gene" | "gene_set";
+            /** @enum {string} */
+            metric: "joint" | "marginal";
+            /** @enum {string} */
+            sort: "alphabetical" | "loading" | "gnomad_pli" | "gnomad_loeuf" | "gnomad_mis_z";
+            items: components["schemas"]["FactorLoading"][];
+            total: number;
+            offset: number;
+            limit: number;
+            next_offset: number | null;
+            summary: components["schemas"]["LoadingSummary"];
+            gnomad?: components["schemas"]["GnomadImport"] | null;
+        };
+        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404. */
+        CatalogGeneSet: {
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            id: string;
+            generation_id: string | null;
+            name: string;
+            library: string | null;
+            gene_count: number | null;
+            genes_in_universe: number | null;
+            object: {
+                [key: string]: unknown;
+            } | null;
+            metadata: {
+                [key: string]: unknown;
+            };
+            provenance: {
+                [key: string]: unknown;
+            };
+            collection: {
+                /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+                id: string;
+                label: string;
+                library: string;
+                gene_set_count: number;
+                object: {
+                    [key: string]: unknown;
+                } | null;
+                payload_sha256: string | null;
+            } | null;
+            limitations: string[];
+        };
         /** @description Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization. */
         WorkspaceEvent: {
             /** @constant */
@@ -3751,7 +4704,7 @@ export interface components {
             entity_revision: number;
             /** @enum {string} */
             operation: "upsert" | "remove" | "invalidate" | "resync";
-            collections: ("drafts" | "gaps" | "explorations" | "requests" | "jobs" | "accounts" | "identity" | "catalog")[];
+            collections: ("drafts" | "gaps" | "explorations" | "requests" | "jobs" | "accounts" | "identity" | "catalog" | "audits")[];
         };
         /** @description Exact imported DisMech source observation and DAPPER mapping. Resolve and validate server-side. No client-authored question. */
         SelectedGap: {
@@ -3899,6 +4852,7 @@ export interface components {
             /** @description True only for incremental public text. Adjacent marked agent-message events may be concatenated for display while preserving original event IDs for replay. Absent or false denotes a complete standalone message. */
             message_delta?: boolean;
         };
+        /** @description Local accepted accounts begin with status not_requested and null job_id/paragraph_id. The owner may explicitly request a hosted research statement later. */
         ParagraphState: {
             /** @enum {string} */
             status: "queued" | "running" | "succeeded" | "failed" | "cancelled" | "not_requested";
@@ -4039,11 +4993,16 @@ export interface components {
         /** @enum {string} */
         LeaderboardView: "researchers" | "accounts" | "datasets";
         /** @enum {string} */
-        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
         /** @enum {string} */
-        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
         /** @enum {string} */
         LeaderboardEvidence: "all" | "supporting";
+        /**
+         * @description Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.
+         * @enum {string}
+         */
+        LeaderboardScope: "published" | "all";
         LeaderboardAttribution: {
             id: string;
             label: string;
@@ -4056,6 +5015,13 @@ export interface components {
             NEUTRAL: number;
             UNKNOWN: number;
         };
+        /** @description An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production. */
+        LeaderboardOrganization: {
+            id: string;
+            name: string;
+            ror: string | null;
+            roles: string[];
+        };
         LeaderboardMetrics: {
             account_count: number;
             upvotes: number;
@@ -4065,6 +5031,8 @@ export interface components {
             explored_gap_count: number;
             claim_count: number;
             researcher_count: number;
+            traced_claim_count: number;
+            traced_account_count: number;
             net_votes: number;
             overall_score: number;
         };
@@ -4089,8 +5057,11 @@ export interface components {
             } | null;
             attribution: components["schemas"]["LeaderboardAttribution"] | null;
             directions: components["schemas"]["LeaderboardDirections"];
+            /** @description Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views. */
+            organizations: components["schemas"]["LeaderboardOrganization"][];
+            url: string | null;
         };
-        /** @description Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
+        /** @description Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
         LeaderboardMetadata: {
             /** Format: date-time */
             as_of: string;
@@ -4122,6 +5093,7 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
         };
         LeaderboardList: {
@@ -4155,10 +5127,12 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             sort: components["schemas"]["LeaderboardSort"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             items: components["schemas"]["LeaderboardEntry"][];
             page: components["schemas"]["Page"];
         };
@@ -4175,6 +5149,7 @@ export interface components {
             directions: components["schemas"]["LeaderboardDirections"];
             value: number;
         };
+        /** @description total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed. */
         LeaderboardRecords: {
             /** Format: date-time */
             as_of: string;
@@ -4206,13 +5181,16 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             id: string;
             metric: components["schemas"]["LeaderboardMetric"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             entry: components["schemas"]["LeaderboardEntry"];
             total: number;
+            withheld: number;
             items: components["schemas"]["LeaderboardRecord"][];
             page: components["schemas"]["Page"];
         };
@@ -4278,6 +5256,8 @@ export interface components {
             generated_at_time?: string | null;
             /** @description AgenticWorkspace id(s) from which this activity can be re-run by an AI agent. Complements `command` / `container_image`: those are the machine replay path, this is the agentic one. Multivalued because the same analysis may be reproducible in more than one workspace. */
             has_agentic_workspace?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description LineageStep CURIEs making up this activity's ordered provenance lineage. */
             has_lineage_step?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
@@ -4313,6 +5293,8 @@ export interface components {
             agent_model?: string | null;
             /** @description The software agent acting in this workspace — an npx:SoftwareAgent, which is also how a nanopublication attributes an assertion to a non-human author. */
             agent_role?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /**
@@ -4379,6 +5361,8 @@ export interface components {
             funder_name?: string | null;
             /** @description NIH institute/center administering the grant (e.g. NHLBI). */
             grant_administering_institute?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -4401,6 +5385,8 @@ export interface components {
             etag?: string | null;
             /** @description Reference to the BCO's execution domain (script, software prerequisites, environment). */
             execution_domain?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Reference to the BCO's I/O domain (input and output files). */
@@ -4431,6 +5417,8 @@ export interface components {
             drs_representation?: string[] | null;
             /** @description The file's name. */
             filename?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Source-assigned identifier retained from a C2M2 record, represented here as a URI or CURIE. Put current storage paths in inherited location instead. Native C2M2 local_id suffixes require their source namespace to form this reference; this profile does not model that two-column key separately. */
@@ -4475,6 +5463,8 @@ export interface components {
              * @description Deep link to the entry on https://dismech.monarchinitiative.org, for human review.
              */
             dismech_source_url?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Known intervening mechanisms, required in spirit when `causal_link_type` is INDIRECT_KNOWN_INTERMEDIATES. */
@@ -4545,6 +5535,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -4684,6 +5676,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Evidence uses bearing on this claim's proposition. Each evidence item's target_proposition must match this proposition when supplied. Source claims, rationale and assumptions describe an explicit interpretation; computational input lineage remains in PROV links. */
             has_evidence?: string[] | null;
             /** @description CURIE/URI of the License node. */
@@ -4720,6 +5714,8 @@ export interface components {
          * @description One explicitly typed quantitative assessment. A Claim links the score to its proposition and provenance. Values are not interchangeable across metrics, and a factor loading must not be relabeled as a probability.
          */
         PackageClaimScore: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description What is estimated, its scale, and (for probabilities) the event and conditioning data/model. A posterior for a latent variable is not automatically a probability that a biological mechanism is true. */
@@ -4790,6 +5786,8 @@ export interface components {
             duo_id?: string | null;
             /** @description Human-readable DUO term label (e.g. "general research use"). */
             duo_label?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description The data use modifier, if this term is a modifier. */
@@ -4835,6 +5833,8 @@ export interface components {
             has_data_use_term?: string[] | null;
             /** @description GA4GH DrsObject CURIEs (file-level identity) making up this dataset. */
             has_drs_object?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description File or C2M2File records carrying a distribution of this dataset. Links the logical dataset to concrete files without requiring DRS registration. An S3 prefix is a dataset location, not a single File; enumerate its files or link an actual manifest when available. */
             has_file?: string[] | null;
             /** @description CURIE/URI of the License node. */
@@ -4902,6 +5902,8 @@ export interface components {
             checksum_sha256?: string | null;
             /** @description GA4GH DRS object identifier. */
             drs_id?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description MIME type of the object. */
@@ -5085,11 +6087,25 @@ export interface components {
             data_use_terms?: components["schemas"]["PackageDataUseTerm"][] | null;
             datasets?: components["schemas"]["PackageDataset"][] | null;
             drs_objects?: components["schemas"]["PackageDrsObject"][] | null;
+            drs_representation_edges?: components["schemas"]["PackageDrsRepresentation"][] | null;
+            embeddings?: components["schemas"]["PackageEmbedding"][] | null;
             evidence_items?: components["schemas"]["PackageEvidenceItem"][] | null;
             files?: components["schemas"]["PackageFile"][] | null;
+            funded_by_edges?: components["schemas"]["PackageFundedBy"][] | null;
             gene_programs?: components["schemas"]["PackageGeneProgram"][] | null;
             gene_set_collections?: components["schemas"]["PackageGeneSetCollection"][] | null;
             gene_sets?: components["schemas"]["PackageGeneSet"][] | null;
+            has_agentic_workspace_edges?: components["schemas"]["PackageHasAgenticWorkspace"][] | null;
+            has_contributor_edges?: components["schemas"]["PackageHasContributor"][] | null;
+            has_creator_edges?: components["schemas"]["PackageHasCreator"][] | null;
+            has_data_use_term_edges?: components["schemas"]["PackageHasDataUseTerm"][] | null;
+            has_drs_object_edges?: components["schemas"]["PackageHasDrsObject"][] | null;
+            has_file_edges?: components["schemas"]["PackageHasFile"][] | null;
+            has_lineage_step_edges?: components["schemas"]["PackageHasLineageStep"][] | null;
+            has_mirror_provenance_edges?: components["schemas"]["PackageHasMirrorProvenance"][] | null;
+            has_recommended_citation_edges?: components["schemas"]["PackageHasRecommendedCitation"][] | null;
+            has_workflow_provenance_edges?: components["schemas"]["PackageHasWorkflowProvenance"][] | null;
+            is_described_by_edges?: components["schemas"]["PackageIsDescribedBy"][] | null;
             knowledge_gaps?: components["schemas"]["PackageKnowledgeGap"][] | null;
             licenses?: components["schemas"]["PackageLicense"][] | null;
             lineage_steps?: components["schemas"]["PackageLineageStep"][] | null;
@@ -5102,6 +6118,7 @@ export interface components {
             nanopub_signatures?: components["schemas"]["PackageNanopubSignature"][] | null;
             nanopublications?: components["schemas"]["PackageNanopublication"][] | null;
             organizations?: components["schemas"]["PackageOrganization"][] | null;
+            packaged_as_edges?: components["schemas"]["PackagePackagedAs"][] | null;
             paragraphs?: components["schemas"]["PackageParagraph"][] | null;
             persons?: components["schemas"]["PackagePerson"][] | null;
             prefixes: {
@@ -5114,6 +6131,10 @@ export interface components {
             ro_crate_packages?: components["schemas"]["PackageRoCratePackage"][] | null;
             scientific_accounts?: components["schemas"]["PackageScientificAccount"][] | null;
             sets?: components["schemas"]["PackageSet"][] | null;
+            used_edges?: components["schemas"]["PackageUsed"][] | null;
+            was_attributed_to_edges?: components["schemas"]["PackageWasAttributedTo"][] | null;
+            was_derived_from_edges?: components["schemas"]["PackageWasDerivedFrom"][] | null;
+            was_generated_by_edges?: components["schemas"]["PackageWasGeneratedBy"][] | null;
         };
         /**
          * EPDapperPin
@@ -5809,6 +6830,80 @@ export interface components {
             subject?: string | null;
         };
         /**
+         * Embedding
+         * @description A fixed-length numeric vector representing another DAPPER node, computed by an embedding model from text derived from that node. `embedding_of` names the represented node; the target's inverse `has_embedding` list is unhashable, so embedding a node never changes the node's own identifier. The vector itself is stored as a row of a shared matrix File and located by `has_vector_file` plus `vector_row`; those locators are unhashable and must be supplied together. `vector_sha256` binds the identifier to the stored bytes; `was_generated_by` (ProvenancedResource) names the Activity that ran the model.
+         */
+        PackageEmbedding: {
+            /** @description Access tier for the resource (e.g. public, controlled). */
+            access_level?: components["schemas"]["PackageAccessLevelEnum"];
+            /** @description Externally-assigned persistent identifiers for this resource — a DOI, an accession, a Handle, an ARK. `id` is DAPPER's own computed content address (`dapper:{ClassName}.{digest}`), which answers "what exactly is this record?". A DOI answers "what does the publisher call this, and how do I cite it?". Both are worth keeping, so neither displaces the other. `identifier_type` names the scheme. */
+            alternate_identifier?: string[] | null;
+            /** @description Whether obtaining this resource requires a controlled-access request/review. */
+            controlled_access?: boolean | null;
+            /** @description Number of elements in the vector. */
+            dimensions?: number | null;
+            /** @description Element type of the stored vector; the type `vector_sha256` was computed over. */
+            dtype?: components["schemas"]["PackageEmbeddingDtypeEnum"];
+            /** @description The exact text given to the model. Recording it makes the embedding reproducible and lets a reader judge what the vector represents. */
+            embedded_text?: string | null;
+            /** @description Model identifier as published by its provider, e.g. a Hugging Face repository id such as `pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb`. */
+            embedding_model?: string | null;
+            /** @description Model revision, tag, or commit, if known. */
+            embedding_model_version?: string | null;
+            /** @description Identifier of the node this vector represents (a GeneSet, GeneSetCollection, Dataset, Claim, ...). Contributes to identity: the same text embedded on behalf of a different node is a different embedding. */
+            embedding_of?: string | null;
+            /** @description Provider or runtime that served the model, e.g. huggingface, openai. */
+            embedding_provider?: string | null;
+            /** @description Authoritative Award CURIEs supporting this resource. */
+            funded_by?: string[] | null;
+            /** @description Contributing agents (Person/Organization CURIEs), distinct from the authoritative creators. */
+            has_contributor?: string[] | null;
+            /** @description Authoritative creators (Person/Organization CURIEs). */
+            has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
+            /** @description CURIE/URI of the License node. */
+            has_license?: string | null;
+            /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
+            has_mirror_provenance?: string[] | null;
+            /** @description The authoritative RecommendedCitation node. */
+            has_recommended_citation?: string | null;
+            /** @description File holding the matrix this vector is a row of. Reference the local File record by its DAPPER identifier; the File's description should state the array layout (e.g. NumPy `.npy`, rows x dimensions, dtype). */
+            has_vector_file?: string | null;
+            /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
+            id: string;
+            /** @description Authoritative primary Publication CURIEs. */
+            is_described_by?: string[] | null;
+            /** @description Human-readable name/label for a node. */
+            name?: string | null;
+            /** @description Normalization applied before storage. */
+            normalization?: components["schemas"]["PackageEmbeddingNormalizationEnum"];
+            /** @description Versioned name of the rule that built `embedded_text` from the target node, e.g. `cfde-geneset-v1`. */
+            text_template?: string | null;
+            /** @description Zero-based row index of this vector within `has_vector_file`. */
+            vector_row?: number | null;
+            /** @description Hex SHA-256 of the vector's bytes in `dtype`, little-endian, C order. Two embeddings with different values are different records even when model and text agree. */
+            vector_sha256?: string | null;
+            /** @description Agent(s) (CURIEs) this resource is attributed to. */
+            was_attributed_to?: string[] | null;
+            /** @description Upstream resource(s) (CURIEs) this one was derived from. */
+            was_derived_from?: string[] | null;
+            /** @description The Activity that generated/packaged this returned result. */
+            was_generated_by?: string | null;
+        } & (unknown & unknown);
+        /**
+         * EmbeddingDtypeEnum
+         * @description Element type of the stored embedding vector. Names follow NumPy dtype spelling; the bytes hashed into `Embedding.vector_sha256` are the row in this type, little-endian, C order.
+         * @enum {string}
+         */
+        PackageEmbeddingDtypeEnum: "float16" | "float32" | "float64" | "bfloat16" | "int8";
+        /**
+         * EmbeddingNormalizationEnum
+         * @description Normalization applied to the stored vector after the model produced it. `none` stores the model output as returned; `l2` stores the unit-length vector, so a dot product is a cosine similarity.
+         * @enum {string}
+         */
+        PackageEmbeddingNormalizationEnum: "none" | "l2";
+        /**
          * EvidenceDirectionEnum
          * @description Direction of an assessment relative to its target proposition.
          * @enum {string}
@@ -5843,6 +6938,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -5913,6 +7010,8 @@ export interface components {
             drs_representation?: string[] | null;
             /** @description The file's name. */
             filename?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Current filesystem path, retrieval URI, or document-declared CURIE (e.g. /work/intermediate.tsv or s3://bucket/intermediate.tsv). Moving the file does not change its DAPPER identity. This is distinct from C2M2File.local_id, which is the source system's identifier and retains its hashable semantics. */
@@ -5978,6 +7077,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -6065,6 +7166,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Reference to a GMT file exporting this single gene set. For a row within a shared GMT use in_gmt_file and gmt_entry instead. Accepts File and any subclass, including C2M2File. Retrieval locations and checksums belong on the referenced file record. In a provenance document, use the local file record's content-derived DAPPER identifier (CURIE or full URI), not a bare checksum or retrieval URL. */
             has_gmt_file?: string | null;
             /** @description CURIE/URI of the License node. */
@@ -6134,6 +7237,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description File serializing this collection as GMT rows. Use the local File or C2M2File record's DAPPER identifier; file location and checksums belong on that record. No C2M2 registration is required by this class. */
             has_gmt_file?: string | null;
             /** @description CURIE/URI of the License node. */
@@ -6257,6 +7362,18 @@ export interface components {
             subject?: string | null;
         };
         /**
+         * HasEmbedding
+         * @description Any Node → an Embedding computed from it. Reifies the node's `has_embedding` list (the inverse of Embedding.embedding_of). This is a representation relationship, not a derivation: the embedded node is not upstream of anything by virtue of having been embedded.
+         */
+        PackageHasEmbedding: {
+            /** @description The object node of an Edge (its `id`/CURIE). */
+            object?: string | null;
+            /** @description The predicate (relationship type) of an Edge. */
+            predicate?: string | null;
+            /** @description The subject node of an Edge (its `id`/CURIE). */
+            subject?: string | null;
+        };
+        /**
          * HasEvidence
          * @description Claim → EvidenceItem.
          */
@@ -6358,6 +7475,8 @@ export interface components {
          *     The digest covers hashable slots ONLY. Timestamps, signatures, mirror observations, workspace locations, and back-references are marked `unhashable` so that re-running, re-signing, mirroring, or re-hosting an artifact never changes what it is. See schema/identity/README.md for the DAPPER-ID-1 profile and schema/trusty-identifiers.md for why this is deliberately NOT a Trusty URI `RA` code.
          */
         PackageHashableNode: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6404,6 +7523,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -6432,6 +7553,8 @@ export interface components {
          * @description License and usage terms for the dataset.
          */
         PackageLicense: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6448,6 +7571,8 @@ export interface components {
         PackageLineageStep: {
             /** @description What happened in this step. */
             activity?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6476,6 +7601,8 @@ export interface components {
              * @description Deep link to the entry on https://dismech.monarchinitiative.org, for human review.
              */
             dismech_source_url?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6515,6 +7642,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -6545,6 +7674,8 @@ export interface components {
          * @description Provenance appended by a mirror/cache. APPEND-ONLY: a mirror may add a MirrorProvenance record but must never rewrite authoritative NIH provenance (see the mirroring invariant at the top of this schema).
          */
         PackageMirrorProvenance: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description sha256 of the mirrored object. */
@@ -6574,6 +7705,8 @@ export interface components {
             as_sentence?: string | null;
             /** @description The scientific object carried by this graph: a Claim or ScientificAccount id. */
             asserts?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6588,6 +7721,8 @@ export interface components {
             derived_from?: string[] | null;
             /** @description DAPPER Activity id that produced the assertion. */
             generated_by_activity?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6602,6 +7737,8 @@ export interface components {
          * @description The publication-info graph — metadata about the NANOPUB itself: who published it, when, under what licence, with what signature. Overlaps almost exactly with the DAPPER attribution core.
          */
         PackageNanopubPublicationInfo: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6616,6 +7753,8 @@ export interface components {
         PackageNanopubSignature: {
             /** @description Signature algorithm, e.g. "RSA". */
             has_algorithm?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Base64 public key of the signer. */
             has_public_key?: string | null;
             /** @description Base64 signature value. */
@@ -6651,6 +7790,8 @@ export interface components {
             creator?: string[] | null;
             /** @description The assertion graph. REQUIRED: nanopublication well-formedness demands exactly one `np:hasAssertion` quad in the Head. */
             has_assertion?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description The provenance graph — where the ASSERTION came from (not where the nanopub came from; that is pubinfo). REQUIRED: exactly one, same as the assertion. A nanopub carrying only an assertion is malformed. */
             has_provenance?: string | null;
             /** @description The publication-info graph — where the NANOPUB itself came from. REQUIRED: exactly one. */
@@ -6685,6 +7826,8 @@ export interface components {
          * @description Abstract base for all DAPPER entities (datasets, agents, awards, publications, licenses, activities, mirror records, ...). Not used directly.
          */
         PackageNode: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6699,6 +7842,8 @@ export interface components {
             contributor_role?: components["schemas"]["PackageContributorRoleEnum"];
             /** @description The role this agent played as a creator of the resource. */
             creator_role?: components["schemas"]["PackageCreatorRoleEnum"];
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6737,6 +7882,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -6781,6 +7928,8 @@ export interface components {
             family_name?: string | null;
             /** @description Given (first) name. */
             given_name?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6803,6 +7952,8 @@ export interface components {
          * @description The content being asserted or evaluated, independent of a particular assessment, score, or execution. A text statement is required; a structured subject-predicate-object form is optional. DAPPER identifiers address the representation, not a guarantee of semantic equivalence between paraphrases.
          */
         PackageProposition: {
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Optional mechanistic structure elaborating this proposition's content. */
@@ -6877,6 +8028,8 @@ export interface components {
             citation?: string | null;
             /** @description Digital Object Identifier for the publication. */
             doi?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6913,6 +8066,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -6943,6 +8098,8 @@ export interface components {
         PackageRecommendedCitation: {
             /** @description The recommended human-readable citation text. */
             citation_text?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6963,6 +8120,8 @@ export interface components {
         PackageRoCratePackage: {
             /** @description RO-Crate spec/profile the crate conforms to. */
             conforms_to?: string | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description Unique identifier for a node — a CURIE shorthand or a full URI. For a Dataset this is its persistent identifier (e.g. a DOI). */
             id: string;
             /** @description Human-readable name/label for a node. */
@@ -6999,6 +8158,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -7046,6 +8207,8 @@ export interface components {
             has_contributor?: string[] | null;
             /** @description Authoritative creators (Person/Organization CURIEs). */
             has_creator?: string[] | null;
+            /** @description Embedding records computed from this node (one per embedding model or text template). Available on every Node. Unhashable: attaching, replacing, or removing an embedding leaves the node's identifier unchanged. The forward, hashable direction is Embedding.embedding_of; if both are supplied they must agree. */
+            has_embedding?: string[] | null;
             /** @description CURIE/URI of the License node. */
             has_license?: string | null;
             /** @description Mirror-appended provenance records. Append-only; mirrors add these but must not touch authoritative fields. */
@@ -7197,6 +8360,13 @@ export interface components {
             legacy_phenotype_id: string;
             trait_group: string | null;
             trait_type: string | null;
+            ontology_mappings?: {
+                [key: string]: unknown;
+            }[];
+            mapping_interpretations?: {
+                [key: string]: unknown;
+            }[];
+            mapping_policy_version?: string;
         };
         /** @description An original EAGGL anchor of archived work, frozen at archive time. trait, label and name are display text (trait is the phenotype shown with the anchor, else its phenotype code); fields that could not be recovered are null. Resolve the frozen factor at /v1/reference-factors/{archived_reference_factor_id}. */
         ReferenceArchiveAnchor: {
@@ -7252,6 +8422,62 @@ export interface components {
                 outcome_id: string | null;
             };
         };
+        /** @description One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, or a mechanism projects onto gene sets built from it). via_ids: the cited gene set, mechanism, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage). Organization roles are recorded credit (publisher, attribution, ...), not data production. */
+        AccountDataSourceConnection: {
+            dataset_id: string;
+            input_roles: string[];
+            routes: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            via_ids: string[];
+            organizations: {
+                organization_id: string;
+                roles: string[];
+            }[];
+            curation_ids: string[];
+            trace_count: number;
+        };
+        /** @description The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it. A point-in-time observation of the reference lineage (re-traced by an operator after lineage changes); GET /v1/accounts/{account_id}/provenance returns the full witness paths. not_traced: no stored trace matches this exact account source; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound. */
+        AccountDataSources: {
+            /** @enum {string} */
+            status: "complete" | "incomplete" | "unavailable" | "not_traced";
+            /** Format: date-time */
+            traced_at?: string;
+            error?: {
+                code: string;
+            };
+            reference_generation_ids?: string[];
+            coverage?: {
+                trace_count: number;
+                counts_are_lower_bounds: boolean;
+                issue_counts: {
+                    [key: string]: number;
+                };
+            };
+            claims?: {
+                claim_id: string;
+                /** @enum {string} */
+                resolution: "complete" | "incomplete" | "not_applicable";
+                datasets: components["schemas"]["AccountDataSourceConnection"][];
+            }[];
+            datasets?: {
+                id: string;
+                name?: string;
+                version?: string;
+                description?: string;
+                /** Format: uri */
+                location?: string;
+            }[];
+            organizations?: {
+                id: string;
+                name?: string;
+                ror?: string;
+            }[];
+            via?: {
+                id: string;
+                kind: string;
+                name?: string;
+                filename?: string;
+            }[];
+        };
         /** @description Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted. */
         ArchivedReferenceFactor: {
             /** @constant */
@@ -7305,6 +8531,862 @@ export interface components {
         };
         ReviewRetryInput: {
             expected_last_event_id: string;
+        };
+        LocalWorkCreate: {
+            /** Format: uuid */
+            draft_id: string;
+            draft_version: number;
+        };
+        LocalWorkGrant: {
+            /** Format: uuid */
+            grant_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            revoked_at?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        LocalResearchOperation: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "prepare" | "query" | "import" | "export" | "validate" | "submit";
+            /** @enum {string} */
+            state: "received" | "running" | "succeeded" | "accepted" | "rejected" | "failed" | "cancelled";
+            /** Format: uuid */
+            local_work_id?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string;
+            result?: {
+                [key: string]: unknown;
+            };
+            error?: {
+                code: string;
+                detail: string;
+            } | null;
+            report?: {
+                [key: string]: unknown;
+            };
+            account_ids?: string[];
+            reused_account_ids?: string[];
+            validation_only?: boolean;
+        };
+        LocalWork: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            research_request_id: string;
+            request: components["schemas"]["ResearchRequest"];
+            /** @enum {string} */
+            state: "preparing" | "ready" | "preparation_failed" | "closed";
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_activity: string;
+            last_action?: string;
+            /** Format: date-time */
+            expires_at: string;
+            reference_generation_id: string;
+            package_id: string | null;
+            package_sha256: string | null;
+            last_error?: {
+                code: string;
+                detail: string;
+            } | null;
+            /** Format: date-time */
+            closed_at?: string;
+            /** Format: uuid */
+            preparation_operation_id?: string;
+            submissions: components["schemas"]["LocalResearchOperation"][];
+            grants: components["schemas"]["LocalWorkGrant"][];
+            /** Format: uri */
+            mcp_url: string;
+            prompt: string;
+            instructions: {
+                codex: string;
+                claude_code: string;
+            };
+            /** Format: uuid */
+            local_work_id?: string;
+        };
+        LocalWorkList: {
+            items: components["schemas"]["LocalWork"][];
+            page?: components["schemas"]["Page"];
+        };
+        /** @description Legacy manual connection only; new workspaces use anonymous access and OAuth. The raw research credential is shown once, never present in later work reads. Store it outside prompts and committed config. Issuance retry returns GRANT_ALREADY_ISSUED, not the credential. */
+        LocalWorkGrantIssued: {
+            /** Format: uuid */
+            grant_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            local_work_id: string;
+            token: string;
+            /** Format: uri */
+            mcp_url: string;
+            prompt: string;
+            instructions: {
+                codex: string;
+                claude_code: string;
+            };
+        };
+        ResearchArtifactDescriptor: {
+            id: string;
+            filename: string;
+            sha256: string;
+            size_bytes: number;
+            purpose: string;
+        };
+        EvidenceClosureArtifact: {
+            id: string;
+            artifact_id: string;
+            filename: string;
+            path: string;
+            sha256: string;
+            size_bytes: number;
+            purpose: string;
+            format: string;
+            dapper_file_id?: string;
+        };
+        EvidenceClosureManifest: {
+            /** @enum {string} */
+            format: "reveal.context-manifest/2";
+            seed_sha256: string;
+            package_sha256: string;
+            context_sha256: string;
+            files: components["schemas"]["EvidenceClosureArtifact"][];
+            package: components["schemas"]["EvidenceClosureArtifact"];
+        };
+        /** @description Successful durable export operation result. export_evidence_context immediately acknowledges with operation_id; poll get_operation. Reuse the same selection/idempotency key after interruption. Transfer only missing checksum-verified artifacts; reconstruct and verify the entire selected closure before authoring/validation. This result contains no inline package and reuses retained original scientific sources without re-querying. */
+        EvidenceContextExport: {
+            /** @enum {string} */
+            format: "reveal.validation-context-export/2";
+            seed_sha256: string;
+            package_sha256: string;
+            context_sha256: string;
+            receipt_ids: string[];
+            import_ids: string[];
+            reuse_receipt_ids: string[];
+            artifacts: components["schemas"]["EvidenceClosureArtifact"][];
+            package_artifact: components["schemas"]["EvidenceClosureArtifact"];
+            manifest: components["schemas"]["EvidenceClosureManifest"];
+            phase_timings_ms: {
+                [key: string]: number;
+            };
+        };
+        /** @description Small immutable context, hash-pinned authoring kit and capability inventory. Factor expansions and phenotype observations are not initially captured. Source artifacts download separately. Existing package envelope version is retained for compatible DAPPER validation; retrieval mode is explicitly seed-only. */
+        ResearchSeed: {
+            /** @enum {string} */
+            package_version: "reveal.evidence-package/0.2-draft";
+            /** @enum {string} */
+            seed_version: "reveal.research-seed/1";
+            /** @enum {string} */
+            retrieval_mode: "progressive";
+            /** Format: uuid */
+            research_request_id: string;
+            reference_generation_id: string;
+        } & {
+            [key: string]: unknown;
+        };
+        LocalWorkPackage: {
+            package_id: string;
+            package_sha256: string;
+            package: components["schemas"]["ResearchSeed"];
+            manifest: {
+                [key: string]: unknown;
+            };
+            artifacts: components["schemas"]["ResearchArtifactDescriptor"][];
+            authoring_instructions: string;
+        } | {
+            /** @enum {string} */
+            state: "preparing";
+            /** Format: uuid */
+            operation_id: string;
+        };
+        LocalWorkspaceSetup: {
+            /** @enum {string} */
+            client: "codex" | "claude_code";
+        };
+        /** @description Redeem the short-lived setup ticket using the SHA-256 of a locally generated rvlm_ bearer. Persist the bearer in the OS credential store before this request. Same-ticket/same-hash retries recover the original grant metadata without another grant. */
+        ResearchSetupExchange: {
+            ticket: string;
+            token_sha256: string;
+        };
+        /** @description Scoped connection metadata only. The server never receives or returns the launcher-generated bearer secret. */
+        ResearchSetupConnection: {
+            /** Format: uuid */
+            grant_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: uuid */
+            local_work_id: string;
+            package_sha256: string;
+            /** Format: uri */
+            mcp_url: string;
+        };
+        /** @description Credential-free setup-manifest.json inside reveal-<work_id>/. Source paths are preserved under input/; pinned authoring files are materialized at their declared paths. Includes both stdio client configurations and start.py; no access token, refresh token, device code or setup ticket. */
+        LocalWorkspaceManifest: {
+            /** @constant */
+            schema_version: 1;
+            /** @enum {string} */
+            setup_version: "reveal.local-setup/2";
+            /** @enum {string} */
+            client: "codex" | "claude_code";
+            /** Format: uuid */
+            local_work_id: string;
+            /** Format: uuid */
+            research_request_id: string;
+            reference_generation_id: string;
+            package_sha256: string;
+            /** Format: uri */
+            mcp_url: string;
+            /** Format: uri */
+            device_authorization_url: string;
+            /** Format: uri */
+            token_url: string;
+            /** Format: uri */
+            revocation_url: string;
+            /** Format: uri */
+            return_url: string;
+            files: {
+                path: string;
+                sha256: string;
+                size_bytes: number;
+            }[];
+        };
+        ResearchOAuthError: {
+            error: string;
+            error_description: string;
+        };
+        ResearchConsentFailure: ({
+            code: string;
+            detail: string;
+        } & {
+            [key: string]: unknown;
+        }) | components["schemas"]["ResearchOAuthError"];
+        /** @description Public-client registration. Default grant_types is authorization_code, which requires at least one exact HTTPS or HTTP loopback callback (localhost,127.0.0.1,::1). Register refresh_token explicitly for refresh support. No custom schemes, callback fragments, credentials, reserved OAuth query parameters, implicit flow or client secret. A client name is self-reported metadata, not verified branding. */
+        ResearchOAuthRegistration: {
+            client_name?: string;
+            redirect_uris?: string[];
+            grant_types?: ("authorization_code" | "refresh_token" | "urn:ietf:params:oauth:grant-type:device_code")[];
+            response_types?: "code"[];
+            /** @enum {string} */
+            token_endpoint_auth_method?: "none";
+            scope?: string;
+        };
+        ResearchOAuthClient: {
+            client_name: string;
+            redirect_uris: string[];
+            grant_types: ("authorization_code" | "refresh_token" | "urn:ietf:params:oauth:grant-type:device_code")[];
+            response_types: "code"[];
+            /** @enum {string} */
+            token_endpoint_auth_method: "none";
+            scope: string;
+            client_id: string;
+            client_id_issued_at: number;
+        };
+        ResearchOAuthDeviceRequest: {
+            client_id: string;
+            /** Format: uri */
+            resource: string;
+            scope?: string;
+            /** Format: uuid */
+            local_work_id?: string;
+        };
+        ResearchOAuthDeviceResponse: {
+            device_code: string;
+            user_code: string;
+            /** Format: uri */
+            verification_uri: string;
+            /** Format: uri */
+            verification_uri_complete: string;
+            /** @constant */
+            expires_in: 600;
+            /** @constant */
+            interval: 5;
+        };
+        ResearchOAuthTokenRequest: {
+            client_id: string;
+            /** Format: uri */
+            resource: string;
+            /** @enum {string} */
+            grant_type: "authorization_code";
+            code: string;
+            /** Format: uri */
+            redirect_uri: string;
+            code_verifier: string;
+        } | {
+            client_id: string;
+            /** Format: uri */
+            resource: string;
+            /** @enum {string} */
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code";
+            device_code: string;
+        } | {
+            client_id: string;
+            /** Format: uri */
+            resource: string;
+            /** @enum {string} */
+            grant_type: "refresh_token";
+            refresh_token: string;
+            scope?: string;
+        };
+        /** @description Opaque Reveal credentials, never Google/ORCID credentials. Access lasts at most 900 seconds; family/rotating refresh lasts at most 30 days, each bounded by work lifetime. Refresh reuse revokes the family. Persist securely and never include in prompts, source files, logs or URLs. */
+        ResearchOAuthTokens: {
+            access_token: string;
+            refresh_token?: string;
+            /** @enum {string} */
+            token_type: "Bearer";
+            expires_in: number;
+            scope: string;
+            /** Format: uri */
+            resource: string;
+            /** Format: uuid */
+            local_work_id: string;
+            package_sha256: string;
+            /** Format: uri */
+            mcp_url: string;
+            /** Format: uuid */
+            grant_id: string;
+        };
+        ResearchOAuthRevocation: {
+            client_id: string;
+            token: string;
+            /** @enum {string} */
+            token_type_hint?: "access_token" | "refresh_token";
+        };
+        ResearchOAuthConsent: {
+            /** Format: uuid */
+            request_id: string;
+            /** @enum {string} */
+            kind: "authorization_code" | "device";
+            client_id: string;
+            client_name: string;
+            scopes: ("research:read" | "research:write")[];
+            /** Format: uri */
+            resource: string;
+            requested_local_work_id: string | null;
+            redirect_uri: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "denied";
+            /** @constant */
+            requires_registered: true;
+        };
+        ResearchOAuthDecision: {
+            /** Format: uuid */
+            request_id?: string;
+            user_code?: string;
+            /** Format: uuid */
+            local_work_id?: string;
+            approve: boolean;
+        } & (unknown | unknown);
+        ResearchOAuthDecisionResult: {
+            /** Format: uri */
+            redirect_url: string;
+        } | {
+            approved: boolean;
+            /** Format: uuid */
+            local_work_id?: string;
+        };
+        ResearchAuthorizationMetadata: {
+            /** Format: uri */
+            issuer: string;
+            /** Format: uri */
+            authorization_endpoint: string;
+            /** Format: uri */
+            token_endpoint: string;
+            /** Format: uri */
+            registration_endpoint: string;
+            /** Format: uri */
+            device_authorization_endpoint: string;
+            /** Format: uri */
+            revocation_endpoint: string;
+            response_types_supported: string[];
+            grant_types_supported: string[];
+            token_endpoint_auth_methods_supported: string[];
+            revocation_endpoint_auth_methods_supported: string[];
+            code_challenge_methods_supported: string[];
+            scopes_supported: string[];
+        };
+        ResearchProtectedResourceMetadata: {
+            /** Format: uri */
+            resource: string;
+            authorization_servers: string[];
+            scopes_supported: ("research:read" | "research:write")[];
+            bearer_methods_supported: "header"[];
+            resource_name: string;
+        };
+        PublicResearchArtifact: {
+            path: string;
+            sha256: string;
+            size_bytes: number;
+            /** @enum {string} */
+            media_type: "application/json";
+            /** Format: uri */
+            download_url: string;
+            /** @enum {string} */
+            authentication: "none";
+            /** Format: date-time */
+            expires_at: string;
+        };
+        /** @description MCP get_public_capture/data/connected-KG response. Exact server-retained public bytes and context; no researcher prompts, work IDs or private scientific closures. Default retention 7 days; use the explicit expires_at, never assume indefinite replay. Authenticated attach_public_captures re-verifies bytes without a source query. Imported-reference and small-model phenotype captures require the same frozen generation. External-KG captures have null reference_generation_id, retain graph/query/source metadata and require that graph in frozen request.composer.selected_kgs; they do not assert CFDE ancestry or a known upstream release. Already-attached evidence outlives public capture expiry. Public science lookup is current-public snapshots only, with authority rechecked when reusing. */
+        PublicResearchCapture: {
+            /** @enum {string} */
+            format: "reveal.public-reference-capture/1";
+            capture_id: string;
+            /** Format: date-time */
+            expires_at: string;
+            reference_generation_id: string | null;
+            operation: string;
+            arguments: {
+                [key: string]: unknown;
+            };
+            reader_version: string | null;
+            /** @enum {string} */
+            source_mode: "imported_reference" | "bioindex_small_phenotype" | "external_kg";
+            source: {
+                [key: string]: unknown;
+            };
+            result: {
+                [key: string]: unknown;
+            };
+            raw_sha256: string;
+            metric_definitions: {
+                [key: string]: unknown;
+            };
+            dapper_context: {
+                [key: string]: unknown;
+            };
+            source_artifacts: {
+                [key: string]: unknown;
+            };
+            source_ref: {
+                [key: string]: unknown;
+            } | null;
+            dapper_file_id: string | null;
+            object_resolution: {
+                [key: string]: unknown;
+            }[];
+            artifacts: components["schemas"]["PublicResearchArtifact"][];
+            attachment_policy: string;
+        } & unknown;
+        /** @description One retained owner-specific account. record_id is the SHA-256 storage identity of [owner_user_id, account.id], not a DAPPER ID. Copies of one scientific account in different workspaces remain separate records. Publication can_manage is always false. */
+        AdminAccountSummary: {
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AccountSummary"];
+        };
+        /** @description Current saved account envelope and its saved research statement, if available. Scientific IDs, schema pins, payload checksums, citations and coverage retain their stored values. An incomplete saved envelope stays explicitly incomplete; this endpoint does not expand or re-query its sources. Artifact download URLs, expiry times and owner-scoped coverage.next_cursor are null. Publication can_manage is false; this is not an owner session or a frozen public snapshot. */
+        AdminAccountDetail: {
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AccountSummary"];
+            result: components["schemas"]["AccountResult"];
+            paragraph: components["schemas"]["ParagraphObjectResult"] | null;
+        };
+        /** @description One retained insufficient-evidence analysis outcome, with its owner and UUID record identity. Explorations here are saved analysis outcomes, not knowledge-gap visit/bookmark records. Publication can_manage is always false. */
+        AdminExplorationSummary: {
+            /** Format: uuid */
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AnalysisOutcomeSummary"];
+        };
+        /** @description Current saved scoped exploration outcome with original attribution, scope and provenance. Scientific evidence hashes and source locators are preserved. Artifact and evidence-reference download URLs are null; internal storage records and credentials are not returned. Publication can_manage is false. */
+        AdminExplorationDetail: {
+            /** Format: uuid */
+            record_id: string;
+            /** Format: uuid */
+            owner_user_id: string;
+            summary: components["schemas"]["AnalysisOutcomeSummary"];
+            result: components["schemas"]["AnalysisOutcome"];
+        };
+        AdminAccountList: {
+            items: components["schemas"]["AdminAccountSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        AdminExplorationList: {
+            items: components["schemas"]["AdminExplorationSummary"][];
+            page: components["schemas"]["Page"];
+        };
+        /** @description Assess the current composer, including unsaved edits, against an owned draft revision. This request neither saves the draft nor submits research. Caller-supplied owners, models, probabilities, evidence or administrative authority are not accepted. */
+        CfdeAssessmentInput: {
+            draft_version: number;
+            composer: components["schemas"]["Composer"];
+        };
+        /** @description Advisory model prediction of whether the scoped CFDE evidence could support at least one responsible, scientifically supported relationship relevant to the selected question. Neither all three relationship categories nor complete resolution of the knowledge gap is required. Choice yes/no likelihoods retain provider values without renormalizing rounded mass (for example, 0.56 plus 0.43). These values are not calibrated success rates. The three relationship-support scores and reported confidence are separate rubric judgments. A prediction is not scientific evidence, a supported claim, validation or permission to publish. Errors and unavailable evidence must never be converted into a no verdict. */
+        CfdeAssessmentResult: {
+            /** @enum {string} */
+            verdict: "yes" | "no";
+            probability_yes: number;
+            probability_no: number;
+            /** @description Separate reported rubric confidence, not the yes probability. */
+            confidence: number;
+            /** @enum {string} */
+            main_blocker: "none" | "weak_relevance" | "missing_cfde_evidence" | "wrong_data_type" | "species_or_context_mismatch" | "incomplete_inputs" | "unsupported_inference";
+            relationship_support: {
+                gene_gene_set: number;
+                gene_mechanism: number;
+                gene_set_mechanism: number;
+            };
+            /** @constant */
+            calibration: "not_calibrated";
+        };
+        /** @description Counts and explicit omissions for this bounded assessment input. Each selected factor uses its exact pinned top 50 gene and top 50 GeneSet loadings, where available, with bounded context excerpts. The provider receives a simple scientific projection of names, loadings, source labels and context. Exact source identities, hashes, definitions and provenance remain in the server-retained pinned audit state rather than the model payload. Complete means the requested bounded input was available; it does not claim complete biological or CFDE coverage. Oversized input fails explicitly instead of silently dropping evidence or returning a no verdict. */
+        CfdeAssessmentCoverage: {
+            factor_count: number;
+            gene_loading_count: number;
+            gene_set_loading_count: number;
+            unique_gene_set_count: number;
+            missing: string[];
+            truncations: {
+                source: string;
+                included_chars: number;
+                total_chars: number;
+            }[];
+            complete: boolean;
+        };
+        /** @description Operational failure only. Retrying requires another explicit assessment request; polling never retries a model call. */
+        CfdeAssessmentError: {
+            code: string;
+            detail: string;
+            retryable: boolean;
+        };
+        /** @description Owner-scoped, expiring advisory assessment of one exact composer. reference_generation_id can be null during preparation; the exact source generation is pinned when asynchronous source preparation completes. No Job, ResearchRequest, ScientificAccount or exploration outcome is created. Every owner receives a separate assessment UUID bound to their own draft revision and composer hash. Default inputs with no researcher notes or uploads may share the underlying forecast; no other owner, draft or assessment identity is exposed. expires_at is the operation deadline, not deletion of a completed prediction. A stale result remains inspectable but should not be shown as the current editor assessment. stale reports a changed saved draft revision or active reference generation; clients must also compare composer_sha256 with current unsaved edits before displaying a current prediction. Preparing and assessing have no prediction; failed and interrupted preserve an explicit error. The operation deadline is at most 120 seconds; interrupted or restarted work needs explicit user retry and is never automatically billed again. */
+        CfdeAssessment: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            draft_id: string;
+            draft_version: number;
+            composer_sha256: string;
+            /** @enum {string} */
+            status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+            /**
+             * Format: date-time
+             * @description Creation time of this owner-scoped assessment receipt.
+             */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Original forecast update time, preserved when a cached forecast is reused; it can precede this receipt creation.
+             */
+            updated_at: string;
+            /**
+             * Format: date-time
+             * @description Underlying operation deadline, preserved on shared or completed forecasts; not the cache retention deadline.
+             */
+            expires_at: string;
+            model: string;
+            rubric_version: string;
+            reference_generation_id: string | null;
+            result: components["schemas"]["CfdeAssessmentResult"] | null;
+            coverage: components["schemas"]["CfdeAssessmentCoverage"] | null;
+            error: components["schemas"]["CfdeAssessmentError"] | null;
+            stale: boolean;
+        } & (unknown & unknown);
+        LightningAuditInput: {
+            /** Format: uuid */
+            draft_id: string;
+            draft_version: number;
+        };
+        /** @description A substantive preliminary scientific audit of the supplied knowledge gap and evidence package. */
+        LightningAuditResult: {
+            /**
+             * @description How well this package supports a useful research direction; justify the choice in summary.
+             * @enum {string}
+             */
+            assessment: "promising" | "partial" | "unsupported";
+            /** @description Required explanatory rationale, 200-260 words in three short paragraphs: the relevant lead, why the evidence does or does not support the question, and what would change the assessment. Explain how the supplied CFDE loading observations and DisMech context bear on this specific question, which hypothesis is worth pursuing, and the specific inferential link still missing. Explain why a partial or unsupported result follows from the supplied data, without treating missing sampled rows as biological absence. Do not only repeat the question or assessment. Use factual claims grounded in the referenced observations. Write complete paragraphs, without quotation marks around source labels. Never empty or a sentence fragment. */
+            summary: string;
+            /** @description At most 3 concrete, relevant source observations, each at most 45 words, when available, explaining their bearing on the question. Cite only supplied evidence_ref IDs. May be empty for unsupported only if no observation supports a direction. */
+            observations: {
+                /** @description At most 45 words: a specific source observation and its relevance; distinguish stored evidence from a proposed interpretation. */
+                text: string;
+                /** @description Exact evidence_ref IDs in this package that support this observation. */
+                evidence_refs: string[];
+            }[];
+            /** @description Required concrete, editable investigative research brief of at most 90 words: state the hypothesis or comparison to investigate, the relevant supplied mechanisms, and what would distinguish the alternatives. For unsupported evidence, specify what evidence to seek and why. Never empty; use existing research tools to inspect evidence; avoid a lengthy experimental program. */
+            recommended_direction: string;
+            /** @description At most 2 items of 25 words each: specific missing observations or assumptions needed to test the proposed explanation, not claims that missing entities do not exist. */
+            missing_evidence: string[];
+            /** @description At most 2 items of 25 words each: prioritized concrete checks an agent could perform next to test the direction. State these as future work; at least one actionable check is required. */
+            next_steps: string[];
+            /** @description At most 2 items of 25 words each: required scope caveats for this bounded package, including relevant coverage omissions, source/species context and association-versus-causation limits. */
+            limitations: string[];
+        };
+        /** @description Incomplete, unvalidated public answer text from the live model response. Only present on pending detail reads; never scientific evidence or a completed result. */
+        LightningAuditProgress: {
+            revision: number;
+            /** @enum {string} */
+            phase: "writing" | "validating";
+            summary: string;
+            recommended_direction: string;
+            observations: string[];
+            missing_evidence: string[];
+            next_steps: string[];
+            limitations: string[];
+        };
+        LightningContinuationInput: {
+            /** @enum {string} */
+            mode: "online" | "local";
+            research_direction: string;
+        };
+        /** @description An independently authorized child run with its own frozen request and reference-generation pin. */
+        LightningContinuation: {
+            /** @enum {string} */
+            mode: "online" | "local";
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            research_request_id: string;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description A short model-visible reference resolved by the server to a retained source-state location. An audit observation is preliminary guidance and is not an accepted scientific Claim. */
+        LightningEvidenceReference: {
+            id: string;
+            pointer: string;
+            label: string;
+            value: unknown;
+            source: {
+                [key: string]: unknown;
+            };
+        };
+        /** @description Private frozen initial audit, independent of later editor changes or deletion. Only an explicit POST may make one provider attempt. There is no agent or retrieval loop. Every verdict is advisory and permits an explicitly requested continuation. */
+        LightningAudit: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "lightning_audit";
+            /** @enum {string} */
+            status: "preparing" | "assessing" | "succeeded" | "failed" | "interrupted";
+            /** Format: uuid */
+            research_request_id: string;
+            /** Format: uuid */
+            source_draft_id: string;
+            source_draft_version: number;
+            question: {
+                /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+                id: string;
+                text: string;
+            };
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            completed_at: string | null;
+            /** Format: date-time */
+            continuation_expires_at: string;
+            reference_generation_id: string;
+            result: components["schemas"]["LightningAuditResult"] | null;
+            coverage: components["schemas"]["CfdeAssessmentCoverage"] | null;
+            evidence_references: components["schemas"]["LightningEvidenceReference"][];
+            provenance: {
+                model: string;
+                prompt_version: string;
+                source_state_sha256?: string;
+                request_sha256?: string;
+                response_sha256?: string;
+            };
+            usage: {
+                input_tokens: number;
+                output_tokens: number;
+            } | null;
+            error: components["schemas"]["CfdeAssessmentError"] | null;
+            continuations: components["schemas"]["LightningContinuation"][];
+            progress?: components["schemas"]["LightningAuditProgress"];
+        };
+        LightningAuditList: {
+            items: components["schemas"]["LightningAudit"][];
+            page: {
+                next_cursor: string | null;
+                has_more: boolean;
+                snapshot_id?: string;
+            };
+        };
+        /** @description trace_count and reached IDs cover the entire account; trace_ids and page_trace_count cover this page. Scientific records are never rewritten. */
+        ProvenanceAnnotation: {
+            trace_count: number;
+            page_trace_count: number;
+            trace_ids: string[];
+            dataset_ids: string[];
+            organization_ids: string[];
+            /** @enum {string} */
+            resolution: "complete" | "incomplete" | "not_applicable";
+        };
+        AnnotatedScientificAccount: {
+            record: components["schemas"]["DapperScientificAccount"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedClaim: {
+            record: components["schemas"]["DapperClaim"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedProposition: {
+            record: components["schemas"]["DapperProposition"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedEvidenceItem: {
+            record: components["schemas"]["DapperEvidenceItem"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        /** @description Deterministic witness path for an originating scientific use. Direction is present only for evidence-origin traces and is not multiplied through source claims. Alternative recorded branches remain in the shared graph. */
+        ProvenanceTrace: {
+            id: string;
+            claim_id: string | null;
+            proposition_id: string | null;
+            evidence_item_id: string | null;
+            origin_id: string;
+            source_field: string;
+            source_id: string;
+            dataset_id: string;
+            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            input_roles: string[];
+            organization_ids: string[];
+            organization_attributions: {
+                organization_id: string;
+                role: string;
+                path_steps: {
+                    edge_id: string;
+                    /** @enum {string} */
+                    direction: "forward" | "reverse";
+                }[];
+            }[];
+            path_steps: {
+                edge_id: string;
+                /** @enum {string} */
+                direction: "forward" | "reverse";
+            }[];
+            path_edge_ids: string[];
+            /** @enum {string} */
+            direction?: "SUPPORTS" | "DISPUTES" | "MIXED" | "NEUTRAL" | "UNKNOWN";
+        };
+        ProvenanceNode: {
+            id: string;
+            kind: string;
+            /** @enum {string} */
+            status: "resolved" | "unresolved" | "conflicting";
+            name?: string | null;
+            sha256?: string | null;
+            filename?: string | null;
+            ror?: string | null;
+        };
+        ProvenanceEdge: {
+            id: string;
+            subject: string;
+            predicate: string;
+            object: string;
+            relation: string;
+            input_role?: string;
+            observations?: {
+                [key: string]: unknown;
+            }[];
+            provenance_source?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @description Distinct claims reaching an exact dataset. Route classifications overlap and must not be added. This measures reuse/reference lineage, not evidentiary strength. */
+        DatasetReuse: {
+            dataset_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            trace_count: number;
+            classification_claim_counts: {
+                proposition_reference: number;
+                evidence_derivation: number;
+                inherited_source_claim: number;
+                factor_projection: number;
+            };
+            classification_claim_ids: {
+                proposition_reference: string[];
+                evidence_derivation: string[];
+                inherited_source_claim: string[];
+                factor_projection: string[];
+            };
+            input_roles: string[];
+        };
+        /** @description Distinct claims, datasets and claim-dataset pairs, grouped by recorded organization roles; publisher and funder do not imply data producer. */
+        OrganizationReuse: {
+            organization_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            dataset_count: number;
+            dataset_ids: string[];
+            claim_dataset_count: number;
+            roles: {
+                [key: string]: {
+                    claim_count: number;
+                    claim_ids: string[];
+                    dataset_count: number;
+                    dataset_ids: string[];
+                    claim_dataset_count: number;
+                };
+            };
+        };
+        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. */
+        ProvenanceCoverage: {
+            /** @enum {string} */
+            status: "complete" | "incomplete";
+            counts_are_lower_bounds: boolean;
+            claim_count: number;
+            resolved_claim_count: number;
+            trace_count: number;
+            lineage_resolution: {
+                /** @enum {string} */
+                status: "complete" | "incomplete";
+                issue_count: number;
+            };
+            retained_projection_coverage: {
+                [key: string]: unknown;
+            }[];
+            recovery_status: {
+                [key: string]: unknown;
+            }[];
+            issues: {
+                [key: string]: unknown;
+            }[];
+        };
+        ProvenanceSnapshot: {
+            id: string;
+            policy_version: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            account_id: string;
+            account_payload_sha256: string;
+            document_sha256: string;
+            publication_version: number;
+            reference_generation_ids: string[];
+            supplement_ids: string[];
+            source_observations: {
+                kind: string;
+                key: string;
+                sha256: string;
+            }[];
+        };
+        AccountProvenance: {
+            account: components["schemas"]["AnnotatedScientificAccount"];
+            claims: components["schemas"]["AnnotatedClaim"][];
+            propositions: components["schemas"]["AnnotatedProposition"][];
+            evidence_items: components["schemas"]["AnnotatedEvidenceItem"][];
+            traces: components["schemas"]["ProvenanceTrace"][];
+            nodes: components["schemas"]["ProvenanceNode"][];
+            edges: components["schemas"]["ProvenanceEdge"][];
+            dataset_reuse: components["schemas"]["DatasetReuse"][];
+            organization_reuse: components["schemas"]["OrganizationReuse"][];
+            coverage: components["schemas"]["ProvenanceCoverage"];
+            snapshot: components["schemas"]["ProvenanceSnapshot"];
+            page: {
+                limit: number;
+                offset: number;
+                total: number;
+                next_cursor: string | null;
+            };
         };
     };
     responses: never;
@@ -9950,9 +12032,11 @@ export interface operations {
                 /** @example researchers */
                 view?: "researchers" | "accounts" | "datasets";
                 /** @example overall */
-                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -10031,9 +12115,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example votes */
-                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -11485,6 +13571,2891 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFactorDetail: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+                /**
+                 * @description Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings.
+                 * @example 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+                 */
+                source_revision?: string;
+            };
+            header?: never;
+            path: {
+                /** @example factor:kpn:0000398:eaggl-capped-v1:Factor1 */
+                source_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getFactorLoadings: {
+        parameters: {
+            query: {
+                /** @example factor:kpn:0000398:eaggl-capped-v1:Factor1 */
+                source_id: string;
+                /** @example gene */
+                kind?: "gene" | "gene_set";
+                /** @example joint */
+                metric?: "joint" | "marginal";
+                /**
+                 * @description Global label/loading order or gene-only gnomAD constraint order. pLI and missense Z descend; LOEUF ascends; missing metrics sort last. gnomAD sorting requires an active imported annotation source (503 otherwise).
+                 * @example loading
+                 */
+                sort?: "alphabetical" | "loading" | "gnomad_pli" | "gnomad_loeuf" | "gnomad_mis_z";
+                /**
+                 * @description Gene-only annotation pin from FactorDetail.gnomad.import_id. Use none when annotations are absent. A change returns 409 to prevent mixed-source append pages.
+                 * @example none
+                 */
+                gnomad_import_id?: string;
+                /** @example LEPR */
+                q?: string;
+                /** @example 200 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+                /**
+                 * @description Pin the factor source revision; a mismatch returns 409 without returning new-generation loadings.
+                 * @example 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
+                 */
+                source_revision?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorLoadings"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCatalogGeneSet: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Pin the reference generation returned by factor detail. A changed active generation returns 409.
+                 * @example d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                 */
+                generation_id?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                 */
+                gene_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogGeneSet"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listLocalWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkList"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createLocalWork: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalWorkCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            201: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWork"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLocalWork: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWork"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLocalWorkPackage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkPackage"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    closeLocalWork: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWork"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    issueLocalResearchGrant: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            201: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalWorkGrantIssued"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revokeLocalResearchGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+                /** @example 99999999-9999-4999-8999-999999999999 */
+                grant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            204: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    downloadLocalWorkspace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LocalWorkspaceSetup"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    /** @example attachment; filename="reveal-77777777-7777-4777-8777-777777777777.zip" */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Workspace or request exceeds its bounded size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    exchangeResearchSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchSetupExchange"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchSetupConnection"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Legacy setup ticket expired or was revoked. Download a credential-free v2 workspace and use explicit OAuth sign-in. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Workspace or request exceeds its bounded size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revokeLocalSetupTickets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                work_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            204: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getResearchAuthorizationMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchAuthorizationMetadata"];
+                };
+            };
+        };
+    };
+    getResearchProtectedResourceMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchProtectedResourceMetadata"];
+                };
+            };
+        };
+    };
+    getResearchMcpProtectedResourceMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchProtectedResourceMetadata"];
+                };
+            };
+        };
+    };
+    registerResearchOAuthClient: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchOAuthRegistration"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            201: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    "Referrer-Policy"?: "no-referrer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthClient"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+        };
+    };
+    authorizeResearchOAuthClient: {
+        parameters: {
+            query: {
+                /** @example rvlc_FICTIONAL_PUBLIC_CLIENT */
+                client_id: string;
+                /** @example http://127.0.0.1:8765/callback */
+                redirect_uri: string;
+                /** @example code */
+                response_type: "code";
+                /** @example FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF */
+                code_challenge: string;
+                /** @example S256 */
+                code_challenge_method: "S256";
+                /** @example https://api.reveal.example.org/mcp */
+                resource: string;
+                /** @example research:read research:write */
+                scope?: string;
+                /** @example client-state */
+                state?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            303: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    "Referrer-Policy"?: "no-referrer";
+                    /** @example https://reveal.example.org/research/connect?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+        };
+    };
+    startResearchDeviceAuthorization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["ResearchOAuthDeviceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    "Referrer-Policy"?: "no-referrer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthDeviceResponse"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+        };
+    };
+    exchangeResearchOAuthToken: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["ResearchOAuthTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    "Referrer-Policy"?: "no-referrer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthTokens"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+        };
+    };
+    revokeResearchOAuthConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/x-www-form-urlencoded": components["schemas"]["ResearchOAuthRevocation"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    Pragma?: "no-cache";
+                    "Referrer-Policy"?: "no-referrer";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+            /** @description OAuth protocol error; never a provider-token response. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthError"];
+                };
+            };
+        };
+    };
+    getResearchOAuthConsent: {
+        parameters: {
+            query?: {
+                /** @example aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa */
+                request_id?: string;
+                /** @example ABCD-EFGH */
+                user_code?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthConsent"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+        };
+    };
+    decideResearchOAuthConsent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResearchOAuthDecision"];
+            };
+        };
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchOAuthDecisionResult"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Consent request body exceeds16384bytes. */
+            413: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchConsentFailure"];
+                };
+            };
+        };
+    };
+    downloadPublicResearchArtifact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa */
+                capture_id: string;
+                /** @example bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb */
+                artifact_sha256: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    "Cache-Control"?: "no-store";
+                    "X-Content-Type-Options"?: "nosniff";
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Explicit public retention expiry; authenticated prior attachments remain retained. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminAccounts: {
+        parameters: {
+            query?: {
+                /** @example private */
+                visibility?: "private" | "public" | "all";
+                /** @example 50 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page; reuse the returned next_cursor with the same credential and visibility filter.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountList"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Cursor Expired */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAdminAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 4e47d886a1e763f834bbcee32b4899930bc9d5bab74b0b81246a82a19b1ee358 */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAccountDetail"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listAdminExplorations: {
+        parameters: {
+            query?: {
+                /** @example private */
+                visibility?: "private" | "public" | "all";
+                /** @example 50 */
+                limit?: number;
+                /**
+                 * @description Omit for the first page; reuse the returned next_cursor with the same credential and visibility filter.
+                 * @example opaque-next-page
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExplorationList"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Cursor Expired */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAdminExploration: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 66666666-6666-4666-8666-666666666666 */
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminExplorationDetail"];
+                };
+            };
+            /** @description Invalid Admin Read Api Key */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Admin Read Api Key Configuration Invalid */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createCfdeAssessment: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CfdeAssessmentInput"];
+            };
+        };
+        responses: {
+            /** @description Assessment accepted or existing assessment reused; poll Location. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/drafts/22222222-2222-4222-8222-222222222222/cfde-assessments/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfdeAssessment"];
+                };
+            };
+            /** @description Assessment idempotency key required. */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Draft revision or idempotency conflict. */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary editor expired. */
+            410: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getCfdeAssessment: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Seconds to long-poll a pending receipt; 0 answers at once.
+                 * @example 10
+                 */
+                wait?: number;
+            };
+            header?: never;
+            path: {
+                /** @example 22222222-2222-4222-8222-222222222222 */
+                draft_id: string;
+                /** @example bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb */
+                assessment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CfdeAssessment"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Access denied. */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporary editor expired. */
+            410: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listLightningAudits: {
+        parameters: {
+            query?: {
+                /** @example 50 */
+                limit?: number;
+                /** @example opaque-owned-audit-cursor */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAuditList"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    createLightningAudit: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightningAuditInput"];
+            };
+        };
+        responses: {
+            /** @description Saved audit receipt; read Location to observe progress. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/lightning-audits/cccccccc-cccc-4ccc-8ccc-cccccccccccc
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAudit"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getLightningAudit: {
+        parameters: {
+            query?: {
+                /** @example 15 */
+                wait?: number;
+                /** @example 0 */
+                after_revision?: number;
+            };
+            header?: never;
+            path: {
+                /** @example cccccccc-cccc-4ccc-8ccc-cccccccccccc */
+                audit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningAudit"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    continueLightningAudit: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Unique per caller and operation for at least 7 days. Same key and same canonical body replay the original accepted response; changed body returns 409 IDEMPOTENCY_CONFLICT. Compare idempotency before draft-version checks on retries.
+                 * @example 66666666-6666-4666-8666-666666666666
+                 */
+                "Idempotency-Key": string;
+            };
+            path: {
+                /** @example cccccccc-cccc-4ccc-8ccc-cccccccccccc */
+                audit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LightningContinuationInput"];
+            };
+        };
+        responses: {
+            /** @description Saved child-run receipt; online dispatch or local seed preparation is asynchronous. */
+            202: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    /**
+                     * @description Relative URL of the created resource.
+                     * @example /v1/jobs/44444444-4444-4444-8444-444444444444
+                     */
+                    Location?: string;
+                    /**
+                     * @description Suggested polling delay in seconds.
+                     * @example 2
+                     */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LightningContinuation"];
+                };
+            };
+            /** @description Invalid Request */
+            400: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Sign In Required */
+            403: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    /** @example private, no-store */
+                    "Cache-Control"?: string;
+                    /** @example Authorization */
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountProvenance: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional exact account payload observation; a mismatch returns 404.
+                 * @example 9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66
+                 */
+                payload_sha256?: string;
+                /** @example 100 */
+                limit?: number;
+                /**
+                 * @description Opaque trace continuation. Changed sources, visibility, or explicit limit return 409.
+                 * @example opaque-signed-cursor
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProvenance"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {
