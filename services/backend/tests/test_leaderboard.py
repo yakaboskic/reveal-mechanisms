@@ -81,9 +81,11 @@ class LeaderboardTests(unittest.TestCase):
         names = sorted({name for values in claims.values() for name in values})
         return {'format': sources.FORMAT, 'policy_version': TRACING_POLICY_VERSION, 'account_id': identity, 'status': 'complete',
             'claims': [{'claim_id': scientific('Claim', claim), 'resolution': 'complete', 'datasets': [{'dataset_id': scientific('Dataset', name),
-                'input_roles': ['data_input'], 'routes': ['factor_projection'], 'via_ids': [], 'organizations': [], 'curation_ids': [],
-                'trace_count': 1} for name in values]} for claim, values in claims.items()],
-            'datasets': [{'id': scientific('Dataset', name), 'name': name} for name in names]}
+                'input_roles': ['data_input'], 'routes': ['factor_projection'], 'via_ids': [], 'curation_ids': [], 'trace_count': 1,
+                'organizations': [{'organization_id': scientific('Organization', name), 'roles': ['publisher']}]} for name in values]}
+                for claim, values in claims.items()],
+            'datasets': [{'id': scientific('Dataset', name), 'name': name, 'location': 'https://example.org/' + name.replace(' ', '-')} for name in names],
+            'organizations': [{'id': scientific('Organization', name), 'name': name + ' publisher', 'ror': 'ror:05a0ya142'} for name in names]}
 
     def publish_trace(self, identity, claims, **change):
         from reveal_backend import account_data_sources as sources
@@ -309,6 +311,10 @@ class LeaderboardTests(unittest.TestCase):
                          {'GTEx V8': (3, 2), 'NCBI gene_info': (1, 1), 'LINCS L1000': (1, 1)})
         gtex = everything['items'][0]
         self.assertEqual((gtex['label'], gtex['rank']), ('GTEx V8', 1))
+        self.assertEqual(gtex['url'], 'https://example.org/GTEx-V8')
+        self.assertEqual(gtex['organizations'], [{'id': scientific('Organization', 'GTEx V8'), 'name': 'GTEx V8 publisher',
+                                                  'ror': 'ror:05a0ya142', 'roles': ['publisher']}])
+        self.assertEqual([row['organizations'] for row in self.browse(view='researchers')['items']], [[]])
         claims = self.detail('datasets', gtex['id'], 'traced_claims', scope='all')
         self.assertEqual((claims['total'], claims['withheld'], [item['id'] for item in claims['items']]), (1, 2, [scientific('Claim', 'Lipid regulation')]))
         accounts = self.detail('datasets', gtex['id'], 'traced_accounts', scope='all')

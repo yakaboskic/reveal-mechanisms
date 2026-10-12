@@ -10338,7 +10338,9 @@
                 "MIXED": 0,
                 "NEUTRAL": 0,
                 "UNKNOWN": 0
-              }
+              },
+              "organizations": [],
+              "url": null
             },
             "total": 1,
             "withheld": 0,

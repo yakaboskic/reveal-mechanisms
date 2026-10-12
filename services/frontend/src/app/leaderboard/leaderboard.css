@@ -111,3 +111,5 @@
   .leaderboard-score-breakdown dl>div{display:flex;align-items:center;justify-content:space-between}
   .leaderboard-score-breakdown dd{margin:0;text-align:right}
 }
+.leaderboard-organizations{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px;margin-top:10px}
+.leaderboard-dataset-source{margin-left:8px;font-size:12px;white-space:nowrap}

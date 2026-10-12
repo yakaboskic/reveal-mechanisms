@@ -16,6 +16,7 @@ import { CitationReference } from "./CitationReference";
 import { AccountGraph } from "./AccountGraph";
 import { inputRoleLabel, type AccountGraphNode } from "@/lib/account-graph";
 import { publicSourceHref } from "@/lib/provenance-view";
+import { OrganizationBadge } from "./OrganizationBadge";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -259,7 +260,6 @@ function ProvenanceView({ claim, result }: { claim: Claim; result: Schema<"Claim
 
 const routeLabels: Record<string, string> = { proposition_reference: "Named in the claim's proposition", evidence_derivation: "Cited by the claim's evidence",
   inherited_source_claim: "Through a source claim", factor_projection: "Through a mechanism's projected gene sets" };
-const rorHref = (ror?: string | null) => ror && /^ror:0[a-z0-9]{8}$/.test(ror) ? `https://ror.org/${ror.slice(4)}` : null;
 /** A dataset the account's stored trace reaches for one claim: reference lineage, not a record of the account. */
 function TracedDatasetView({ node, result }: { node: AccountGraphNode; result: Schema<"AccountResult"> }) {
   const sources = result.data_sources, connection = node.trace!;
@@ -280,9 +280,9 @@ function TracedDatasetView({ node, result }: { node: AccountGraphNode; result: S
       {dataset?.version && <><dt>Version</dt><dd>{dataset.version}</dd></>}
       <dt>Reached through</dt><dd className="traced-dataset-links">{connection.via_ids.map(viaLink)}</dd>
       <dt>How</dt><dd className="traced-dataset-routes">{connection.routes.map(route => <span key={route}>{routeLabels[route] || human(route)}</span>)}</dd>
-      <dt>Credited</dt><dd>{connection.organizations.length ? connection.organizations.map(item => {
-        const organization = organizations.get(item.organization_id), href = rorHref(organization?.ror);
-        return <span className="traced-dataset-organization" key={item.organization_id}>{href ? <a href={href} target="_blank" rel="noreferrer">{organization?.name || "Organization"}</a> : organization?.name || "Organization"}<small>{item.roles.map(human).join(", ")}</small></span>;
+      <dt>Credited</dt><dd className="traced-dataset-organizations">{connection.organizations.length ? connection.organizations.map(item => {
+        const organization = organizations.get(item.organization_id);
+        return <OrganizationBadge key={item.organization_id} organization={{ id: item.organization_id, name: organization?.name, ror: organization?.ror }} roles={item.roles} />;
       }) : "No organization recorded"}</dd>
     </dl>
     {location && <p><a href={location} target="_blank" rel="noreferrer">Dataset source ↗</a></p>}

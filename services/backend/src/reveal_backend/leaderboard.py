@@ -109,7 +109,8 @@ def row(identity, kind, label):
                     'voter_count', 'account_gap_count', 'explored_gap_count', 'claim_count', 'researcher_count',
                     'traced_claim_count', 'traced_account_count')},
         'components': {'accounts': 0, 'votes': 0, 'gaps': 0}, 'orcid': None,
-        'account_id': None, 'gap_id': None, 'gap': None, 'attribution': None, 'directions': directions()}
+        'account_id': None, 'gap_id': None, 'gap': None, 'attribution': None, 'directions': directions(),
+        'organizations': [], 'url': None}
 
 
 def public_actor(value):
@@ -290,13 +291,20 @@ def traced_datasets(tx, scope, copies, frozen_sources, fixture_ids, datasets, re
     """Add the traced dataset metrics from stored account data sources. Public copies use the record frozen with their
     snapshot; scope='all' adds each other saved account's own record. Private units count but are never listed."""
     from .account_data_sources import KIND, current, owner_key, publication_key
-    uses, names = [], {}
+    uses, names, locations, organizations, credits = [], {}, {}, {}, defaultdict(lambda: defaultdict(set))
 
     def add(data, account_id, public):
         if not data or not current(data) or not isinstance(data.get('claims'), list): return
-        for item in data.get('datasets') or []: names.setdefault(item['id'], item.get('name'))
-        uses.extend((connection['dataset_id'], claim['claim_id'], account_id, public)
-                    for claim in data['claims'] for connection in claim.get('datasets') or [])
+        for item in data.get('datasets') or []:
+            names.setdefault(item['id'], item.get('name'))
+            if item.get('location'): locations.setdefault(item['id'], item['location'])
+        # Credited organizations are public reference lineage, recorded per dataset: never per account.
+        for item in data.get('organizations') or []: organizations.setdefault(item['id'], item)
+        for claim in data['claims']:
+            for connection in claim.get('datasets') or []:
+                uses.append((connection['dataset_id'], claim['claim_id'], account_id, public))
+                for credit in connection.get('organizations') or []:
+                    credits[connection['dataset_id']][credit['organization_id']].update(credit.get('roles') or [])
 
     for identity in sorted(copies):
         for owner, snapshot_id in sorted(frozen_sources[identity]):
@@ -320,6 +328,10 @@ def traced_datasets(tx, scope, copies, frozen_sources, fixture_ids, datasets, re
         item = datasets.setdefault(identity, row(identity, 'dataset', names.get(identity) or identity))
         claims, linked = {claim for claim, _, _ in entries}, {account for _, account, _ in entries}
         item['metrics'].update(traced_claim_count=len(claims), traced_account_count=len(linked))
+        item['url'] = item['url'] or locations.get(identity)
+        item['organizations'] = [{'id': key, 'name': (organizations.get(key) or {}).get('name') or key,
+                                  'ror': (organizations.get(key) or {}).get('ror'), 'roles': sorted(roles)}
+                                 for key, roles in sorted(credits[identity].items())]
         public_claims = sorted({claim for claim, _, public in entries if public})
         public_accounts = sorted({account for _, account, public in entries if public})
         details = records[('datasets', identity)]

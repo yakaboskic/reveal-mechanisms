@@ -231,6 +231,8 @@ def schemas(b):
     b.add('LeaderboardScope',enum('published','all',description='Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.'))
     b.add('LeaderboardAttribution',obj({'id':string(pattern='^researcher_[a-f0-9]{64}$'),'label':string(),'orcid':null(string())}))
     b.add('LeaderboardDirections',obj({key:count for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}))
+    b.add('LeaderboardOrganization',obj({'id':string(),'name':string(),'ror':null(string()),'roles':array(string())},
+        description='An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production.'))
     b.add('LeaderboardMetrics',obj({**{key:count for key in ('account_count','upvotes','downvotes','voter_count',
         'account_gap_count','explored_gap_count','claim_count','researcher_count','traced_claim_count','traced_account_count')},'net_votes':{'type':'integer'},
         'overall_score':{'type':'number','minimum':0,'maximum':100}}))
@@ -239,7 +241,9 @@ def schemas(b):
         'components':obj({key:{'type':'number','minimum':0,'maximum':100} for key in ('accounts','votes','gaps')}),
         'orcid':null(string()),'account_id':null(string()),'gap_id':null(string()),
         'gap':null(obj({'id':string(),'label':string()})),'attribution':null(ref('LeaderboardAttribution')),
-        'directions':ref('LeaderboardDirections')}))
+        'directions':ref('LeaderboardDirections'),
+        'organizations':array(ref('LeaderboardOrganization'),description='Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views.'),
+        'url':null(string(format='uri',description='Datasets: the public source page of the dataset, when its lineage records one.'))}))
     b.add('LeaderboardMetadata',obj({'as_of':time,'score_version':enum('public-contribution-v1'),
         'cohort_size':count,'voting_participants':count,'exclusions':obj({key:count for key in
             ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')}),
@@ -591,7 +595,7 @@ def endpoints(b,f,e):
             'traced_claim_count':0,'traced_account_count':0},
         'components':{'accounts':0,'votes':0,'gaps':0},'orcid':None,'account_id':f['account']['id'],'gap_id':f['gap']['id'],
         'gap':{'id':f['gap']['id'],'label':f['gap'].get('name') or f['gap']['id']},'attribution':None,
-        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}}
+        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')},'organizations':[],'url':None}
     leaderboard_description='All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.'
     b.operation('/v1/leaderboard','get','getLeaderboard','Scientific content','Rank public community contributions',
         leaderboard_description+' The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.',

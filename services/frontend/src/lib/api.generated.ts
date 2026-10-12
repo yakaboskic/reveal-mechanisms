@@ -5015,6 +5015,13 @@ export interface components {
             NEUTRAL: number;
             UNKNOWN: number;
         };
+        /** @description An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production. */
+        LeaderboardOrganization: {
+            id: string;
+            name: string;
+            ror: string | null;
+            roles: string[];
+        };
         LeaderboardMetrics: {
             account_count: number;
             upvotes: number;
@@ -5050,6 +5057,9 @@ export interface components {
             } | null;
             attribution: components["schemas"]["LeaderboardAttribution"] | null;
             directions: components["schemas"]["LeaderboardDirections"];
+            /** @description Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views. */
+            organizations: components["schemas"]["LeaderboardOrganization"][];
+            url: string | null;
         };
         /** @description Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
         LeaderboardMetadata: {

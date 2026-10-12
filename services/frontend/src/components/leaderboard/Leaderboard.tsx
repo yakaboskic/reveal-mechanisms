@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { LoadingSurface } from "../LoadingSurface";
+import { OrganizationBadge } from "../OrganizationBadge";
+import { publicSourceHref } from "@/lib/provenance-view";
 import { onPageReturn } from "@/lib/page-return";
 import { formatLeaderboardNumber as number, leaderboardHref, LeaderboardPageChangedError, leaderboardScopes, leaderboardSorts, leaderboardViews, mergeLeaderboardPages, publicLeaderboardHref, readLeaderboardQuery, sortsFor, verifiedOrcidHref, type LeaderboardEntry, type LeaderboardMetric, type LeaderboardQuery, type LeaderboardScope, type LeaderboardSort, type LeaderboardView } from "@/lib/leaderboard";
 
@@ -45,6 +47,15 @@ function usePublicRevalidation(reload: () => void) {
   useEffect(() => onPageReturn(() => latest.current()), []);
 }
 
+/** A dataset's name: its scientific record when public evidence cites it, else its public source page when recorded. */
+function DatasetName({ entry }: { entry: LeaderboardEntry }) {
+  const source = publicSourceHref(entry.url);
+  if (entry.metrics.account_count > 0) return <><Link className="leaderboard-record-name" href={`/id/${encodeURIComponent(entry.id)}`}>{entry.label}</Link>
+    {source && <a className="leaderboard-dataset-source" href={source} target="_blank" rel="noopener noreferrer">Source <span aria-hidden="true">↗</span></a>}</>;
+  if (source) return <a className="leaderboard-record-name" href={source} target="_blank" rel="noopener noreferrer">{entry.label} <span aria-hidden="true">↗</span><span className="sr-only"> (opens the dataset’s source page)</span></a>;
+  return <span className="leaderboard-record-name">{entry.label}</span>;
+}
+
 function Contributor({ entry }: { entry: LeaderboardEntry }) {
   const author = entry.attribution;
   if (!author) return <span>Attribution unavailable</span>;
@@ -65,8 +76,9 @@ export function LeaderboardTable({ entries, view, sort, scope = "published", onO
       <td className="leaderboard-rank">{entry.rank}</td>
       <th scope="row" className="leaderboard-name">
         {view === "researchers" ? <button type="button" className="leaderboard-record-name" onClick={event => onOpen(entry, entry.metrics.account_count ? "accounts" : "explored", event.currentTarget)}>{entry.label}</button>
-          : view === "datasets" && !entry.metrics.account_count ? <span className="leaderboard-record-name">{entry.label}</span>
-          : <Link className="leaderboard-record-name" href={`/${view === "accounts" ? "accounts" : "id"}/${encodeURIComponent(entry.account_id || entry.id)}`}>{entry.label}</Link>}
+          : view === "datasets" ? <DatasetName entry={entry} />
+          : <Link className="leaderboard-record-name" href={`/accounts/${encodeURIComponent(entry.account_id || entry.id)}`}>{entry.label}</Link>}
+        {view === "datasets" && !!entry.organizations.length && <div className="leaderboard-organizations" aria-label="Credited organizations">{entry.organizations.map(organization => <OrganizationBadge key={organization.id} organization={organization} compact />)}</div>}
         {view === "researchers" && verifiedOrcidHref(entry.orcid) && <a className="leaderboard-orcid" href={verifiedOrcidHref(entry.orcid)!} target="_blank" rel="noopener noreferrer">Verified ORCID <span aria-hidden="true">↗</span></a>}
         {view === "accounts" && <div className="leaderboard-record-context"><Contributor entry={entry} />{entry.gap && <Link href={`/knowledge-gaps/${encodeURIComponent(entry.gap.id)}`}>{entry.gap.label}</Link>}<span>{number(entry.metrics.claim_count)} associated {entry.metrics.claim_count === 1 ? "claim" : "claims"}</span></div>}
         {view === "datasets" && scope === "published" && entry.metrics.account_count > 0 && <button type="button" className="leaderboard-evidence-link" onClick={event => onOpen(entry, "files", event.currentTarget)}>Evidence and source files</button>}

@@ -10147,6 +10147,8 @@ paths:
                         MIXED: 0
                         NEUTRAL: 0
                         UNKNOWN: 0
+                      organizations: []
+                      url: null
                     total: 1
                     withheld: 0
                     items:
@@ -37371,6 +37373,30 @@ components:
       - NEUTRAL
       - UNKNOWN
       additionalProperties: false
+    LeaderboardOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ror:
+          anyOf:
+          - type: string
+          - type: 'null'
+        roles:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - name
+      - ror
+      - roles
+      additionalProperties: false
+      description: An organization credited for a dataset in its traced reference
+        lineage. Roles are recorded credit (publisher, attribution, ...), not data
+        production.
     LeaderboardMetrics:
       type: object
       properties:
@@ -37473,6 +37499,20 @@ components:
           - type: 'null'
         directions:
           $ref: '#/components/schemas/LeaderboardDirections'
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardOrganization'
+          description: 'Datasets: the organizations credited for the dataset in its
+            traced reference lineage (publisher, attribution, ...). Empty for other
+            views.'
+        url:
+          anyOf:
+          - type: string
+            description: 'Datasets: the public source page of the dataset, when its
+              lineage records one.'
+            format: uri
+          - type: 'null'
       required:
       - id
       - kind
@@ -37486,6 +37526,8 @@ components:
       - gap
       - attribution
       - directions
+      - organizations
+      - url
       additionalProperties: false
     LeaderboardMetadata:
       type: object
