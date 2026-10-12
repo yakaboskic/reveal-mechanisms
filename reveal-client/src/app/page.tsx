@@ -7,6 +7,8 @@ import { api, ApiError, backend, errorMessage, request, type CfdeAssessment, typ
 import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
+import { cfdeSources, datasetTitle, type CfdeDataset, type DataSourcesStatus } from "../lib/data-sources";
+import { organizationInitials, organizationLogo, rorHref, type CreditedOrganization } from "../lib/organizations";
 
 type PendingSubmission = { body: AnalysisInput; key: string };
 type FeasibilityRun = { draft: Draft; cfde: "yes" | "no"; audit: LightningAudit | null };
@@ -200,7 +202,8 @@ function directionPaint(direction: string) {
   if (direction === "DISPUTES") return { stroke: "#f3ccc8", width: 4 };
   return { stroke: "#b7b9be", width: 1 };
 }
-type AccountNode = { id: string; label: string; title: string; source: string };
+// cfde: how many CFDE datasets a claim reaches; dataset: a CFDE dataset in the Source column.
+type AccountNode = { id: string; label: string; title: string; source: string; cfde?: number; dataset?: CfdeDataset };
 function graphSource(source: string) {
   const value = source.toLowerCase();
   if (value.includes("biomarker")) return "BiomarkerKG";
@@ -208,7 +211,9 @@ function graphSource(source: string) {
   if (value.includes("cfde") || value.includes("eaggl") || value.includes("pigean")) return "CFDE";
   return source;
 }
-type AccountEdge = { from: string; to: string; tone: "support" | "dispute" | "plain"; curve: boolean; key: string };
+type AccountEdge = { from: string; to: string; tone: "support" | "dispute" | "plain" | "cfde"; curve: boolean; key: string };
+// Traced CFDE lineage reads as a dashed green line, in the colors of the CFDE support bubbles.
+const cfdePaint = { stroke: "#8cc3a5", width: 2, dash: "6 5" };
 function accountGraph(data: unknown) {
   if (!isRecord(data) || !isRecord(data.document)) return null;
   const document = data.document;
@@ -230,14 +235,18 @@ function accountGraph(data: unknown) {
   const seenEvidence = new Set<string>();
   const seenGraphs = new Set<string>();
   const seenFiles = new Set<string>();
+  const claimLinks: { id: string; evidence: string[] }[] = [];
   for (const claimId of idList(account.component_claims)) {
     const claim = claims.get(claimId);
     if (!claim) continue;
     claimNodes.push({ id: "claim:" + claimId, label: textField(claim, "statement") || textField(claim, "name") || "Claim", title: textField(claim, "statement") || claimId, source: "" });
+    const link = { id: claimId, evidence: [] as string[] };
+    claimLinks.push(link);
     if (gap) edges.push({ from: "gap", to: "claim:" + claimId, tone: "plain", curve: true, key: "gap-" + claimId });
     for (const evidenceId of idList(claim.has_evidence)) {
       const item = evidence.get(evidenceId);
       if (!item) continue;
+      link.evidence.push(evidenceId);
       if (!seenEvidence.has(evidenceId)) {
         seenEvidence.add(evidenceId);
         const source = textField(item, "evidence_source");
@@ -266,7 +275,30 @@ function accountGraph(data: unknown) {
     }
   }
   if (!gap && !claimNodes.length) return null;
-  return { gap, claims: claimNodes, evidence: evidenceNodes, files: [...graphNodes, ...fileNodes], edges };
+  // The CFDE datasets each claim reaches, traced once when the account was saved and served with it as data_sources.
+  const cfde = cfdeSources(data.data_sources, claimLinks);
+  const datasetNodes: AccountNode[] = (cfde?.datasets || []).map(dataset => ({ id: "dataset:" + dataset.id, label: dataset.name, title: datasetTitle(dataset, !!cfde?.lowerBound), source: "", dataset }));
+  for (const node of claimNodes) {
+    const reached = cfde?.claimDatasets.get(node.id.slice("claim:".length));
+    if (!reached?.length) continue;
+    node.cfde = reached.length;
+    node.title += "\n\nSupported by CFDE datasets: " + reached.map(id => cfde?.datasets.find(item => item.id === id)?.name || id).join("; ");
+  }
+  for (const edge of cfde?.edges || []) edges.push({ ...edge, tone: "cfde", curve: true });
+  const cfdeStatus: DataSourcesStatus | null = cfde?.status || null;
+  return { gap, claims: claimNodes, evidence: evidenceNodes, files: [...datasetNodes, ...graphNodes, ...fileNodes], edges, cfdeStatus };
+}
+function DatasetName({ dataset }: { dataset: CfdeDataset }) {
+  return dataset.href ? <a className="account-dataset-name" href={dataset.href} target="_blank" rel="noreferrer">{dataset.name}<i aria-hidden="true"> ↗</i></a>
+    : <b className="account-dataset-name">{dataset.name}</b>;
+}
+/** An organization credited for a CFDE dataset: its logo (or initials), linked to its ROR record when it has one. */
+function OrganizationMark({ organization }: { organization: CreditedOrganization }) {
+  const logo = organizationLogo(organization), name = organization.name || "Organization", href = rorHref(organization.ror);
+  const label = organization.roles?.length ? `${name} · ${organization.roles.map(readable).join(", ")}` : name;
+  const mark = logo ? <img className={"account-org-logo" + (logo.wide ? " is-wide" : "")} src={logo.src} alt={label} title={label} loading="lazy" decoding="async" />
+    : <abbr className="account-org-initials" title={label}>{organizationInitials(name)}</abbr>;
+  return href ? <a className="account-org" href={href} target="_blank" rel="noreferrer" title={`${label} (ROR record)`}>{mark}</a> : mark;
 }
 function AccountNodeView({ node }: { node: AccountNode }) {
   const [popup, setPopup] = useState<{ top: number; left: number } | null>(null);
@@ -276,12 +308,17 @@ function AccountNodeView({ node }: { node: AccountNode }) {
     const width = Math.min(352, window.innerWidth - 24);
     setPopup({ top: Math.min(box.bottom + 8, window.innerHeight - 16), left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)) });
   }
-  return <article className="account-node" data-net-id={node.id} onMouseEnter={enter} onMouseLeave={() => setPopup(null)}><span>{node.label}</span>{node.source && <small>{node.source}</small>}{popup && <div className="account-node-pop" style={{ top: popup.top, left: popup.left }} role="tooltip">{text}</div>}</article>;
+  return <article className={"account-node" + (node.dataset ? " account-dataset" : "")} data-net-id={node.id} onMouseEnter={enter} onMouseLeave={() => setPopup(null)}>
+    {node.dataset ? <DatasetName dataset={node.dataset} /> : <span>{node.label}</span>}{node.source && <small>{node.source}</small>}
+    {!!node.dataset?.organizations.length && <div className="account-dataset-orgs" aria-label="Credited organizations">{node.dataset.organizations.map(item => <OrganizationMark organization={item} key={item.id} />)}</div>}
+    {!!node.cfde && <ul className="net-context-bubbles account-cfde-bubble" aria-label="CFDE support"><li>CFDE supported · {node.cfde} dataset{node.cfde === 1 ? "" : "s"}</li></ul>}
+    {popup && <div className="account-node-pop" style={{ top: popup.top, left: popup.left }} role="tooltip">{text}</div>}
+  </article>;
 }
 function AccountGraph({ data }: { data: unknown }) {
   const model = useMemo(() => accountGraph(data), [data]);
   const root = useRef<HTMLDivElement>(null);
-  const [drawn, setDrawn] = useState<{ width: number; height: number; links: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; key: string; curve: boolean }[] }>({ width: 0, height: 0, links: [] });
+  const [drawn, setDrawn] = useState<{ width: number; height: number; links: { x1: number; y1: number; x2: number; y2: number; stroke: string; width: number; dash?: string; key: string; curve: boolean }[] }>({ width: 0, height: 0, links: [] });
   const layoutKey = model ? [model.gap?.id || "", ...model.claims.map(item => item.id), ...model.evidence.map(item => item.id), ...model.files.map(item => item.id), ...model.edges.map(item => item.key)].join("|") : "";
   useLayoutEffect(() => {
     const rootEl = root.current;
@@ -298,7 +335,7 @@ function AccountGraph({ data }: { data: unknown }) {
         const from = point(edge.from, "right");
         const to = point(edge.to, "left");
         if (!from || !to) return [];
-        const paint = edge.tone === "plain" ? { stroke: "#b7b9be", width: 1 } : directionPaint(edge.tone === "support" ? "SUPPORTS" : "DISPUTES");
+        const paint = edge.tone === "cfde" ? cfdePaint : edge.tone === "plain" ? { stroke: "#b7b9be", width: 1 } : directionPaint(edge.tone === "support" ? "SUPPORTS" : "DISPUTES");
         return [{ x1: from.x, y1: from.y, x2: to.x, y2: to.y, ...paint, key: edge.key, curve: edge.curve }];
       });
       setDrawn({ width: origin.width, height: origin.height, links });
@@ -310,10 +347,12 @@ function AccountGraph({ data }: { data: unknown }) {
   }, [layoutKey, model]);
   if (!model) return <p className="settings-note">This record has no scientific account graph.</p>;
   const column = (title: string, nodes: AccountNode[], className = "") => <div className={"account-net-col " + className}><h3>{title}</h3>{nodes.map(node => <AccountNodeView node={node} key={node.id} />)}</div>;
+  const traced = model.files.some(node => node.dataset);
   return <figure className="account-net-figure">
-    <figcaption className="account-net-legend"><span className="account-swatch support" />Supports<span className="account-swatch dispute" />Disputes<span className="account-swatch plain" />Other</figcaption>
+    <figcaption className="account-net-legend"><span className="account-swatch support" />Supports<span className="account-swatch dispute" />Disputes<span className="account-swatch plain" />Other{traced && <><span className="account-swatch cfde" />CFDE lineage</>}</figcaption>
+    {model.cfdeStatus === "unavailable" && <p className="account-net-note">CFDE datasets could not be traced for this account.</p>}
     <div className="account-net-scroll"><div className="account-net" ref={root}>
-      <svg className="factor-net-edges" width={drawn.width} height={drawn.height} aria-hidden="true">{drawn.links.map(link => link.curve ? <path key={link.key} d={curvePath(link.x1, link.y1, link.x2, link.y2)} fill="none" stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" /> : <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke={link.stroke} strokeWidth={link.width} strokeLinecap="round" />)}</svg>
+      <svg className="factor-net-edges" width={drawn.width} height={drawn.height} aria-hidden="true">{drawn.links.map(link => link.curve ? <path key={link.key} d={curvePath(link.x1, link.y1, link.x2, link.y2)} fill="none" stroke={link.stroke} strokeWidth={link.width} strokeDasharray={link.dash} strokeLinecap="round" /> : <line key={link.key} x1={link.x1} y1={link.y1} x2={link.x2} y2={link.y2} stroke={link.stroke} strokeWidth={link.width} strokeDasharray={link.dash} strokeLinecap="round" />)}</svg>
       {model.gap ? column("Knowledge gap", [model.gap]) : <div className="account-net-col" />}
       {column("Claim", model.claims, "account-net-pad-right")}
       {column("Evidence", model.evidence, "account-net-pad")}
