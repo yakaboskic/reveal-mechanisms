@@ -9,6 +9,8 @@ export type AccountGraphNode = {
   missing: boolean; cycle: boolean; limited: boolean; shared: number;
   missingReferences: string[];
   shortLabel?: string;
+  /** A dataset this claim reaches through the stored account trace (data_sources), possibly absent from the document. */
+  trace?: Schema<"AccountDataSourceConnection">;
 };
 type Node = { id: string; [key: string]: unknown };
 type Entry = { node: Node; kind: AccountGraphKind };
@@ -16,6 +18,10 @@ const kinds: Record<string, AccountGraphKind> = { scientific_accounts: "account"
 const ids = (value: unknown): string[] => (Array.isArray(value) ? value : [value]).filter((item): item is string => typeof item === "string" && !!item);
 const text = (value: unknown) => typeof value === "string" ? value : "";
 export const graphKindLabel = (kind: AccountGraphKind) => ({ account: "Scientific account", claim: "Claim", evidence: "Evidence use", dataset: "Dataset", file: "File", activity: "Activity", record: "Source record" })[kind];
+/** Plain words for a traced dataset's input role: primary data, or the identifier mapping a gene set was built with. */
+export function inputRoleLabel(roles: string[]) {
+  return roles.includes("data_input") ? "primary data" : roles.includes("metadata_input") ? "gene identifier mapping" : "recorded input";
+}
 export function accountGraphLabel(node: AccountGraphNode, length = 48) {
   const label = (node.shortLabel || node.label).replace(/\s+/g, " ").trim();
   if (label.length <= length) return label;
@@ -25,6 +31,7 @@ export function accountGraphLabel(node: AccountGraphNode, length = 48) {
 
 /** Evidence and activity paths are traversed but never drawn as extra circles.
  * Dataset containment uses actual membership, not proximity or a shared job.
+ * A claim also contains the datasets its stored account trace reaches (data_sources).
  * Repeated display occurrences retain one canonical scientific identity. */
 export function buildAccountHierarchy(result: Schema<"AccountResult">, maxDepth = 3, maxOccurrences = 600): AccountGraphNode {
   const records = new Map<string, Entry>();
@@ -81,6 +88,14 @@ export function buildAccountHierarchy(result: Schema<"AccountResult">, maxDepth 
   };
   const root = display(result.root_id, "account", "Account synthesis");
   const componentClaims = [...new Set(ids(records.get(result.root_id)?.node.component_claims))];
+  // Datasets the stored account trace reaches per claim: reference lineage (for example a gene set's CFDE source
+  // data) is not inside the account document, so these circles carry their own names.
+  const sources = result.data_sources, traced = new Map((sources?.claims || []).map(claim => [claim.claim_id, claim.datasets]));
+  const tracedNames = new Map([...(sources?.datasets || []).map(item => [item.id, item.name || ""] as const), ...(sources?.via || []).map(item => [item.id, item.name || item.filename || ""] as const)]);
+  const claimNumbers = new Map(componentClaims.map((id, index) => [id, `C${index + 1}`]));
+  const viaLabel = (id: string) => claimNumbers.get(id) || entityLabel(id) || tracedNames.get(id) || graphKindLabel(kindOf(id)).toLowerCase();
+  const tracedRelation = (connection: Schema<"AccountDataSourceConnection">) =>
+    `Supporting dataset · ${inputRoleLabel(connection.input_roles)} · through ${[...new Set(connection.via_ids.map(viaLabel))].join(", ")}`;
   const claims = componentClaims.slice(0, Math.max(0, maxOccurrences - 1));
   root.limited = claims.length < componentClaims.length;
   let remaining = Math.max(0, maxOccurrences - 1 - claims.length);
@@ -123,14 +138,22 @@ export function buildAccountHierarchy(result: Schema<"AccountResult">, maxDepth 
         else associate(standalone, id, computational);
       }
     }
+    const connections = new Map((traced.get(id) || []).map(connection => [connection.dataset_id, connection]));
+    for (const datasetId of connections.keys()) if (!datasets.has(datasetId)) datasets.set(datasetId, false);
     if (maxDepth < 2) { claim.limited ||= datasets.size + standalone.size > 0; continue; }
     const append = (parent: AccountGraphNode, id: string, relation: string) => {
       if (remaining <= 0) { parent.limited = true; return null; }
       remaining--; const node = display(id, `${parent.id}/${encodeURIComponent(id)}`, relation); parent.children.push(node); return node;
     };
     for (const [id, computational] of datasets) {
-      const dataset = append(claim, id, computational ? "Computational source · provenance path" : "Source dataset · recorded source path");
+      const connection = connections.get(id);
+      const relation = connection && !records.has(id) ? tracedRelation(connection) : computational ? "Computational source · provenance path" : "Source dataset · recorded source path";
+      const dataset = append(claim, id, relation);
       if (!dataset) continue;
+      if (connection) {
+        dataset.trace = connection;
+        if (!records.has(id)) { dataset.missing = false; dataset.label = tracedNames.get(id) || graphKindLabel("dataset"); }
+      }
       const files = members(id);
       if (maxDepth < 3) { dataset.limited = files.length > 0; continue; }
       for (const file of files) append(dataset, file, "Dataset file");

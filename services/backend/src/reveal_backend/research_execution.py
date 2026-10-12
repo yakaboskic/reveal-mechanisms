@@ -14,7 +14,7 @@ from .evidence_package import canonical_json, sha256
 from .runtime_config import ROOT, artifacts_root, reference_mysql_connection, setting
 from .research_work import authorize_commit, public_base
 from .runtime_metrics import measure
-from . import user_inputs
+from . import account_data_sources, user_inputs
 
 
 def authorize_artifact(tx, owner, artifact):
@@ -442,6 +442,15 @@ def validate_submission(service, operation):
         'reused_account_ids': selected_existing}
     if operation['kind'] == 'validate':
         return {k: payload[k] for k in ('report', 'account_ids', 'reused_account_ids', 'evidence_manifest_sha256')}
+    # Trace each submitted account's claims to their data sources outside the write fence, over the capture
+    # records commit_accounts writes; it stores them only for accounts new in that commit.
+    retained = {record['sha256']: record for record in source_records}
+    payload['data_sources'] = {}
+    for accepted in validated:
+        identity = accepted['document']['scientific_accounts'][0]['id']
+        if identity not in payload['data_sources']:
+            payload['data_sources'][identity] = account_data_sources.compute(
+                service.repo, owner, identity, accepted['document'], accepted['storage']['sha256'], retained)
     return payload
 
 
@@ -459,6 +468,7 @@ def commit_accounts(service, tx, operation, prepared):
         *(('artifact', digest([owner, record['sha256']])) for record in prepared['source_records']),
         *(('account', digest([owner, doc['scientific_accounts'][0]['id']])) for doc in documents),
         *(('account_membership', digest([owner, doc['scientific_accounts'][0]['id']])) for doc in documents),
+        *((account_data_sources.KIND, account_data_sources.owner_key(owner, doc['scientific_accounts'][0]['id'])) for doc in documents),
         *(('scientific_document', digest([owner, accepted['storage']['sha256']])) for accepted in prepared['validated'])], bare=('object',))
     frozen = owned(tx, 'request', operation['research_request_id'], owner)['data']
     reused = record_dependencies(tx, owner, frozen['id'], prepared['reused']['receipt_ids'],
@@ -490,6 +500,9 @@ def commit_accounts(service, tx, operation, prepared):
             writes.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary),
                 **claim_structure_record(accepted.get('report'))}, stamp))
             writes.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
+            traced = prepared.get('data_sources', {}).get(identity)
+            if traced and traced['document_sha256'] == accepted['storage']['sha256']:
+                writes.put(account_data_sources.KIND, account_data_sources.owner_key(owner, identity), owner, traced)
         document_sha = accepted['storage']['sha256']
         writes.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,
             'job_id': work_id, 'local_work_id': work_id, 'observed_at': now(), 'citation_metadata': metadata, 'artifact_access': access,

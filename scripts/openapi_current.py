@@ -315,6 +315,21 @@ def reference_schemas(b):
         description='Outdated-reference stamp on work built on a superseded reference generation. The work keeps every record and stays readable, downloadable and publishable, and paragraph jobs still run; re-analysis and review retry are blocked; start a new analysis on the same gap with current factors instead. reference holds the original anchors. Public copies null analysis.job_id and analysis.request_id. A later reload advances to_reference_generation and appends to history. Absent on current work and in deployments that never reloaded reference data.'))
     for name in ('AccountSummary','AccountResult','AnalysisOutcome','ResearchRequest'):
         S[name]['properties']['archive']=ref('ReferenceArchive')
+    count={'type':'integer','minimum':0}
+    routes=enum('proposition_reference','evidence_derivation','inherited_source_claim','factor_projection')
+    b.add('AccountDataSourceConnection',obj({'dataset_id':string(),'input_roles':array(string()),'routes':array(routes),
+        'via_ids':array(string()),'organizations':array(obj({'organization_id':string(),'roles':array(string())})),
+        'curation_ids':array(string()),'trace_count':count},
+        description='One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, or a mechanism projects onto gene sets built from it). via_ids: the cited gene set, mechanism, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage). Organization roles are recorded credit (publisher, attribution, ...), not data production.'))
+    b.add('AccountDataSources',obj({'status':enum('complete','incomplete','unavailable','not_traced'),'traced_at':time,
+        'error':obj({'code':string()}),'reference_generation_ids':array(digest),
+        'coverage':obj({'trace_count':count,'counts_are_lower_bounds':{'type':'boolean'},'issue_counts':{'type':'object','additionalProperties':count}}),
+        'claims':array(obj({'claim_id':string(),'resolution':enum('complete','incomplete','not_applicable'),'datasets':array(ref('AccountDataSourceConnection'))})),
+        'datasets':array(obj({'id':string(),'name':string(),'version':string(),'description':string(),'location':string(format='uri')},required=['id'])),
+        'organizations':array(obj({'id':string(),'name':string(),'ror':string()},required=['id'])),
+        'via':array(obj({'id':string(),'kind':string(),'name':string(),'filename':string()},required=['id','kind']))},required=['status'],
+        description='The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it. A point-in-time observation of the reference lineage (re-traced by an operator after lineage changes); GET /v1/accounts/{account_id}/provenance returns the full witness paths. not_traced: no stored trace matches this exact account source; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound.'))
+    S['AccountResult']['properties']['data_sources']=ref('AccountDataSources')
     # The outcome summary is derived from the outcome: optional keys propagate with it.
     S['AnalysisOutcomeSummary']['properties']['archive']=deepcopy(S['AnalysisOutcome']['properties']['archive'])
     b.add('ArchivedReferenceFactor',obj({'format':{'type':'string','const':'reveal.archived-reference-factor/1'},'archive_id':digest,
@@ -354,6 +369,30 @@ def examples(b, f, e):
     for key in ['account','claim','paragraph','question_result','gene_set']:
         for artifact in e[key]['artifacts']:artifact.update(availability='not_available',verification='checksum_verified')
     e['account']['research_statement']={'status':'succeeded','job_id':b.PARAGRAPH_JOB_ID,'paragraph_id':f['paragraph']['id']}
+    # Illustrative stored data sources: the first claim's mechanism projects onto GTEx gene sets, whose curated
+    # reference lineage reaches GTEx V8 and NCBI gene_info.
+    doc=f['account_document']; mechanism=doc['mechanisms'][0]
+    gtex,gene_info='dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5','dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk'
+    broad,gtex_consortium,ncbi=('dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8','dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ',
+        'dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK')
+    via={'routes':['factor_projection','proposition_reference'],'via_ids':[mechanism['id']],'curation_ids':['cfde-collection-lineage-2026-10-11'],'trace_count':1}
+    first=[{'dataset_id':gtex,'input_roles':['data_input'],**via,'organizations':[{'organization_id':broad,'roles':['publisher']},
+                {'organization_id':gtex_consortium,'roles':['attribution']}]},
+           {'dataset_id':gene_info,'input_roles':['metadata_input'],**via,'organizations':[{'organization_id':ncbi,'roles':['publisher']}]}]
+    e['account']['data_sources']={'status':'incomplete','traced_at':'2026-10-12T00:00:00Z',
+        'reference_generation_ids':['ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a'],
+        'coverage':{'trace_count':2,'counts_are_lower_bounds':True,'issue_counts':{'MISSING_LINEAGE':3}},
+        'claims':[{'claim_id':claim,'resolution':'complete' if index==0 else 'not_applicable','datasets':first if index==0 else []}
+                  for index,claim in enumerate(doc['scientific_accounts'][0]['component_claims'])],
+        'datasets':[{'id':gene_info,'name':'NCBI Gene Homo_sapiens.gene_info','version':'undated snapshot',
+                     'description':'NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.',
+                     'location':'https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/'},
+                    {'id':gtex,'name':'GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)','version':'v8',
+                     'description':'Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.',
+                     'location':'https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression'}],
+        'organizations':[{'id':gtex_consortium,'name':'GTEx Consortium'},{'id':ncbi,'name':'National Center for Biotechnology Information','ror':'ror:02meqm098'},
+                         {'id':broad,'name':'Broad Institute','ror':'ror:05a0ya142'}],
+        'via':[{'id':mechanism['id'],'kind':'mechanism','name':mechanism['name']}]}
     package_dir=b.OUT/'examples/evidence-package'
     shutil.copytree(b.ROOT/'data/evidence-packages/cad-builder-v1',package_dir,dirs_exist_ok=True)
     package=json.loads((package_dir/'evidence-package.json').read_text())

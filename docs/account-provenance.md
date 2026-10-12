@@ -40,6 +40,20 @@ The served KPN generation `ec3364ae…` stored each collection's Datasets and Or
 
 The processing bounds are 10,000 nodes, 50,000 edges and depth 128; a 100,000-state processing limit also bounds repeated work. Serialized responses are limited to 8 MiB. Exceeding a bound returns `422 PROVENANCE_LIMIT_EXCEEDED` without rankings. Retained storage outages return a service error. A missing full account source returns `409 PROVENANCE_SOURCE_UNAVAILABLE`; conflicting root payload observations return `409 SCIENTIFIC_SOURCE_CONFLICT` (or 404 when an exact payload was requested).
 
+## Stored data sources
+
+Every new account is traced once when it is saved: by the agent run's final save (`Worker.accept_accounts`, both job engines) and by a local submission (`research_execution.validate_submission` traces, `commit_accounts` stores). The trace runs before the acceptance write fence, over the exact capture records the commit writes, and is stored in the same commit as one `account_data_sources` record per owner and account (`account_data_sources.py`). `GET /v1/accounts/{id}` serves it as `data_sources`: per claim, each Dataset it reaches with its input roles, routes, the cited gene set, mechanism, file or source claim it was reached through (`via_ids`), the credited Organizations and roles, and any curated lineage step (`curation_ids`), plus names for the bubble chart. The account view draws these datasets inside each claim circle.
+
+- **Never blocking:** a trace failure (storage, reference database, processing bound, or a 90 s deadline) is stored as `status: unavailable` with an error code; the account is accepted regardless.
+- **Exact source:** a record is served only for the document and account payload it traced, under the current format and `TRACING_POLICY_VERSION`; otherwise `data_sources` is `{status: not_traced}`. Re-accepting an account keeps its first trace, matching the first-document-wins object index. A private read that withholds revoked borrowed objects drops the connections reached only through them and reports `incomplete`.
+- **Publication:** publishing copies the owner's matching record beside the new snapshot (`digest(['publication', snapshot_id])`); a later re-trace never changes what a published snapshot serves.
+- **Point in time:** the record observes the reference tables when the account was saved (`reference_generation_ids`, `source_observations_sha256`). After a lineage curation or policy change, re-trace with the backfill, which uses the endpoint's exact sources (dry run first):
+
+```sh
+REVEAL_ARTIFACT_STORE=s3 REVEAL_S3_BUCKET=cyaka-reveal-data REVEAL_S3_PREFIX=qa/ AWS_PROFILE=broad \
+  .venv/bin/python scripts/backfill_account_data_sources.py --prefix reveal_workflow_qa [--force] [--apply]
+```
+
 ## Import preservation and historical recovery
 
 New version-3 reference bundles retain provenance nodes and relationship groups before and after `gene_sets` in collection YAML. Relevant sections are streamed and validated. Captures and evidence packages preserve anonymous provenance edges alongside exact scientific nodes. Dataset and organization records reachable only through inverse membership remain in immutable retained captures, because canonical DAPPER reachability is directed; the endpoint expands that verified context without rewriting accepted records, even when the original catalog rows have retired.

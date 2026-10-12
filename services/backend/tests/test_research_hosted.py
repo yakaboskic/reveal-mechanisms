@@ -1,5 +1,6 @@
 """Real progressive seed, SQL receipt, validation and commit; only Box authorship is fake."""
 import asyncio
+import json
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -147,6 +148,24 @@ class HostedResearchJourneyTests(unittest.TestCase):
             self.assertEqual(tx.list('account', self.owner)[0]['data']['result']['document'], before)
         with self.repo.read_transaction() as tx:
             with self.assertRaises(Problem): authenticate(tx, 'Bearer '+self.executions[-1].research_access['token'])
+
+    def test_accepted_account_stores_the_trace_the_endpoint_reads_after_commit(self):
+        # Acceptance traces the account before its commit over the capture records that commit writes; the stored
+        # record equals the endpoint's trace of the committed account.
+        import test_research_data as references
+        from reveal_backend import account_data_sources
+        from reveal_backend.app import scientific_source
+        connect = lambda *args, **kwargs: references.Connection(self.reference.path, self.reference.queries)
+        with patch('reveal_backend.runtime_config.reference_mysql_connection', side_effect=connect):
+            account_id = self.run_job(self.new_job())['result']['account_ids'][0]
+            with self.repo.read_transaction() as tx:
+                stored = tx.get(account_data_sources.KIND, account_data_sources.owner_key(self.owner, account_id))['data']
+                source = scientific_source(tx, account_id, self.owner, 'account', None, verify_payload=True)
+                exact = account_data_sources.trace_source(tx, account_id, source, source['document_sha256'])
+        self.assertIn(stored['status'], ('complete', 'incomplete'))
+        self.assertEqual(stored['document_sha256'], source['document_sha256'])
+        self.assertEqual({key: value for key, value in stored.items() if key != 'traced_at'},
+                         {key: value for key, value in exact.items() if key != 'traced_at'})
 
     def test_wrong_work_receipt_capture_cannot_accept_or_launch_a_paragraph(self):
         result = self.run_job(self.new_job(), corrupt_scope=True)

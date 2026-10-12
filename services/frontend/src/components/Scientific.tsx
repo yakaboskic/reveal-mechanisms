@@ -14,7 +14,8 @@ import { sourceDownloadPath } from "@/lib/source-download";
 import { ReferenceArchiveBanner, ReferenceBadge, requestSettings } from "./ReferenceArchive";
 import { CitationReference } from "./CitationReference";
 import { AccountGraph } from "./AccountGraph";
-import { type AccountGraphNode } from "@/lib/account-graph";
+import { inputRoleLabel, type AccountGraphNode } from "@/lib/account-graph";
+import { publicSourceHref } from "@/lib/provenance-view";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -256,6 +257,57 @@ function ProvenanceView({ claim, result }: { claim: Claim; result: Schema<"Claim
   return <><h2>Follow the evidence to its source</h2><p className="small-note">{result.coverage.complete ? "Complete authorized upstream view." : "Bounded upstream view. Missing records are not evidence of absence."}</p>{result.artifacts.length ? result.artifacts.map(artifact => <SourceArtifact key={artifact.file.id} artifact={artifact} />) : <p className="small-note">No downloadable source artifacts are included in this view.</p>}<section className="construction-provenance"><h3>Construction provenance</h3>{activity ? <><p>{activity.name || "Generating activity"}</p>{activity.description && <p>{activity.description}</p>}<dl className="scientific-keyval">{activity.software_name && <><dt>Software</dt><dd>{activity.software_name}{activity.software_version ? ` ${activity.software_version}` : ""}</dd></>}{activity.generated_at_time && <><dt>Generated</dt><dd><time dateTime={activity.generated_at_time}>{activity.generated_at_time}</time></dd></>}</dl><Technical label="Activity record and execution details" value={activity} /></> : <p className="small-note">The generating activity is not included in this view. <Link href={objectHref(claim.was_generated_by)}>Inspect activity</Link></p>}</section>{document.gene_sets?.length ? <section className="referenced-records"><h3>Referenced gene sets</h3>{document.gene_sets.map(set => <Link key={set.id} href={objectHref(set.id)}>{set.name || set.id}</Link>)}</section> : null}<details className="technical-disclosure"><summary>Exact payload observations and traversal coverage</summary><Record value={result.schema} /><Record value={result.payloads} /><Record value={result.coverage} /></details><Technical label="Claim record" value={claim} /></>;
 }
 
+const routeLabels: Record<string, string> = { proposition_reference: "Named in the claim's proposition", evidence_derivation: "Cited by the claim's evidence",
+  inherited_source_claim: "Through a source claim", factor_projection: "Through a mechanism's projected gene sets" };
+const rorHref = (ror?: string | null) => ror && /^ror:0[a-z0-9]{8}$/.test(ror) ? `https://ror.org/${ror.slice(4)}` : null;
+/** A dataset the account's stored trace reaches for one claim: reference lineage, not a record of the account. */
+function TracedDatasetView({ node, result }: { node: AccountGraphNode; result: Schema<"AccountResult"> }) {
+  const sources = result.data_sources, connection = node.trace!;
+  const dataset = sources?.datasets?.find(item => item.id === node.objectId);
+  const organizations = new Map((sources?.organizations || []).map(item => [item.id, item]));
+  const via = new Map((sources?.via || []).map(item => [item.id, item]));
+  const claims = result.document.claims || [], location = publicSourceHref(dataset?.location);
+  const viaLink = (id: string) => {
+    const claim = claims.find(item => item.id === id), number = (result.document.scientific_accounts?.[0]?.component_claims || []).indexOf(id);
+    if (claim) return <Link key={id} href={claimHref(id, result.root_id)}>{number >= 0 ? `Claim C${number + 1}` : "Source claim"}</Link>;
+    const name = via.get(id)?.name || via.get(id)?.filename || entityLabel(result.document, id);
+    return id.startsWith("dapper:") ? <Link key={id} href={objectHref(id)} title={id}>{name}</Link> : <span key={id}>{name}</span>;
+  };
+  return <>
+    {dataset?.description && <p>{dataset.description}</p>}
+    <dl className="scientific-keyval">
+      <dt>Role</dt><dd>{human(inputRoleLabel(connection.input_roles))}</dd>
+      {dataset?.version && <><dt>Version</dt><dd>{dataset.version}</dd></>}
+      <dt>Reached through</dt><dd className="traced-dataset-links">{connection.via_ids.map(viaLink)}</dd>
+      <dt>How</dt><dd className="traced-dataset-routes">{connection.routes.map(route => <span key={route}>{routeLabels[route] || human(route)}</span>)}</dd>
+      <dt>Credited</dt><dd>{connection.organizations.length ? connection.organizations.map(item => {
+        const organization = organizations.get(item.organization_id), href = rorHref(organization?.ror);
+        return <span className="traced-dataset-organization" key={item.organization_id}>{href ? <a href={href} target="_blank" rel="noreferrer">{organization?.name || "Organization"}</a> : organization?.name || "Organization"}<small>{item.roles.map(human).join(", ")}</small></span>;
+      }) : "No organization recorded"}</dd>
+    </dl>
+    {location && <p><a href={location} target="_blank" rel="noreferrer">Dataset source ↗</a></p>}
+    {!!connection.curation_ids.length && <p className="small-note">REVEAL curated the step from the gene set&apos;s construction to this dataset ({connection.curation_ids.join(", ")}); the source gene set files do not record it.</p>}
+    {sources?.status === "incomplete" && <p className="small-note">Some of this account&apos;s sources have no recorded lineage, so its data sources are a lower bound.</p>}
+    <p className="small-note">{sources?.traced_at && <>Traced <time dateTime={sources.traced_at}>{sources.traced_at.slice(0, 10)}</time>. </>}Organization roles are recorded credit, not data production.</p>
+  </>;
+}
+/** The account's traced data sources: each dataset, how many claims reach it, and who is credited for it. */
+function DataSourcesSummary({ result }: { result: Schema<"AccountResult"> }) {
+  const sources = result.data_sources;
+  if (!sources || !["complete", "incomplete"].includes(sources.status)) return null;
+  const organizations = new Map((sources.organizations || []).map(item => [item.id, item.name || "Organization"]));
+  const reach = new Map<string, { claims: number; organizations: Set<string> }>();
+  for (const claim of sources.claims || []) for (const item of claim.datasets) {
+    const entry = reach.get(item.dataset_id) || { claims: 0, organizations: new Set<string>() };
+    entry.claims += 1; item.organizations.forEach(org => entry.organizations.add(organizations.get(org.organization_id) || "Organization"));
+    reach.set(item.dataset_id, entry);
+  }
+  return <section className="account-data-sources" aria-label="Data sources"><h4>Data sources</h4>{sources.datasets?.length ? <ul>{sources.datasets.map(dataset => {
+    const entry = reach.get(dataset.id);
+    return <li key={dataset.id}>{dataset.name || "Dataset"}<small>{entry?.claims || 0} {entry?.claims === 1 ? "claim" : "claims"}{entry?.organizations.size ? ` · ${[...entry.organizations].join(", ")}` : ""}</small></li>;
+  })}</ul> : <p className="small-note">No claim reaches a recorded dataset.</p>}{sources.status === "incomplete" && <p className="small-note">Some sources have no recorded lineage; this list is a lower bound.</p>}</section>;
+}
+
 /** Reuses the same evidence/provenance renderers as the full claim page. The
  * inspector reads only the selected account's observation, including its pages. */
 function ScientificInspector({ node, result }: { node: AccountGraphNode; result: Schema<"AccountResult"> }) {
@@ -269,19 +321,19 @@ function ScientificInspector({ node, result }: { node: AccountGraphNode; result:
   const artifact = result.artifacts.find(value => value.file.id === node.objectId);
   const record = recordNodes(document).find(value => value.id === node.objectId);
   return <div className="graph-record-content">
-    {node.missing ? <p>This referenced record is not included in the loaded account view. Load more source records when available.</p> : account ? <><p>{account.closing_remarks || "No separate closing synthesis was recorded."}</p><details><summary>Approach and scope</summary><p>{account.context}</p></details></> : claim ? <>
+    {node.missing ? <p>This referenced record is not included in the loaded account view. Load more source records when available.</p> : account ? <><p>{account.closing_remarks || "No separate closing synthesis was recorded."}</p><details><summary>Approach and scope</summary><p>{account.context}</p></details><DataSourcesSummary result={result} /></> : claim ? <>
       <p>{claim.statement || document.propositions?.find(value => value.id === claim.proposition)?.statement}</p>
       <Tabs labels={["Assessment", "Evidence", "Provenance"]} value={tab} onChange={setTab} /><div role="tabpanel" aria-label={`Selected claim ${tab.toLowerCase()}`}>
         {tab === "Assessment" && <><dl className="scientific-keyval"><dt>Direction</dt><dd>{human(claim.direction)}</dd><dt>Review status</dt><dd>{human(claim.status)}</dd><dt>Evidence</dt><dd>{claim.has_evidence?.length || 0} linked items</dd></dl><ScoreList document={document} ids={claim.has_score} /><Attribution document={document} ids={claim.was_attributed_to} /></>}
         {tab === "Evidence" && <EvidenceView claim={claim} result={claimResult} accountId={result.root_id} />}
         {tab === "Provenance" && <ProvenanceView claim={claim} result={claimResult} />}
       </div><Link className="claim-page-link" href={claimHref(claim.id, result.root_id)}>Open claim page ↗</Link>
-    </> : node.kind === "evidence" ? <EvidenceView evidenceIds={[node.objectId]} result={claimResult} accountId={result.root_id} /> : dataset ? <>
+    </> : node.kind === "evidence" ? <EvidenceView evidenceIds={[node.objectId]} result={claimResult} accountId={result.root_id} /> : node.trace && !dataset ? <TracedDatasetView node={node} result={result} /> : dataset ? <>
       {dataset.description && <p>{dataset.description}</p>}{dataset.location && <div className="graph-storage-location"><strong>Dataset location</strong><br /><code>{dataset.location}</code></div>}<p>A dataset location may describe a storage prefix. Only explicitly linked files are shown as its distributions.</p><dl className="scientific-keyval"><dt>Files</dt><dd>{dataset.has_file?.length || 0} explicitly linked</dd>{dataset.version && <><dt>Version</dt><dd>{dataset.version}</dd></>}</dl><Technical label="Dataset record" value={dataset} />
     </> : file ? <SourceArtifact artifact={artifact || { file, download_url: null, expires_at: null, availability: "not_available", verification: "source_reported" }} /> : activity ? <>
       {activity.description && <p>{activity.description}</p>}<p>Computational inputs record what this activity used. They do not by themselves establish support for a claim.</p><dl className="scientific-keyval">{activity.software_name && <><dt>Software</dt><dd>{activity.software_name}{activity.software_version ? ` ${activity.software_version}` : ""}</dd></>}{activity.generated_at_time && <><dt>Generated</dt><dd>{activity.generated_at_time}</dd></>}</dl><Technical label="Activity record" value={activity} />
     </> : <Technical label="Scientific record" value={record} />}
-    <Link className="account-explorer-record-link" href={objectHref(node.objectId)}>Open scientific record ↗</Link>
+    {!(node.trace && !dataset) && <Link className="account-explorer-record-link" href={objectHref(node.objectId)}>Open scientific record ↗</Link>}
   </div>;
 }
 export function ClaimView({ id }: { id: string }) {

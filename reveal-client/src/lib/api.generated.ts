@@ -4439,6 +4439,7 @@ export interface components {
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
             archive?: components["schemas"]["ReferenceArchive"];
+            data_sources?: components["schemas"]["AccountDataSources"];
         };
         ClaimResult: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -8396,6 +8397,62 @@ export interface components {
                 account_id: string | null;
                 outcome_id: string | null;
             };
+        };
+        /** @description One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, or a mechanism projects onto gene sets built from it). via_ids: the cited gene set, mechanism, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage). Organization roles are recorded credit (publisher, attribution, ...), not data production. */
+        AccountDataSourceConnection: {
+            dataset_id: string;
+            input_roles: string[];
+            routes: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection")[];
+            via_ids: string[];
+            organizations: {
+                organization_id: string;
+                roles: string[];
+            }[];
+            curation_ids: string[];
+            trace_count: number;
+        };
+        /** @description The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it. A point-in-time observation of the reference lineage (re-traced by an operator after lineage changes); GET /v1/accounts/{account_id}/provenance returns the full witness paths. not_traced: no stored trace matches this exact account source; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound. */
+        AccountDataSources: {
+            /** @enum {string} */
+            status: "complete" | "incomplete" | "unavailable" | "not_traced";
+            /** Format: date-time */
+            traced_at?: string;
+            error?: {
+                code: string;
+            };
+            reference_generation_ids?: string[];
+            coverage?: {
+                trace_count: number;
+                counts_are_lower_bounds: boolean;
+                issue_counts: {
+                    [key: string]: number;
+                };
+            };
+            claims?: {
+                claim_id: string;
+                /** @enum {string} */
+                resolution: "complete" | "incomplete" | "not_applicable";
+                datasets: components["schemas"]["AccountDataSourceConnection"][];
+            }[];
+            datasets?: {
+                id: string;
+                name?: string;
+                version?: string;
+                description?: string;
+                /** Format: uri */
+                location?: string;
+            }[];
+            organizations?: {
+                id: string;
+                name?: string;
+                ror?: string;
+            }[];
+            via?: {
+                id: string;
+                kind: string;
+                name?: string;
+                filename?: string;
+            }[];
         };
         /** @description Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted. */
         ArchivedReferenceFactor: {

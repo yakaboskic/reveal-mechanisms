@@ -1203,7 +1203,9 @@ def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verif
             if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
             key=digest([user,identity])
             keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
-            if kind=='account': keys.append(('publication',key))
+            if kind=='account':
+                from .account_data_sources import KIND as DATA_SOURCES   # owner_key(user, identity) is this key
+                keys+=[('publication',key),(DATA_SOURCES,key)]
             records=tx.get_records(keys)
             row=require_owned(tx,kind,identity,user,records.get((kind,key)),
                 dependency=records.get(('scientific_dependencies',key)))['data']
@@ -1266,7 +1268,7 @@ def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verif
         artifacts = {key: item for key, item in artifacts.items() if key in visible}
     return {'user': user, 'public': public, 'snapshot': snapshot, 'publication_record': publication_record,
             'result': result, 'document': document, 'metadata': metadata, 'artifacts': artifacts,
-            'full_document_available': full_document_available,
+            'full_document_available': full_document_available, 'document_sha256': document_sha if public is None else None,
             'root_payload': root_payload, 'withheld_dependencies': withheld_dependencies, 'withheld_ids': withheld_ids, 'archive': archive}
 
 def scientific(identity,request,kind='object'):
@@ -1303,8 +1305,11 @@ def scientific(identity,request,kind='object'):
             clipped['coverage']['complete'] = False
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
         if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
-        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
-            can_manage=public is None,record=public if public else publication_record,account_result=result)
+        if kind=='account':
+            clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
+                can_manage=public is None,record=public if public else publication_record,account_result=result)
+            from .account_data_sources import response as data_sources
+            clipped['data_sources']=data_sources(tx,identity,source)
         if archive: clipped['archive']=archive
         return clipped
 

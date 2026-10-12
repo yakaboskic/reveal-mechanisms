@@ -13,19 +13,28 @@ from .account_provenance import TRACING_POLICY_VERSION as POLICY_VERSION
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
 
 
+def _document_files(document):
+    return {node.get('sha256'): node for node in document.get('files', []) if node.get('sha256') and node.get('id')}
+
+
+def visible_records(document, records):
+    """Only retained bytes for a File the document holds, matched by checksum and File id."""
+    files = _document_files(document)
+    return {checksum: deepcopy(record) for checksum, record in records.items()
+            if checksum in files and record.get('sha256') == checksum
+            and record.get('file', {}).get('id') == files[checksum]['id']}
+
+
 def artifact_records(tx, source):
     """Only retained bytes for visible Files; public reads never look up an owner."""
-    files = {node.get('sha256'): node for node in source['document'].get('files', [])
-             if node.get('sha256') and node.get('id')}
+    files = _document_files(source['document'])
     if source['public'] is not None:
         records = source['snapshot'].get('artifact_records', {})
     else:
         owner = source['user']
         rows = tx.get_many('artifact', [digest([owner, checksum]) for checksum in files])
         records = {row['data'].get('sha256'): row['data'] for row in rows.values() if row['owner'] == owner}
-    return {checksum: deepcopy(record) for checksum, record in records.items()
-            if checksum in files and record.get('sha256') == checksum
-            and record.get('file', {}).get('id') == files[checksum]['id']}
+    return visible_records(source['document'], records)
 
 
 def _decode_cursor(cursor, secret):
@@ -90,6 +99,16 @@ def paginate(result, snapshot, authority, query, *, secret=None):
 
 
 def read(tx, account_id, source, query):
+    traced = trace(tx, account_id, source, artifact_records(tx, source))
+    return paginate(traced['result'], traced['snapshot'], traced['authority'], query)
+
+
+def trace(tx, account_id, source, records):
+    """The unpaginated trace of one authorized account source over its visible retained capture records.
+
+    Returns {'result', 'snapshot', 'authority', 'document'}: the collected traces and metrics, their snapshot
+    identity, the reading authority, and the enriched document whose records describe every reached node.
+    The endpoint and the stored account data sources (account_data_sources.py) both trace through here."""
     from .account_provenance import collect
     from .provenance_reference import expand
     if 'legacy_result' in source or not source.get('full_document_available', True):
@@ -97,7 +116,7 @@ def read(tx, account_id, source, query):
     original = source['document']
     from .artifact_store import StorageUnavailable
     try:
-        expanded, metadata = expand(original, artifact_records(tx, source), tx=tx,
+        expanded, metadata = expand(original, records, tx=tx,
                                     blocked_ids=source.get('withheld_ids', ()), account_id=account_id)
     except StorageUnavailable as error:
         raise Problem(503, 'SERVICE_UNAVAILABLE', 'Retained provenance storage is temporarily unavailable.') from error
@@ -134,4 +153,4 @@ def read(tx, account_id, source, query):
                 'reference_generation_ids': sorted(metadata.get('reference_generation_ids', [])),
                 'supplement_ids': sorted(metadata.get('supplement_ids', [])),
                 'source_observations': metadata.get('source_observations', [])}
-    return paginate(result, snapshot, authority, query)
+    return {'result': result, 'snapshot': snapshot, 'authority': authority, 'document': expanded}

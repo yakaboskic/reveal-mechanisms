@@ -19,10 +19,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from reveal_backend import jobs, workspace_events, research_execution, worker as W
+from reveal_backend import account_data_sources, jobs, workspace_events, research_execution, worker as W
 # Imported before any patch window: a module first imported inside one would keep the patched uid/now.
 from reveal_backend import (acceptance, analysis_outcomes, citations, reference_archive, reference_generation,  # noqa: F401
-    research_hosted, scientific_reuse, scientific_writes, workflow_execution)
+    research_hosted, scientific_reuse, scientific_writes, workflow_execution, provenance_api, provenance_reference, provenance_supplements)
 from reveal_backend.evidence_package import canonical_json, sha256
 from reveal_backend.repository import Repository, Transaction, digest
 
@@ -262,6 +262,7 @@ class AcceptanceBatchTests(unittest.TestCase):
         """Run the batched and the sequential acceptance on copies of one database; their rows must be identical."""
         for index, (prior_owner, prior) in enumerate(before): self.accept(self.repo, SequentialWorker, prior_owner, prior, label='prior%d' % index)
         claimed = self.claimed(self.repo, owner)   # one job and lease, copied into both databases
+        prior = {json.loads(payload)['account_id'] for (kind, _), (_, _, payload, _) in rows(self.repo).items() if kind == 'account_membership'}
         batched = Repository(str(self.root / 'batched.sqlite')); sequential = Repository(str(self.root / 'sequential.sqlite'))
         for copy in (batched, sequential): shutil.copy(self.repo.sqlite_path, copy.sqlite_path)
         statements = []; execute = Transaction.execute
@@ -271,6 +272,12 @@ class AcceptanceBatchTests(unittest.TestCase):
         with patch.object(Transaction, 'execute', counted):
             self.accept(sequential, SequentialWorker, owner, documents, claimed=deepcopy(claimed), **options)
         after, reference = rows(batched), rows(sequential)
+        # Stored account data sources postdate the sequential copy: each new account gains exactly one, and every
+        # other row is unchanged.
+        traced = {key: value for key, value in after.items() if key[0] == account_data_sources.KIND}
+        new = {document['scientific_accounts'][0]['id'] for document in documents} - prior
+        self.assertEqual({json.loads(payload)['account_id'] for _, _, payload, _ in traced.values()}, new)
+        after = {key: value for key, value in after.items() if key not in traced}
         self.assertEqual(set(after), set(reference))
         for key in reference: self.assertEqual(after[key], reference[key], key)
         kinds = {kind for kind, _ in after}
@@ -346,6 +353,21 @@ class SubmissionBatchTests(unittest.TestCase):
         after, reference = rows(batched), rows(sequential_repo)
         self.assertEqual(set(after), set(reference))
         for key in reference: self.assertEqual(after[key], reference[key], key)
+
+
+    def test_submission_stores_prepared_data_sources_only_for_new_accounts(self):
+        traced = {'format': account_data_sources.FORMAT, 'account_id': self.document['scientific_accounts'][0]['id'],
+                  'document_sha256': sha256(canonical_json(self.document)), 'status': 'complete', 'claims': []}
+        key = (account_data_sources.KIND, account_data_sources.owner_key(OWNER, traced['account_id']))
+        def commit(record):
+            original = research_execution.commit_accounts
+            def with_traces(service, tx, operation, prepared):
+                return original(service, tx, operation, {**prepared, 'data_sources': {traced['account_id']: record}})
+            self.commit(self.repo, with_traces, [self.document])
+        commit(traced)
+        self.assertEqual(json.loads(rows(self.repo)[key][2]), traced)
+        commit({**traced, 'status': 'incomplete'})   # re-accepting an account never replaces its first trace
+        self.assertEqual(json.loads(rows(self.repo)[key][2])['status'], 'complete')
 
 
 class ApplyPutsTests(unittest.TestCase):

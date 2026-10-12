@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { accountGraphLabel, buildAccountHierarchy, flattenAccountHierarchy, mergeAccountPages } from "../src/lib/account-graph";
 import type { Schema } from "../src/lib/client";
 
-const fixture = () => JSON.parse(readFileSync(new URL("../src/lib/fixtures/contract.json", import.meta.url), "utf8")).account as Schema<"AccountResult">;
+const traced = () => JSON.parse(readFileSync(new URL("../src/lib/fixtures/contract.json", import.meta.url), "utf8")).account as Schema<"AccountResult">;
+// Document-lineage tests read the account without its stored trace (data_sources); traced() keeps it.
+const fixture = () => { const result = traced(); delete result.data_sources; return result; };
 
 test("only explicit component claims are account children, preserving scientific order", () => {
   const result = fixture(), account = result.document.scientific_accounts![0];
@@ -167,4 +169,34 @@ test("an oversized component collection stays inside the total display budget", 
   const graph = buildAccountHierarchy(result, 3, 80);
   assert.equal(flattenAccountHierarchy(graph).length, 80);
   assert.equal(graph.children.length, 79); assert.equal(graph.limited, true);
+});
+
+test("traced datasets join their claim with names, input roles and the objects they came through", () => {
+  const result = traced(), sources = result.data_sources!, account = result.document.scientific_accounts![0];
+  const graph = buildAccountHierarchy(result), first = graph.children[0];
+  assert.equal(first.objectId, account.component_claims[0]);
+  const datasets = first.children.filter(node => node.trace);
+  assert.deepEqual(datasets.map(node => node.objectId).sort(), sources.claims![0].datasets.map(item => item.dataset_id).sort());
+  for (const node of datasets) {
+    const named = sources.datasets!.find(item => item.id === node.objectId)!;
+    assert.equal(node.kind, "dataset"); assert.equal(node.missing, false); assert.equal(node.label, named.name);
+    assert.match(node.relation, /^Supporting dataset · (primary data|gene identifier mapping) · through Factor1$/);
+    assert.deepEqual(node.children, []);
+  }
+  assert.ok(graph.children.slice(1).every(claim => claim.children.every(node => !node.trace)));
+});
+
+test("a traced dataset already recorded in the document stays one circle with its recorded relation", () => {
+  const result = traced(), claim = result.document.claims!.find(node => node.id === result.data_sources!.claims![0].claim_id)!;
+  const evidence = result.document.evidence_items!.find(node => node.id === claim.has_evidence![0])!, recorded = result.data_sources!.claims![0].datasets[0];
+  result.document.datasets = [{ id: recorded.dataset_id, name: "Recorded dataset" }]; evidence.was_derived_from = [recorded.dataset_id];
+  const nodes = buildAccountHierarchy(result).children[0].children.filter(node => node.objectId === recorded.dataset_id);
+  assert.equal(nodes.length, 1);
+  assert.equal(nodes[0].label, "Recorded dataset"); assert.equal(nodes[0].relation, "Source dataset · recorded source path");
+  assert.deepEqual(nodes[0].trace, recorded);
+});
+
+test("an account without stored data sources draws exactly its document lineage", () => {
+  const untraced = fixture(), notTraced = { ...fixture(), data_sources: { status: "not_traced" as const } };
+  assert.deepEqual(flattenAccountHierarchy(buildAccountHierarchy(notTraced)), flattenAccountHierarchy(buildAccountHierarchy(untraced)));
 });
