@@ -8,6 +8,7 @@ import { followJob, followWorkspace } from "../lib/events";
 import { createMutationKeys } from "../lib/mutations";
 import { emptyComposer, terminal, withFactors, type AnalysisInput, type Composer, type Draft, type Factor, type Gap, type Job, type JobEvent, type Me, type Schema } from "../lib/types";
 import { cfdeSources, datasetTitle, type CfdeDataset, type DataSourcesStatus } from "../lib/data-sources";
+import { downloadInvestigationReport } from "../lib/investigation-report";
 import { organizationInitials, organizationLogo, rorHref, type CreditedOrganization } from "../lib/organizations";
 
 type PendingSubmission = { body: AnalysisInput; key: string };
@@ -1761,8 +1762,8 @@ export default function Home() {
             </div>
           </section>}
           {activeStep === "investigation" && <section className="step open">
-            <div className={"step-heading-row investigation-heading" + (headingAside ? " with-aside" : "")}><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2><p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p>{!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}{(showActivityLink || resultActions.length > 0) && <p className="investigation-nav">{resultActions.map((action, index) => <span className="status-link-item" key={action.key}>{index > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}{showActivityLink && <span className="status-link-item">{resultActions.length > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span>}</p>}{showTabs && <div className="investigation-tabs" role="tablist" aria-label="Investigation contents"><button type="button" role="tab" aria-selected={investigationTab === "assessment"} onClick={() => setInvestigationTab("assessment")}>Feasibility assessment</button><button type="button" role="tab" aria-selected={investigationTab === "result"} onClick={() => setInvestigationTab("result")}>Investigation result</button></div>}</div>{headingAside && <div className="investigation-heading-actions">{showStartFull && <button type="button" className="step-next" onClick={() => { if (!feasibility) return; void launchFullInvestigation(feasibility.draft); }} disabled={!mutable || !!cfdeGate}>Start full investigation</button>}{showEvidenceProvenance && <p className="evidence-provenance"><button type="button">Evidence provenance</button></p>}</div>}</div>
-            <div className="step-body">{investigationPanel}</div>
+            <div className={"step-heading-row investigation-heading" + (headingAside ? " with-aside" : "")}><div className="step-heading-copy"><h2 className="step-heading"><span className="step-number">3</span>Investigation</h2><p className="investigation-field">{gap ? <><strong>Knowledge gap:</strong> {gap.object.text || gapTitle(gap)}</> : <><strong>Knowledge gap:</strong> <span className="muted">Select a knowledge gap to investigate.</span></>}</p>{!!factorList && <p className="investigation-field"><strong>Factors:</strong> {factorList}</p>}{(showActivityLink || resultActions.length > 0) && <p className="investigation-nav">{resultActions.map((action, index) => <span className="status-link-item" key={action.key}>{index > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={() => openResultInspect(action.inspect)}>{action.label}</button></span>)}{showActivityLink && <span className="status-link-item">{resultActions.length > 0 && <span className="status-rule" aria-hidden="true">|</span>}<button type="button" className="status-link" onClick={openActivityInspect}>Activity</button></span>}</p>}{showTabs && <div className="investigation-tabs" role="tablist" aria-label="Investigation contents"><button type="button" role="tab" aria-selected={investigationTab === "assessment"} onClick={() => setInvestigationTab("assessment")}>Feasibility assessment</button><button type="button" role="tab" aria-selected={investigationTab === "result"} onClick={() => setInvestigationTab("result")}>Investigation result</button></div>}</div>{headingAside && <div className="investigation-heading-actions">{showStartFull && <button type="button" className="step-next" onClick={() => { if (!feasibility) return; void launchFullInvestigation(feasibility.draft); }} disabled={!mutable || !!cfdeGate}>Start full investigation</button>}{showEvidenceProvenance && <p className="report-download"><button type="button" onClick={() => void downloadInvestigationReport(gap?.object.text || (gap ? gapTitle(gap) : "Investigation"))}>Download report</button></p>}</div>}</div>
+            <div className="step-body report-stage">{showTabs ? <><div id="report-assessment" className={investigationTab === "assessment" ? undefined : "report-parked"}>{feasibilityReport}</div><div id="report-result" className={investigationTab === "result" ? undefined : "report-parked"}>{jobReport}</div></> : <div id="report-body">{investigationPanel}</div>}</div>
           </section>}
         </div>
         {inspectColumnOpen && <InspectColumn gap={showGapInspect ? inspectGap : null} factor={showFactorInspect ? inspectFactor : null} factorPending={showFactorInspect && !inspectFactor} result={showResultInspect ? inspectResult : null} activity={showActivityInspect ? <ActivityRecord events={activity} logRef={activityLogRef} /> : null} cfdePassed={cfdePassed} focus={inspectColumnFocus} gapNote={inspectGapNote} factorNote={inspectFactorNote} onFocus={setInspectFocus} onCloseGap={closeGapInspect} onCloseFactor={closeFactorInspect} onCloseResult={closeResultInspect} onCloseActivity={closeActivityInspect} />}
@@ -1797,6 +1798,15 @@ function ParagraphView({ progress }: { progress?: ParagraphProgress }) {
     {text && <p className="research-text">{text}</p>}
   </>;
 }
+function accountDapper(records: ResultRecord[]) {
+  const accounts = records.filter(record => record.path.startsWith("accounts/"));
+  const ready = accounts.length > 0 && accounts.every(record => {
+    const coverage = record.data?.coverage as { complete?: boolean; next_cursor?: string | null } | undefined;
+    return !!record.data && !record.error && coverage?.complete === true && !coverage.next_cursor;
+  });
+  const objects = accounts.flatMap(record => record.data ? [record.data] : []);
+  return { ready, text: ready ? JSON.stringify(objects.length === 1 ? objects[0] : objects, null, 2) : "" };
+}
 function ResultView({ job, principalKind, onActions }: { job: Job; principalKind?: Me["principal_kind"]; onActions: (actions: ResultAction[]) => void }) {
   const [records, setRecords] = useState<ResultRecord[]>([]);
   const result = job.result;
@@ -1829,7 +1839,8 @@ function ResultView({ job, principalKind, onActions }: { job: Job; principalKind
   useEffect(() => { onActions(actions); }, [actions, onActions]);
   useEffect(() => () => onActions([]), [onActions]);
   if (!result) return null;
-  return <section className="results">{result.kind === "analysis" && records.map(record => record.data ? <AccountGraph data={record.data} key={record.path} /> : null)}<h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
+  const dapper = result.kind === "analysis" ? accountDapper(records) : null;
+  return <section className="results">{dapper && <pre id="report-dapper-data" hidden data-ready={dapper.ready ? "true" : "false"}>{dapper.text}</pre>}{result.kind === "analysis" && records.map(record => record.data ? <AccountGraph data={record.data} key={record.path} /> : null)}<h3>{result.kind === "analysis_outcome" ? "Investigation outcome" : "Scientific account"}</h3>
     {principalKind === "anonymous" && result.kind === "analysis" && <p className="muted">Guest results are private to this workspace. Publishing requires a registered account.</p>}
     {records.map(record => {
       const document = record.data?.document as Record<string, Record<string, unknown>[]> | undefined;
