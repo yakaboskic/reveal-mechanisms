@@ -48,6 +48,7 @@ test("stored data sources put each claim's CFDE datasets in the Source column, p
     "dapper:Claim.one": ["dapper:Dataset.gtex", "dapper:Dataset.ncbi", "dapper:Dataset.lincs"],
     "dapper:Claim.four": ["dapper:Dataset.gtex", "dapper:Dataset.ncbi", "dapper:Dataset.lincs"],
   });
+  assert.deepEqual([...sources.unverifiedClaims], ["dapper:Claim.two"]);
   const gtex = sources.datasets[0];
   assert.deepEqual(gtex.claims, ["dapper:Claim.one", "dapper:Claim.four"]);
   assert.deepEqual(gtex.via, ["Psychiatric disorders mechanism Factor2", "claim 1"]);
@@ -76,6 +77,7 @@ test("untraced, failed and malformed data sources draw no datasets", () => {
     const sources = cfdeSources({ status, ...(status === "unavailable" ? { error: { code: "TRACE_TIMEOUT" } } : {}) }, claims)!;
     assert.equal(sources.status, status);
     assert.deepEqual([sources.datasets, sources.edges, sources.claimDatasets.size], [[], [], 0]);
+    assert.deepEqual([...sources.unverifiedClaims].sort(), claims.map(claim => claim.id).sort());
   }
   const complete = cfdeSources({ ...dataSources, status: "complete", coverage: { trace_count: 6, counts_are_lower_bounds: false, issue_counts: {} } }, claims)!;
   assert.equal(complete.lowerBound, false);

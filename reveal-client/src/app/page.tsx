@@ -202,8 +202,9 @@ function directionPaint(direction: string) {
   if (direction === "DISPUTES") return { stroke: "#f3ccc8", width: 4 };
   return { stroke: "#b7b9be", width: 1 };
 }
-// cfde: how many CFDE datasets a claim reaches; dataset: a CFDE dataset in the Source column.
-type AccountNode = { id: string; label: string; title: string; source: string; cfde?: number; dataset?: CfdeDataset };
+// cfde: how many CFDE datasets a claim reaches. cfdeUnverified: the saved trace did not resolve this claim.
+// dataset: a CFDE dataset in the Source column.
+type AccountNode = { id: string; label: string; title: string; source: string; cfde?: number; cfdeUnverified?: boolean; dataset?: CfdeDataset };
 function graphSource(source: string) {
   const value = source.toLowerCase();
   if (value.includes("biomarker")) return "BiomarkerKG";
@@ -279,10 +280,15 @@ function accountGraph(data: unknown) {
   const cfde = cfdeSources(data.data_sources, claimLinks);
   const datasetNodes: AccountNode[] = (cfde?.datasets || []).map(dataset => ({ id: "dataset:" + dataset.id, label: dataset.name, title: datasetTitle(dataset, !!cfde?.lowerBound), source: "", dataset }));
   for (const node of claimNodes) {
-    const reached = cfde?.claimDatasets.get(node.id.slice("claim:".length));
-    if (!reached?.length) continue;
-    node.cfde = reached.length;
-    node.title += "\n\nSupported by CFDE datasets: " + reached.map(id => cfde?.datasets.find(item => item.id === id)?.name || id).join("; ");
+    const claimId = node.id.slice("claim:".length);
+    const reached = cfde?.claimDatasets.get(claimId);
+    if (reached?.length) {
+      node.cfde = reached.length;
+      node.title += "\n\nSupported by CFDE datasets: " + reached.map(id => cfde?.datasets.find(item => item.id === id)?.name || id).join("; ");
+    } else if (cfde?.unverifiedClaims.has(claimId)) {
+      node.cfdeUnverified = true;
+      node.title += "\n\nCannot verify CFDE support. The saved lineage for this claim did not resolve.";
+    }
   }
   for (const edge of cfde?.edges || []) edges.push({ ...edge, tone: "cfde", curve: true });
   const cfdeStatus: DataSourcesStatus | null = cfde?.status || null;
@@ -312,6 +318,7 @@ function AccountNodeView({ node }: { node: AccountNode }) {
     {node.dataset ? <DatasetName dataset={node.dataset} /> : <span>{node.label}</span>}{node.source && <small>{node.source}</small>}
     {!!node.dataset?.organizations.length && <div className="account-dataset-orgs" aria-label="Credited organizations">{node.dataset.organizations.map(item => <OrganizationMark organization={item} key={item.id} />)}</div>}
     {!!node.cfde && <ul className="net-context-bubbles account-cfde-bubble" aria-label="CFDE support"><li>CFDE supported · {node.cfde} dataset{node.cfde === 1 ? "" : "s"}</li></ul>}
+    {node.cfdeUnverified && <ul className="net-context-bubbles account-cfde-bubble is-unverified" aria-label="CFDE support"><li>Cannot verify CFDE support</li></ul>}
     {popup && <div className="account-node-pop" style={{ top: popup.top, left: popup.left }} role="tooltip">{text}</div>}
   </article>;
 }

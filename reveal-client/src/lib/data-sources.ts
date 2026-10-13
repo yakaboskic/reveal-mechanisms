@@ -16,7 +16,7 @@ export type CfdeDataset = {
   organizations: CreditedOrganization[];
 };
 export type CfdeEdge = { from: string; to: string; key: string };
-export type CfdeSources = { status: DataSourcesStatus; datasets: CfdeDataset[]; claimDatasets: Map<string, string[]>; edges: CfdeEdge[]; lowerBound: boolean };
+export type CfdeSources = { status: DataSourcesStatus; datasets: CfdeDataset[]; claimDatasets: Map<string, string[]>; edges: CfdeEdge[]; lowerBound: boolean; unverifiedClaims: Set<string> };
 
 const statuses: DataSourcesStatus[] = ["complete", "incomplete", "unavailable", "not_traced"];
 const roleNames: Record<string, string> = { data_input: "primary data", metadata_input: "gene-identifier mapping" };
@@ -82,7 +82,17 @@ export function cfdeSources(value: unknown, claims: { id: string; evidence: stri
   const ordered = [...datasets.values()].map(({ credits, ...dataset }) => ({ ...dataset,
     organizations: [...credits].map(([key, roles]) => ({ id: key, name: named.get(key)?.name || null, ror: named.get(key)?.ror || null, roles: [...roles].sort() })) }))
     .sort((a, b) => primary(a) - primary(b) || b.claims.length - a.claims.length || a.name.localeCompare(b.name));
-  return { status: sources.status, datasets: ordered, claimDatasets, edges: [...edges.values()],
+  // An incomplete claim record, or a trace that never finished, does not show that CFDE support is absent.
+  const unverifiedClaims = new Set<string>();
+  if (sources.status === "unavailable" || sources.status === "not_traced") {
+    for (const claim of claims) unverifiedClaims.add(claim.id);
+  } else {
+    for (const claim of sources.claims || []) {
+      if (!graph.has(claim.claim_id) || (claim.datasets || []).length || claim.resolution !== "incomplete") continue;
+      unverifiedClaims.add(claim.claim_id);
+    }
+  }
+  return { status: sources.status, datasets: ordered, claimDatasets, edges: [...edges.values()], unverifiedClaims,
     lowerBound: sources.status === "incomplete" || !!sources.coverage?.counts_are_lower_bounds };
 }
 

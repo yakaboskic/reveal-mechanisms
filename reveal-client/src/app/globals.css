@@ -387,6 +387,7 @@ a.account-dataset-name:hover { color:var(--blue); text-decoration:underline; }
 .account-org-logo.is-wide { width:auto; max-width:150px; }
 .account-org-initials { display:inline-grid; place-items:center; width:26px; height:26px; border-radius:50%; background:#e7f3ec; color:#1f7a4d; font-size:11px; font-weight:700; text-decoration:none; }
 .net-context-bubbles.account-cfde-bubble { margin-top:.5rem; }
+.net-context-bubbles.account-cfde-bubble.is-unverified li { background:#f3f3f1; color:var(--muted); border-color:#dddddd; }
 .loading-tabs [role="tablist"] { display:flex; gap:.2rem; padding:.22rem; background:var(--base); border-radius:8px; }
 .loading-tabs [role="tab"] { flex:1; background:transparent; color:var(--muted); border-color:transparent; border-radius:6px; padding:.4rem .5rem; font-size:13px; font-weight:650; box-shadow:none; }
 .loading-tabs [role="tab"]:hover:not(:disabled) { background:transparent; color:var(--ink); border-color:transparent; }
