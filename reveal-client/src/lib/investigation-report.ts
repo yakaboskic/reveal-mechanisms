@@ -4,25 +4,34 @@
 const reportStyle = `
 :root { color-scheme:light; --base:#f6f5f2; --ink:#33363d; --blue:#2c5c97; --orange:#e07b39; --orange-dark:#c2662b; --orange-soft:#fbeee3; --muted:#6b6b6b; --line:#e6e1d6; --error:#b3261e; }
 * { box-sizing:border-box; }
-body { margin:0; background:var(--base); color:var(--ink); font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif; font-size:15px; line-height:1.55; }
-main.report { width:100%; margin:28px auto; background:white; border:1px solid var(--line); border-radius:8px; padding:1.15rem 1.1rem 1.4rem; }
+body { margin:0; background:var(--base); color:var(--ink); font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Arial,sans-serif; font-size:15px; line-height:1.6; }
+main.report { width:100%; margin:0 auto; background:white; border:0; border-radius:0; padding:2rem 2.25rem 3rem; }
 h3,h4,p { margin:0; }
-h3 { font-size:17px; font-weight:650; line-height:1.4; }
-h4 { font-size:16px; font-weight:650; }
-p + p { margin-top:.7rem; }
-ul { margin:.5rem 0; padding-left:1.35rem; }
+h3 { font-size:20px; font-weight:650; letter-spacing:-.3px; line-height:1.35; }
+h4 { font-size:15px; font-weight:650; line-height:1.4; }
+p + p { margin-top:.75rem; }
+ul { margin:.45rem 0 .2rem; padding-left:1.2rem; }
+li { margin:.4rem 0; line-height:1.55; }
+li::marker { color:var(--orange); }
 a { color:var(--blue); text-underline-offset:3px; }
-.report-fields p { margin:.45rem 0 .15rem; }
-.report-dapper { margin:20px 0; }
-.report-dapper summary { cursor:pointer; font-weight:650; }
-.report-dapper p { margin:.75rem 0 0; }
-.report-dapper pre { margin:.75rem 0 0; max-height:none; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; line-height:1.45; background:var(--base); padding:.85rem; border-radius:4px; }
+.report-fields { padding-bottom:.15rem; }
+.report-fields p { margin:.55rem 0 0; font-size:16px; line-height:1.5; }
+.report-fields p:first-child { margin-top:0; }
+.report-dapper { margin:20px 0; border:1px solid var(--line); border-radius:8px; background:var(--base); }
+.report-dapper summary { display:flex; align-items:center; gap:.7rem; padding:.8rem 1rem; cursor:pointer; color:var(--ink); font-size:14px; font-weight:650; list-style:none; }
+.report-dapper summary::-webkit-details-marker { display:none; }
+.report-dapper summary::before { content:""; flex:none; width:.42rem; height:.42rem; margin-top:-.15rem; border:solid var(--ink); border-width:0 1.6px 1.6px 0; transform:rotate(-45deg); }
+.report-dapper[open] summary { border-bottom:1px solid var(--line); }
+.report-dapper[open] summary::before { margin-top:.15rem; transform:rotate(45deg); }
+.report-dapper p { margin:0; padding:.9rem 1rem 1rem; color:var(--muted); font-size:14px; }
+.report-dapper pre { margin:0; max-height:32rem; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:12px; line-height:1.5; background:white; padding:1rem 1.05rem 1.1rem; border-radius:0 0 8px 8px; }
 .report-fields strong,.activity-status-row > strong { font-size:13px; font-weight:650; }
-.report-block + .report-block { margin-top:1.35rem; padding-top:1.15rem; border-top:2px solid var(--line); }
-.feasibility-report { display:grid; gap:.15rem; margin:0; }
-.feasibility-report h3 { margin:0 0 .45rem; }
-.feasibility-report h4 { margin:.9rem 0 .15rem; font-size:14px; }
-.feasibility-report ul { margin:.15rem 0 .2rem; }
+.report-block + .report-block { margin-top:1.6rem; padding-top:1.35rem; border-top:1px solid var(--line); }
+.feasibility-report { display:grid; gap:.2rem; margin:0; }
+.feasibility-report h3 { margin:0 0 .7rem; }
+.feasibility-report h4 { margin:1.15rem 0 .2rem; font-size:14px; color:var(--orange-dark); }
+.feasibility-report p { font-size:15px; line-height:1.65; }
+.feasibility-report ul { margin:.2rem 0 .15rem; }
 .activity-status-row { display:flex; align-items:center; flex-wrap:wrap; gap:.45rem .55rem; margin:.35rem 0 .7rem; font-weight:400; }
 .activity-status-row p { margin:0; font-size:14px; font-weight:400; line-height:28px; }
 .activity-status-row .status { display:inline-flex; align-items:center; box-sizing:border-box; height:28px; padding-top:0; padding-bottom:0; font-weight:400; line-height:1; }
@@ -32,11 +41,10 @@ a { color:var(--blue); text-underline-offset:3px; }
 .status.running { color:var(--orange-dark); background:var(--orange-soft); }
 .notice { background:var(--orange-soft); border:1px solid #f0d3bc; border-radius:4px; padding:.7rem .9rem; margin-bottom:1rem; font-size:14px; }
 .muted { color:var(--muted); }
-.results { padding-top:1.35rem; margin-top:1.2rem; border-top:2px solid var(--line); }
-.results > h3 { margin-bottom:1rem; }
-.result-record h4 { margin-bottom:.7rem; }
-.result-record p { font-size:14px; }
-.research-text { line-height:1.75; }
+.results { padding-top:1.35rem; margin-top:1.35rem; border-top:1px solid var(--line); }
+.results > h3 { margin-bottom:.85rem; }
+.result-record h4 { margin-bottom:.7rem; font-size:16px; }
+.result-record p,.research-text { font-size:15px; line-height:1.7; }
 .outcome-section { margin-top:.85rem; font-size:14px; }
 .scope-note { border-left:3px solid var(--orange); padding-left:.7rem; margin-top:1rem; color:#6b4e32; }
 .paragraph-result { margin-top:1.35rem; }
@@ -50,8 +58,8 @@ a { color:var(--blue); text-underline-offset:3px; }
 .account-swatch.dispute { background:#f3ccc8; }
 .account-swatch.plain { background:#b7b9be; }
 .account-swatch.cfde { background:repeating-linear-gradient(90deg,#8cc3a5 0 6px,transparent 6px 10px); }
-.account-net-scroll { overflow:visible; }
-.account-net { position:relative; display:grid; grid-template-columns:repeat(4,minmax(8.75rem,1fr)); column-gap:2rem; align-items:center; min-width:40rem; }
+.account-net-scroll { max-width:100%; overflow-x:auto; overflow-y:hidden; }
+.account-net { position:relative; display:block; overflow:hidden; }
 .account-net-col { position:relative; z-index:1; display:flex; flex-direction:column; justify-content:center; min-width:0; }
 .account-net-col > h3 { margin:0 0 25px; color:var(--muted); font-size:12px; font-weight:650; line-height:1.3; text-align:center; }
 .account-net-pad-right { padding-right:16px; }
@@ -108,18 +116,58 @@ async function inlineImages(root: ParentNode) {
   }));
 }
 
+/** The saved graph keeps the on-screen geometry. Edges are already drawn in that box, so each node and
+ * heading is pinned to the same rectangle and the box keeps that height. A later reflow would move the
+ * cards off the lines and let them cover the account text. */
+function pinBox(source: HTMLElement, target: HTMLElement, origin: DOMRect) {
+  const box = source.getBoundingClientRect();
+  target.style.position = "absolute";
+  target.style.boxSizing = "border-box";
+  target.style.margin = "0";
+  target.style.zIndex = "1";
+  target.style.left = `${box.left - origin.left}px`;
+  target.style.top = `${box.top - origin.top}px`;
+  target.style.width = `${box.width}px`;
+  target.style.height = `${box.height}px`;
+}
 function freezeGraphs(live: ParentNode, copy: ParentNode) {
   const liveNets = [...live.querySelectorAll<HTMLElement>(".account-net")];
   const copyNets = [...copy.querySelectorAll<HTMLElement>(".account-net")];
   liveNets.forEach((net, index) => {
     const clone = copyNets[index];
-    const box = net.getBoundingClientRect();
-    if (!clone || box.width < 2 || box.height < 2) return;
-    const width = `${Math.round(box.width)}px`;
-    const height = `${Math.round(box.height)}px`;
-    clone.style.width = width;
-    clone.style.minWidth = width;
-    clone.style.height = height;
+    const origin = net.getBoundingClientRect();
+    if (!clone || origin.width < 2 || origin.height < 2) return;
+    clone.style.display = "block";
+    clone.style.position = "relative";
+    clone.style.overflow = "hidden";
+    clone.style.width = `${origin.width}px`;
+    clone.style.height = `${origin.height}px`;
+    clone.style.minWidth = "0";
+    clone.querySelectorAll<HTMLElement>(".account-net-col").forEach(column => {
+      column.style.position = "static";
+      column.style.display = "block";
+      column.style.height = "0";
+      column.style.minWidth = "0";
+      column.style.padding = "0";
+      column.style.zIndex = "auto";
+    });
+    const pin = (selector: string) => {
+      const sources = [...net.querySelectorAll<HTMLElement>(selector)];
+      const targets = [...clone.querySelectorAll<HTMLElement>(selector)];
+      sources.forEach((source, item) => { const target = targets[item]; if (target) pinBox(source, target, origin); });
+    };
+    pin(".account-node");
+    pin(".account-net-col > h3");
+    const svg = clone.querySelector("svg");
+    if (svg instanceof SVGElement) {
+      svg.setAttribute("width", String(origin.width));
+      svg.setAttribute("height", String(origin.height));
+      svg.style.position = "absolute";
+      svg.style.left = "0";
+      svg.style.top = "0";
+      svg.style.width = `${origin.width}px`;
+      svg.style.height = `${origin.height}px`;
+    }
   });
 }
 
