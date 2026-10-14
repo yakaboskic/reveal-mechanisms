@@ -142,11 +142,12 @@ def setup(request):
             if request.get('research_context') != context:
                 raise ValueError('Research context differs from the frozen seed')
             runtime['research_context'] = context
-        from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256
+        from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256
         contract_sha256 = pinned_contract_sha256(frozen)
         prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
                                  contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen),
-                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')))
+                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')),
+                                 kit_version=pinned_kit_version(frozen))
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())

@@ -217,7 +217,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
         files['input/evidence-package.json'] = data
-        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt, pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256,
+        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt, pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256,
                                     validate_dispatch_budget, validate_file_input)
         budget_path = request.input_path.parent / BUDGET_FILENAME
         view_path = request.input_path.parent / VIEW_FILENAME
@@ -247,7 +247,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                     validate_file_input(data, json.loads(manifest_data),
                                         research_prompt(request.selected_graphs, request.validation_feedback, progressive=value.get('retrieval_mode') == 'progressive',
                                                         contract_sha256=pinned_contract_sha256(value), skeleton_sha256=pinned_skeleton_sha256(value),
-                                                        claim_structure_sha256=pinned_claim_structure_sha256(value), lightning_audit=bool(value.get('lightning_audit'))))
+                                                        claim_structure_sha256=pinned_claim_structure_sha256(value), lightning_audit=bool(value.get('lightning_audit')),
+                                                        kit_version=pinned_kit_version(value)))
                     files['input/evidence-input.json'] = manifest_data
                 frozen_view = frozen_input.get('dispatch_view')
                 if frozen_view:

@@ -16,7 +16,8 @@ from unittest.mock import patch
 from reveal_backend import research_seed
 from reveal_backend.acceptance import claim_structure_record
 from reveal_backend.authoring_structure import _normalized_finding, diagnostic_response
-from reveal_backend.claim_suggestions import BIOLINK, FAMILIES, GAP_RELATION, LEGACY, OBO, PROV, claim_structure, factor_traits, mentions
+from reveal_backend.claim_suggestions import (BIOLINK, FAMILIES, GAP_RELATION, LEGACY, METRIC_FAMILY, OBO, PROV, RELEASE_TOOLS, TEMPLATES, claim_structure,
+                                              factor_traits, mentions)
 from reveal_backend.evidence_package import canonical_json, decode
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -25,6 +26,7 @@ FACTOR = 'dapper:Mechanism.' + 'F' * 32
 SET = 'dapper:GeneSet.' + 'S' * 32
 FILE = 'dapper:File.' + 'C' * 32
 TRAIT = 'KPN.TRAIT:0000398'
+OTHER = 'KPN.TRAIT:0000001'   # a linked phenotype other than the factor's own fitted trait (T2D)
 INS, C10, C10_UPPER = 'HGNC.SYMBOL:INS', 'HGNC.SYMBOL:C10orf71', 'HGNC.SYMBOL:C10ORF71'
 FAMILY_CHECKS = {'atomic-result-kind', 'atomic-triple', 'atomic-orientation', 'atomic-endpoints', 'atomic-predicate', 'atomic-score',
                  'atomic-capture', 'atomic-single-fact', 'atomic-value-in-statement'}
@@ -83,6 +85,11 @@ class Account:
         return self.claim(name, **{'statement': 'Gene set S is associated with T2D (beta_uncorrected 1.62).', 'triple': (SET, 'obo:RO_0002610', TRAIT),
                                    'scores': [('beta_uncorrected', 'EFFECT_ESTIMATE', 1.62)], 'derived': (FILE, SET), **changes})
 
+    def factor_trait(self, name='factor-trait', trait=OTHER, **changes):
+        return self.claim(name, **{'statement': 'Factor Factor8 is linked to CADinT2D (phewas_beta 0.0412, phewas_q 0.0031).',
+                                   'triple': (FACTOR, 'obo:RO_0002610', trait),
+                                   'scores': [('phewas_beta', 'EFFECT_ESTIMATE', 0.0412), ('phewas_q', 'SCORE', 0.0031)], **changes})
+
     def gap(self, cites, name='gap', subject=C10, obj=GAP, statement="C10orf71 links Factor8, T2D and the gap within the factor's fit."):
         return self.claim(name, statement, (subject, GAP_RELATION, obj), kind='BIOLOGICAL_INTERPRETATION', derived=(), cites=cites)
 
@@ -105,13 +112,13 @@ def counted(result):
 
 class ClassificationTests(unittest.TestCase):
     def test_standard_families_and_a_gap_synthesis_conform(self):
-        account = Account().factor_gene().phenotype_gene().factor_gene_set().gene_gene_set().gene_set_trait()
+        account = Account().factor_gene().phenotype_gene().factor_gene_set().gene_gene_set().gene_set_trait().factor_trait()
         result = account.gap(['factor-gene', 'gene-gene-set', 'phenotype-gene', 'factor-gene-set']).structure()
         summary = result['summary']
         self.assertEqual({family: value for family, value in summary['families'].items()},
                          {family: {'count': 1, 'conformant': 1} for family in summary['families']})
         self.assertEqual(summary['synthesis'], {'count': 1, 'coherent': 1, 'gap_relevance': 1})
-        self.assertEqual((summary['other'], summary['claims'], summary['conformance_rate'], summary['issues']), (0, 6, 1.0, {}))
+        self.assertEqual((summary['other'], summary['claims'], summary['conformance_rate'], summary['issues']), (0, 7, 1.0, {}))
         self.assertEqual([item['check'] for item in result['suggestions']], ['claim-structure-summary'])
         self.assertTrue(all(item['severity'] == 'suggestion' for item in result['suggestions']))
 
@@ -376,6 +383,154 @@ class SuggestionTests(unittest.TestCase):
             self.assertEqual(checks(result), {'claim-structure-summary'})
         # The example factor's own trait is on the path, and the synthesis says so.
         self.assertEqual(factor_traits(example, context['dapper_context'], context), {example['mechanisms'][0]['id']: '0000000'})
+
+
+def release(context=None, availability='supported', **operations):
+    """A package whose frozen catalog lists the release readers (and any other named operation) with an availability."""
+    context = context or package()
+    context['capabilities']['operations'] = [{'name': name, 'availability': availability} for name in RELEASE_TOOLS] + \
+        [{'name': name, 'availability': value} for name, value in operations.items()]
+    return context
+
+
+def hint(result):
+    return next((item for item in result['suggestions'] if item['check'] == 'family-missing'), None)
+
+
+class ReleaseFamilyTests(unittest.TestCase):
+    """Release gene set-trait betas and factor-trait links: the kind map, the new family, exclusions, the bridge and the hints."""
+    def test_every_family_has_a_template_a_kind_map_and_reaches_its_suggestions(self):
+        from reveal_backend.source_validation import METRIC_KINDS
+        self.assertEqual(set(TEMPLATES), set(FAMILIES))
+        for family, spec in FAMILIES.items():
+            self.assertEqual(spec[3], tuple(spec[4]))
+            # The advisory family and the source-fidelity gate agree on every metric's kind.
+            for metric, kind in spec[4].items(): self.assertEqual(METRIC_KINDS[metric], kind, metric)
+        for metric, family in METRIC_FAMILY.items(): self.assertIn(metric, FAMILIES[family][4])
+        # A missing TEMPLATES (or other) key would raise, and lint would drop every suggestion; each family reports its own.
+        for family in FAMILIES:
+            with self.subTest(family=family):
+                result = getattr(Account(), family)(name='atom', kind='BIOLOGICAL_INTERPRETATION', statement='No value here.').structure(release())
+                self.assertEqual(counted(result), {family: 1})
+                found = {item['check'] for item in result['suggestions'] if item.get('family') == family}
+                self.assertIn('atomic-result-kind', found)
+                if FAMILIES[family][3]:
+                    value = next(item for item in result['suggestions'] if item['check'] == 'atomic-value-in-statement')
+                    self.assertIn(TEMPLATES[family], value['repair'])
+
+    def test_score_repairs_name_each_metric_with_its_kind(self):
+        expected = {'factor_gene': 'loading or factor_value: LOADING',
+                    'gene_set_trait': 'beta_uncorrected or beta: EFFECT_ESTIMATE; avg_postp: POSTERIOR_PROBABILITY',
+                    'factor_trait': 'phewas_beta: EFFECT_ESTIMATE; nnls_loading: LOADING; phewas_q or phewas_p_onesided: SCORE'}
+        for family, metrics in expected.items():
+            with self.subTest(family=family):
+                result = getattr(Account(), family)(name='atom', scores=[]).structure()
+                score = next(item for item in result['suggestions'] if item['check'] == 'atomic-score')
+                self.assertIn('(' + metrics + ')', score['repair'])
+
+    def test_factor_trait_atoms_orientation_kinds_and_the_own_trait_wording(self):
+        def atom(context=None, **changes):
+            result = Account().factor_trait(name='atom', **changes).structure(context)
+            self.assertEqual(counted(result), {'factor_trait': 1})
+            return checks(result, 'atom') & (FAMILY_CHECKS | {'atomic-within-fit'})
+        self.assertEqual(atom(), set())
+        self.assertEqual(atom(triple=(OTHER, 'obo:RO_0002610', FACTOR)), {'atomic-orientation'})
+        self.assertEqual(atom(triple=(FACTOR, 'RO:0002610', OTHER)), {'atomic-predicate'})
+        self.assertEqual(atom(triple=('dapper:Mechanism.' + 'U' * 32, 'obo:RO_0002610', OTHER)), {'atomic-endpoints'})
+        self.assertEqual(atom(scores=[('phewas_q', 'EFFECT_ESTIMATE', 0.0031)]), {'atomic-score'})
+        self.assertEqual(atom(scores=[('nnls_loading', 'LOADING', 0.218)], statement='Factor Factor8 has nnls_loading 0.218 on CADinT2D.'), set())
+        self.assertEqual(atom(scores=[('phewas_p_onesided', 'SCORE', 1.2e-05)], statement='Factor Factor8 links CADinT2D (p 1.2e-05).'), set())
+        self.assertEqual(atom(scores=[('phewas_q', 'SCORE', 0.0031), ('phewas_q', 'SCORE', 0.04)]), {'atomic-single-fact'})
+        self.assertEqual(atom(scores=[('phewas_q', 'SCORE', 0.0031), ('beta', 'EFFECT_ESTIMATE', 1.62)]), {'atomic-single-fact'})
+        # A link to the factor's own fitted trait keeps the within-fit wording; a package without the fit cannot tell.
+        own = dict(trait=TRAIT, statement='Factor Factor8 is linked to T2D (phewas_beta 0.0412, phewas_q 0.0031).')
+        self.assertEqual(atom(**own), {'atomic-within-fit'})
+        self.assertEqual(atom(**{**own, 'statement': "Factor Factor8 is linked to T2D within the factor's fit (phewas_q 0.0031)."}), set())
+        self.assertEqual(atom(context=package(traits=False), **own), set())
+        within = next(item for item in Account().factor_trait(**own).structure()['suggestions'] if item['check'] == 'atomic-within-fit')
+        self.assertEqual((within['family'], within['claims']), ('factor_trait', ['urn:test:factor-trait']))
+        # Release betas: avg_postp is a posterior probability of the same gene set-trait row.
+        for kind, expected in (('POSTERIOR_PROBABILITY', set()), ('SCORE', {'atomic-score'})):
+            result = Account().gene_set_trait(name='atom', scores=[('avg_postp', kind, 0.734)], statement='Gene set S is associated with T2D (avg_postp 0.734).').structure()
+            self.assertEqual((counted(result), checks(result, 'atom') & FAMILY_CHECKS), ({'gene_set_trait': 1}, expected))
+
+    def test_zero_beta_rows_and_phenotypes_without_a_kpn_id_are_never_atomic_claims(self):
+        zero = 'Gene set S has beta_uncorrected 0 for T2D.'
+        for value in (0, 0.0, -0.0):
+            with self.subTest(value=value):
+                for context in (None, package(), release()):
+                    result = Account().gene_set_trait(statement=zero, scores=[('beta_uncorrected', 'EFFECT_ESTIMATE', value), ('beta', 'EFFECT_ESTIMATE', 0.0)]).structure(context)
+                    self.assertEqual(counted(result), {'other': 1})
+                    self.assertFalse(checks(result, 'gene-set-trait'))
+                    self.assertEqual(result['summary']['atomic'], {'count': 0, 'conformant': 0})
+        # Only beta_uncorrected decides: a zero joint beta with a nonzero uncorrected beta is still an association row.
+        result = Account().gene_set_trait(scores=[('beta_uncorrected', 'EFFECT_ESTIMATE', 1.62), ('beta', 'EFFECT_ESTIMATE', 0.0)]).structure()
+        self.assertEqual((counted(result), checks(result, 'gene-set-trait')), ({'gene_set_trait': 1}, set()))
+        self.assertEqual(counted(Account().gene_set_trait(scores=[('beta_uncorrected', 'EFFECT_ESTIMATE', False)]).structure()), {'gene_set_trait': 1})
+        # A zero row does not join a synthesis path: the synthesis below has one family.
+        account = Account().factor_gene_set().gene_set_trait(statement=zero, scores=[('beta_uncorrected', 'EFFECT_ESTIMATE', 0.0)])
+        result = account.claim('involved', 'Gene set S is involved in Factor8 relevant to T2D.', (SET, 'obo:RO_0002331', FACTOR), kind='BIOLOGICAL_INTERPRETATION',
+                               derived=(), cites=['factor-gene-set', 'gene-set-trait']).structure()
+        self.assertEqual(checks(result, 'involved'), {'synthesis-families'})
+        # A factor link to a phenotype without a KPN trait id is never hinted toward a KPN.TRAIT endpoint.
+        for label, triple in (('no triple', None), ('urn phenotype', (FACTOR, 'obo:RO_0002610', 'urn:reveal:phenotype:SYNTH2')),
+                              ('another ontology', (FACTOR, 'obo:RO_0002610', 'MONDO:0005148'))):
+            with self.subTest(label):
+                result = Account().factor_trait(triple=triple).structure(release())
+                self.assertEqual(counted(result), {'other': 1})
+                self.assertNotIn('KPN.TRAIT:<NNNNNNN>', json.dumps(result))
+        # The phenotype has a KPN id: an unrecognized factor endpoint is still a factor-trait Claim to repair.
+        result = Account().factor_trait(name='atom', triple=('urn:cfde:factor:F8', 'obo:RO_0002610', OTHER)).structure()
+        self.assertEqual((counted(result), checks(result, 'atom') & FAMILY_CHECKS), ({'factor_trait': 1}, {'atomic-endpoints'}))
+
+    def test_factor_phenotype_bridge_cites_factor_trait_atoms(self):
+        def bridge(cites, trait=OTHER, statement="Factor8 and CADinT2D share C10orf71 beside the factor's PheWAS link.", account=None):
+            account = account or Account().factor_gene().phenotype_gene(trait=trait).factor_trait(
+                trait=trait, statement="Factor Factor8 is linked to the trait within the factor's fit (phewas_beta 0.0412).")
+            result = account.claim('bridge', statement, (FACTOR, 'obo:RO_0002610', trait), kind='BIOLOGICAL_INTERPRETATION', derived=(), cites=cites).structure()
+            return result, checks(result, 'bridge')
+        result, found = bridge(['factor-gene', 'phenotype-gene', 'factor-trait'])
+        self.assertEqual((found, result['summary']['synthesis']['coherent'], result['summary']['families']['factor_trait']), (set(), 1, {'count': 1, 'conformant': 1}))
+        # The factor-trait Claim evidences the bridge directly; one gene on the factor completes the path.
+        self.assertEqual(bridge(['factor-trait', 'factor-gene'])[1], set())
+        self.assertEqual(bridge(['factor-trait'])[1], {'synthesis-families'})
+        # Back to the factor's own trait it is within the fit, not an independent bridge.
+        self.assertEqual(bridge(['factor-trait', 'factor-gene'], trait=TRAIT)[1], {'synthesis-within-fit'})
+        self.assertEqual(bridge(['factor-trait', 'factor-gene'], trait=TRAIT, statement="Factor8 and T2D, within the factor's fit.")[1], set())
+        # A link to another phenotype off the cited path is not a coherent bridge.
+        account = Account().factor_gene().factor_trait(trait='KPN.TRAIT:0000002')
+        self.assertEqual(bridge(['factor-trait', 'factor-gene'], account=account)[1], {'synthesis-path'})
+
+    def test_release_readers_are_hinted_only_when_the_frozen_catalog_serves_them(self):
+        from reveal_backend.reference_generation import KPN_MODEL
+        from reveal_backend.research_data import capability_catalog
+        account = Account().factor_gene()
+        betas = 'gene set-trait via get_trait_gene_sets (then get_gene_set) or get_gene_set_traits (with get_gene_set)'
+        links = 'factor-trait via get_factor_trait_links or get_trait_factor_links (then get_factor), phenotypes with a KPN trait id only'
+        found = hint(account.structure(release()))
+        self.assertEqual(found['message'], 'No atomic Claims for: phenotype-gene, factor-gene set, gene-gene set, gene set-trait, factor-trait.')
+        self.assertIn(betas + ' or get_pigean_gene_set_phenotype, nonzero beta_uncorrected rows only', found['repair'])
+        self.assertTrue(found['repair'].endswith('; ' + links + '.'))
+        # Without a package nothing is blocked.
+        self.assertEqual(hint(account.structure(use_package=False))['repair'], found['repair'])
+        # The set-trait family no longer depends on the BioIndex gate.
+        local = capability_catalog({'model': KPN_MODEL}, phenotype_verified=False)
+        context = release(package()); context['capabilities'] = {**local, 'operations': local['operations'] + context['capabilities']['operations']}
+        found = hint(account.structure(context))
+        self.assertEqual(found['message'], 'No atomic Claims for: factor-gene set, gene-gene set, gene set-trait, factor-trait.')
+        self.assertIn(betas + ', nonzero beta_uncorrected rows only', found['repair'])
+        self.assertNotIn('get_pigean', found['repair'])
+        # A catalog frozen before the release readers (or one marking them not_stored) hints neither release route.
+        for label, context in {'absent': package(), 'not_stored': release(availability='not_stored'), 'local catalog': {'capabilities': local}}.items():
+            with self.subTest(label):
+                found = hint(account.structure(context))
+                self.assertNotIn('factor-trait', found['message'])
+                for tool in RELEASE_TOOLS: self.assertNotIn(tool, found['repair'])
+        self.assertIn('gene set-trait via get_pigean_gene_set_phenotype, nonzero beta_uncorrected rows only', hint(account.structure(package()))['repair'])
+        # Each route needs every tool it names: without get_factor only the direct factor route remains.
+        self.assertIn('factor-trait via get_factor_trait_links, phenotypes', hint(account.structure(release(get_factor='not_stored')))['repair'])
+        without = hint(account.structure(release(get_gene_set='not_stored')))['repair']
+        self.assertIn('gene set-trait via get_pigean_gene_set_phenotype, nonzero', without); self.assertNotIn('get_trait_gene_sets', without)
 
 
 class HostedDiagnosticsTests(unittest.TestCase):

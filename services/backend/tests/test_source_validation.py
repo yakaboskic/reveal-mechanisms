@@ -75,6 +75,20 @@ class SourceValidationTests(unittest.TestCase):
                     self.document['claim_scores'][0]['score_kind'] = kind
                     self.assertIn('source-metric-kind', self.checks())
 
+    def test_release_beta_and_factor_trait_metrics_keep_their_kinds(self):
+        rows = {'beta_uncorrected': ('EFFECT_ESTIMATE', 0.0213), 'beta': ('EFFECT_ESTIMATE', 0.0102), 'avg_postp': ('POSTERIOR_PROBABILITY', 0.734),
+                'phewas_beta': ('EFFECT_ESTIMATE', 0.0412), 'nnls_loading': ('LOADING', 0.218), 'phewas_q': ('SCORE', 0.0031),
+                'phewas_p_onesided': ('SCORE', 1.2e-05)}
+        self.sources = {'file': {'result': {'items': [{metric: value for metric, (_, value) in rows.items()}]}}}
+        self.document['evidence_items'][0].update(context='Captured /result/items/0.', snippet='')
+        for metric, (kind, value) in rows.items():
+            with self.subTest(metric=metric):
+                self.document['claim_scores'][0].update(metric=metric, value=value, score_kind=kind)
+                self.assertEqual(self.checks(), set())
+                for other in {'EFFECT_ESTIMATE', 'LOADING', 'POSTERIOR_PROBABILITY', 'PROBABILITY', 'SCORE'} - {kind}:
+                    self.document['claim_scores'][0]['score_kind'] = other
+                    self.assertIn('source-metric-kind', self.checks())
+
     def test_metric_fidelity_uses_exact_decimal_values_before_float_rounding(self):
         source = b'{"data":[{"loading":0.10000000000000000000009}]}'
         authored = b'{"claims":[{"id":"claim","has_evidence":["evidence"],"has_score":["score"]}],"claim_scores":[{"id":"score","metric":"loading","value":0.10000000000000000000009,"score_kind":"LOADING"}],"evidence_items":[{"id":"evidence","was_derived_from":["file"],"context":"/data/0"}]}'

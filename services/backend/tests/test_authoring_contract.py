@@ -75,7 +75,7 @@ class AuthoringContractTests(unittest.TestCase):
         original=bundle['documents'][0]
         doc=json.loads((ROOT/'services/backend/agent-runtime/authoring-skeleton.json').read_bytes())
         self.assertEqual(set(doc), {'prefixes','scientific_accounts','propositions','claims','evidence_items','claim_scores'})
-        self.assertEqual((len(doc['scientific_accounts']),len(doc['claims']),len(doc['claim_scores'])),(1,6,5))
+        self.assertEqual((len(doc['scientific_accounts']),len(doc['claims']),len(doc['claim_scores'])),(1,7,7))
         for group,rows in doc.items():
             for node in rows if isinstance(rows,list) else ():
                 self.assertFalse({'was_generated_by','was_attributed_to','source_ref','source_locator','subject_proposition','required_question'} & set(node))
@@ -177,7 +177,7 @@ class AuthoringContractTests(unittest.TestCase):
                 summary=result['claim_structure']
                 self.assertEqual({family:value['count'] for family,value in summary['families'].items()},dict.fromkeys(summary['families'],1))
                 self.assertEqual((summary['atomic'],summary['synthesis'],summary['other'],summary['issues']),
-                                 ({'count':5,'conformant':5},{'count':1,'coherent':1,'gap_relevance':1},0,{}))
+                                 ({'count':6,'conformant':6},{'count':1,'coherent':1,'gap_relevance':1},0,{}))
                 self.assertEqual([a['check'] for a in result['advisories'] if a['severity']=='suggestion'],['claim-structure-summary'])
                 props={p['id']:p for p in doc['propositions']}; claims={c['id']:c for c in doc['claims']}
                 gene_set=doc['gene_sets'][0]['id'];source=doc['files'][0]['id']
@@ -207,11 +207,12 @@ class AuthoringContractTests(unittest.TestCase):
         bundle=json.loads((ROOT/'services/backend/agent-runtime/authoring-examples.json').read_bytes())
         doc=bundle['documents'][0]; base=doc['claims'][0]['id'].rpartition(':')[0]+':'
         synthesis=next(item for item in doc['evidence_items'] if item.get('source_claims'))
-        self.assertEqual(synthesis['id'],base+'evidence-6')
+        self.assertEqual(synthesis['id'],base+'evidence-7')
         # Renumber the synthesis below an atomic Claim it cites, whose id then extends the synthesis id.
         for (synthesis_number,atomic),cited in (((1,10),'claim-10'),((3,30),'claim-30')):
+            # The synthesis has no ClaimScore; score-7 belongs to an atomic Claim and keeps its id.
             mapping={base+f'{kind}-{old}':base+f'{kind}-{new}' for kind in ('claim','evidence','proposition','score')
-                     for old,new in ((6,synthesis_number),(atomic//10,atomic))}
+                     for old,new in ((7,synthesis_number),(atomic//10,atomic)) if kind!='score' or old!=7}
             changed=exact_rewrite(doc,mapping)
             cites={item['id']:item.get('source_claims',[]) for item in changed['evidence_items']}
             self.assertIn(base+cited,cites[base+f'evidence-{synthesis_number}'])

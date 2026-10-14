@@ -186,7 +186,7 @@ class LightningContinuationTests(unittest.TestCase):
     def test_hosted_audit_guidance_is_bound_to_the_retained_seed_on_replay(self):
         from reveal_backend.agent_execution import ExecutionRequest
         from reveal_backend.box_adapter import make_bundle
-        from reveal_backend.dispatch_view import (pinned_claim_structure_sha256, pinned_contract_sha256,
+        from reveal_backend.dispatch_view import (pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version,
             pinned_skeleton_sha256, research_prompt, validate_file_input, FILE_INPUT_FILENAME)
         from reveal_backend.evidence_budget import fit_input_budget
         from reveal_backend.evidence_package import EvidenceBuildError, decode
@@ -200,7 +200,7 @@ class LightningContinuationTests(unittest.TestCase):
         metadata = decode((path.parent.parent / FILE_INPUT_FILENAME).read_bytes())
         arguments = {'progressive': True, 'contract_sha256': pinned_contract_sha256(package),
             'skeleton_sha256': pinned_skeleton_sha256(package),
-            'claim_structure_sha256': pinned_claim_structure_sha256(package)}
+            'claim_structure_sha256': pinned_claim_structure_sha256(package), 'kit_version': pinned_kit_version(package)}
         plain = research_prompt([], **arguments)
         self.assertNotIn('lightning_audit', plain)
         with self.assertRaises(EvidenceBuildError): validate_file_input(path.read_bytes(), metadata, plain)

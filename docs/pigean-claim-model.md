@@ -242,14 +242,15 @@ Different model versions change evidence/assessment provenance. For factor-defin
 
 ## 9. Source adapter and review rules
 
-The available source families remain the same:
+The available source families are:
 
 - Gene–factor: BioIndex `pigean-gene-factor`; interactive `factor_gene_direct` where returned.
 - Gene-set–factor: BioIndex `pigean-gene-set-factor`; interactive `factor_gene_set_direct` where returned.
 - Gene–trait: BioIndex `pigean-gene-phenotype` and gene-centered results; captured factor rows can also contain these metrics.
-- Gene-set–trait: BioIndex `pigean-gene-set-phenotype` and gene-set-centered results; captured factor rows can also contain these metrics.
+- Gene-set–trait: BioIndex `pigean-gene-set-phenotype` and gene-set-centered results; captured factor rows can also contain these metrics. Where the seed's capability catalog lists them, `get_trait_gene_sets` and `get_gene_set_traits` serve the reference release's PIGEAN betas mode, which is distinct from the BioIndex small-model values.
+- Factor–trait: where the seed's capability catalog lists them, `get_factor_trait_links` and `get_trait_factor_links` serve the release's eaggl trait linkage and factor-PheWAS links at q ≤ 0.05.
 
-Record each source relationship faithfully, without interpreting unavailable values as zero or repeated retrievals as independent evidence. `factor_value` is a LOADING; `combined` is a method-specific SCORE; `beta` and `beta_uncorrected` are separately named EFFECT_ESTIMATE values. Retain unknown metric semantics in raw artifacts. Pin any normalization, score interpretation or threshold used by an assessment, and retain the mechanism's exact factor source identity and label revision.
+The [evidence claim structure](evidence-claim-structure.md) gives each family's triple and ClaimScores. Record each source relationship faithfully, without interpreting unavailable values as zero or repeated retrievals as independent evidence. `factor_value` is a LOADING; `combined` is a method-specific SCORE; `beta` and `beta_uncorrected` are separately named EFFECT_ESTIMATE values; release `avg_postp` is a POSTERIOR_PROBABILITY; factor–trait `nnls_loading` is a LOADING, `phewas_beta` an EFFECT_ESTIMATE, and `phewas_q` and `phewas_p_onesided` are SCOREs. Retain unknown metric semantics in raw artifacts. Pin any normalization, score interpretation or threshold used by an assessment, and retain the mechanism's exact factor source identity and label revision.
 
 Review must separately check (a) the faithful recording of each source observation, (b) the explanation of its relevance to the biological target, and (c) whether the Claim statement accurately summarizes all its evidence. Mechanism identity is supplied directly by the EAGGL factor. Missing descriptive labels do not block involvement claims; scope mismatches or missing evidence for more specific process/readout/regulatory relationships remain explicit.
 
