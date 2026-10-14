@@ -159,6 +159,24 @@ class TraitDetailTests(unittest.TestCase):
             c.execute('INSERT INTO reveal_ref_phenotypes VALUES(?,?,?,?,?,?,?,?)', ('late', UNKNOWN, None, 'late', None, None, 0, '{}'))
         self.assertEqual(self.get('/v1/traits/' + UNKNOWN)['phenotype'], 'late')
 
+    def test_non_ascii_identifiers_are_not_found_before_any_statement(self):
+        """MySQL refuses (1267, a 503) to compare an ascii_bin id with a non-ASCII value: such an id is unknown or malformed."""
+        arabic = 'KPN.TRAIT:' + '٠٠٠٠٣٩٨'  # Arabic-Indic digits: \d would match them, [0-9] does not
+        for identity in (arabic, 'TNFα', 'Sézary_syndrome_Orphanet_3162'):
+            self.assertEqual(self.get('/v1/traits/' + identity, 404)['code'], 'NOT_FOUND')
+        for source in ('TNFα', 'Sézary_syndrome_Orphanet_3162', 'factor:kpn:٠٠٠٠٣٩٨:eaggl-capped-v1:Factor1'):
+            self.assertEqual(self.links(404, source_id=source)['code'], 'NOT_FOUND')
+        self.assertEqual(self.links(422, trait_id=arabic)['code'], 'INVALID_QUERY')  # outside the contract's ^KPN\.TRAIT:[0-9]{7}$
+        self.assertEqual(self.betas(422, trait_id=arabic)['code'], 'INVALID_QUERY')
+        self.assertEqual(self.betas(422, gene_set_id='dapper:GeneSet.TNFα' + 'a' * 28)['code'], 'INVALID_QUERY')
+        self.assertEqual(self.get('/v1/mechanism-objects/dapper:Mechanism.TNFα', 404)['code'], 'NOT_FOUND')
+        self.assertEqual(self.opened, [])  # no lease: nothing reached MySQL
+        from reveal_backend.reference_generation import FACTOR_KEY_RE, KPN_TRAIT_RE, PUBLIC_ID_RE, parse_public_id
+        self.assertIsNone(KPN_TRAIT_RE.fullmatch(arabic)); self.assertIsNone(FACTOR_KEY_RE.fullmatch(arabic + '::Factor1'))
+        self.assertIsNone(PUBLIC_ID_RE.fullmatch('factor:kpn:٠٠٠٠٣٩٨:eaggl-capped-v1:Factor1'))
+        with self.assertRaises(ValueError): parse_public_id('factor:kpn:٠٠٠٠٣٩٨:eaggl-capped-v1:Factor1')
+        self.assertEqual(self.get('/v1/traits/' + T2D)['kpn_trait_id'], T2D)
+
     def test_every_route_needs_a_published_release(self):
         with sqlite3.connect(self.path) as c: c.execute('DELETE FROM reveal_ref_release')
         for path, params in [('/v1/traits/' + T2D, {}), ('/v1/trait-gene-sets', {'trait_id': T2D}), ('/v1/factor-trait-links', {'source_id': F1})]:

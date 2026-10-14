@@ -78,17 +78,17 @@
           },
           "gnomad": null,
           "trait_links": {
-            "n_phenotypes": 6698,
+            "n_phenotypes": 6697,
             "n_linked": 412,
             "n_linked_kpn_traits": 398,
             "n_linked_atlas_traits": 97,
             "own_trait_q": 2.1e-14,
             "top_linked": [
               {
-                "phenotype": "T2D",
-                "kpn_trait_id": "KPN.TRAIT:0000398",
-                "name": "Type 2 diabetes",
-                "phewas_q": 2.1e-14
+                "phenotype": "Rare_insulinresistance_syndrome_Orphanet_181368",
+                "kpn_trait_id": "KPN.TRAIT:0005995",
+                "name": "Rare insulin-resistance syndrome",
+                "phewas_q": 6.4e-112
               },
               {
                 "phenotype": "HbA1c_example",

@@ -28,10 +28,10 @@
           "scope": "all",
           "sort": "phewas_q",
           "summary": {
-            "n_phenotypes": 6698,
+            "n_phenotypes": 6697,
             "n_linked": 2,
-            "n_linked_kpn_traits": 2,
-            "n_linked_atlas_traits": 1,
+            "n_linked_kpn_traits": 1,
+            "n_linked_atlas_traits": 0,
             "own_trait_q": 4.6e-10
           },
           "total": 2,

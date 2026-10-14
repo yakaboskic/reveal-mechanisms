@@ -26,9 +26,9 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from .auth import Problem
 from .evidence_package import canonical_json, decode, require, sha256
-from .factor_details import GENE_COVERAGE, SET_COVERAGE, LEGACY_COVERAGE
+from .factor_details import GENE_COVERAGE, SET_COVERAGE, LEGACY_COVERAGE, collection_facts, extracted
 from .reference_generation import KPN_MODEL, LEGACY_MODEL, GENERATION_RE, mechanism_node, parse_public_id
-from .reference_lineage import collection_lineage, lineage_closure
+from .reference_lineage import lineage_closure
 from .reference_pin import NO_TABLE, ReleaseUnavailable, current_release, superseded_problem
 from .repository import application_prefix, application_sql
 
@@ -72,8 +72,9 @@ METRICS = {
 # Operation-specific notes appended to the shared loaded-data tool descriptions.
 DESCRIPTIONS = {
     'get_gene_gene_sets': ' Lists CFDE gene sets whose stored membership contains the gene (symbol matched without case; member and'
-        ' source_pointer give the exact stored identifier). With factor_id, only that factor\'s retained projections (per trait in a'
-        ' reload-era generation, per library in a release), with their joint and marginal loadings.',
+        ' source_pointer give the exact stored identifier). With factor_id (recommended), only that factor\'s retained projections (per'
+        ' trait in a reload-era generation, per library in a release), with their joint and marginal loadings. Without it every stored'
+        ' gene set\'s membership is scanned, within a time budget: past it the result is unavailable (scan_budget_exceeded), not empty.',
     'get_trait_gene_sets': ' Lists the PIGEAN gene-set betas of a KPN trait by beta_uncorrected (library keeps one CFDE library; q filters'
         ' the gene-set name). Reference releases only; these are not the BioIndex small-model values.',
     'get_gene_set_traits': ' Lists the KPN traits with a PIGEAN beta for a gene set, by beta_uncorrected. Reference releases only.',
@@ -103,6 +104,12 @@ BETA_COVERAGE = ('PIGEAN betas mode (no outer Gibbs) on each atlas trait\'s PIGE
 LINK_COVERAGE = ('eaggl trait linkage (nnls_loading) and factor-PheWAS (phewas_*), kept at Benjamini-Hochberg q <= 0.05 over every'
     ' factor-phenotype test of the release. A phenotype absent here is unlinked at this threshold, not a negative result.')
 NO_GRAPH = 'A reference release stores no EAGGL factor hierarchy graph.'
+# get_gene_gene_sets without factor_id reads every stored gene set's members (about 1 GB of JSON in a release): MySQL stops
+# the statement at the budget (an optimizer hint; a comment to SQLite) with ER_QUERY_TIMEOUT, an unavailable result.
+SCAN_BUDGET_MS, SCAN_TIMEOUT = 4000, 3024
+SCAN_HINT = f'/*+ MAX_EXECUTION_TIME({SCAN_BUDGET_MS}) */ '
+SCAN_BUDGET_COVERAGE = ('The membership scan of every stored gene set stopped at its time budget, so nothing was observed; this is'
+    ' not a biological negative. Pass factor_id to search one factor\'s retained projections.')
 RELEASE_ONLY = 'Gene-set betas and factor-trait links are stored only in reference releases.'
 # An optional release file absent at publish leaves its table empty (the stored manifest's absent_files).
 RELEASE_FILES = {'get_trait_gene_sets': 'trait_gene_sets.tsv.gz', 'get_gene_set_traits': 'trait_gene_sets.tsv.gz',
@@ -124,6 +131,7 @@ KPN_FACTOR_TEXT_JOIN = ('SELECT f.factor_key,f.public_id,f.eaggl_factor_id,f.kpn
 KPN_FACTOR_TABLES = ['reference_factors', 'eaggl_factors']
 GENE_LOADING_TABLES, SET_LOADING_TABLES = ['eaggl_gene_loadings', 'eaggl_genes'], ['factor_gene_set_projections', 'cfde_gene_sets']
 GENE_ORDER, SET_ORDER = 'l.loading DESC,g.symbol,g.gene_index', 'p.joint_loading DESC,s.gene_set_id'
+RELEASE_SET_ORDER = 'p.joint_loading DESC,p.gene_set_id'  # ties by the projection key (factor_key, gene_set_id)
 SET_COLUMNS = ('gene_set_id', 'name', 'library', 'joint_loading', 'marginal_loading', 'joint_loading_text',
                'marginal_loading_text', 'joint_rank', 'marginal_rank', 'is_joint_top_factor')
 # A release factor by any of its three unique keys. Release statements name the contract tables (application_sql prefixes them).
@@ -174,7 +182,21 @@ def _text(value, name, maximum=250):
 
 def _trait(value):
     trait = _text(value, 'trait_id')
-    return 'KPN.TRAIT:' + trait.rsplit(':', 1)[1] if re.fullmatch(r'trait:kpn:\d{7}', trait) else trait
+    return 'KPN.TRAIT:' + trait.rsplit(':', 1)[1] if re.fullmatch(r'trait:kpn:[0-9]{7}', trait) else trait
+
+
+IDENTIFIERS = ('factor_id', 'trait_id', 'gene_set_id')
+
+
+def _foreign(arguments):
+    """Whether an identifier argument is not ASCII: no ascii_bin id column holds one, and MySQL refuses the comparison (1267),
+    so the identifier is not found, without a statement."""
+    return any(isinstance(arguments.get(key), str) and not arguments[key].isascii() for key in IDENTIFIERS)
+
+
+def _timed_out(error):
+    """MAX_EXECUTION_TIME stopped the statement (MySQL ER_QUERY_TIMEOUT)."""
+    return bool(getattr(error, 'args', None)) and error.args[0] == SCAN_TIMEOUT
 
 
 def _no_table(error):
@@ -413,11 +435,13 @@ class ReferenceQueryService:
         gen, imp, release = generation['generation_id'], generation['eaggl_import_id'], generation.get('source_kind') == RELEASE
         lookup = (lambda values: self._release_factors(connection, values)) if release else \
             (lambda values: self._kpn_factors(connection, gen, imp, values))
-        rows = lookup(identities)
+        # A non-ASCII identity matches no ascii_bin key (_foreign): it is not found, and never sent to MySQL (1267).
+        plain = [identity for identity in identities if identity.isascii()]
+        rows = lookup(plain) if plain else []
         factors, found = {}, []
         for identity in identities:
             matches = [row for row in rows if identity in (row['public_id'], row['factor_key'], row['eaggl_factor_id'])]
-            if not matches:  # an id the exact SQL comparison may still match: the single lookup decides
+            if not matches and identity.isascii():  # an id the exact SQL comparison may still match: the single lookup decides
                 matches = lookup([identity])
             if len(matches) > 1:
                 factors[identity] = Problem(409, 'AMBIGUOUS_IDENTITY', 'The imported factor identifier is ambiguous.'); continue
@@ -427,7 +451,7 @@ class ReferenceQueryService:
         tops = {}
         specs = ((('gene', RELEASE_GENE_TABLES, RELEASE_GENE_COVERAGE, RELEASE_GENE_ORDER, ('symbol', 'loading'),
                    'SELECT %s AS anchor,gene AS symbol,loading FROM reveal_ref_factor_genes WHERE factor_key=%s', 'loading DESC,symbol'),
-                  ('gene_set', RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, SET_ORDER, SET_COLUMNS, 'SELECT %s AS anchor,' + SET_SELECT +
+                  ('gene_set', RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, RELEASE_SET_ORDER, SET_COLUMNS, 'SELECT %s AS anchor,' + SET_SELECT +
                    ' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id WHERE p.factor_key=%s',
                    'joint_loading DESC,gene_set_id')) if release else (
                 ('gene', GENE_LOADING_TABLES, GENE_COVERAGE, GENE_ORDER, ('symbol', 'gene_index', 'loading'),
@@ -478,12 +502,18 @@ class ReferenceQueryService:
             generation = self._pin(connection, generation_id)
             if generation['model'] != KPN_MODEL: return None
             columns = ('kpn_trait_id', 'legacy_phenotype_id', 'phenotype_name', 'gwas_source_category')
+            # A non-ASCII phenotype is in no ascii_bin column (MySQL refuses the comparison, 1267): only a linkage phenotype's
+            # legacy id (utf8mb4) can hold it.
+            plain = isinstance(phenotype, str) and phenotype.isascii()
             if generation.get('source_kind') == RELEASE:
-                select = ('SELECT kpn_trait_id,legacy_phenotype_id,phenotype_name,gwas_source_category FROM reveal_ref_traits WHERE {} UNION '
-                          'SELECT kpn_trait_id,legacy_phenotype_id,display_name,category FROM reveal_ref_phenotypes'
-                          ' WHERE is_atlas=0 AND kpn_trait_id IS NOT NULL AND legacy_phenotype_id IS NOT NULL AND {}')
-                rows = self._rows(connection, application_sql(select.format('kpn_trait_id=%s OR legacy_phenotype_id=%s', 'kpn_trait_id=%s OR legacy_phenotype_id=%s'),
-                                                              application_prefix(self.prefix)), [phenotype] * 4, columns)
+                phenotypes = ('SELECT kpn_trait_id,legacy_phenotype_id,display_name,category FROM reveal_ref_phenotypes'
+                              ' WHERE is_atlas=0 AND kpn_trait_id IS NOT NULL AND legacy_phenotype_id IS NOT NULL AND {}')
+                if plain:
+                    select = ('SELECT kpn_trait_id,legacy_phenotype_id,phenotype_name,gwas_source_category FROM reveal_ref_traits WHERE {} UNION '
+                              + phenotypes).format('kpn_trait_id=%s OR legacy_phenotype_id=%s', 'kpn_trait_id=%s OR legacy_phenotype_id=%s')
+                else: select = phenotypes.format('legacy_phenotype_id=%s')
+                rows = self._rows(connection, application_sql(select, application_prefix(self.prefix)), [phenotype] * (4 if plain else 1), columns)
+            elif not plain: return None  # kpn_traits keeps both ids in ascii_bin columns
             else:
                 select = 'SELECT ' + ','.join(columns) + ' FROM kpn_traits WHERE generation_id=%s AND '
                 try: rows = self._rows(connection, select + 'kpn_trait_id=%s UNION ' + select + 'legacy_phenotype_id=%s',
@@ -590,6 +620,7 @@ class ReferenceQueryService:
         if op in GRAPH_OPERATIONS: return missing(NO_GRAPH)
         if RELEASE_FILES.get(op) in (g['manifest'].get('absent_files') or ()):
             return missing(f'This release was published without {RELEASE_FILES[op]}.')
+        if _foreign(a): return missing()
         if op in ('get_factor', 'get_factor_loadings', 'get_factor_trait_links'):
             item = factor(a.get('factor_id'))
             if not item: return missing()
@@ -620,10 +651,12 @@ class ReferenceQueryService:
             order = 'p.marginal_loading' if metric == 'marginal' else 'p.joint_loading'
             return page('SELECT ' + SET_SELECT + ' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id'
                 " WHERE p.factor_key=%s AND LOWER(s.gene_set_name) LIKE %s ESCAPE '!'", [item['factor_key'], like], SET_COLUMNS,
-                RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, order + ' DESC,s.gene_set_id')
+                RELEASE_SET_TABLES, RELEASE_SET_COVERAGE, order + ' DESC,p.gene_set_id')
         if op == 'search_factors':
+            # eaggl_factor_id is ascii_bin: a non-ASCII search can match only the label (MySQL refuses the comparison, 1267).
+            ids = (" OR LOWER(eaggl_factor_id) LIKE %s ESCAPE '!'", [like]) if search.isascii() else ('', [])
             return page('SELECT public_id,factor_key,eaggl_factor_id,kpn_trait_id,label,source_revision FROM reveal_ref_factors'
-                " WHERE LOWER(label) LIKE %s ESCAPE '!' OR LOWER(eaggl_factor_id) LIKE %s ESCAPE '!'", [like, like],
+                " WHERE LOWER(label) LIKE %s ESCAPE '!'" + ids[0], [like, *ids[1]],
                 ('public_id', 'factor_key', 'eaggl_factor_id', 'kpn_trait_id', 'label', 'source_revision'), ['reveal_ref_factors'],
                 'All factors stored in this release.', 'public_id')
         if op in ('search_genes', 'resolve_gene'):
@@ -657,20 +690,26 @@ class ReferenceQueryService:
             # Portable prefilter on the stored members' JSON text (a member string ending in :<symbol>), checked exactly below.
             members = "JSON_EXTRACT(s.metadata,'$.dapper_gene_set.members')"
             pattern = '%' + (':' + symbol + '"').lower().replace('!', '!!').replace('%', '!%').replace('_', '!_') + '%'
-            columns, select, scoped = ('gene_set_id', 'name', 'library', 'n_genes'), 'SELECT s.gene_set_id,s.gene_set_name,s.library,s.n_genes,', {}
+            columns, select, scoped = ('gene_set_id', 'name', 'library', 'n_genes'), 's.gene_set_id,s.gene_set_name,s.library,s.n_genes,', {}
             if 'factor_id' in a:
                 item = factor(a['factor_id'])
                 if not item: return missing()
                 columns += SET_COLUMNS[3:]
-                sql = (select + ''.join('p.' + column + ',' for column in SET_COLUMNS[3:]) + members + ' FROM reveal_ref_projections p'
+                sql = ('SELECT ' + select + ''.join('p.' + column + ',' for column in SET_COLUMNS[3:]) + members + ' FROM reveal_ref_projections p'
                        ' JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id WHERE p.factor_key=%s AND ')
                 params, involved = [item['factor_key']], RELEASE_SET_TABLES
-                coverage, order = RELEASE_MEMBERSHIP_COVERAGE + ' ' + RELEASE_SET_COVERAGE, SET_ORDER
+                coverage, order = RELEASE_MEMBERSHIP_COVERAGE + ' ' + RELEASE_SET_COVERAGE, RELEASE_SET_ORDER
                 scoped = {'factor': {'factor_id': item['public_id'], 'factor_key': item['factor_key'], 'label': item['label']}}
-            else:
-                sql, params, involved = select + members + ' FROM reveal_ref_gene_sets s WHERE ', [], ['reveal_ref_gene_sets']
+            else:  # every stored gene set's members: bounded in time (SCAN_HINT)
+                sql, params, involved = 'SELECT ' + SCAN_HINT + select + members + ' FROM reveal_ref_gene_sets s WHERE ', [], ['reveal_ref_gene_sets']
                 coverage, order = RELEASE_MEMBERSHIP_COVERAGE, 's.n_genes,s.gene_set_id'
-            result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern], (*columns, 'members'), involved, coverage, order)
+            try:
+                result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern], (*columns, 'members'), involved,
+                                      coverage, order)
+            except Exception as error:
+                if scoped or not _timed_out(error): raise
+                return {'status': 'unavailable', 'items': [], 'reason': 'scan_budget_exceeded', 'gene': symbol,
+                        'import_coverage': SCAN_BUDGET_COVERAGE}, tables
             found = []
             for row in result['items']:
                 stored = _json(row.pop('members')) or []
@@ -719,10 +758,12 @@ class ReferenceQueryService:
                     RELEASE_GENE_SET_COVERAGE, 'gene_set_id')
             identity = _text(a.get('gene_set_id'), 'gene_set_id')
             if op == 'get_gene_set':
+                # The collection's payload is read only when its parsed lineage is not cached (factor_details.collection_facts).
                 found = rows('SELECT s.gene_set_id,s.gene_set_name,s.library,s.n_genes,s.n_genes_in_eaggl_universe,s.metadata,s.collection_id,'
-                    'c.portal_collection_id,c.payload FROM reveal_ref_gene_sets s JOIN reveal_ref_collections c ON c.collection_id=s.collection_id'
-                    ' WHERE s.gene_set_id=%s', [identity], ('gene_set_id', 'name', 'library', 'n_genes', 'n_genes_in_eaggl_universe', 'metadata',
-                    'collection_id', 'portal_collection_id', 'payload'), ['reveal_ref_gene_sets', 'reveal_ref_collections'])
+                    "c.portal_collection_id,JSON_EXTRACT(c.payload,'$.document_sha256') FROM reveal_ref_gene_sets s"
+                    ' JOIN reveal_ref_collections c ON c.collection_id=s.collection_id WHERE s.gene_set_id=%s', [identity],
+                    ('gene_set_id', 'name', 'library', 'n_genes', 'n_genes_in_eaggl_universe', 'metadata', 'collection_id', 'portal_collection_id',
+                     'document_sha256'), ['reveal_ref_gene_sets', 'reveal_ref_collections'])
             else:
                 found = rows('SELECT gene_set_id,metadata FROM reveal_ref_gene_sets WHERE gene_set_id=%s', [identity], ('gene_set_id', 'metadata'),
                              ['reveal_ref_gene_sets'])
@@ -731,10 +772,12 @@ class ReferenceQueryService:
             if node and node.get('id') != identity: raise Problem(503, 'SOURCE_NOT_READY', 'Stored gene-set object identity differs from its key.')
             if op == 'get_gene_set':
                 # Only this gene set's lineage closure (producer plus curated provenance, wide fan-ins collapsed), never the
-                # whole collection: a GlyGen HZ2 collection alone exceeds the capture budget.
-                payload = item.pop('payload') or {}
-                closure = lineage_closure(node or {}, collection_lineage(payload))
-                item['payload'] = {'collection_id': item.pop('collection_id'), 'document_sha256': payload.get('document_sha256'),
+                # whole collection: a GlyGen HZ2 collection alone exceeds the capture budget. Copied: the cached lineage is shared.
+                collection = item.pop('collection_id')
+                facts = collection_facts(release, collection, extracted(item.pop('document_sha256')), lambda: rows(
+                    'SELECT payload FROM reveal_ref_collections WHERE collection_id=%s', [collection], ('raw',), ['reveal_ref_collections'])[0]['raw'])
+                closure = deepcopy(lineage_closure(node or {}, facts['lineage'], index=facts['index']))
+                item['payload'] = {'collection_id': collection, 'document_sha256': facts['document_sha256'],
                                    'portal_collection_id': item.pop('portal_collection_id'), **closure}
                 return {'items': [item], 'import_coverage': 'Exact release definition and the provenance closure of its construction (inputs'
                         ' sharing their onward lineage are represented by one; see collapsed); missing membership is explicit.'}, tables
@@ -766,6 +809,7 @@ class ReferenceQueryService:
         def missing(reason='The requested records are not stored in this import.'):
             return {'status': 'not_stored', 'items': [], 'reason': reason, 'import_coverage': 'No stored observation; this is not a biological negative.'}, tables
         if op in RELEASE_OPERATIONS: return missing(RELEASE_ONLY)
+        if kpn and _foreign(a): return missing()  # migration 008 keys are ascii_bin too
         def factor(identity):
             _text(identity, 'factor_id')
             if kpn:
@@ -823,9 +867,10 @@ class ReferenceQueryService:
                     ['eaggl_cfde_gene_set_links'], LEGACY_COVERAGE, 'gene_set_rank,node_id')
         if op == 'search_factors':
             if kpn:
+                ids = (" OR LOWER(eaggl_factor_id) LIKE %s ESCAPE '!'", [like]) if search.isascii() else ('', [])  # ascii_bin, as in _release
                 return page('SELECT public_id,factor_key,eaggl_factor_id,kpn_trait_id,label,source_revision FROM reference_factors'
-                    " WHERE generation_id=%s AND (LOWER(label) LIKE %s ESCAPE '!' OR LOWER(eaggl_factor_id) LIKE %s ESCAPE '!')",
-                    [gen,like,like], ('public_id','factor_key','eaggl_factor_id','kpn_trait_id','label','source_revision'),
+                    " WHERE generation_id=%s AND (LOWER(label) LIKE %s ESCAPE '!'" + ids[0] + ')',
+                    [gen,like,*ids[1]], ('public_id','factor_key','eaggl_factor_id','kpn_trait_id','label','source_revision'),
                     ['reference_factors'], 'All factors stored in this generation.', 'public_id')
             return page('SELECT factor_id,trait,label,input_sha256 FROM eaggl_factors'
                 " WHERE import_id=%s AND (LOWER(label) LIKE %s ESCAPE '!' OR LOWER(factor_id) LIKE %s ESCAPE '!')",
@@ -878,11 +923,16 @@ class ReferenceQueryService:
                 params, involved = [gen, 'per_trait', item['factor_key']], ['factor_gene_set_projections', 'cfde_gene_sets']
                 coverage, order = MEMBERSHIP_COVERAGE + ' ' + SET_COVERAGE, SET_ORDER
                 scope = {'factor': {'factor_id': item['public_id'], 'factor_key': item['factor_key'], 'label': item['label']}}
-            else:
-                sql = select + members + ' FROM cfde_gene_sets s WHERE s.generation_id=%s AND '
+            else:  # every gene set of the generation: bounded in time, as in _release
+                sql = select.replace('SELECT ', 'SELECT ' + SCAN_HINT, 1) + members + ' FROM cfde_gene_sets s WHERE s.generation_id=%s AND '
                 params, involved, coverage, order = [gen], ['cfde_gene_sets'], MEMBERSHIP_COVERAGE, 's.n_genes,s.gene_set_id'
-            result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern],
-                                  (*columns, 'members'), involved, coverage, order)
+            try:
+                result, tables = page(sql + 'LOWER(' + members + ") LIKE %s ESCAPE '!'", [*params, pattern],
+                                      (*columns, 'members'), involved, coverage, order)
+            except Exception as error:
+                if scope or not _timed_out(error): raise
+                return {'status': 'unavailable', 'items': [], 'reason': 'scan_budget_exceeded', 'gene': symbol,
+                        'import_coverage': SCAN_BUDGET_COVERAGE}, tables
             found = []
             for row in result['items']:
                 stored = _json(row.pop('members')) or []
@@ -895,7 +945,7 @@ class ReferenceQueryService:
             if not kpn: return missing('This imported model has factor trait labels but no KPN trait catalog.')
             columns = ('kpn_trait_id','legacy_phenotype_id','phenotype_name','trait_group','trait_type','description','metadata')
             trait = _text(a.get('trait_id'),'trait_id') if op == 'get_trait' else None
-            if trait and re.fullmatch(r'trait:kpn:\d{7}',trait): trait='KPN.TRAIT:'+trait.rsplit(':',1)[1]
+            if trait and re.fullmatch(r'trait:kpn:[0-9]{7}',trait): trait='KPN.TRAIT:'+trait.rsplit(':',1)[1]
             clause, params = ("LOWER(phenotype_name) LIKE %s ESCAPE '!'",[like]) if op == 'search_traits' else ('kpn_trait_id=%s',[trait])
             return page('SELECT '+','.join(columns)+' FROM kpn_traits WHERE generation_id=%s AND '+clause,
                 [gen,*params], columns,['kpn_traits'],'Imported trait metadata; no phenotype association scores are stored.','kpn_trait_id')
@@ -1020,7 +1070,7 @@ class _OverBudget(ValueError):
 GENE_SYMBOL = r'(?:HGNC\.SYMBOL:)?[A-Za-z0-9][A-Za-z0-9._@-]{0,63}'
 # kpn_traits.gwas_source_category -> the pigean-gene trait_group key; other categories are refused.
 TRAIT_GROUPS = {'KPN': 'portal', 'rare_v2': 'rare_v2'}
-KPN_TRAIT = re.compile(r'KPN\.TRAIT:\d{7}')
+KPN_TRAIT = re.compile(r'KPN\.TRAIT:[0-9]{7}')
 
 
 class SmallModelBioIndex:

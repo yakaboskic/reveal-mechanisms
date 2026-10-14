@@ -40,7 +40,7 @@ def schemas(b):
     b.add('FactorTraitLinks', obj({'source_id': null(string()), 'trait_id': null(kpn), 'scope': b.enum('atlas', 'all'), 'sort': b.enum(*LINK_SORTS),
         'summary': null(obj({'n_phenotypes': count, 'n_linked': count, 'n_linked_kpn_traits': count, 'n_linked_atlas_traits': count,
             'own_trait_q': null(probability)})), 'items': array(ref('FactorTraitLink')), **page},
-        description='Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait\'s own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor\'s linkage over every phenotype tested: own_trait_q is null when its own trait was not tested.'))
+        description='Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait\'s own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor\'s linkage over every phenotype tested: n_linked includes its own trait, n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the other linked phenotypes, and own_trait_q is null when its own trait was not tested.'))
     b.add('MechanismObject', obj({'dapper_id': b.did('Mechanism'), 'status': {'type': 'string', 'const': 'current'}, 'source_id': string(),
         'release_id': release}, description='The served factor whose minted DAPPER Mechanism this id is. Resolve the factor at /v1/mechanisms/{source_id}.'))
 
@@ -116,7 +116,8 @@ def endpoints(b, e):
            'is_own_trait': True, 'is_atlas_trait': True, 'nnls_loading': .18, 'phewas_beta': .52, 'phewas_p_onesided': 1e-12, 'phewas_q': 4.6e-10}
     links = lambda **values: {'source_id': None, 'trait_id': None, 'scope': 'all', 'sort': 'phewas_q', 'summary': None, 'total': len(values['items']),
                               'next_offset': None, 'coverage': LINK_COVERAGE, 'release_id': release, **values}
-    summary = {'n_phenotypes': 6698, 'n_linked': 2, 'n_linked_kpn_traits': 2, 'n_linked_atlas_traits': 1, 'own_trait_q': own['phewas_q']}
+    # The factor's own trait is one of its n_linked, never one of its other linked KPN or atlas traits.
+    summary = {'n_phenotypes': 6697, 'n_linked': 2, 'n_linked_kpn_traits': 1, 'n_linked_atlas_traits': 0, 'own_trait_q': own['phewas_q']}
     op = b.operation('/v1/factor-trait-links', 'get', 'listFactorTraitLinks', 'Mechanisms', 'Page factor-trait links of a factor or of a trait',
         'Give exactly one of source_id (the phenotypes a factor is linked to) or trait_id (the factors linked to a trait: the gap use case); otherwise 422. Only links at BH q <= 0.05 are stored: an absent phenotype is unlinked at this threshold, not a negative result. An unknown source_id, or a release without links, returns 404.' + illustrative,
         'FactorTraitLinks', {'factor': links(source_id=factor['source_id'], summary=summary, items=[deepcopy(own), deepcopy(link)]),
