@@ -97,6 +97,12 @@ class ResearchExecutionTests(unittest.TestCase):
             self.assertEqual(len(tx.list('account_membership',self.owner)),1)
             from reveal_backend.account_discovery import visible_accounts
             self.assertEqual(visible_accounts(tx,self.owner,attribution=True)[0]['attribution']['user_id'],self.owner)
+            # The submission traced its new account's data sources before the commit and stored them with it.
+            from reveal_backend import account_data_sources
+            stored = tx.get(account_data_sources.KIND, account_data_sources.owner_key(self.owner, result['account_ids'][0]))
+            self.assertEqual(stored['data'], prepared['data_sources'][result['account_ids'][0]])
+            self.assertEqual(stored['data']['document_sha256'], prepared['validated'][0]['storage']['sha256'])
+            self.assertIn(stored['data']['status'], ('complete', 'incomplete'))
 
     def test_invalid_second_document_rejects_entire_batch_before_commit(self):
         draft, import_id = self.imported_draft()

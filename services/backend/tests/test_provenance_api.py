@@ -167,6 +167,36 @@ class ProvenanceApiTests(unittest.TestCase):
         self.assertEqual(response.json()['code'], 'PROVENANCE_SOURCE_UNAVAILABLE')
         self.assertNotIn('dataset_reuse', response.json())
 
+    def test_box_account_mechanism_binds_by_identity_end_to_end(self):
+        # A hosted (Box) account cites a KPN Mechanism with no capture; the endpoint binds it by identity to the published
+        # release and traces its projected gene sets through their collection lineage (producer and curated).
+        from types import SimpleNamespace
+        import test_provenance_release as release
+        reference = SimpleNamespace(addCleanup=self.addCleanup)
+        release.ReleaseHydrationTests.setUp(reference)
+        mechanism = reference.mechanism
+        claim, prop = identifier('Claim', 'm'), identifier('Proposition', 'm')
+        document = {'scientific_accounts': [dict(self.base_account, id=self.account_id, component_claims=[claim], conclusion_claims=[claim])],
+                    'claims': [{'id': claim, 'proposition': prop, 'statement': 'A mechanism claim', 'direction': 'SUPPORTS', 'status': 'proposed'}],
+                    'propositions': [{'id': prop, 'subject_entity': mechanism['id'], 'statement': 'The factor is involved.',
+                                      'proposition_kind': 'RESULT'}],
+                    'mechanisms': [mechanism]}
+        self.install_document(document)
+        connect = lambda *args, **kwargs: release.Connection(reference.path, reference.queries)
+        with patch('reveal_backend.runtime_config.reference_mysql_connection', side_effect=connect), \
+             patch.dict(os.environ, {'REVEAL_PROVENANCE_PORTAL_URL': ''}):
+            response = self.request('get', self.provenance_route, self.owner)
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()  # contract conformance: test_response_conforms_to_generated_contract
+        coverage = body['coverage']['retained_projection_coverage'][0]
+        self.assertEqual((coverage['mechanism_id'], coverage['binding_origin']), (mechanism['id'], 'document_identity'))
+        self.assertEqual({row['dataset_id'] for row in body['dataset_reuse']}, {release.GTEX, release.GLYGEN})
+        self.assertEqual({row['organization_id'] for row in body['organization_reuse']}, {release.BROAD, release.GWU})
+        curated = [edge for edge in body['edges'] if edge['relation'] == 'was_derived_from' and edge['object'] == release.GLYGEN]
+        self.assertEqual(curated[0]['provenance_source'][0]['kind'], 'curated_lineage')
+        # The fitted trait's GWAS route is the portal's, here disabled: coverage, not an error.
+        self.assertIn({'code': 'external_provenance_unavailable', 'object_id': release.TRAIT}, body['coverage']['issues'])
+
     def test_response_conforms_to_generated_contract(self):
         self.install_document(deepcopy(self.fixture['account']['document']))
         response = self.request('get', self.provenance_route, self.owner)

@@ -637,7 +637,7 @@ export interface paths {
         };
         /**
          * Rank public community contributions
-         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.
          */
         get: operations["getLeaderboard"];
         put?: never;
@@ -4519,6 +4519,7 @@ export interface components {
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
             archive?: components["schemas"]["ReferenceArchive"];
+            data_sources?: components["schemas"]["AccountDataSources"];
         };
         ClaimResult: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -5095,11 +5096,16 @@ export interface components {
         /** @enum {string} */
         LeaderboardView: "researchers" | "accounts" | "datasets";
         /** @enum {string} */
-        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
         /** @enum {string} */
-        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
         /** @enum {string} */
         LeaderboardEvidence: "all" | "supporting";
+        /**
+         * @description Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.
+         * @enum {string}
+         */
+        LeaderboardScope: "published" | "all";
         LeaderboardAttribution: {
             id: string;
             label: string;
@@ -5112,6 +5118,13 @@ export interface components {
             NEUTRAL: number;
             UNKNOWN: number;
         };
+        /** @description An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production. */
+        LeaderboardOrganization: {
+            id: string;
+            name: string;
+            ror: string | null;
+            roles: string[];
+        };
         LeaderboardMetrics: {
             account_count: number;
             upvotes: number;
@@ -5121,6 +5134,8 @@ export interface components {
             explored_gap_count: number;
             claim_count: number;
             researcher_count: number;
+            traced_claim_count: number;
+            traced_account_count: number;
             net_votes: number;
             overall_score: number;
         };
@@ -5145,8 +5160,16 @@ export interface components {
             } | null;
             attribution: components["schemas"]["LeaderboardAttribution"] | null;
             directions: components["schemas"]["LeaderboardDirections"];
+            /** @description Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views. */
+            organizations: components["schemas"]["LeaderboardOrganization"][];
+            url: string | null;
+            /**
+             * @description Datasets: present for a KPN trait's GWAS bottom-line artifact that traced claims reach (stored data sources kind gwas_bottom_line); url is then its portal artifact page. Absent for a DAPPER Dataset.
+             * @enum {string}
+             */
+            source_kind?: "gwas_bottom_line";
         };
-        /** @description Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
+        /** @description Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
         LeaderboardMetadata: {
             /** Format: date-time */
             as_of: string;
@@ -5178,6 +5201,7 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
         };
         LeaderboardList: {
@@ -5211,10 +5235,12 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             sort: components["schemas"]["LeaderboardSort"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             items: components["schemas"]["LeaderboardEntry"][];
             page: components["schemas"]["Page"];
         };
@@ -5231,6 +5257,7 @@ export interface components {
             directions: components["schemas"]["LeaderboardDirections"];
             value: number;
         };
+        /** @description total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed. */
         LeaderboardRecords: {
             /** Format: date-time */
             as_of: string;
@@ -5262,13 +5289,16 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             id: string;
             metric: components["schemas"]["LeaderboardMetric"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             entry: components["schemas"]["LeaderboardEntry"];
             total: number;
+            withheld: number;
             items: components["schemas"]["LeaderboardRecord"][];
             page: components["schemas"]["Page"];
         };
@@ -8499,6 +8529,74 @@ export interface components {
                 account_id: string | null;
                 outcome_id: string | null;
             };
+        };
+        /** @description One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, a mechanism projects onto gene sets built from it, or a KPN trait the claim reaches, cited or a mechanism's fitted trait, has a GWAS bottom line: trait_gwas). via_ids: the cited gene set, mechanism, trait, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage: the release's lap/config/source_datasets.yaml, or a reload-era collection-lineage curation). Organization roles are recorded credit (publisher, attribution, ...), not data production. */
+        AccountDataSourceConnection: {
+            dataset_id: string;
+            input_roles: string[];
+            routes: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas")[];
+            via_ids: string[];
+            organizations: {
+                organization_id: string;
+                roles: string[];
+            }[];
+            curation_ids: string[];
+            trace_count: number;
+        };
+        /** @description The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it, from the published reference release without the portal (no remote fetch): a reached KPN trait's GWAS route ends at its bottom-line artifact (datasets kind gwas_bottom_line). A point-in-time observation of the reference lineage (re-traced by an operator after a release or lineage change); GET /v1/accounts/{account_id}/provenance returns the full witness paths, with the portal's GWAS lineage. not_traced: no stored trace matches this exact account source and tracing policy; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound. */
+        AccountDataSources: {
+            /** @enum {string} */
+            status: "complete" | "incomplete" | "unavailable" | "not_traced";
+            /** Format: date-time */
+            traced_at?: string;
+            error?: {
+                code: string;
+            };
+            reference_generation_ids?: string[];
+            coverage?: {
+                trace_count: number;
+                counts_are_lower_bounds: boolean;
+                issue_counts: {
+                    [key: string]: number;
+                };
+            };
+            claims?: {
+                claim_id: string;
+                /** @enum {string} */
+                resolution: "complete" | "incomplete" | "not_applicable";
+                datasets: components["schemas"]["AccountDataSourceConnection"][];
+            }[];
+            datasets?: {
+                id: string;
+                name?: string;
+                version?: string;
+                description?: string;
+                /** Format: uri */
+                location?: string;
+                /**
+                 * @description Absent for a DAPPER Dataset. gwas_bottom_line: a KPN trait's GWAS bottom-line artifact on the Translator provenance portal, named by the published release (its metadata.bottom_line.gwas_artifact); the id is gwas-bottom-line:<artifact_id> and location the portal's artifact page, built from ids and never fetched.
+                 * @enum {string}
+                 */
+                kind?: "gwas_bottom_line";
+                /** @description gwas_bottom_line: the portal artifact id. */
+                artifact_id?: string;
+                ancestry_code?: string;
+                ancestry_name?: string;
+                /** @description gwas_bottom_line: the KPN trait whose GWAS this is. */
+                kpn_trait_id?: string;
+                portal_trait_id?: string;
+            }[];
+            organizations?: {
+                id: string;
+                name?: string;
+                ror?: string;
+            }[];
+            via?: {
+                id: string;
+                kind: string;
+                name?: string;
+                filename?: string;
+            }[];
         };
         /** @description Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted. */
         ArchivedReferenceFactor: {
@@ -12189,9 +12287,11 @@ export interface operations {
                 /** @example researchers */
                 view?: "researchers" | "accounts" | "datasets";
                 /** @example overall */
-                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -12270,9 +12370,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example votes */
-                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**

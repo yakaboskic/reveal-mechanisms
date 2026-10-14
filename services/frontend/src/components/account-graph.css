@@ -51,3 +51,11 @@
 @media(min-width:1050px){.reading-page:has(>.scientific.account-study){max-width:1150px}}
 @media(max-width:760px){.account-explorer-layout{grid-template-columns:1fr}.account-explorer-inspector{border-left:0;border-top:1px solid #e2eaf1}.account-bubbles-frame{height:460px}}
 @media(prefers-reduced-motion:reduce){.account-explorer *{scroll-behavior:auto}.account-bubble-tooltip{animation:none}}
+.account-explorer-inspector .traced-dataset-links{display:flex;flex-wrap:wrap;gap:4px 10px}
+.account-explorer-inspector .traced-dataset-routes span{display:block}
+.account-explorer-inspector .traced-dataset-organizations{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
+.account-explorer-inspector .traced-dataset-organizations .organization-badge{flex-wrap:wrap}
+.account-explorer-inspector .account-data-sources{margin-top:18px}
+.account-explorer-inspector .account-data-sources ul{margin:8px 0 0;padding-left:16px;font-size:12px;line-height:1.6;color:#3d4f66}
+.account-explorer-inspector .account-data-sources li{margin-bottom:6px}
+.account-explorer-inspector .account-data-sources li small{display:block;color:#6b7b91}

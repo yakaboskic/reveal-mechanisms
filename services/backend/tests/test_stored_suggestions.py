@@ -84,6 +84,19 @@ class StoredSuggestionTests(unittest.TestCase):
                         self.assertEqual(hits['native:Z']['ranking']['metric'], 'reciprocal_rank_fusion')
                         self.assertNotEqual(hits['native:Z']['ranking']['value'], 1.)
 
+    def test_search_score_pool_matches_exact_suggestions_when_every_factor_is_returned(self):
+        contexts = [('source:alpha', 'alpha'), ('source:beta', 'beta')]
+        exact = self.catalog.suggest_factors(contexts, 'semantic', 5, (), precomputed=True)
+        with patch.object(self.catalog.index, 'fetch_vectors', side_effect=AssertionError('no vector download')):
+            searched = self.catalog.suggest_factors(contexts, 'semantic', 5, (), precomputed=True, search_scores=True)
+        self.assertEqual([item['record']['source_id'] for item in searched], [item['record']['source_id'] for item in exact])
+        self.assertTrue(all('retrieval' not in item for item in searched))  # the pool keeps no retrieval record
+        for left, right in zip(searched, exact):
+            self.assertEqual(left['contexts'], right['contexts'])
+            self.assertEqual(left['context_similarities'].keys(), right['context_similarities'].keys())
+            for key in left['context_similarities']:
+                self.assertAlmostEqual(left['context_similarities'][key], right['context_similarities'][key], places=12)
+
     def test_lexical_suggestions_do_not_acquire_semantic_scores(self):
         hits = self.catalog.suggest_factors([('source:alpha', 'alpha')], 'lexical', 5, (), precomputed=True)
         self.assertTrue(hits)

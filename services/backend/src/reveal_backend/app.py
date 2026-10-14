@@ -595,7 +595,8 @@ def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
     """(items, public rerank status, audit fields): Jev order over every eligible disease identity plus the
     top cosine factors, or today's disease-then-cosine policy over that pool when Jev cannot answer."""
     disease_items=getattr(catalog,'disease_factors',lambda *_: [])(gap,gap_rerank.DISEASE_POOL_SIZE,exclude)
-    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,**index)
+    # Rank the wide pool by the vector search's own similarities: exact re-scoring would download every candidate's vectors.
+    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,search_scores=True,**index)
     entries=gap_rerank.pool(disease_items,cosine_items)
     mechanisms=[catalog.mechanisms[identity] for identity,_ in contexts if identity in catalog.mechanisms]
     factors=[(entry['item']['record']['source_id'],gap_rerank.factor_view(entry['item']['record'])) for entry in entries]
@@ -610,7 +611,7 @@ def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
             logging.getLogger('reveal').error('Suggestion rerank failed (%s)', type(error).__name__)
         scores,meta={},{}
         items,public['status'],public['reason']=gap_rerank.fallback(entries,disease_items,remaining),'fallback',getattr(error,'reason','internal_error')
-    audit={**public,**meta,'elapsed_ms':round((monotonic()-started)*1000)}
+    audit={**public,**meta,'pool_scores':'vector_search','elapsed_ms':round((monotonic()-started)*1000)}
     return items,public,{'rerank':audit,'rerank_pool':gap_rerank.pool_rows(entries,scores)}
 
 def build_suggestions(body):
@@ -1130,28 +1131,29 @@ def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=N
         return page(items,(viewer or '') if scope=='public' else user,limit,cursor,listing_scope(['accounts',gap_id,query,scope,sort],reference_state))
 
 @app.get('/v1/leaderboard')
-def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',limit:int=20,cursor:str|None=None):
+def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    sort=leaderboard.options(view,sort,evidence)
+    sort=leaderboard.options(view,sort,evidence,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)  # Invalid supplied credentials never downgrade to public.
-        projection=leaderboard.build(tx,evidence)
+        projection=leaderboard.build(tx,evidence,scope)
     items=leaderboard.ranking(projection,view,sort)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence}
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence,'scope':scope}
 
 @app.get('/v1/leaderboard/{view}/{entry_id}/records')
-def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',limit:int=20,cursor:str|None=None):
+def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    leaderboard.options(view,evidence=evidence,metric=metric)
+    leaderboard.options(view,evidence=evidence,metric=metric,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)
-        projection=leaderboard.build(tx,evidence)
-    entry,items=leaderboard.details(projection,view,entry_id,metric)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'entry':entry,'total':len(items)}
+        projection=leaderboard.build(tx,evidence,scope)
+    entry,items,withheld=leaderboard.details(projection,view,entry_id,metric)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'scope':scope,'entry':entry,
+        'total':len(items),'withheld':withheld}
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -1221,7 +1223,9 @@ def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verif
             if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
             key=digest([user,identity])
             keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
-            if kind=='account': keys.append(('publication',key))
+            if kind=='account':
+                from .account_data_sources import KIND as DATA_SOURCES   # owner_key(user, identity) is this key
+                keys+=[('publication',key),(DATA_SOURCES,key)]
             records=tx.get_records(keys)
             row=require_owned(tx,kind,identity,user,records.get((kind,key)),
                 dependency=records.get(('scientific_dependencies',key)))['data']
@@ -1284,7 +1288,7 @@ def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verif
         artifacts = {key: item for key, item in artifacts.items() if key in visible}
     return {'user': user, 'public': public, 'snapshot': snapshot, 'publication_record': publication_record,
             'result': result, 'document': document, 'metadata': metadata, 'artifacts': artifacts,
-            'full_document_available': full_document_available,
+            'full_document_available': full_document_available, 'document_sha256': document_sha if public is None else None,
             'root_payload': root_payload, 'withheld_dependencies': withheld_dependencies, 'withheld_ids': withheld_ids, 'archive': archive}
 
 def scientific(identity,request,kind='object'):
@@ -1321,8 +1325,11 @@ def scientific(identity,request,kind='object'):
             clipped['coverage']['complete'] = False
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
         if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
-        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
-            can_manage=public is None,record=public if public else publication_record,account_result=result)
+        if kind=='account':
+            clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
+                can_manage=public is None,record=public if public else publication_record,account_result=result)
+            from .account_data_sources import response as data_sources
+            clipped['data_sources']=data_sources(tx,identity,source)
         if archive: clipped['archive']=archive
         return clipped
 

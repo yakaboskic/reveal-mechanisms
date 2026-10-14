@@ -18,7 +18,7 @@ from .evidence_budget import fit_input_budget
 from .reference_generation import KPN_MODEL, LEGACY_MODEL, MODELS
 from .repository import Repository, now, uid, digest
 from .runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT, setting, artifacts_root, mysql_connection
-from . import jobs
+from . import account_data_sources, jobs
 from .artifact_store import s3_enabled, store as artifact_store, retained_file, StorageUnavailable
 
 log=logging.getLogger('reveal.worker')
@@ -600,8 +600,20 @@ class Worker:
                 *(('scientific_document',digest([owner,sha])) for sha in shas)]
             for doc in documents:
                 identity=doc['scientific_accounts'][0]['id']
-                keys+=[('outbox',digest([owner,identity,'default-paragraph'])),('account',digest([owner,identity])),('account_membership',digest([owner,identity]))]
+                keys+=[('outbox',digest([owner,identity,'default-paragraph'])),('account',digest([owner,identity])),('account_membership',digest([owner,identity])),
+                    (account_data_sources.KIND,account_data_sources.owner_key(owner,identity))]
                 if mode=='box': keys+=[('artifact',digest([owner,file['sha256']])) for file in doc.get('files',[]) if captured.get(file.get('sha256'))]
+            # Trace each account's claims to their data sources before the fence, over the capture records this commit
+            # writes, in its write order (box ledger captures replace package sources); written only for new accounts.
+            retained={record['sha256']:record for record in source_artifacts}
+            for doc in documents if mode=='box' else ():
+                for file in doc.get('files',[]):
+                    source=captured.get(file.get('sha256'))
+                    if source: retained[file['sha256']]={'sha256':file['sha256'],'file':file,**source['retained'],'job_id':job['id']}
+            traced_owner,traced=owner,{}
+            for doc,document_sha in zip(documents,shas):
+                identity=doc['scientific_accounts'][0]['id']
+                if identity not in traced: traced[identity]=account_data_sources.compute(self.repository,owner,identity,doc,document_sha,retained)
             with self.repository.transaction() as tx:
                 tx.get_records([key for key in keys if isinstance(key[1],str)],bare=('object',))   # one read for the whole commit
                 pair=jobs.fenced(tx,job['id'],token)
@@ -647,6 +659,9 @@ class Worker:
                     if not previous:
                         writes.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':deepcopy(summary),**claim_structure_record(report)})
                         writes.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
+                        traced_record=traced.get(identity)
+                        if traced_record and traced_owner==owner and traced_record['document_sha256']==document_sha:
+                            writes.put(account_data_sources.KIND,account_data_sources.owner_key(owner,identity),owner,traced_record)
                     writes.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                         'citation_metadata':metadata,'artifact_access':snapshot})
                     writes.document(doc,document_sha,metadata,projection.__getitem__,borrowed_ids)
