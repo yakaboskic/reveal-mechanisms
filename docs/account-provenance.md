@@ -13,14 +13,14 @@ Authorization: Bearer <application credential>
 
 ## How a request is served
 
-The route reads in three phases and writes no file (`provenance_api.trace`):
+The route reads in four steps and writes no file (`provenance_api.trace`, where they are phases 1a, 1b, 2 and 3):
 
 1. **Authorize** (one application read transaction): the caller's identity, the authorized account source, its retained artifact records and the cursor secret.
 2. **Hydrate** (no application lease): capture bytes from the artifact store, then the reference reads under the reference lease alone (`provenance_reference.expand`). Only the reload-era (legacy generation) path opens an application read, for registered recovery supplements.
 3. **Portal** (no database lease): the bottom-line GWAS graph of every reached trait from the Translator provenance portal, within 15 seconds in all. A failure is coverage, never an error.
 4. **Recheck and rank** (one short read transaction): identity, publication or ownership state and the withheld dependencies are read again; any change returns `409 CURSOR_EXPIRED`. Then the walk, the withheld filter, the snapshot and the page.
 
-At most two traces per process are in their database phases at once.
+At most two traces per process are in their database steps (1, 2 and 4) at once.
 
 ## Reference hydration
 
@@ -30,6 +30,18 @@ Trusted captures bind an account's opaque ids to reference data, each checksum-v
 - Box evidence-package captures `reveal.reference-evidence.mysql-capture/2` (`reference-release`, `reference-factors`, `candidate-factors`), whose Mechanisms are re-minted with the captured release manifest exactly as the package builder minted them.
 
 A capture pinned to the published reference release is read from its `ref_*` tables, after `ref_release` on the same connection (see [reference releases](reference-release.md)): `ref_factors` (checked against the captured row), every per-library `ref_projections` row, `ref_gene_sets` and `ref_collections`. Gene sets the account reaches get their full node; gene sets reached only by a projection get their name, collection and generating activity, never their members. Collection lineage merges the producer's provenance with the curated source datasets (`reference_lineage.collection_lineage`) and keeps only one gene set's closure (`lineage_closure`). Parsed lineage is cached per release, collection and document checksum (128 MB) and dropped when the release changes.
+
+Ids are ASCII, as the reference tables' id columns are: an id the account cites with any other character (a KPN trait id written with non-ASCII digits included) is unresolvable and never reaches SQL.
+
+### Factor projection bound
+
+A release Mechanism retains about 570 projections (the top 50 of each library, joint or marginal). The trace does not expand them all: per library it follows
+
+- the top `TRACE_PROJECTIONS_PER_LIBRARY` (10) gene sets by `joint_rank`, the same gene sets an archived snapshot keeps;
+- every gene set the account itself cites, or a capture binds;
+- in rank order, each further gene set whose lineage closure reaches a Dataset the gene sets already followed do not.
+
+The Datasets reached per library are therefore those of every retained projection, while the route stays near 90 gene sets per Mechanism. Each `coverage.retained_projection_coverage` entry of a release Mechanism states the sample: `retained_rows` (all retained projections), `traced_rows` (those followed) and `trace_bound` (`{per_library: 10, order: joint_rank, plus: [account_gene_sets, best_per_further_dataset]}`). A projection edge observes only `library`, `joint_rank` and `marginal_rank`; loadings stay in the reference tables (`GET /v1/factor-loadings`). Measured on the 2026-10-05 release, an account citing all 13 T2D Mechanisms is 2.5 MB with 1,317 nodes and 2,619 edges, where expanding every projection gave 12.3 MB and `422 PROVENANCE_LIMIT_EXCEEDED`; the Datasets reached by each of 73 sampled Mechanisms, overall and per library, are unchanged. Archived snapshots already hold the top gene sets per library, and reload-era projections are followed as retained.
 
 ### Identity binding
 
@@ -68,7 +80,7 @@ Rare-disease lists have no GWAS (`not_a_gwas_trait`), and some traits are not on
 
 - `account`, `claims`, `propositions`, and `evidence_items` contain `{record, provenance}` wrappers. `record` preserves the original scientific object. `provenance` adds the total trace count, current-page trace IDs/count, reached dataset and organization IDs, and resolution status.
 - `traces` identify the originating claim, proposition/evidence item and source field, dataset reached, route classifications, input roles and organization attributions. `path_steps` describe an auditable witness path; reverse dataset membership steps are explicit.
-- `nodes` and `edges` share the traversed graph across traces. Alternative recorded branches remain in the graph, without enumerating every path. Nodes are compact summaries rather than complete GeneSet member lists; a trait and the portal's GWAS nodes carry `href`, a public page built from their ids. The bounded shared graph repeats on each page.
+- `nodes` and `edges` share the traversed graph across traces. Alternative recorded branches remain in the graph, without enumerating every path. Nodes are compact summaries rather than complete GeneSet member lists; a trait and the portal's GWAS nodes carry `href`, a public page built from their ids, and a verified capture File has kind `capture`. The bounded shared graph repeats on each page.
 - `dataset_reuse` and `organization_reuse` are full-account totals, computed before pagination. Do not sum totals from successive pages.
 - `snapshot` pins the account payload, authorized document, publication version, reference generations and releases, supplements and tracing policy (`account-provenance-v2`). Source observations contain hashes and public scientific coordinates, not private storage locations. A `portal_bottom_line` observation is keyed by the portal URL read, with the checksum of the compacted graph, so a changed portal graph expires cursors.
 - `coverage` separates lineage resolution, retained-projection coverage, recovery status and the optional `upstream_gaps`. Missing lineage makes counts explicit lower bounds. Processing limits and storage failures do not produce zero rankings.
@@ -85,7 +97,9 @@ Organization summaries count distinct datasets, claims and claim–dataset pairs
 
 Traversal uses derivation, generation and activity-input relationships in fields and edge records. A reached File may be associated with its recorded Dataset, but this inverse membership does not expand sibling files or inherit unrelated lineage of the containing dataset. Free-text names, retrieval candidates, KnowledgeGap selection links, embeddings and account-authoring activity inputs do not establish claim reuse.
 
-Factor expansion is pinned to a trusted capture binding or an identity binding to the published release (see [Reference hydration](#reference-hydration)). Release projections are the retained top 50 of each library, joint **or** marginal; reload-era KPN projections are the per-trait top-50 union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
+A cited File whose retained artifact record the trace verifies by checksum is a lineage endpoint, not missing lineage: a research capture (its `research_source` descriptor names the File's id and checksum) or a Box package capture (`reveal.reference-evidence.mysql-capture/2`). Its node has kind `capture`; the retained bytes are the observation, and what they bind is traced from the Mechanisms, gene sets and traits the account cites. A File with no retained record, or whose record, File and descriptor checksums disagree, still raises `MISSING_LINEAGE`. A capture contributes no Dataset and no claim count.
+
+Factor expansion is pinned to a trusted capture binding or an identity binding to the published release (see [Reference hydration](#reference-hydration)). Release projections are the retained top 50 of each library, joint **or** marginal, of which the trace follows a bounded sample (see [Factor projection bound](#factor-projection-bound)); reload-era KPN projections are the per-trait top-50 union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
 
 An activity's used inputs that share one onward lineage (the same generating activities, derivations and Datasets) are followed through one representative once more than 25 of them do, and `collapsed_inputs` is observed on its edge. GlyGen HZ2's 6,620 cached API responses are one path to the GlyGen release. Datasets are always followed one by one. More than 25 inputs with no lineage at all are one `unlinked_inputs` coverage entry (`{activity, count}`).
 
@@ -95,7 +109,7 @@ The processing bounds are 10,000 nodes, 50,000 edges and depth 128; a 100,000-st
 
 Every new account is traced once when it is saved: by the agent run's final save (`Worker.accept_accounts`, both job engines, in its persistence worker thread) and by a local submission (`research_execution.validate_submission` traces, `commit_accounts` stores). The trace runs before the acceptance write fence, over the exact capture records the commit writes, and is stored in the same commit as one `account_data_sources` record per owner and account (`account_data_sources.py`). `GET /v1/accounts/{id}` serves it as `data_sources`: per claim, each Dataset it reaches with its input roles, routes, the cited gene set, mechanism, trait, file or source claim it was reached through (`via_ids`), the credited Organizations and roles, and any curated lineage step (`curation_ids`), plus names for the bubble chart. The account view draws these datasets inside each claim circle.
 
-- **Release-era trace, no portal:** the record comes from `provenance_api.trace_local`, the endpoint's hydration and walk (identity binding included) without phase 3's portal fetch. It reads the reference tables and retained capture bytes, makes no remote request and writes no file. A reached trait's GWAS route ends at its bottom-line artifact as the published release names it (`metadata.bottom_line.gwas_artifact`): a data source of kind `gwas_bottom_line` with id `gwas-bottom-line:<artifact_id>`, its ancestry, the KPN trait and the portal's artifact page (built from ids) as `location`. The endpoint itself still shows the portal's GWAS lineage.
+- **Release-era trace, no portal:** the record comes from `provenance_api.trace_local`, the endpoint's hydration and walk (identity binding, the factor projection bound and capture endpoints included) without the portal fetch. It reads the reference tables and retained capture bytes, makes no remote request and writes no file. A reached trait's GWAS route ends at its bottom-line artifact as the published release names it (`metadata.bottom_line.gwas_artifact`): a data source of kind `gwas_bottom_line` with id `gwas-bottom-line:<artifact_id>`, its ancestry, the KPN trait and the portal's artifact page (built from ids) as `location`. The endpoint itself still shows the portal's GWAS lineage.
 - **Never blocking:** a trace failure (storage, reference database, processing bound, or a 90 s deadline) is stored as `status: unavailable` with an error code; the account is accepted regardless.
 - **Exact source:** a record is served only for the document and account payload it traced, under the current format and `TRACING_POLICY_VERSION`; otherwise `data_sources` is `{status: not_traced}`. Records traced under `account-provenance-v1` (before the reference release) are therefore `not_traced` until re-traced. Re-accepting an account keeps its first trace, matching the first-document-wins object index. A private read that withholds revoked borrowed objects drops the connections reached only through them and reports `incomplete`.
 - **Publication:** publishing copies the owner's matching record beside the new snapshot (`digest(['publication', snapshot_id])`); a later re-trace never changes what a published snapshot serves.

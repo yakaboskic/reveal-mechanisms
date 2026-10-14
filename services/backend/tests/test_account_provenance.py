@@ -442,6 +442,46 @@ class AccountProvenanceTests(unittest.TestCase):
         self.assertEqual(result['coverage']['status'], 'complete')
         self.assertEqual([edge['object'] for edge in result['edges'] if edge['relation'] == 'used'], [kept])
 
+    def test_a_verified_capture_file_is_a_lineage_endpoint_and_other_files_are_missing_lineage(self):
+        source = document()
+        source['evidence_items'][0]['was_derived_from'] = ['capture', 'upload']
+        source['files'] = [{'id': 'capture', 'filename': 'research-1.json'}, {'id': 'upload', 'filename': 'notes.json'}]
+        unverified = provenance.collect(deepcopy(source), 'account')
+        self.assertEqual({node['id']: node['kind'] for node in unverified['nodes'] if node['id'] in ('capture', 'upload')},
+                         {'capture': 'file', 'upload': 'file'})
+        self.assertEqual({row['code'] for row in unverified['coverage']['issues']}, {'MISSING_LINEAGE'})
+        source['_provenance_coverage'] = {'capture_file_ids': ['capture', 'upload']}
+        verified = provenance.collect(source, 'account')
+        nodes = {node['id']: node for node in verified['nodes']}
+        self.assertEqual((nodes['capture']['kind'], nodes['capture']['filename'], nodes['upload']['kind']), ('capture', 'research-1.json', 'capture'))
+        self.assertEqual(verified['coverage']['status'], 'complete')
+        self.assertEqual(verified['dataset_reuse'], unverified['dataset_reuse'])  # an endpoint, never a Dataset
+        # Only a File is a capture: a cited id of another kind keeps its own lineage rules.
+        source['_provenance_coverage'] = {'capture_file_ids': ['capture', 'set']}
+        source['gene_sets'][0].pop('was_generated_by')
+        result = provenance.collect(source, 'account')
+        self.assertEqual(next(node for node in result['nodes'] if node['id'] == 'set')['kind'], 'gene_set')
+        self.assertEqual({row['origin_id'] for row in result['coverage']['issues'] if row['code'] == 'MISSING_LINEAGE'}, {'prop', 'evidence'})
+
+    def test_a_factor_projection_edge_observes_its_library_and_ranks(self):
+        source = document()
+        source['propositions'][0]['subject_entity'] = 'mechanism'
+        source['mechanisms'] = [{'id': 'mechanism'}]
+        retained = {'kind': 'retained_projection', 'reference_generation_id': 'e' * 64}
+        source['factor_projection_edges'] = [{'subject': 'mechanism', 'predicate': 'reveal:factorProjection', 'object': 'set',
+                                              'library': 'GTEx', 'joint_rank': 1, 'marginal_rank': 3, 'provenance_source': retained}]
+        edge = next(edge for edge in provenance.collect(source, 'account')['edges'] if edge['relation'] == 'factor_projection')
+        self.assertEqual((edge['observations'], edge['provenance_source']), ([{'library': 'GTEx', 'joint_rank': 1, 'marginal_rank': 3}], [retained]))
+
+    def test_trait_ids_take_ascii_digits_only(self):
+        self.assertEqual(provenance.kpn_trait('KPN.TRAIT:0000398'), 'KPN.TRAIT:0000398')
+        for digits in ('٠٠٠٠٣٩٨', '００００３９８', '000039٨'):
+            self.assertIsNone(provenance.kpn_trait('KPN.TRAIT:' + digits))
+            self.assertIsNone(provenance.kpn_trait('https://broadinstitute.github.io/kpn-data-models/kpn.trait/' + digits + '/'))
+        source = document()
+        source['propositions'][0]['object_entity'] = 'KPN.TRAIT:٠٠٠٠٣٩٨'
+        self.assertNotIn(source['propositions'][0]['object_entity'], provenance.eligible_reference_ids(source, 'account'))
+
 
 if __name__ == '__main__':
     unittest.main()
