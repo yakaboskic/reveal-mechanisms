@@ -13,7 +13,9 @@ Phases 1 and 3 run in the threadpool, at most TRACE_SLOTS at once per process.
 trace_local is the same trace without phase 2 and without pagination, for the stored account data sources
 (account_data_sources.py) computed when an account is saved: it makes no portal request and writes no file. Each reached
 trait's GWAS route ends at its bottom-line artifact as the release names it (ref_traits / ref_phenotypes
-metadata.bottom_line.gwas_artifact), a dataset node of kind gwas_bottom_line whose portal link is built from ids.
+metadata.bottom_line.gwas_artifact), a dataset node of kind gwas_bottom_line whose portal link is built from ids. Its
+hydration and walk are the endpoint's (expand, assemble, collect), so a stored record follows the same factor projection
+bound (provenance_reference.TRACE_PROJECTIONS_PER_LIBRARY) and ends at the same verified capture Files.
 """
 import asyncio
 from contextlib import ExitStack
@@ -236,8 +238,9 @@ def assemble(account_id, source, original, expanded, metadata, outcomes, *, loca
                 expanded[group] = [value for value in values if not isinstance(value, dict) or
                                    (value.get('id') not in blocked and value.get('subject') not in blocked
                                     and value.get('object') not in blocked)]
+    # capture_file_ids: cited Files verified as retained captures, where the walk ends (kind capture), never missing lineage.
     expanded['_provenance_coverage'] = {key: metadata.get(key, []) for key in
-        ('retained_projection_coverage', 'recovery_status', 'blocked_reference_ids')}
+        ('retained_projection_coverage', 'recovery_status', 'blocked_reference_ids', 'capture_file_ids')}
     expanded['_provenance_coverage'].update(issues=issues, upstream_gaps=[
         {'route': 'trait_gwas', 'code': code, 'object_ids': sorted(ids)} for code, ids in sorted(gaps.items())])
     result = collect(expanded, account_id)

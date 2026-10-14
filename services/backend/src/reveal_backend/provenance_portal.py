@@ -206,7 +206,8 @@ def _retry_after(value):
 async def _body(response):
     """The body, or None past MAX_BYTES (decoded bytes are counted, so a compressed body cannot exceed it either)."""
     length = response.headers.get('content-length')
-    if length and length.isdigit() and int(length) > MAX_BYTES: return None
+    # [0-9] only: str.isdigit also accepts other Unicode digits, some of which int() rejects.
+    if length and length.isascii() and length.isdigit() and int(length) > MAX_BYTES: return None
     body = bytearray()
     async for chunk in response.aiter_bytes():
         body += chunk

@@ -11,6 +11,10 @@ trait -reveal:publishedGwas-> the portal's bottom-line Dataset (route trait_gwas
 portal's raw inputs hang off that Dataset by reveal:portalTransitiveInput, which is
 shown but never traversed. An activity's used inputs are followed one per lineage
 signature once a signature groups more than GROUP_THRESHOLD of them.
+
+A File the trace verified as a retained capture (`_provenance_coverage.capture_file_ids`) is a
+lineage endpoint: its node has kind capture, and without recorded lineage it ends the walk
+instead of reporting MISSING_LINEAGE. A factor projection edge observes its library and ranks.
 """
 from collections import defaultdict, deque
 from copy import deepcopy
@@ -49,7 +53,8 @@ FIELDS = {'was_derived_from': 'prov:wasDerivedFrom', 'was_generated_by': 'prov:w
 REVEAL = {'factor_projection': 'reveal:factorProjection', 'fitted_on_trait': 'reveal:fittedOnTrait',
           'published_gwas': 'reveal:publishedGwas', 'portal_transitive_input': 'reveal:portalTransitiveInput'}
 # A KPN trait as cited: its CURIE or its kpn-data-models page.
-TRAIT_ID = re.compile(r'(?:KPN\.TRAIT:|https://broadinstitute\.github\.io/kpn-data-models/kpn\.trait/)(\d{7})/?')
+# [0-9], not \d: a str pattern's \d matches every Unicode digit, and the ascii trait columns hold only these.
+TRAIT_ID = re.compile(r'(?:KPN\.TRAIT:|https://broadinstitute\.github\.io/kpn-data-models/kpn\.trait/)([0-9]{7})/?')
 ORG_ROLES = {'was_attributed_to': 'attribution', 'has_creator': 'creator',
              'has_contributor': 'contributor', 'publisher': 'publisher', 'funded_by': 'funder',
              'was_associated_with': 'generation_agent'}
@@ -113,6 +118,7 @@ class _Graph:
         self.issue_origins = defaultdict(set)
         self.reference_origins = defaultdict(set)
         self.projections = set()
+        self.captures = set(document.get('_provenance_coverage', {}).get('capture_file_ids', []))
         self.factor_bindings = {item.get('mechanism_id') for item in
             document.get('_provenance_coverage', {}).get('retained_projection_coverage', [])
             if isinstance(item, dict) and (item.get('known_factor_binding') is True or
@@ -173,11 +179,15 @@ class _Graph:
             if len(self._input_edges) > MAX_EDGES:
                 _limit()
         value = self._input_edges[key]
+        # A projection observes its library and ranks; its source is in provenance_source alone (a trace holds thousands).
+        observed = ({name: item for name, item in metadata.items() if name != 'provenance_source'} if relation == 'factor_projection'
+                    else metadata)
         if metadata:
-            observations = value.setdefault('observations', [])
-            if metadata not in observations:
-                observations.append(metadata)
-                observations.sort(key=lambda item: json.dumps(item, sort_keys=True))
+            if observed:
+                observations = value.setdefault('observations', [])
+                if observed not in observations:
+                    observations.append(observed)
+                    observations.sort(key=lambda item: json.dumps(item, sort_keys=True))
             if 'provenance_source' in metadata:
                 sources = value.setdefault('provenance_source', [])
                 if metadata['provenance_source'] not in sources:
@@ -189,7 +199,9 @@ class _Graph:
         if identity not in self.nodes:
             node = self.records.get(identity)
             status = 'conflicting' if identity in self.conflicts else 'resolved' if node else 'unresolved'
-            compact = {'id': identity, 'kind': self.kinds.get(identity, 'unresolved'), 'status': status}
+            kind = self.kinds.get(identity, 'unresolved')
+            compact = {'id': identity, 'kind': 'capture' if kind == 'file' and status == 'resolved' and identity in self.captures else kind,
+                       'status': status}
             if node and status == 'resolved':
                 for key in ('name', 'sha256', 'filename', 'ror', 'href'):
                     if key in node:
@@ -375,9 +387,10 @@ class _Graph:
                 links += self.outgoing(identity, {'was_derived_from', 'source_claims', 'mechanistic_model'})
             elif kind == 'claim':
                 links += self.outgoing(identity, {'proposition'}) + self.evidence(identity, origin)
-            # An activity whose inputs were all summarized (unlinked_inputs) already has its coverage entry.
+            # An activity whose inputs were all summarized (unlinked_inputs) already has its coverage entry; a verified capture is
+            # where its lineage ends.
             if (kind in ('gene_set', 'file', 'activity', 'mechanistic_model') and not links and not (kind == 'file' and self.parents.get(identity))
-                    and not (kind == 'activity' and self.outgoing(identity, {'used'}))):
+                    and not (kind == 'activity' and self.outgoing(identity, {'used'})) and not (kind == 'file' and identity in self.captures)):
                 self.issue('MISSING_LINEAGE', origin)
             for edge in links:
                 relation, target = edge['relation'], edge['object']

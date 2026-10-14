@@ -1,4 +1,6 @@
 """Release-pinned trace hydration: research and Box-package captures bound to the published release's ref_* tables."""
+import asyncio
+from contextlib import contextmanager
 from copy import deepcopy
 import json
 import os
@@ -9,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from reveal_backend import provenance_reference as reference
-from reveal_backend.account_provenance import collect
+from reveal_backend.account_provenance import collect, kpn_trait
 from reveal_backend.acceptance import public_runtime
 from reveal_backend.evidence_package import canonical_json, sha256
 from reveal_backend.reference_generation import KPN_MODEL
@@ -151,7 +153,14 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         self.assertEqual(metadata['reference_generation_ids'], [RELEASE])
         self.assertEqual({edge['object'] for edge in doc['factor_projection_edges']}, {CITED, PROJECTED, GLYGEN_SET})
         self.assertEqual(metadata['retained_projection_coverage'], [{'mechanism_id': self.mechanism['id'], 'reference_generation_id': RELEASE,
-            'status': 'retained_rows_loaded', 'known_factor_binding': True, 'retained_rows': 3, 'model_construction_provenance': 'not_established'}])
+            'status': 'retained_rows_loaded', 'known_factor_binding': True, 'retained_rows': 3, 'traced_rows': 3,
+            'trace_bound': reference.TRACE_BOUND, 'model_construction_provenance': 'not_established'}])
+        # A projection edge observes its library and ranks; its release is its provenance_source.
+        edge = next(edge for edge in doc['factor_projection_edges'] if edge['object'] == CITED)
+        self.assertEqual({key: value for key, value in edge.items() if key != 'provenance_source'},
+                         {'subject': self.mechanism['id'], 'predicate': 'reveal:factorProjection', 'object': CITED,
+                          'library': 'GTEx', 'joint_rank': 1, 'marginal_rank': 1})
+        self.assertEqual(edge['provenance_source'], {'kind': 'retained_projection', 'reference_generation_id': RELEASE})
         sets = {node['id']: node for node in doc['gene_sets']}
         self.assertEqual(sets[CITED], self.cited)  # cited: the full node, its non-identity slots removed
         self.assertEqual(sets[PROJECTED], {'id': PROJECTED, 'name': 'projected set', 'collection_id': 'gtex', 'was_generated_by': EXTRACT})
@@ -216,7 +225,8 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         self.assertEqual(calls, [self.mechanism['id']])
         self.assertEqual([sql for sql, _ in self.queries], ['SELECT release_id,published_at,manifest FROM reveal_ref_release'])
         self.assertIn({'code': 'reference_release_superseded'}, metadata['issues'])
-        self.assertEqual([(edge['object'], edge['reference_generation_id']) for edge in doc['factor_projection_edges']], [(CITED, RELEASE)])
+        self.assertEqual([(edge['object'], edge['provenance_source']['reference_generation_id'], edge['library'], edge['joint_rank'])
+                          for edge in doc['factor_projection_edges']], [(CITED, RELEASE, 'GTEx', 1)])
         self.assertEqual(metadata['retained_projection_coverage'][0]['status'], 'archived_snapshot_loaded')
         self.assertEqual({node['id']: node.get('name') for node in doc['traits']}, {TRAIT: 'type 2 diabetes'})
         self.assertEqual(metadata['traits'], {})  # no current-table GWAS metadata for superseded work
@@ -418,6 +428,261 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         with self.assertRaises(sqlite3.OperationalError):
             reference.expand(self.document, {}, tx=EmptyTx(),
                 connection_factory=lambda: (_ for _ in ()).throw(sqlite3.OperationalError('offline')))
+
+    def test_a_verified_capture_file_ends_its_lineage_and_an_unverified_file_is_missing_lineage(self):
+        self.capture()
+        self.box('reference-release.json', ['reveal_ref_release'], [{'release_id': RELEASE, 'published_at': '2026-10-10T12:00:00', 'manifest': json.dumps(MANIFEST)}])
+        captured, box = (record['file'] for record in sorted(self.records.values(), key=lambda record: record['file']['filename']))
+        unverified = self.runtime.file('notes.json', b'{"notes": 1}', 'application/json')
+        self.records[unverified['sha256']] = {'sha256': unverified['sha256'], 'file': unverified,  # its descriptor names other bytes
+            'research_source': {'sha256': '0' * 64, 'dapper_file_id': unverified['id'], 'source_mode': 'imported_reference'}}
+        unknown = self.runtime.file('unknown.json', b'[]', 'application/json')  # no retained record
+        cited = {'captured': captured, 'box': box, 'unverified': unverified, 'unknown': unknown}
+        self.document['files'] = list(cited.values())
+        self.document['claims'][0]['has_evidence'] = [f'dapper:EvidenceItem.{name}' for name in cited]
+        self.document['evidence_items'] = [{'id': f'dapper:EvidenceItem.{name}', 'target_proposition': PROP, 'direction': 'SUPPORTS',
+                                            'was_derived_from': [file['id']]} for name, file in cited.items()]
+        doc, metadata = self.expand()
+        self.assertEqual(metadata['capture_file_ids'], sorted([captured['id'], box['id']]))
+        result = self.collect(doc, metadata)
+        kinds = {node['id']: node['kind'] for node in result['nodes']}
+        self.assertEqual([kinds[file['id']] for file in cited.values()], ['capture', 'capture', 'file', 'file'])
+        missing = {row['origin_id'] for row in result['coverage']['issues'] if row['code'] == 'MISSING_LINEAGE'}
+        self.assertEqual(missing, {'dapper:EvidenceItem.unverified', 'dapper:EvidenceItem.unknown'})
+        evidence = {wrapper['record']['id']: wrapper['provenance']['resolution'] for wrapper in result['evidence_items']}
+        self.assertEqual(evidence['dapper:EvidenceItem.captured'], 'not_applicable')  # an endpoint, not a Dataset
+        self.assertEqual(evidence['dapper:EvidenceItem.unverified'], 'incomplete')
+        # Without the verified record the same File is missing lineage again.
+        self.records = {key: value for key, value in self.records.items() if value['file']['id'] != captured['id']}
+        doc, metadata = self.expand()
+        self.assertNotIn(captured['id'], metadata['capture_file_ids'])
+        self.assertIn('dapper:EvidenceItem.captured', {row['origin_id'] for row in self.collect(doc, metadata)['coverage']['issues']
+                                                       if row['code'] == 'MISSING_LINEAGE'})
+
+    def test_an_upload_or_a_file_that_is_not_a_box_capture_is_never_a_capture(self):
+        # An account citing no Mechanism or gene set: its cited Box capture is still read and parsed before it ends lineage.
+        self.document.update(mechanisms=[], propositions=[{'id': PROP, 'subject_entity': RARE}], claims=[{'id': 'dapper:Claim.a', 'proposition': PROP}])
+        self.document['scientific_accounts'][0]['component_claims'] = ['dapper:Claim.a']
+        self.box('reference-release.json', ['reveal_ref_release'], [{'release_id': RELEASE, 'published_at': '2026-10-10T12:00:00', 'manifest': json.dumps(MANIFEST)}])
+        box = next(iter(self.records.values()))['file']
+        raw = b'{"format": "a researcher\'s own file"}'  # named as a Box capture, not one
+        fake = self.runtime.file('reference-factors.json', raw, 'application/json')
+        self.records[fake['sha256']], self.raw[fake['sha256']] = {'sha256': fake['sha256'], 'file': fake, 'storage': {'store': 's3'}}, raw
+        upload = self.runtime.file('assay.json', b'{"gene": "A"}', 'application/json')
+        self.records[upload['sha256']] = {'sha256': upload['sha256'], 'file': upload, 'research_source': {  # an evidence import: no source_mode
+            'path': 'imports/i/' + upload['sha256'] + '.json', 'format': 'binary', 'origin': 'reveal-import:i', 'sha256': upload['sha256'],
+            'size_bytes': 13, 'dapper_file_id': upload['id'], 'eligible_evidence': True, 'cfde_evidence': False}}
+        cited = {'box': box, 'fake': fake, 'upload': upload}
+        self.document['files'] = list(cited.values())
+        self.document['claims'][0]['has_evidence'] = [f'dapper:EvidenceItem.{name}' for name in cited]
+        self.document['evidence_items'] = [{'id': f'dapper:EvidenceItem.{name}', 'target_proposition': PROP, 'direction': 'SUPPORTS',
+                                            'was_derived_from': [file['id']]} for name, file in cited.items()]
+        doc, metadata = self.expand()
+        self.assertEqual(metadata['capture_file_ids'], [box['id']])
+        self.assertIn({'code': 'invalid_capture_binding', 'object_id': fake['id']}, metadata['issues'])
+        result = self.collect(doc, metadata)
+        self.assertEqual([next(node['kind'] for node in result['nodes'] if node['id'] == file['id']) for file in cited.values()],
+                         ['capture', 'file', 'file'])
+        self.assertEqual({row['origin_id'] for row in result['coverage']['issues'] if row['code'] == 'MISSING_LINEAGE'},
+                         {'dapper:EvidenceItem.fake', 'dapper:EvidenceItem.upload'})
+
+    def test_non_ascii_ids_are_unresolvable_and_never_reach_sql(self):
+        digits = '٠٠٠٠٣٩٨'  # 0000398 in Arabic-Indic digits: Python's \d matches them
+        trait, gene_set = 'KPN.TRAIT:' + digits, 'dapper:GeneSet.' + 'é' * 32
+        self.assertIsNone(kpn_trait(trait))
+        self.assertIsNone(kpn_trait('https://broadinstitute.github.io/kpn-data-models/kpn.trait/' + digits + '/'))
+        self.assertEqual(kpn_trait('KPN.TRAIT:0000398'), TRAIT)
+        # A Mechanism node naming a public factor id in those digits is never looked up.
+        named = {'id': ref('Mechanism', 'named'), 'name': 'T2D mechanism Factor1',
+                 'description': f'EAGGL mechanism factor:kpn:{digits}:eaggl-capped-v1:Factor1. KPN trait type 2 diabetes.'}
+        self.document['mechanisms'].append(named)
+        self.document['propositions'] = [{'id': PROP, 'subject_entity': self.mechanism['id'], 'object_entity': gene_set},
+                                         {'id': PROP2, 'subject_entity': trait, 'object_entity': named['id']}]
+        doc, metadata = self.expand()
+        parameters = [value for _, args in self.queries for value in args]
+        self.assertTrue(parameters and all(str(value).isascii() for value in parameters), parameters)
+        self.assertEqual(metadata['reference_generation_ids'], [RELEASE])  # the ASCII Mechanism still binds
+        coverage = {row['mechanism_id']: row for row in metadata['retained_projection_coverage']}
+        self.assertEqual(coverage[named['id']]['identity_lookup'], 'not_applicable')
+        self.assertEqual(coverage[self.mechanism['id']]['status'], 'retained_rows_loaded')
+        self.assertNotIn(gene_set, {node['id'] for node in doc.get('gene_sets', [])})
+        self.assertEqual({node['id'] for node in doc['traits']}, {TRAIT})
+        # The SQL boundary itself: a non-ASCII id names no row and is never sent.
+        self.queries.clear()
+        rows = reference._batched(Connection(self.path, self.queries), 'SELECT gene_set_id FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})',
+                                  [], [CITED, gene_set], ('gene_set_id',))
+        self.assertEqual((rows, self.queries[0][1]), ([{'gene_set_id': CITED}], (CITED,)))
+
+
+LIBRARIES = ('GTEx', 'LINCS_L1000', 'GlyGen', 'IDG', 'RummaGEO', 'HuBMAP', 'MoTrPAC', 'IMPC', 'MetabolomicsWorkbench')
+
+
+class Repo:
+    """A public source's trace reads no application row: its artifact records are the publication's."""
+    @contextmanager
+    def read_transaction(self): yield None
+
+
+class ProjectionBoundTests(unittest.TestCase):
+    """A release Mechanism's factor_projection route follows its top gene sets per library, the account's own and the first one
+    reaching each further Dataset: the Datasets reached stay those of every retained projection, and an account citing 13 T2D
+    Mechanisms (about 576 retained projections each, as released) stays far inside the response and graph bounds."""
+    release_setup, capture, expand = ReleaseHydrationTests.setUp, ReleaseHydrationTests.capture, ReleaseHydrationTests.expand
+
+    def setUp(self):
+        self.release_setup()
+
+    def build(self, factors, per_library=64, further=True):
+        """Factors 1..`factors` of T2D, each projecting in every library onto its own gene sets ranked 1..per_library. Collection
+        <library>-a generated the top 10 (and without `further` all of them); with `further` the rest are <library>-b's, whose
+        lineage reaches another Dataset. Each Mechanism is cited by one claim whose evidence is its get_factor capture."""
+        gene_sets, projections, collections = [], [], []
+        for library in LIBRARIES:
+            for part in 'ab':
+                activity, file, dataset = (ref(cls, library + part) for cls in ('Activity', 'File', 'Dataset'))
+                collections.append((f'{library}-{part}', library, 'portal-' + library, json.dumps({'document_sha256': '3' * 64, 'provenance': {
+                    'activities': [{'id': activity}], 'files': [{'id': file}], 'organizations': [{'id': BROAD, 'name': 'Broad Institute'}],
+                    'datasets': [{'id': dataset, 'name': f'{library} {part} release', 'publisher': BROAD}],
+                    'used_edges': [used(activity, file)],
+                    'was_derived_from_edges': [{'subject': file, 'predicate': 'prov:wasDerivedFrom', 'object': dataset}]}})))
+        mechanisms, factor_rows, account = [], [], {'id': ACCOUNT, 'component_claims': [], 'conclusion_claims': []}
+        document = {'scientific_accounts': [account], 'claims': [], 'propositions': [], 'evidence_items': [], 'mechanisms': mechanisms, 'files': []}
+        self.records, self.raw = {}, {}
+        for number in range(1, factors + 1):
+            key = f'{TRAIT}::Factor{number}'
+            item = {**self.item, 'factor_key': key, 'public_id': f'factor:kpn:0000398:eaggl-capped-v1:Factor{number}',
+                    'eaggl_factor_id': f'T2D::Factor{number}', 'label': f'program {number}'}
+            factor_rows.append((key, item['public_id'], item['eaggl_factor_id'], TRAIT, number, item['label'], '{}'))
+            mechanisms.append(reference._compute_mechanism(item, self.source))
+            known = set(self.records); self.capture(items=[item])
+            file = self.records[(set(self.records) - known).pop()]['file']
+            document['files'].append(file)
+            claim, prop, evidence = (ref(cls, f'f{number}') for cls in ('Claim', 'Proposition', 'EvidenceItem'))
+            document['claims'].append({'id': claim, 'proposition': prop, 'has_evidence': [evidence]})
+            document['propositions'].append({'id': prop, 'subject_entity': mechanisms[-1]['id'], 'object_entity': TRAIT})
+            document['evidence_items'].append({'id': evidence, 'target_proposition': prop, 'direction': 'SUPPORTS', 'was_derived_from': [file['id']]})
+            account['component_claims'].append(claim)
+            for index, library in enumerate(LIBRARIES):
+                for rank in range(1, per_library + 1):
+                    identity = ref('GeneSet', f'f{number}l{index}r{rank}')
+                    part = 'b' if further and rank > reference.TRACE_PROJECTIONS_PER_LIBRARY else 'a'
+                    gene_sets.append((identity, f'{library}-{part}', f'{library} signature {number}.{rank}', library, json.dumps({'dapper_gene_set': {
+                        'id': identity, 'name': f'{library} signature {number}.{rank}', 'members': ['HGNC.SYMBOL:GENE_A'],
+                        'was_generated_by': ref('Activity', library + part)}})))
+                    projections.append((key, identity, library, 1 / rank, 1 / rank, rank, rank))
+        account['conclusion_claims'] = [document['claims'][0]['id']]
+        with sqlite3.connect(self.path) as c:
+            for table in ('reveal_ref_factors', 'reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections'): c.execute('DELETE FROM ' + table)
+            c.executemany('INSERT INTO reveal_ref_factors VALUES(?,?,?,?,?,?,?)', factor_rows)
+            c.executemany('INSERT INTO reveal_ref_projections VALUES(?,?,?,?,?,?,?)', projections)
+            c.executemany('INSERT INTO reveal_ref_gene_sets VALUES(?,?,?,?,?)', gene_sets)
+            c.executemany('INSERT INTO reveal_ref_collections VALUES(?,?,?,?)', collections)
+        self.document = document
+
+    def account_source(self):
+        return {'document': self.document, 'public': {'id': 'publication', 'owner': 'owner', 'data': {'version': 1}}, 'publication_record': None,
+                'user': None, 'root_payload': sha256(canonical_json(self.document['scientific_accounts'][0])), 'withheld_ids': set(),
+                'withheld_dependencies': False, 'snapshot': {'artifact_records': deepcopy(self.records)}}
+
+    def traced(self, endpoint=False, per_library=None):
+        """The endpoint's page (portal disabled) or trace_local's result, optionally with another per-library bound."""
+        from reveal_backend import provenance_api
+        source = self.account_source()
+        bound = patch.object(reference, 'TRACE_PROJECTIONS_PER_LIBRARY', per_library) if per_library else patch.dict(os.environ, {})
+        with patch('reveal_backend.runtime_config.reference_mysql_connection', side_effect=lambda *args, **kwargs: Connection(self.path, self.queries)), \
+             patch.object(reference, '_read_capture', side_effect=lambda record: self.raw[record['sha256']]), bound, \
+             patch.dict(os.environ, {'REVEAL_GATEWAY_SECRET': 's' * 32, 'REVEAL_PROVENANCE_PORTAL_URL': ''}):
+            if endpoint: return asyncio.run(provenance_api.trace(Repo(), ACCOUNT, lambda tx: source, {}))
+            return provenance_api.trace_local(Repo(), ACCOUNT, source, provenance_api.visible_records(self.document, self.records))
+
+    def test_thirteen_t2d_mechanisms_stay_far_inside_the_response_bounds(self):
+        from reveal_backend import account_data_sources, account_provenance, provenance_api
+        self.build(13)
+        page = self.traced(endpoint=True)
+        size = len(json.dumps(page, ensure_ascii=False, separators=(',', ':')).encode())
+        self.assertLess(size, provenance_api.MAX_RESPONSE_BYTES // 4)
+        self.assertLess(len(page['nodes']), account_provenance.MAX_NODES // 4)
+        self.assertLess(len(page['edges']), account_provenance.MAX_EDGES // 10)
+        # Per Mechanism: the top 10 of each library and the first gene set of its further collection, stated in coverage.
+        coverage = page['coverage']['retained_projection_coverage']
+        self.assertEqual([(row['retained_rows'], row['traced_rows'], row['trace_bound']) for row in coverage],
+                         [(64 * len(LIBRARIES), 11 * len(LIBRARIES), reference.TRACE_BOUND)] * 13)
+        projected = [edge for edge in page['edges'] if edge['relation'] == 'factor_projection']
+        self.assertEqual(len(projected), 13 * 11 * len(LIBRARIES))
+        self.assertTrue(all(edge['observations'] == [{'library': edge['observations'][0]['library'], 'joint_rank': edge['observations'][0]['joint_rank'],
+                                                      'marginal_rank': edge['observations'][0]['joint_rank']}] for edge in projected))
+        datasets = {ref('Dataset', library + part) for library in LIBRARIES for part in 'ab'}
+        self.assertEqual({row['dataset_id'] for row in page['dataset_reuse']}, datasets)
+        # The capture each claim's evidence cites is where that lineage ends: no missing lineage anywhere.
+        self.assertEqual(sum(node['kind'] == 'capture' for node in page['nodes']), 13)
+        self.assertEqual({row['code'] for row in page['coverage']['issues']}, {'external_provenance_unavailable'})  # portal disabled
+        # The stored data sources trace the same bound: the same Datasets per claim (and the trait's release-named GWAS), the same
+        # coverage, and no missing lineage.
+        local = self.traced()
+        self.assertEqual(local['result']['coverage']['retained_projection_coverage'], coverage)
+        gwas = provenance_api.GWAS_DATASET_PREFIX + ARTIFACT
+        self.assertEqual({wrapper['record']['id']: wrapper['provenance']['dataset_ids'] for wrapper in local['result']['claims']},
+                         {wrapper['record']['id']: sorted(wrapper['provenance']['dataset_ids'] + [gwas]) for wrapper in page['claims']})
+        stored = account_data_sources.compact(local)
+        self.assertEqual((stored['status'], stored['coverage']['issue_counts']), ('complete', {}))
+        # Expanding every retained projection instead exceeds the response bound, and reaches no other Dataset.
+        unbounded = self.traced(per_library=10 ** 6)['result']
+        self.assertGreater(len(json.dumps(unbounded, ensure_ascii=False, separators=(',', ':')).encode()), provenance_api.MAX_RESPONSE_BYTES)
+        reach = lambda result: {row['dataset_id']: row['claim_ids'] for row in result['dataset_reuse']}
+        self.assertEqual(reach(unbounded), reach(local['result']))
+
+    def test_datasets_reached_are_unchanged_when_projections_beyond_the_top_add_no_collection(self):
+        self.build(2, further=False)
+        bounded, unbounded = self.traced()['result'], self.traced(per_library=10 ** 6)['result']
+        self.assertEqual([row['traced_rows'] for row in bounded['coverage']['retained_projection_coverage']], [10 * len(LIBRARIES)] * 2)
+        self.assertEqual([row['traced_rows'] for row in unbounded['coverage']['retained_projection_coverage']], [64 * len(LIBRARIES)] * 2)
+        reached = lambda result: {wrapper['record']['id']: wrapper['provenance']['dataset_ids'] for wrapper in result['claims']}
+        self.assertEqual(reached(bounded), reached(unbounded))
+        self.assertLessEqual({ref('Dataset', library + 'a') for library in LIBRARIES}, {row['dataset_id'] for row in bounded['dataset_reuse']})
+        self.assertEqual(bounded['organization_reuse'], unbounded['organization_reuse'])
+
+    def test_gene_sets_the_account_cites_are_always_followed(self):
+        self.build(1, per_library=20, further=False)
+        deep = ref('GeneSet', 'f1l0r20')  # GTEx rank 20: beyond the top 10, reaching nothing new
+        self.document['propositions'][0]['object_entity'] = deep
+        result = self.traced()['result']
+        self.assertEqual(result['coverage']['retained_projection_coverage'][0]['traced_rows'], 10 * len(LIBRARIES) + 1)
+        self.assertIn(deep, {edge['object'] for edge in result['edges'] if edge['relation'] == 'factor_projection'})
+
+    def test_a_gene_set_whose_lineage_uses_an_upstream_gene_set_is_followed(self):
+        # GTEx rank 11 is generated by an activity that used another GeneSet, whose own collection reaches a further Dataset.
+        self.build(1, per_library=12, further=False)
+        deep, upstream = ref('GeneSet', 'f1l0r11'), ref('GeneSet', 'upstream')
+        uses, makes, raw, dataset = ref('Activity', 'usesset'), ref('Activity', 'upstream'), ref('File', 'upstream'), ref('Dataset', 'upstream')
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_gene_sets SET collection_id=?,metadata=? WHERE gene_set_id=?', ('GTEx-c', json.dumps({'dapper_gene_set': {
+                'id': deep, 'name': 'GTEx signature 1.11', 'members': ['HGNC.SYMBOL:GENE_A'], 'was_generated_by': uses}}), deep))
+            c.execute('INSERT INTO reveal_ref_gene_sets VALUES(?,?,?,?,?)', (upstream, 'upstream', 'upstream set', 'GTEx', json.dumps({'dapper_gene_set': {
+                'id': upstream, 'name': 'upstream set', 'members': ['HGNC.SYMBOL:GENE_A'], 'was_generated_by': makes}})))
+            c.executemany('INSERT INTO reveal_ref_collections VALUES(?,?,?,?)', [
+                ('GTEx-c', 'GTEx', 'portal-GTEx', json.dumps({'document_sha256': '4' * 64, 'provenance': {
+                    'activities': [{'id': uses}], 'used_edges': [used(uses, upstream)]}})),
+                ('upstream', 'GTEx', 'portal-GTEx', json.dumps({'document_sha256': '5' * 64, 'provenance': {
+                    'activities': [{'id': makes}], 'files': [{'id': raw}], 'organizations': [{'id': BROAD, 'name': 'Broad Institute'}],
+                    'datasets': [{'id': dataset, 'name': 'upstream release', 'publisher': BROAD}], 'used_edges': [used(makes, raw)],
+                    'was_derived_from_edges': [{'subject': raw, 'predicate': 'prov:wasDerivedFrom', 'object': dataset}]}}))])
+        bounded, unbounded = self.traced()['result'], self.traced(per_library=10 ** 6)['result']
+        self.assertIn(deep, {edge['object'] for edge in bounded['edges'] if edge['relation'] == 'factor_projection'})
+        reached = lambda result: {row['dataset_id'] for row in result['dataset_reuse']}
+        self.assertIn(dataset, reached(bounded))
+        self.assertEqual(reached(bounded), reached(unbounded))
+
+    def test_a_withheld_gene_set_covers_nothing_and_an_undefined_one_is_reported(self):
+        self.build(1, per_library=13)
+        # GTEx ranks 11 and 12 are the first two reaching GTEx-b's Dataset; 13 has no ref_gene_sets row.
+        withheld, next_best, undefined = (ref('GeneSet', f'f1l0r{rank}') for rank in (11, 12, 13))
+        with sqlite3.connect(self.path) as c: c.execute('DELETE FROM reveal_ref_gene_sets WHERE gene_set_id=?', (undefined,))
+        doc, metadata = self.expand(blocked_ids={withheld})
+        projected = {edge['object'] for edge in doc['factor_projection_edges']}
+        self.assertEqual((withheld in projected, next_best in projected, undefined in projected), (False, True, True))
+        self.assertIn(ref('Dataset', 'GTExb'), {node['id'] for node in doc['datasets']})
+        self.assertIn({'code': 'gene_set_definition_unavailable', 'object_id': undefined}, metadata['issues'])
+        self.assertEqual(metadata['retained_projection_coverage'][0]['traced_rows'], 11 * len(LIBRARIES) + 1)
 
 
 if __name__ == '__main__':

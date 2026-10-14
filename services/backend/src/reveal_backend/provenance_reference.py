@@ -10,12 +10,20 @@ source_kind 'reference_release') and the reference-release captures of Box evide
 packages (reveal.reference-evidence.mysql-capture/2: reference-release, reference-factors,
 candidate-factors), checksum-verified and their Mechanisms re-minted from the captured
 rows. A release is read from the <prefix>_ref_* tables after reference_pin's ref_release
-read on the same connection: ref_factors, ref_projections (every per-library row), ref_gene_sets
-and ref_collections through reference_lineage (collection_lineage, lineage_closure). Gene sets
-the document reaches get their full node; gene sets reached only by a projection get their
-name, collection_id and generating activity. A capture pinned to a release that is no longer
-published is the coverage issue reference_release_superseded: that work is hydrated only from
-capture bytes and archived snapshots (archived(mechanism_id)), never from the current tables.
+read on the same connection: ref_factors, ref_projections, ref_gene_sets and ref_collections
+through reference_lineage (collection_lineage, lineage_closure). Of a Mechanism's retained
+projections (every per-library row) the trace follows, per library, the
+TRACE_PROJECTIONS_PER_LIBRARY best by joint_rank, every gene set the account cites or a capture
+binds, and the best-ranked gene set whose lineage closure reaches a Dataset (or an upstream gene
+set) those do not (so the Datasets reached per library are those of every retained row; a withheld
+gene set is never followed); its retained_projection_coverage entry states that bound (trace_bound,
+traced_rows). A projection edge observes only library, joint_rank and marginal_rank. Gene sets the
+document reaches get their full node; gene sets reached only by a projection get their name,
+collection_id and generating activity. A capture
+pinned to a release that is no longer published is the coverage issue
+reference_release_superseded: that work is hydrated only from capture bytes and archived
+snapshots (archived(mechanism_id), already its top gene sets per library), never from the
+current tables.
 Every reached KPN trait (a bound Mechanism's fitted trait, or one a proposition cites) gets a
 `traits` record named from ref_phenotypes / ref_traits; metadata['traits'] carries its
 bottom-line GWAS artifact (metadata.bottom_line) for the trace's portal phase. Missing tables
@@ -33,6 +41,12 @@ release is never matched.
 Curated lineage edges are labelled provenance_source.kind curated_lineage: a release collection's
 payload.curated_provenance (lap/config/source_datasets.yaml; its curation_id is that source path) and a
 reload-era collection's payload.lineage_curation (scripts/apply_collection_lineage.py).
+
+A cited research capture File whose retained artifact record the trace verifies by checksum (a research_source
+descriptor of a query capture or one of its segments, with a source_mode), or a cited Box package capture whose
+bytes parse as one, is a lineage endpoint: metadata['capture_file_ids'] names it, and the walk ends there at a
+node of kind capture instead of reporting missing lineage; an upload or other retained source File is not one.
+Id columns are ascii: a non-ASCII id the document cites is unresolvable and never reaches SQL.
 """
 from collections import OrderedDict, defaultdict, deque
 from copy import deepcopy
@@ -60,6 +74,15 @@ STRIP_GENE_SET = ('in_gene_set_collection', 'in_gmt_file', 'gmt_entry', 'has_emb
 RELEASE = 'reference_release'  # a valid generation that is the published release (its model in `valid`)
 RELEASE_FACTOR_COLUMNS = ('factor_key', 'public_id', 'eaggl_factor_id', 'kpn_trait_id', 'label')
 RELEASE_PROJECTION_COLUMNS = ('factor_key', 'gene_set_id', 'library', 'joint_loading', 'marginal_loading', 'joint_rank', 'marginal_rank')
+# A release Mechanism's factor_projection route (_traced): per library its best gene sets by joint_rank (the archived snapshot's
+# top gene sets per library), the account's own, and the best-ranked one reaching each further Dataset; the rest of the
+# retained top 50 (joint or marginal) reach no other Dataset and are not followed.
+TRACE_PROJECTIONS_PER_LIBRARY = 10
+TRACE_BOUND = {'per_library': TRACE_PROJECTIONS_PER_LIBRARY, 'order': 'joint_rank', 'plus': ['account_gene_sets', 'best_per_further_dataset']}
+LIGHT_SETS = ("SELECT gene_set_id,collection_id,gene_set_name,JSON_EXTRACT(metadata,'$.dapper_gene_set.was_generated_by'),"
+              "JSON_EXTRACT(metadata,'$.dapper_gene_set.was_derived_from') FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})")
+LIGHT_COLUMNS = ('gene_set_id', 'collection_id', 'gene_set_name', 'was_generated_by', 'was_derived_from')
+PROJECTION_OBSERVATIONS = ('library', 'joint_rank', 'marginal_rank')  # what a projection edge observes
 # A Box package's reference-release captures (reference_evidence): filename -> the tables its source names.
 BOX_FORMAT = 'reveal.reference-evidence.mysql-capture/2'
 BOX_CAPTURES = {'reference-release.json': ['reveal_ref_release'], 'reference-factors.json': ['reveal_ref_factors', 'reveal_ref_traits'],
@@ -69,8 +92,9 @@ KPN_PAGE = 'https://broadinstitute.github.io/kpn-data-models/kpn.trait/{}/'
 IDENTITY = 'document_identity'
 CURATED = 'curated_lineage'
 LINEAGE_FIELDS = ('was_derived_from', 'was_generated_by')
-# A KPN Mechanism node names its public factor id (reference_generation.mechanism_node).
-KPN_DESCRIPTION = re.compile(r'EAGGL mechanism (' + PUBLIC_ID_RE.pattern + r')\. KPN trait ')
+# A KPN Mechanism node names its public factor id (reference_generation.mechanism_node). re.ASCII: its digits are [0-9] only,
+# as the ascii public_id column holds them (a str pattern's \d also matches other Unicode digits).
+KPN_DESCRIPTION = re.compile(r'EAGGL mechanism (' + PUBLIC_ID_RE.pattern + r')\. KPN trait ', re.ASCII)
 IDENTITY_COLUMNS = (*RELEASE_FACTOR_COLUMNS, 'phenotype_name')
 IDENTITY_FACTORS = ('SELECT ' + ','.join('f.' + column for column in RELEASE_FACTOR_COLUMNS) + ',t.phenotype_name FROM reveal_ref_factors f'
                     ' JOIN reveal_ref_traits t ON t.kpn_trait_id=f.kpn_trait_id WHERE f.public_id IN ({marks})')
@@ -125,7 +149,8 @@ def _rows(connection, sql, params, columns):
 
 def _batched(connection, sql, prefix, identities, columns):
     result = []
-    identities = sorted(set(identities))
+    # Id columns are ascii: a non-ASCII id names no row, and never reaches SQL.
+    identities = sorted(identity for identity in set(identities) if not isinstance(identity, str) or identity.isascii())
     for offset in range(0, len(identities), BATCH):
         batch = identities[offset:offset + BATCH]
         result.extend(_rows(connection, sql.format(marks=','.join(['%s'] * len(batch))),
@@ -295,6 +320,109 @@ def _observed_sets(capture):
 
 
 
+def _rank(row):
+    return (row['joint_rank'] if isinstance(row.get('joint_rank'), (int, float)) else float('inf'), row['gene_set_id'])
+
+
+def _traced(rows, referenced, reach, blocked=frozenset()):
+    """The release projection rows a trace follows, in their read order: per factor and library its TRACE_PROJECTIONS_PER_LIBRARY
+    best by joint_rank, every row of a gene set the account cites or a capture binds (`referenced`), and, in rank order, each
+    further row whose gene set reaches something (`reach`, _reach) the kept ones do not. A gene set with no definition is
+    followed (it reports gene_set_definition_unavailable); a withheld one (`blocked`) never is, so it covers nothing."""
+    ranked, kept = defaultdict(list), set()
+    for row in rows:
+        if row['gene_set_id'] not in blocked: ranked[row['factor_key'], row.get('library')].append(row)
+    for items in ranked.values():
+        covered = set()
+        for index, row in enumerate(sorted(items, key=_rank)):
+            datasets = reach.get(row['gene_set_id'], frozenset({('gene_set_definition_unavailable', row['gene_set_id'])}))
+            if index < TRACE_PROJECTIONS_PER_LIBRARY or row['gene_set_id'] in referenced or not datasets <= covered:
+                kept.add(id(row)); covered |= datasets
+    return [row for row in rows if id(row) in kept]
+
+
+def _upstream_sets(graph):
+    """The GeneSets a lineage graph's nodes and edges derive from, are generated by or use: bound to its generation and
+    followed in turn (inherit_set_bindings)."""
+    from .account_provenance import _refs, _relation
+    result = set()
+    for group, rows in graph.items():
+        if not isinstance(rows, list): continue
+        for node in rows:
+            if not isinstance(node, dict): continue
+            if group.endswith('_edges'):
+                identities = [node.get('object')] if _relation(node.get('predicate'), group) in LINEAGE_FIELDS + ('used',) else []
+            else:
+                identities = [target for field in (*LINEAGE_FIELDS, 'used') for target in _refs(node.get(field))]
+            result.update(identity for identity in identities if isinstance(identity, str) and identity.startswith('dapper:GeneSet.'))
+    return result
+
+
+def _closure_key(identity, collection, node, index):
+    """Sibling sets generated by the same activities share one closure; a set the lineage itself relates (was_generated_by
+    edges) has its own."""
+    from .account_provenance import _refs
+    own = bool(index.targets('was_generated_by', identity))
+    return (collection, tuple(sorted(_refs(node.get('was_generated_by')))), identity if own else None)
+
+
+def _closure_of(key, lineage, index, closures):
+    """The (unlabelled) lineage closure of a closure key, computed once per trace (`closures`)."""
+    if key not in closures:
+        closures[key] = _closure({'was_generated_by': list(key[1]), **({'id': key[2]} if key[2] else {})}, lineage, index)
+    return closures[key]
+
+
+def _release_lineages(connection, generation, collections):
+    """(document_sha256 by collection, {collection: (lineage, index, curated)}) of release collections, parsed once per release,
+    collection and document checksum (_LINEAGE). The caller has just read that release from ref_release on `connection`."""
+    shas = {row['collection_id']: _json_value(row['document_sha256']) for row in _batched(connection, _ref(
+        "SELECT collection_id,JSON_EXTRACT(payload,'$.document_sha256') FROM reveal_ref_collections"
+        ' WHERE collection_id IN ({marks})'), [], collections, ('collection_id', 'document_sha256'))}
+    lineages = {collection: _LINEAGE.get(generation, collection, sha) for collection, sha in shas.items()}
+    missing = [collection for collection, cached in lineages.items() if cached is None]
+    if missing:
+        from .reference_lineage import collection_lineage, lineage_index
+        for row in _batched(connection, _ref('SELECT collection_id,payload AS raw FROM reveal_ref_collections'
+                ' WHERE collection_id IN ({marks})'), [], missing, ('collection_id', 'raw')):
+            raw = row['raw'] if isinstance(row['raw'], str) else json.dumps(row['raw'])
+            payload = json.loads(raw)
+            lineage = collection_lineage(payload)
+            lineages[row['collection_id']] = (lineage, lineage_index(lineage), _curated(payload))
+            del payload
+            _LINEAGE.put(generation, row['collection_id'], shas[row['collection_id']], *lineages[row['collection_id']], len(raw))
+    return shas, lineages
+
+
+def _reach(connection, generation, rows, closures):
+    """{gene_set_id: frozenset of what it reaches} of projected release gene sets: the Datasets its lineage closure holds, the
+    ids it derives from directly and the upstream GeneSets its closure names (_upstream_sets: each followed in turn, it stands
+    for what it reaches). A set whose collection has no lineage stands for that gap, so one of them is followed and reports it."""
+    from .account_provenance import _refs
+    light = _batched(connection, _ref(LIGHT_SETS), [], {row['gene_set_id'] for row in rows}, LIGHT_COLUMNS)
+    _, lineages = _release_lineages(connection, generation, {row['collection_id'] for row in light})
+    reach, by_key = {}, {}
+    for row in light:
+        node = {key: _json_value(row[key]) for key in ('was_generated_by', 'was_derived_from') if row[key] is not None}
+        datasets = set(_refs(node.get('was_derived_from')))
+        if lineages.get(row['collection_id']):
+            lineage, index, _ = lineages[row['collection_id']]
+            key = _closure_key(row['gene_set_id'], row['collection_id'], node, index)
+            if key not in by_key:
+                closure = _closure_of(key, lineage, index, closures)
+                by_key[key] = {item['id'] for item in closure.get('datasets', ()) if isinstance(item, dict)} | _upstream_sets(closure)
+            datasets |= by_key[key] - {row['gene_set_id']}
+        else:
+            datasets.add(('collection_provenance_unavailable', row['collection_id']))
+        reach[row['gene_set_id']] = frozenset(datasets)
+    return reach
+
+
+def _observed(row):
+    """A retained projection row as its edge observes it: library and ranks (loadings stay in the reference tables)."""
+    return {key: row[key] for key in PROJECTION_OBSERVATIONS if row.get(key) is not None}
+
+
 def _relevant_graph(graph, roots, blocked):
     """Keep recorded source dependencies of these exact sets, not sibling sets."""
     from .account_provenance import FIELDS, ORG_ROLES, _relation, _refs
@@ -377,14 +505,17 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
 
     enriched = deepcopy(document)
     blocked = set(blocked_ids)
-    eligible = eligible_reference_ids(document, account_id=account_id) - blocked
+    # Id columns are ascii (MySQL): a non-ASCII id is unresolvable, so it is never bound, hydrated or read.
+    eligible = {identity for identity in eligible_reference_ids(document, account_id=account_id) if identity.isascii()} - blocked
     wanted_mechanisms = {value for value in eligible if value.startswith('dapper:Mechanism.')}
     wanted_sets = {value for value in eligible if value.startswith('dapper:GeneSet.')}
     wanted_traits = {value for value in eligible if kpn_trait(value)}
     cited_sets = set(wanted_sets)
     files = {node['id']: node for node in document.get('files', []) if isinstance(node, dict) and 'id' in node}
     metadata = {'reference_generation_ids': [], 'supplement_ids': [], 'source_observations': [], 'issues': [],
-                'retained_projection_coverage': [], 'recovery_status': [], 'blocked_reference_ids': [], 'traits': {}}
+                'retained_projection_coverage': [], 'recovery_status': [], 'blocked_reference_ids': [], 'traits': {},
+                'capture_file_ids': []}
+    captures = set()  # cited Files whose retained artifact record is verified by checksum: lineage endpoints
     issues, observations, conflicts = {}, {}, set()
     bindings, set_generations = defaultdict(dict), defaultdict(set)
     capture_sources, candidate_nodes = {}, {}
@@ -446,23 +577,10 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
     def inherit_set_bindings(graph, generation):
         # Upstream sets acquire the exact source generation from an allowed
         # recorded derivation, never from an active catalog or a name match.
-        from .account_provenance import _refs, _relation
-        for group, rows in graph.items():
-            if not isinstance(rows, list): continue
-            for node in rows:
-                if not isinstance(node, dict): continue
-                if group.endswith('_edges'):
-                    identities = [node.get('object')] if _relation(node.get('predicate'), group) in (
-                        'was_derived_from', 'was_generated_by', 'used') else []
-                else:
-                    identities = [target for field in ('was_derived_from', 'was_generated_by', 'used')
-                                  for target in _refs(node.get(field))]
-                for identity in identities:
-                    if not isinstance(identity, str) or not identity.startswith('dapper:GeneSet.') or identity in blocked:
-                        continue
-                    set_generations[identity].add(generation)
-                    if len(set_generations[identity]) > 1:
-                        conflicts.add(identity); issue('ambiguous_reference_binding', identity)
+        for identity in sorted(_upstream_sets(graph) - blocked):
+            set_generations[identity].add(generation)
+            if len(set_generations[identity]) > 1:
+                conflicts.add(identity); issue('ambiguous_reference_binding', identity)
 
     def bind(identity, generation, source, item, node):
         wanted_mechanisms.add(identity)
@@ -490,13 +608,20 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
         file = record.get('file') or {}
         file_id = file.get('id')
         box = not isinstance(source, dict) and file.get('filename') in BOX_CAPTURES
-        if not box and (not isinstance(source, dict) or descriptor.get('source_mode') != 'imported_reference'): continue
         if file_id in blocked: continue
+        verified = (record.get('sha256') == checksum and file.get('sha256') == checksum and (file_id not in files or files[file_id] == file)
+                    and (box or descriptor.get('sha256') == checksum and descriptor.get('dapper_file_id') == file_id))
+        # A cited capture verified by checksum is where its lineage ends: the walk shows it as a capture instead of missing
+        # lineage. A research capture is a query capture or one of its segments (its research_source descriptor has a
+        # source_mode); a Box package capture is one once its bytes parse as one (below). An upload or other retained source
+        # File is not a capture.
+        cited = verified and file_id in eligible and file_id in files
+        if cited and not box and isinstance(descriptor.get('source_mode'), str): captures.add(file_id)
+        if not box and (not isinstance(source, dict) or descriptor.get('source_mode') != 'imported_reference'): continue
         # An authorized snapshot can contain captures that bind an eligible
         # Mechanism even when that capture File is not cited by a claim.
-        if not wanted_mechanisms and not wanted_sets: continue
-        if (record.get('sha256') != checksum or file.get('sha256') != checksum or (file_id in files and files[file_id] != file)
-                or not box and (descriptor.get('sha256') != checksum or descriptor.get('dapper_file_id') != file_id)):
+        if not wanted_mechanisms and not wanted_sets and not (box and cited): continue
+        if not verified:
             issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
         raw = _read_capture(record)  # Storage failures are not empty scientific results.
         if sha256(raw) != checksum:
@@ -505,6 +630,8 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
             try: release_id, rows = _box_rows(raw, BOX_CAPTURES[file['filename']])
             except (ValueError, TypeError, AttributeError):
                 issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
+            if cited: captures.add(file_id)
+            if not wanted_mechanisms and not wanted_sets: continue
             if file['filename'] == 'reference-release.json': box_manifests.setdefault(release_id, []).append((checksum, rows))
             else: box_rows.append((release_id, checksum, file_id, rows))
             continue
@@ -516,6 +643,7 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                 raise ValueError('Capture source binding differs')
             if capture.get('result', {}).get('status') not in ('complete', 'partial'): continue
         except (ValueError, TypeError, AttributeError):
+            captures.discard(file_id)
             issue('invalid_capture_binding', file_id if file_id in eligible else None); continue
         generation = source['generation_id']
         touched = False
@@ -618,6 +746,7 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                 chosen[identity] = candidates[0]
         return chosen
 
+    metadata['capture_file_ids'] = sorted(captures)
     if not capture_sources and not wanted_traits and not publics and not pending_sets:
         choose()
         metadata['issues'] = list(issues.values())
@@ -719,7 +848,9 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
         # Cited traits are read from the published release unless the account's work is pinned only to a superseded one: work
         # bound to the published release keeps its fitted traits, their names and GWAS routes, beside superseded work.
         if release and (not superseded or release['release_id'] in valid): current = release['release_id']
-        projections = []
+        projections, raw_closures = [], {}
+        # The gene sets the account cites, or a capture binds (with the sets they derive from): always followed.
+        referenced = cited_sets | {identity for identity, contexts in set_generations.items() if contexts}
         for generation, gen in sorted(valid.items()):
             current_bindings = {identity: binding for identity, binding in chosen.items() if binding['generation_id'] == generation}
             try:
@@ -739,15 +870,17 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                     projection_rows = _batched(connection, _ref('SELECT ' + ','.join(RELEASE_PROJECTION_COLUMNS) +
                         ' FROM reveal_ref_projections WHERE factor_key IN ({marks})'), [], exact, RELEASE_PROJECTION_COLUMNS)
                     observe('ref_projections', generation, projection_rows)
-                    counts = defaultdict(int)
-                    for row in projection_rows:
-                        projections.append((generation, exact[row['factor_key']], row['gene_set_id'], row)); counts[row['factor_key']] += 1
+                    counts, traced = defaultdict(int), defaultdict(int)
+                    for row in projection_rows: counts[row['factor_key']] += 1
+                    reach = _reach(connection, generation, projection_rows, raw_closures)
+                    for row in _traced(projection_rows, referenced, reach, blocked):
+                        projections.append((generation, exact[row['factor_key']], row['gene_set_id'], _observed(row))); traced[row['factor_key']] += 1
                     for key, identity in exact.items():
                         origin = current_bindings[identity].get('binding_origin')
                         metadata['retained_projection_coverage'].append({'mechanism_id': identity,
                             'reference_generation_id': generation, 'status': 'retained_rows_loaded', 'known_factor_binding': True,
-                            'retained_rows': counts[key], 'model_construction_provenance': 'not_established',
-                            **({'binding_origin': origin} if origin else {})})
+                            'retained_rows': counts[key], 'traced_rows': traced[key], 'trace_bound': deepcopy(TRACE_BOUND),
+                            'model_construction_provenance': 'not_established', **({'binding_origin': origin} if origin else {})})
                         fitted(identity, current_bindings[identity]['item']['kpn_trait_id'], None, generation)
                 elif gen['model'] == KPN_MODEL:
                     keys = {binding['item']['factor_key'] for binding in current_bindings.values()}
@@ -769,7 +902,7 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                     observe('factor_gene_set_projections', generation, projection_rows)
                     for row in projection_rows:
                         identity = exact[row['factor_key']]
-                        projections.append((generation, identity, row['gene_set_id'], row))
+                        projections.append((generation, identity, row['gene_set_id'], _observed(row)))
                     counts = defaultdict(int)
                     for row in projection_rows: counts[row['factor_key']] += 1
                     for key, identity in exact.items():
@@ -850,10 +983,8 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                         full = _batched(connection, _ref('SELECT gene_set_id,collection_id,metadata FROM reveal_ref_gene_sets'
                             ' WHERE gene_set_id IN ({marks})'), [], [identity for identity in sets if identity in cited_sets],
                             ('gene_set_id', 'collection_id', 'metadata'))
-                        light = _batched(connection, _ref("SELECT gene_set_id,collection_id,gene_set_name,"
-                            "JSON_EXTRACT(metadata,'$.dapper_gene_set.was_generated_by'),JSON_EXTRACT(metadata,'$.dapper_gene_set.was_derived_from')"
-                            ' FROM reveal_ref_gene_sets WHERE gene_set_id IN ({marks})'), [], [identity for identity in sets if identity not in cited_sets],
-                            ('gene_set_id', 'collection_id', 'gene_set_name', 'was_generated_by', 'was_derived_from'))
+                        light = _batched(connection, _ref(LIGHT_SETS), [], [identity for identity in sets if identity not in cited_sets],
+                            LIGHT_COLUMNS)
                         observe('ref_gene_sets', generation, full + light)
                         found, nodes = set(), {}
                         for row in full:
@@ -868,23 +999,8 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                             nodes[row['gene_set_id']] = (row['collection_id'], node, [], row['gene_set_id'] not in node_pool)
                         found.update(row['gene_set_id'] for row in full + light)
                         for identity in sorted(set(sets) - found): issue('gene_set_definition_unavailable', identity)
-                        collections = sorted({collection for collection, _, _, _ in nodes.values()})
-                        shas = {row['collection_id']: _json_value(row['document_sha256']) for row in _batched(connection, _ref(
-                            "SELECT collection_id,JSON_EXTRACT(payload,'$.document_sha256') FROM reveal_ref_collections"
-                            ' WHERE collection_id IN ({marks})'), [], collections, ('collection_id', 'document_sha256'))}
+                        shas, lineages = _release_lineages(connection, generation, {collection for collection, _, _, _ in nodes.values()})
                         observe('ref_collections', generation, [[collection, sha] for collection, sha in shas.items()])
-                        lineages = {collection: _LINEAGE.get(generation, collection, sha) for collection, sha in shas.items()}
-                        missing = [collection for collection, cached in lineages.items() if cached is None]
-                        if missing:
-                            from .reference_lineage import collection_lineage, lineage_index
-                            for row in _batched(connection, _ref('SELECT collection_id,payload AS raw FROM reveal_ref_collections'
-                                    ' WHERE collection_id IN ({marks})'), [], missing, ('collection_id', 'raw')):
-                                raw = row['raw'] if isinstance(row['raw'], str) else json.dumps(row['raw'])
-                                payload = json.loads(raw)
-                                lineage = collection_lineage(payload)
-                                lineages[row['collection_id']] = (lineage, lineage_index(lineage), _curated(payload))
-                                del payload
-                                _LINEAGE.put(generation, row['collection_id'], shas[row['collection_id']], *lineages[row['collection_id']], len(raw))
                         from .acceptance import public_runtime
                         groups = {cls: group for group, cls in public_runtime().groups.items()}
                         for identity, (collection, node, dependencies, add) in sorted(nodes.items()):
@@ -895,14 +1011,11 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                                 continue
                             lineage, index, curated = lineages[collection]
                             if add: merge({'gene_sets': [node]}, source)
-                            # Sibling sets generated by the same activities share one closure; a set the lineage itself
-                            # relates (was_generated_by edges) has its own. Curated edges are labelled curated_lineage.
-                            from .account_provenance import _refs
-                            own = bool(index.targets('was_generated_by', identity))
-                            key = (collection, tuple(sorted(_refs(node.get('was_generated_by')))), identity if own else None)
+                            # One closure per closure key (_closure_key); curated edges are labelled curated_lineage.
+                            key = _closure_key(identity, collection, node, index)
                             if key not in closures:
-                                closures[key] = _label_released(_closure({'was_generated_by': list(key[1]), **({'id': identity} if own else {})},
-                                    lineage, index), curated, {'reference_generation_id': generation, 'collection_id': collection})
+                                closures[key] = _label_released(_closure_of(key, lineage, index, raw_closures), curated,
+                                    {'reference_generation_id': generation, 'collection_id': collection})
                                 inherit_set_bindings(closures[key], generation)
                                 merge(closures[key], source)
                             extra = defaultdict(list)
@@ -1003,8 +1116,7 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
             if identity in conflicts or gene_set in conflicts or gene_set in blocked: continue
             origin = chosen[identity].get('binding_origin')
             merge({'mechanisms': [candidate_nodes[identity]]}, {'kind': origin or 'research_capture'})
-            merge({'factor_projection_edges': [{'subject': identity, 'predicate': 'reveal:factorProjection',
-                'object': gene_set, 'reference_generation_id': generation, **row}]},
+            merge({'factor_projection_edges': [{'subject': identity, 'predicate': 'reveal:factorProjection', 'object': gene_set, **row}]},
                 {'kind': 'retained_projection', 'reference_generation_id': generation, **({'binding_origin': origin} if origin else {})})
         kpns = {kpn_trait(identity) for identity in wanted_traits} | set(traits)
         if current and kpns:
@@ -1053,8 +1165,7 @@ def expand(document, artifact_records, *, tx, connection_factory=None, blocked_i
                     and row['gene_set_id'] not in blocked]
             merge({'mechanisms': [candidate_nodes[identity]], 'factor_projection_edges': [
                 {'subject': identity, 'predicate': 'reveal:factorProjection', 'object': row['gene_set_id'],
-                 'reference_generation_id': generation, 'library': row.get('library'), 'joint_rank': row.get('rank'),
-                 'joint_loading': row.get('joint_loading'), 'marginal_loading': row.get('marginal_loading')} for row in rows]},
+                 **_observed({'library': row.get('library'), 'joint_rank': row.get('rank')})} for row in rows]},
                 {'kind': 'archived_snapshot', 'reference_generation_id': generation})
             metadata['retained_projection_coverage'].append({'mechanism_id': identity, 'reference_generation_id': generation,
                 'status': 'archived_snapshot_loaded', 'known_factor_binding': True, 'retained_rows': len(rows),
