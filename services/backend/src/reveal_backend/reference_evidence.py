@@ -108,7 +108,7 @@ import re
 import time
 
 from .provenance_schema import PROVENANCE_NODES, PROVENANCE_EDGES
-from .reference_lineage import EDGE_KEY, collection_lineage, lineage_closure
+from .reference_lineage import BOOKKEEPING, EDGE_KEY, collection_lineage, lineage_closure
 from .evidence_collector import CaptureStore, add_source_prefixes, deepcopy_record, gz_records
 from .evidence_package import (BUILD_VERSION, INPUT_VERSION, TARGETS, EvidenceBuildError, build_package, canonical_json,
                                decode, finite, frozen_semantic_association, pointer, ref, require, sha256, unique)
@@ -644,6 +644,7 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, e
     closure = lineage_closure(node, provenance)
     grouped = {item['activity'] for item in closure['collapsed']}
     kept = {tuple(edge[key] for key in EDGE_KEY) for edge in closure['provenance'].get('used_edges') or []}
+    bookkeeping = set(provenance.get(BOOKKEEPING) or ())  # run bookkeeping inputs (the curated map): not lineage, as in the closure
     pool = {}
     for source in (metadata.get('dapper_dependencies'), *(producer.get(group) for group in PROVENANCE_GROUPS),
                    *(provenance.get(group) for group in PROVENANCE_GROUPS)):
@@ -658,7 +659,8 @@ def _resolve_gene_set(dapper, row, collection, base_prefixes, class_groups, *, e
                for edge in [*(producer.get(group) or []), *(provenance.get(group) or [])]):
             return None, [], {}, 'Malformed stored provenance edge'
         for edge in provenance.get(group) or []:
-            if group == 'used_edges' and edge['subject'] in grouped and tuple(edge[key] for key in EDGE_KEY) not in kept: continue
+            if group == 'used_edges' and (edge['object'] in bookkeeping
+                                          or edge['subject'] in grouped and tuple(edge[key] for key in EDGE_KEY) not in kept): continue
             target = memberships if group == 'has_file_edges' else outgoing
             target.setdefault(edge['object'] if group == 'has_file_edges' else edge['subject'], []).append((group, edge))
     file_ids = {identity for identity in pool if DAPPER_REFERENCE.fullmatch(identity)

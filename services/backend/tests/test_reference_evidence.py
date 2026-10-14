@@ -616,6 +616,25 @@ class ReferenceEvidenceTests(unittest.TestCase):
         recognized = cfde_source_files(package, self.root / 'curated-lineage' / 'package' / 'evidence-package.json')
         self.assertIn(package['source_artifacts']['gene-set-collections']['dapper_file_id'], recognized)
 
+    def test_bookkeeping_inputs_of_the_curated_map_stay_out_of_the_package(self):
+        """A RummaGEO-like run manifest the producer lists as a used input: the curated map calls it bookkeeping, so the
+        package, like the trace's lineage closure, carries neither the File nor its used edge."""
+        database = self.root / 'with-bookkeeping.sqlite3'
+        shutil.copyfile(self.database, database)
+        manifest = self.runtime.file('source_manifest.json', b'{}', 'application/json')
+        used = {'subject': self.activity['id'], 'predicate': 'prov:used', 'object': manifest['id'], 'edge_role': 'data_input'}
+        with sqlite3.connect(database) as db:
+            payload = json.loads(db.execute('SELECT payload FROM reveal_ref_collections').fetchone()[0])
+            payload['provenance'].setdefault('files', []).append(manifest)
+            payload['provenance'].setdefault('used_edges', []).append(used)
+            payload['curated_provenance'] = {'source': 'lap/config/source_datasets.yaml', 'source_sha256': '0' * 64, 'notes': [],
+                                             'groups': {}, 'bookkeeping_inputs': [manifest['id']]}
+            db.execute('UPDATE reveal_ref_collections SET payload=?', (json.dumps(payload),))
+        context = self.collect('bookkeeping', [ANCHOR], database=database).package['dapper_context']
+        self.assertNotIn(manifest['id'], {node['id'] for node in context.get('files') or []})
+        self.assertNotIn(used, context.get('used_edges') or [])
+        self.runtime.validate(context)
+
     def test_selection_provenance_is_frozen_like_collect_package(self):
         metadata = {'origins': {ANCHOR: 'automatic'}, 'dismissed_eaggl_ids': [SIBLING],
                     'semantic_retrieval': {'status': 'not_computed', 'embedding_run_id': None}, 'frozen_binding': {'anchors': []}}
