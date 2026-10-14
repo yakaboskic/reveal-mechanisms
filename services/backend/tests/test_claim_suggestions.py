@@ -514,8 +514,9 @@ class ReleaseFamilyTests(unittest.TestCase):
         # Without a package nothing is blocked.
         self.assertEqual(hint(account.structure(use_package=False))['repair'], found['repair'])
         # The set-trait family no longer depends on the BioIndex gate.
-        local = capability_catalog({'model': KPN_MODEL}, phenotype_verified=False)
-        context = release(package()); context['capabilities'] = {**local, 'operations': local['operations'] + context['capabilities']['operations']}
+        local = capability_catalog({'model': KPN_MODEL}, phenotype_verified=False)  # a reload-era pin: release readers not_stored
+        served = capability_catalog({'model': KPN_MODEL}, phenotype_verified=False, source_kind='reference_release')
+        context = release(package()); context['capabilities'] = {**served, 'operations': served['operations'] + context['capabilities']['operations']}
         found = hint(account.structure(context))
         self.assertEqual(found['message'], 'No atomic Claims for: factor-gene set, gene-gene set, gene set-trait, factor-trait.')
         self.assertIn(betas + ', nonzero beta_uncorrected rows only', found['repair'])
