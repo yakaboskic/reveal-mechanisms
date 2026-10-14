@@ -5,7 +5,7 @@ import Link from "next/link";
 import { messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { factorHref, traitPageHref } from "@/lib/factor-links";
-import { appendRows, linkKey, linkSortLabels, linkThreshold, metricDefinitions, metricValue, ownTraitStatus, phenotypeTarget, type LinkScope, type LinkSort } from "@/lib/trait-view";
+import { appendRows, linkKey, linkSortLabels, linkThreshold, metricDefinitions, metricValue, ownTraitStatus, phenotypeTarget, releaseLacks, type LinkScope, type LinkSort } from "@/lib/trait-view";
 import { LoadingSurface } from "./LoadingSurface";
 
 const count = (value: number) => value.toLocaleString();
@@ -19,7 +19,7 @@ export function TraitLinks({ sourceId, traitId, release, self, summary }: { sour
   const binding = JSON.stringify([sourceId, traitId, scope, sort]);
   const requestKey = `${binding}:${offset}:${attempt}`;
   const [loaded, setLoaded] = useState<{ binding: string; result: Schema<"FactorTraitLinks"> } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null), [settled, setSettled] = useState("");
+  const [failure, setFailure] = useState<{ key: string; message: string; absent: boolean } | null>(null), [settled, setSettled] = useState("");
   const busy = settled !== requestKey, latest = useRef(loaded);
   latest.current = loaded;
   useEffect(() => {
@@ -30,15 +30,16 @@ export function TraitLinks({ sourceId, traitId, release, self, summary }: { sour
       const previous = latest.current, append = offset > 0 && previous?.binding === binding;
       if ((release && result.release_id !== release) || (append && previous.result.release_id !== result.release_id)) throw new Error("The reference release changed while loading. Reload the page.");
       setLoaded({ binding, result: { ...result, items: append ? appendRows(previous.result.items, result.items, linkKey) : result.items } });
-    }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error) }); })
+    }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error), absent: offset === 0 && releaseLacks(error) }); })
       .finally(() => { if (!controller.signal.aborted) setSettled(requestKey); });
     return () => controller.abort();
   }, [binding, requestKey, byFactor, sourceId, traitId, release, scope, sort, offset]);
   const result = loaded?.binding === binding ? loaded.result : null;
-  const error = failure?.key === requestKey ? failure.message : "";
+  const error = failure?.key === requestKey ? failure.message : "", absent = failure?.key === requestKey && failure.absent;
   const facts = byFactor ? summary || result?.summary : null;
   const own = ownTraitStatus(facts);
   const reset = (change: () => void) => { change(); setOffset(0); };
+  if (absent && !result) return <section className="factor-loadings trait-links" aria-labelledby={`${id}-title`}><h2 id={`${id}-title`}>{byFactor ? "Linked traits" : "Linked factors"}</h2><p className="loading-empty">The published reference release does not include factor-trait links{byFactor ? " for this factor" : ""}.</p></section>;
   return <section className="factor-loadings trait-links" aria-labelledby={`${id}-title`}>
     <div className="loading-heading"><div><h2 id={`${id}-title`}>{byFactor ? "Linked traits" : "Linked factors"}</h2><p>{result?.coverage || `Factor–phenotype links from eaggl trait linkage and factor-PheWAS, kept at Benjamini–Hochberg q ≤ ${linkThreshold}. An absent phenotype is unlinked at this threshold, not a negative result.`}</p></div>
       {byFactor && <div className="loading-view" role="group" aria-label="Phenotypes shown"><button type="button" aria-pressed={scope === "all"} onClick={() => reset(() => setScope("all"))}>All phenotypes</button><button type="button" aria-pressed={scope === "atlas"} onClick={() => reset(() => setScope("atlas"))}>Atlas traits</button></div>}</div>

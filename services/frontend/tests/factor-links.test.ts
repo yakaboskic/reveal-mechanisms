@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { factorHref, geneSetHref, referenceReturnPath, returnLabel, traitHref, traitPageHref } from "../src/lib/factor-links";
 
 test("trait links use the KPN catalog and preserve leading zeroes", () => {
@@ -47,4 +48,12 @@ test("trait pages are in-app, carry their return path and accept only KPN trait 
   assert.equal(returnLabel(back), "Back to trait");
   assert.equal(returnLabel("/gene-sets/dapper%3AGeneSet.x"), "Back to gene set");
   assert.equal(returnLabel("/accounts/dapper%3AScientificAccount.x?view=lineage"), "Back to scientific account");
+});
+
+test("the id resolver opens only exact KPN trait ids as trait pages", () => {
+  const resolver = readFileSync(new URL("../src/app/id/[id]/page.tsx", import.meta.url), "utf8");
+  assert.match(resolver, /const trait = traitPageHref\(exact\);\s*if \(trait\) redirect\(trait\);/);
+  assert.doesNotMatch(resolver, /startsWith\("KPN\.TRAIT:"\)/);
+  assert.equal(traitPageHref("KPN.TRAIT:0000398"), "/traits/KPN.TRAIT%3A0000398");
+  for (const id of ["KPN.TRAIT:", "KPN.TRAIT:12345678", "KPN.TRAIT:0000398 "]) assert.equal(traitPageHref(id), null);
 });

@@ -20,7 +20,8 @@ const issueLabels: Record<string, string> = {
 };
 export const issueLabel = (code: string) => issueLabels[code] || human(code);
 const gapLabels: Record<string, string> = {
-  not_a_gwas_trait: "Rare-disease gene list, with no GWAS", not_on_portal: "No bottom-line GWAS on the provenance portal", no_upstream_organizations: "GWAS dataset names no organization",
+  not_a_gwas_trait: "Rare-disease gene list, with no GWAS", not_on_portal: "No bottom-line GWAS on the provenance portal",
+  no_gwas_ancestry_artifact: "Bottom-line GWAS on the portal, but none of the ancestry the trace uses (Mixed)", no_upstream_organizations: "GWAS dataset names no organization",
 };
 export const gapLabel = (code: string) => gapLabels[code] || human(code);
 
