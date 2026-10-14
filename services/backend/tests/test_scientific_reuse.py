@@ -250,4 +250,64 @@ class ScientificReuseTests(unittest.TestCase):
             self.assertEqual(failure.exception.code,'PRIVATE_RESEARCH_INPUTS')
 
 
+class ReferenceCaptureSourceTests(unittest.TestCase):
+    """_legacy_sql_source rebinds a retained reference-evidence capture to the package's fit: a generation's tables (/1) or
+    the environment's reference release (/2), with the table sets the account lint uses."""
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(); self.addCleanup(temporary.cleanup)
+        self.root, self.rows, self.release = Path(temporary.name), {}, 'a' * 64
+        self.package = {'pigean': {'model': 'eaggl-capped-v1', 'mechanisms': {'factor': {'fit': {'upstream_build': self.release}}}},
+                        'source_artifacts': {}}
+
+    def get(self, kind, identity):
+        self.assertEqual(kind, 'artifact'); return self.rows.get(identity)
+
+    def add(self, key, *, version='2', kind='mysql', names=('reveal_ref_factor_genes',), field=None, **changes):
+        field = field or ('release_id' if version == '2' else 'generation_id')
+        body = {'format': f'reveal.reference-evidence.{"mysql-capture" if kind == "mysql" else "derived-capture"}/{version}', field: self.release,
+                'model': 'eaggl-capped-v1', 'source': {'kind': kind, 'tables' if kind == 'mysql' else 'derived_from': list(names)}, 'data': [], **changes}
+        raw = canonical_json(body); path = self.root / key; path.write_bytes(raw)
+        source = {'format': 'json', 'sha256': sha256(raw), 'dapper_file_id': 'dapper:File.' + key,
+                  'origin': f"{kind}:{'+'.join(names)}?{field}={self.release}"}
+        self.package['source_artifacts'][key] = source
+        self.rows[digest(['owner', source['sha256']])] = {'owner': 'owner', 'data': {'path': str(path),
+            'file': {'id': source['dapper_file_id'], 'size_in_bytes': len(raw)}}}
+
+    def accepted(self, key): return reuse._legacy_sql_source(self, 'owner', self.package, key)
+
+    def test_release_and_generation_captures_bind_to_their_own_tables_and_identity(self):
+        self.add('loadings'); self.add('betas', names=('reveal_ref_trait_gene_sets', 'reveal_ref_gene_sets'))
+        self.add('links', names=('reveal_ref_factor_trait_links', 'reveal_ref_phenotypes'))
+        self.add('connections', kind='mysql-derived', names=('loadings', 'betas'))
+        self.add('generation', version='1', names=('eaggl_gene_loadings',))
+        self.add('generation-derived', version='1', kind='mysql-derived', names=('generation',))
+        for key in ('loadings', 'betas', 'links', 'connections', 'generation', 'generation-derived'):
+            self.assertTrue(self.accepted(key), key)
+        self.add('mixed-version', names=('eaggl_gene_loadings',))  # /2 never reads a generation's tables
+        self.add('old-tables', version='1', names=('reveal_ref_factor_genes',))
+        self.add('generation-keyed', field='generation_id')  # /2 is identified by its release
+        self.add('other-release', release_id='b' * 64)
+        self.add('other-model', model='other-model')
+        self.add('unknown-version', version='3')
+        self.add('dismech', names=('dismech_documents',))
+        self.add('mixed-derived', kind='mysql-derived', names=('loadings', 'dismech'))
+        self.add('cyclic', kind='mysql-derived', names=('cyclic',))
+        for key in ('mixed-version', 'old-tables', 'generation-keyed', 'other-release', 'other-model', 'unknown-version', 'dismech',
+                    'mixed-derived', 'cyclic', 'missing'):
+            self.assertFalse(self.accepted(key), key)
+        self.package['source_artifacts']['loadings']['origin'] += '&x=1'
+        self.assertFalse(self.accepted('loadings'))  # the origin must name exactly its tables and release
+
+    def test_changed_bytes_another_owner_or_another_fit_are_refused(self):
+        self.add('loadings')
+        Path(self.root / 'loadings').write_bytes(b'{}')
+        self.assertFalse(self.accepted('loadings'))
+        self.add('loadings')
+        self.rows[digest(['owner', self.package['source_artifacts']['loadings']['sha256']])]['owner'] = 'other'
+        self.assertFalse(self.accepted('loadings'))
+        self.add('loadings')
+        self.package['pigean']['mechanisms']['second'] = {'fit': {'upstream_build': 'b' * 64}}
+        self.assertFalse(self.accepted('loadings'))  # one fit per package
+
+
 if __name__=='__main__': unittest.main()

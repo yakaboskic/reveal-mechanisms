@@ -33,6 +33,13 @@
           "collection": null,
           "limitations": [
             "Illustrative unavailable-object response; no provenance is fabricated."
+          ],
+          "external_links": [
+            {
+              "label": "Gene-set provenance on the Translator portal",
+              "kind": "portal_gene_set",
+              "href": "https://translator.broadinstitute.org/artifact_provenance/gene_set/details/id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
           ]
         }
       }

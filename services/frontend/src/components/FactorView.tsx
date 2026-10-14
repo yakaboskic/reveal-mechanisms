@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api, ApiError, messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { firstGenePage } from "@/lib/factor-explorer";
-import { factorHref, traitHref, referenceReturnPath, returnLabel } from "@/lib/factor-links";
+import { factorHref, traitHref, traitPageHref, referenceReturnPath, returnLabel } from "@/lib/factor-links";
 import { mechanismName, mechanismTrait } from "@/lib/mechanism-display";
 import { constraintDefinitions, constraintSourceHref } from "@/lib/gnomad-display";
 import { LoadingSurface } from "./LoadingSurface";
@@ -49,9 +49,10 @@ export function FactorView({ sourceId, revision, archiveId, from }: { sourceId: 
   const detail = result?.detail;
   const traitUrl = detail?.factor.kpn_trait ? traitHref(detail.factor.kpn_trait.id) : null;
   const self = factorHref(sourceId, detail?.factor.source_revision || revision, { archiveId, from });
+  const traitPage = detail?.factor.kpn_trait ? traitPageHref(detail.factor.kpn_trait.id, self) : null;
   return <main id="main" className="reference-page factor-page"><ReferenceNavigation from={from} />
     {!result ? <LoadingSurface title={error ? "Couldn’t open this factor" : "Opening factor"} description="Retrieving its gene loadings, gene-set projections and source record." error={error} onRetry={() => retry(n => n + 1)} skeleton="record" /> : result.archived ? <ArchivedFactorView snapshot={result.archived} /> : detail && <>
-      <header className="reference-heading"><p className="reference-kind">EAGGL factor</p><h1>{mechanismName(detail.factor)}</h1><p className="factor-trait">{traitUrl ? <a href={traitUrl} target="_blank" rel="noopener noreferrer">{mechanismTrait(detail.factor)}</a> : mechanismTrait(detail.factor)}</p>
+      <header className="reference-heading"><p className="reference-kind">EAGGL factor</p><h1>{mechanismName(detail.factor)}</h1><p className="factor-trait">{traitPage ? <Link href={traitPage}>{mechanismTrait(detail.factor)}</Link> : traitUrl ? <a href={traitUrl} target="_blank" rel="noopener noreferrer">{mechanismTrait(detail.factor)}</a> : mechanismTrait(detail.factor)}{traitPage && traitUrl && <a className="link-secondary" href={traitUrl} target="_blank" rel="noopener noreferrer">KPN catalog ↗<span className="sr-only"> (opens in a new tab)</span></a>}</p>
       </header>
       <FactorExplorer key={binding} detail={detail} self={self} genes={result.genes} />
       <section id="factor-additional-info" className="factor-additional-info" aria-labelledby="factor-additional-info-title">

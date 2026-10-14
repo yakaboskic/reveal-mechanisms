@@ -689,6 +689,27 @@ def get_catalog_gene_set(gene_set_id:str,generation_id:str|None=None):
     from .factor_details import gene_set_detail
     return gene_set_detail(catalog,gene_set_id,generation_id=generation_id)
 
+@app.get('/v1/traits/{kpn_trait_id}')
+def get_trait(kpn_trait_id:str):
+    from .trait_details import trait_detail
+    return trait_detail(kpn_trait_id)
+
+@app.get('/v1/trait-gene-sets')
+def list_trait_gene_sets(trait_id:str|None=None,gene_set_id:str|None=None,library:str|None=None,sort:str='beta_uncorrected',limit:int=50,offset:int=0):
+    from .trait_details import trait_gene_sets
+    return trait_gene_sets(trait_id=trait_id,gene_set_id=gene_set_id,library=library,sort=sort,limit=limit,offset=offset)
+
+@app.get('/v1/factor-trait-links')
+def list_factor_trait_links(source_id:str|None=None,trait_id:str|None=None,scope:str='all',sort:str='phewas_q',limit:int=50,offset:int=0):
+    from .trait_details import factor_trait_links
+    return factor_trait_links(source_id=source_id,trait_id=trait_id,scope=scope,sort=sort,limit=limit,offset=offset)
+
+# Registered before /v1/mechanisms/{source_id:path}, which must never shadow it.
+@app.get('/v1/mechanism-objects/{dapper_id:path}')
+def get_mechanism_object(dapper_id:str):
+    from .trait_details import mechanism_object
+    return mechanism_object(catalog,dapper_id)
+
 @app.get('/v1/mechanisms/{source_id:path}')
 def get_mechanism(source_id:str,source_revision:str|None=None):
     catalog.load(); record=catalog.factors.get(source_id) or catalog.mechanisms.get(source_id)
@@ -1309,12 +1330,12 @@ def scientific(identity,request,kind='object'):
 def account(dapper_id:str,request:Request): return scientific(dapper_id,request,'account')
 
 @app.get('/v1/accounts/{account_id}/provenance')
-def account_provenance(account_id:str,request:Request):
-    from .provenance_api import read
-    with repo.read_transaction() as tx:
-        user=optional_identity(tx,request)
-        source=scientific_source(tx,account_id,user,'account',request.query_params.get('payload_sha256'),verify_payload=True)
-        return read(tx,account_id,source,request.query_params)
+async def account_provenance(account_id:str,request:Request):
+    # Three phases (provenance_api.trace): no database lease is held while the portal is awaited.
+    from .provenance_api import trace
+    def resolve(tx):
+        return scientific_source(tx,account_id,optional_identity(tx,request),'account',request.query_params.get('payload_sha256'),verify_payload=True)
+    return await trace(repo,account_id,resolve,request.query_params,archived=getattr(catalog,'archived_for_mechanism',None))
 
 @app.get('/v1/claims/{dapper_id}')
 @app.get('/v1/objects/{dapper_id}')
@@ -1430,15 +1451,18 @@ _routes_lifespan = app.router.lifespan_context
 @asynccontextmanager
 async def background_lifespan(application):
     """The API process warms the catalog (REVEAL_CATALOG_WARMUP) and runs the readiness monitor
-    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off."""
-    from . import readiness
+    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off. Shutdown closes the
+    provenance portal client of this loop."""
+    from . import provenance_portal, readiness
     async with _routes_lifespan(application) as state:
         warmup = getattr(catalog, 'start_warmup', None)
         if warmup and os.getenv('REVEAL_CATALOG_WARMUP', '1') != '0': warmup()
         monitor = readiness.start(lambda: repo, lambda: catalog) if os.getenv('REVEAL_READINESS_MONITOR', '1') != '0' else None
         try: yield state
         finally:
-            if monitor: readiness.stop(monitor)
+            try:
+                if monitor: readiness.stop(monitor)
+            finally: await provenance_portal.aclose()
 
 app.router.lifespan_context = background_lifespan
 

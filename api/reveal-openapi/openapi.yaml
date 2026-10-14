@@ -16284,7 +16284,7 @@ paths:
                     factor: *id070
                     generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                     provenance:
-                      eaggl_import_id: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+                      eaggl_import_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                       factor_id: T2D::Factor1
                       factor_key: KPN.TRAIT:0000398::Factor1
                       model: eaggl-capped-v1
@@ -16299,11 +16299,27 @@ paths:
                       total: 71
                       min: 0.0003
                       max: 0.24
-                      coverage: 'Retained per-trait projections: gene sets in the
-                        top 50 by joint or marginal loading. Search covers this retained
-                        subset, not every gene set in the source library.'
+                      coverage: 'Retained projections, ranked within each gene-set
+                        library: the gene sets in the top 50 of their library by joint
+                        or marginal loading. Search covers this retained subset, not
+                        every gene set in the source library.'
                       available: true
                     gnomad: null
+                    trait_links:
+                      n_phenotypes: 6698
+                      n_linked: 412
+                      n_linked_kpn_traits: 398
+                      n_linked_atlas_traits: 97
+                      own_trait_q: 2.1e-14
+                      top_linked:
+                      - phenotype: T2D
+                        kpn_trait_id: KPN.TRAIT:0000398
+                        name: Type 2 diabetes
+                        phewas_q: 2.1e-14
+                      - phenotype: HbA1c_example
+                        kpn_trait_id: null
+                        name: HbA1c (illustrative phenotype without a KPN id)
+                        phewas_q: 3.4e-09
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16366,8 +16382,8 @@ paths:
       summary: Search and page factor loadings
       description: Search literal gene symbols or gene-set names, library and identifier.
         Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal
-        projections retained in the top 50 by either rank. Gene scores and set scores
-        have separate scales. Missing legacy set scores stay null.
+        projections retained in the top 50 of their library by either rank. Gene scores
+        and set scores have separate scales. Missing legacy set scores stay null.
       parameters:
       - name: source_id
         in: query
@@ -16430,6 +16446,16 @@ paths:
           maxLength: 200
         example: LEPR
         description: ''
+      - name: library
+        in: query
+        required: false
+        schema:
+          type: string
+          maxLength: 64
+        example: GO_BP
+        description: Gene-set rows of one library only (ranks are within libraries);
+          total counts the matching rows and summary stays over every library. Genes
+          have no library, so kind=gene ignores it.
       - name: limit
         in: query
         required: false
@@ -16547,7 +16573,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-loadings?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&kind=gene&metric=joint&sort=loading&gnomad_import_id=none&q=LEPR&library=GO_BP&limit=200&offset=0&generation_id=d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c&source_revision=191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550''
           -H ''Accept: application/json'''
   /v1/catalog/gene-sets/{gene_set_id}:
     get:
@@ -16602,6 +16628,10 @@ paths:
                     collection: null
                     limitations:
                     - Illustrative unavailable-object response; no provenance is fabricated.
+                    external_links:
+                    - label: Gene-set provenance on the Translator portal
+                      kind: portal_gene_set
+                      href: https://translator.broadinstitute.org/artifact_provenance/gene_set/details/id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -18355,7 +18385,7 @@ paths:
                 type: string
                 const: no-referrer
             Location:
-              schema: &id132
+              schema: &id133
                 type: string
                 format: uri
               example: https://reveal.example.org/research/connect?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
@@ -24989,16 +25019,22 @@ paths:
       tags:
       - Scientific accounts
       summary: Expand scientific account provenance and dataset reuse
-      description: Read the full authorized account and annotate its propositions
+      description: 'Read the full authorized account and annotate its propositions
         and evidence with dataset and organization lineage. Totals count distinct
         claims, before trace pagination. Stored factor projections are distinguished
-        from direct lineage; no complete model-input provenance is implied. Source
+        from direct lineage; no complete model-input provenance is implied. A reached
+        KPN trait (a factor''s fitted trait or one a proposition cites) adds its published
+        GWAS: route trait_gwas to the bottom-line Dataset of the Translator provenance
+        portal, read within a 15 s budget (an unreachable portal is coverage external_provenance_unavailable,
+        never an error); the GWAS raw inputs are shown on reveal:portalTransitiveInput
+        edges and never traversed. An activity''s inputs sharing one onward lineage
+        are followed through one representative past 25 (collapsed_inputs). Source
         gaps produce explicit lower bounds. The processing bounds are 10,000 nodes,
         50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds
         returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization,
         immutable observations and tracing policy. Public reads use frozen publication
         records and public reference sources only. The example uses the existing illustrative
-        scientific-account fixture and does not claim historical provenance recovery.
+        scientific-account fixture and does not claim historical provenance recovery.'
       parameters:
       - name: account_id
         in: path
@@ -26737,7 +26773,7 @@ paths:
                       - code: MISSING_LINEAGE
                         origin_id: dapper:Proposition.yUAm2Mgs3NxOTghFk_4SrqgpYaecOFvL
                     snapshot:
-                      policy_version: account-provenance-v1
+                      policy_version: account-provenance-v2
                       account_id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                       account_payload_sha256: 9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66
                       document_sha256: accbb338a0d8ca9f6241ce9e43d125ba6816c8cd1d014de781a612b289c4ee32
@@ -26745,7 +26781,7 @@ paths:
                       reference_generation_ids: []
                       supplement_ids: []
                       source_observations: []
-                      id: b88dc188a9faeee76174717939e17e31b5b6e69108a28573f60a7c8bb22e59bd
+                      id: 47a319c7efb9eb8823cfe9242611d4519d2930e173dd06c692644df2a2cdfa0a
                     page:
                       limit: 100
                       offset: 0
@@ -26814,6 +26850,650 @@ paths:
       - lang: Shell
         label: request
         source: 'curl -X GET ''https://api.reveal.example.org/v1/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/provenance?payload_sha256=9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66&limit=100''
+          -H ''Accept: application/json'''
+  /v1/traits/{kpn_trait_id}:
+    get:
+      operationId: getTrait
+      tags:
+      - Mechanisms
+      summary: Inspect a reference trait
+      description: 'Public reference data of the published release: an atlas trait
+        with its fitted factors, per-library gene-set beta counts and linked factors
+        of other traits, or a non-atlas phenotype the factor-trait linkage reached
+        (is_atlas false). GWAS links point to the Translator provenance portal and
+        are built from stored ids; the portal is never called. Unknown or malformed
+        ids return 404. Examples are illustrative: no release build, linkage or portal
+        read was performed for them.'
+      parameters:
+      - name: kpn_trait_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: ^KPN\.TRAIT:[0-9]{7}$
+        example: KPN.TRAIT:0000398
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraitDetail'
+              examples:
+                atlas_trait:
+                  summary: Atlas trait
+                  value:
+                    kpn_trait_id: KPN.TRAIT:0000398
+                    phenotype: T2D
+                    name: Type 2 diabetes (T2D)
+                    category: KPN
+                    is_atlas: true
+                    legacy_phenotype_id: T2D
+                    trait_group: metabolic
+                    trait_type: phenotype
+                    description: null
+                    kpn_url: https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/
+                    gwas:
+                      status: available
+                      portal_trait_id: T2D
+                      gwas_artifact_id: bl-t2d-mixed
+                      portal_href: https://translator.broadinstitute.org/artifact_provenance/bottom_line/T2D
+                      artifacts:
+                      - ancestry_code: EU
+                        ancestry_name: European
+                        artifact_id: bl-t2d-eu
+                        href: https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-eu
+                      - ancestry_code: Mixed
+                        ancestry_name: Mixed ancestry
+                        artifact_id: bl-t2d-mixed
+                        href: https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed
+                    factors:
+                    - source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                      label: Metabolic Dysregulation Indicators
+                      factor_number: 1
+                    gene_set_libraries:
+                    - library: GTEx
+                      n_gene_sets: 140
+                      n_nonzero: 112
+                      top_gene_sets:
+                      - kpn_trait_id: KPN.TRAIT:0000398
+                        trait_name: Type 2 diabetes (T2D)
+                        gene_set_id: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                        gene_set_name: Example imported gene set
+                        library: GTEx
+                        collection_id: dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc
+                        n_genes: 120
+                        beta_uncorrected: 0.031
+                        beta: 0.027
+                        avg_postp: 0.62
+                        library_rank: 1
+                    - library: MoTrPAC
+                      n_gene_sets: 64
+                      n_nonzero: 41
+                      top_gene_sets:
+                      - kpn_trait_id: KPN.TRAIT:0000398
+                        trait_name: Type 2 diabetes (T2D)
+                        gene_set_id: dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                        gene_set_name: Second example gene set
+                        library: MoTrPAC
+                        collection_id: dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd
+                        n_genes: 85
+                        beta_uncorrected: 0.012
+                        beta: 0.0
+                        avg_postp: 0.18
+                        library_rank: 1
+                    linked_factors:
+                      n_factors: 37
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                linked_phenotype:
+                  summary: Linked phenotype
+                  value:
+                    kpn_trait_id: KPN.TRAIT:0001360
+                    phenotype: gcat_trait_illustrative_phenotype
+                    name: illustrative phenotype
+                    category: null
+                    is_atlas: false
+                    legacy_phenotype_id: null
+                    trait_group: null
+                    trait_type: null
+                    description: null
+                    kpn_url: https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/
+                    gwas:
+                      status: not_on_portal
+                      portal_trait_id: null
+                      gwas_artifact_id: null
+                      portal_href: null
+                      artifacts: []
+                    factors: []
+                    gene_set_libraries: []
+                    linked_factors:
+                      n_factors: 1
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398
+          -H ''Accept: application/json'''
+  /v1/trait-gene-sets:
+    get:
+      operationId: listTraitGeneSets
+      tags:
+      - Mechanisms
+      summary: Page gene-set betas of a trait or of a gene set
+      description: 'Give exactly one of trait_id (the trait''s gene sets) or gene_set_id
+        (the traits of one gene set); otherwise 422. Values are the release''s PIGEAN
+        betas mode, distinct from the BioIndex small-model values. A release without
+        betas returns 404. Examples are illustrative: no release build, linkage or
+        portal read was performed for them.'
+      parameters:
+      - name: trait_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^KPN\.TRAIT:[0-9]{7}$
+        example: KPN.TRAIT:0000398
+        description: 'A KPN trait id: list its gene sets. Exclusive with gene_set_id.'
+      - name: gene_set_id
+        in: query
+        required: false
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+        example: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+        description: 'A gene set: list the traits it has a beta for. Exclusive with
+          trait_id.'
+      - name: library
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+        example: GTEx
+        description: Keep one CFDE library.
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - beta_uncorrected
+          - beta
+          - avg_postp
+          default: beta_uncorrected
+        example: beta_uncorrected
+        description: Descending with zero values last; ties by library_rank, then
+          gene_set_id.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+        example: 50
+        description: ''
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+        example: 0
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TraitGeneSets'
+              examples:
+                trait:
+                  summary: Trait
+                  value:
+                    trait_id: KPN.TRAIT:0000398
+                    gene_set_id: null
+                    library: null
+                    sort: beta_uncorrected
+                    total: 2
+                    next_offset: null
+                    coverage: 'Gene-set betas from PIGEAN betas mode (one fit per
+                      CFDE library on the trait''s PIGEAN gene statistics, no outer
+                      Gibbs), for the gene sets PIGEAN kept. A trait and gene set
+                      without a row were not fitted: an absent pair is not a zero
+                      beta. Some kept rows are exactly 0.'
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    items:
+                    - kpn_trait_id: KPN.TRAIT:0000398
+                      trait_name: Type 2 diabetes (T2D)
+                      gene_set_id: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                      gene_set_name: Example imported gene set
+                      library: GTEx
+                      collection_id: dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc
+                      n_genes: 120
+                      beta_uncorrected: 0.031
+                      beta: 0.027
+                      avg_postp: 0.62
+                      library_rank: 1
+                    - kpn_trait_id: KPN.TRAIT:0000398
+                      trait_name: Type 2 diabetes (T2D)
+                      gene_set_id: dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+                      gene_set_name: Second example gene set
+                      library: MoTrPAC
+                      collection_id: dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd
+                      n_genes: 85
+                      beta_uncorrected: 0.012
+                      beta: 0.0
+                      avg_postp: 0.18
+                      library_rank: 1
+                gene_set:
+                  summary: Gene set
+                  value:
+                    trait_id: null
+                    gene_set_id: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                    library: null
+                    sort: beta_uncorrected
+                    total: 1
+                    next_offset: null
+                    coverage: 'Gene-set betas from PIGEAN betas mode (one fit per
+                      CFDE library on the trait''s PIGEAN gene statistics, no outer
+                      Gibbs), for the gene sets PIGEAN kept. A trait and gene set
+                      without a row were not fitted: an absent pair is not a zero
+                      beta. Some kept rows are exactly 0.'
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    items:
+                    - kpn_trait_id: KPN.TRAIT:0000398
+                      trait_name: Type 2 diabetes (T2D)
+                      gene_set_id: dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                      gene_set_name: Example imported gene set
+                      library: GTEx
+                      collection_id: dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc
+                      n_genes: 120
+                      beta_uncorrected: 0.031
+                      beta: 0.027
+                      avg_postp: 0.62
+                      library_rank: 1
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: trait
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/trait-gene-sets?trait_id=KPN.TRAIT%3A0000398&sort=beta_uncorrected&limit=50&offset=0''
+          -H ''Accept: application/json'''
+      - lang: Shell
+        label: gene_set
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/trait-gene-sets?gene_set_id=dapper%3AGeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&limit=50&offset=0''
+          -H ''Accept: application/json'''
+  /v1/factor-trait-links:
+    get:
+      operationId: listFactorTraitLinks
+      tags:
+      - Mechanisms
+      summary: Page factor-trait links of a factor or of a trait
+      description: 'Give exactly one of source_id (the phenotypes a factor is linked
+        to) or trait_id (the factors linked to a trait: the gap use case); otherwise
+        422. Only links at BH q <= 0.05 are stored: an absent phenotype is unlinked
+        at this threshold, not a negative result. An unknown source_id, or a release
+        without links, returns 404. Examples are illustrative: no release build, linkage
+        or portal read was performed for them.'
+      parameters:
+      - name: source_id
+        in: query
+        required: false
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 255
+        example: factor:kpn:0000398:eaggl-capped-v1:Factor1
+        description: 'A served factor: list its linked phenotypes. Exclusive with
+          trait_id.'
+      - name: trait_id
+        in: query
+        required: false
+        schema:
+          type: string
+          pattern: ^KPN\.TRAIT:[0-9]{7}$
+        example: KPN.TRAIT:0001360
+        description: 'A KPN trait id: list the factors linked to it. Exclusive with
+          source_id.'
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - atlas
+          - all
+          default: all
+        example: all
+        description: atlas keeps links whose phenotype is an atlas trait.
+      - name: sort
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - phewas_q
+          - phewas_beta
+          - nnls_loading
+          default: phewas_q
+        example: phewas_q
+        description: phewas_q ascends; phewas_beta and nnls_loading descend; ties
+          by phenotype, then factor.
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+        example: 50
+        description: ''
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+        example: 0
+        description: ''
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FactorTraitLinks'
+              examples:
+                factor:
+                  summary: Factor
+                  value:
+                    source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                    trait_id: null
+                    scope: all
+                    sort: phewas_q
+                    summary:
+                      n_phenotypes: 6698
+                      n_linked: 2
+                      n_linked_kpn_traits: 2
+                      n_linked_atlas_traits: 1
+                      own_trait_q: 4.6e-10
+                    total: 2
+                    next_offset: null
+                    coverage: Factor-phenotype links from the eaggl trait linkage
+                      and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype
+                      tests. A phenotype absent for a factor is unlinked at this threshold,
+                      not a negative result.
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    items:
+                    - source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                      factor_label: Metabolic Dysregulation Indicators
+                      fitted_kpn_trait_id: KPN.TRAIT:0000398
+                      fitted_trait_name: Type 2 diabetes (T2D)
+                      phenotype: T2D
+                      phenotype_kpn_trait_id: KPN.TRAIT:0000398
+                      phenotype_name: Type 2 diabetes (T2D)
+                      is_own_trait: true
+                      is_atlas_trait: true
+                      nnls_loading: 0.18
+                      phewas_beta: 0.52
+                      phewas_p_onesided: 1.0e-12
+                      phewas_q: 4.6e-10
+                    - source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                      factor_label: Metabolic Dysregulation Indicators
+                      fitted_kpn_trait_id: KPN.TRAIT:0000398
+                      fitted_trait_name: Type 2 diabetes (T2D)
+                      phenotype: gcat_trait_illustrative_phenotype
+                      phenotype_kpn_trait_id: KPN.TRAIT:0001360
+                      phenotype_name: illustrative phenotype
+                      is_own_trait: false
+                      is_atlas_trait: false
+                      nnls_loading: 0.042
+                      phewas_beta: 0.31
+                      phewas_p_onesided: 2.1e-07
+                      phewas_q: 3.4e-05
+                trait:
+                  summary: Trait
+                  value:
+                    source_id: null
+                    trait_id: KPN.TRAIT:0001360
+                    scope: all
+                    sort: phewas_q
+                    summary: null
+                    total: 1
+                    next_offset: null
+                    coverage: Factor-phenotype links from the eaggl trait linkage
+                      and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype
+                      tests. A phenotype absent for a factor is unlinked at this threshold,
+                      not a negative result.
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+                    items:
+                    - source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                      factor_label: Metabolic Dysregulation Indicators
+                      fitted_kpn_trait_id: KPN.TRAIT:0000398
+                      fitted_trait_name: Type 2 diabetes (T2D)
+                      phenotype: gcat_trait_illustrative_phenotype
+                      phenotype_kpn_trait_id: KPN.TRAIT:0001360
+                      phenotype_name: illustrative phenotype
+                      is_own_trait: false
+                      is_atlas_trait: false
+                      nnls_loading: 0.042
+                      phewas_beta: 0.31
+                      phewas_p_onesided: 2.1e-07
+                      phewas_q: 3.4e-05
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '422':
+          description: Invalid Input
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                invalid_input:
+                  summary: Invalid input
+                  value: *id007
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: factor
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-trait-links?source_id=factor%3Akpn%3A0000398%3Aeaggl-capped-v1%3AFactor1&scope=all&sort=phewas_q&limit=50&offset=0''
+          -H ''Accept: application/json'''
+      - lang: Shell
+        label: trait
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0''
+          -H ''Accept: application/json'''
+  /v1/mechanism-objects/{dapper_id}:
+    get:
+      operationId: getMechanismObject
+      tags:
+      - Mechanisms
+      summary: Resolve a minted Mechanism id to its factor
+      description: A DAPPER Mechanism id the catalog minted for a served factor resolves
+        to that factor's source_id. A Mechanism of a factor a superseded release served
+        returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor;
+        other ids return 404. The example factor is from an illustrative eaggl-capped-v1
+        release.
+      parameters:
+      - name: dapper_id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:Mechanism\.[A-Za-z0-9_-]{32}$
+        example: dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan
+        description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+          path values.
+      responses:
+        '200':
+          description: Successful response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MechanismObject'
+              examples:
+                current:
+                  summary: Current
+                  value:
+                    dapper_id: dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan
+                    status: current
+                    source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
+                    release_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
+          headers:
+            X-Request-ID:
+              description: Correlation ID for this HTTP request.
+              schema:
+                type: string
+                format: uuid
+        '404':
+          description: Not Found
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                not_found:
+                  summary: Not found
+                  value: *id005
+        '410':
+          description: Reference Generation Superseded
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                reference_generation_superseded:
+                  summary: Reference generation superseded
+                  value:
+                    type: urn:reveal:problem:reference-generation-superseded
+                    title: Reference Generation Superseded
+                    status: 410
+                    code: REFERENCE_GENERATION_SUPERSEDED
+                    detail: This Mechanism names a factor the published reference
+                      release no longer serves.
+                    request_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+                    retryable: false
+                    archived_reference_factor: *id069
+        '503':
+          description: Dependency Unavailable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                dependency_unavailable:
+                  summary: Dependency unavailable
+                  value: *id014
+      security:
+      - {}
+      - ApplicationBearer: []
+      x-codeSamples:
+      - lang: Shell
+        label: request
+        source: 'curl -X GET https://api.reveal.example.org/v1/mechanism-objects/dapper%3AMechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan
           -H ''Accept: application/json'''
 components:
   securitySchemes:
@@ -33832,7 +34512,7 @@ components:
             or eaggl-capped-v1 (KPN reference generations).'
         catalog_file:
           $ref: '#/components/schemas/DapperFile'
-        reference_generation_id: &id119
+        reference_generation_id: &id120
           type: string
           description: 'Reference generation id: 64 lowercase hex characters.'
           pattern: ^[a-f0-9]{64}$
@@ -34180,7 +34860,7 @@ components:
             $ref: '#/components/schemas/SourceRef'
         archive:
           $ref: '#/components/schemas/ReferenceArchive'
-        lightning_audit_id: &id148
+        lightning_audit_id: &id149
           type: string
           format: uuid
         lightning_context:
@@ -34718,7 +35398,7 @@ components:
           type: array
           items: *id103
           maxItems: 3
-        evidence_package_sha256: &id114
+        evidence_package_sha256: &id115
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -35799,16 +36479,16 @@ components:
       - rank
       additionalProperties: false
       description: One retained gene weight or gene-set projection. rank is the full
-        factor gene rank or the original selected-metric gene-set projection rank,
-        unchanged by search/pagination; legacy sets preserve imported rank. joint_rank
-        and marginal_rank are original projection ranks. Legacy gene-set weights are
-        null.
+        factor gene rank or the original selected-metric gene-set projection rank
+        within its library, unchanged by search, library filter or pagination; legacy
+        sets preserve imported rank. joint_rank and marginal_rank are original projection
+        ranks within the library. Legacy gene-set weights are null.
     FactorDetail:
       type: object
       properties:
         factor:
           $ref: '#/components/schemas/EagglFactor'
-        generation_id: &id112
+        generation_id: &id113
           anyOf:
           - type: string
             pattern: ^[a-f0-9]{64}$
@@ -35832,6 +36512,8 @@ components:
           - factor_key
           - model
           additionalProperties: false
+          description: 'eaggl_import_id is the reference release id: a release holds
+            the EAGGL fit with no separate import id.'
         genes:
           $ref: '#/components/schemas/LoadingSummary'
         gene_sets:
@@ -35840,6 +36522,54 @@ components:
           anyOf:
           - $ref: '#/components/schemas/GnomadImport'
           - type: 'null'
+        trait_links:
+          type: object
+          properties:
+            n_phenotypes: *id111
+            n_linked: *id111
+            n_linked_kpn_traits: *id111
+            n_linked_atlas_traits: *id111
+            own_trait_q:
+              anyOf:
+              - &id112
+                type: number
+                minimum: 0
+                maximum: 1
+              - type: 'null'
+            top_linked:
+              type: array
+              items:
+                type: object
+                properties:
+                  phenotype:
+                    type: string
+                  kpn_trait_id:
+                    anyOf:
+                    - type: string
+                    - type: 'null'
+                  name:
+                    type: string
+                  phewas_q: *id112
+                required:
+                - phenotype
+                - kpn_trait_id
+                - name
+                - phewas_q
+                additionalProperties: false
+          required:
+          - n_phenotypes
+          - n_linked
+          - n_linked_kpn_traits
+          - n_linked_atlas_traits
+          - own_trait_q
+          - top_linked
+          additionalProperties: false
+          description: 'Present when the release carries factor-trait links (eaggl
+            trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes
+            tested and linked, the q of the factor''s own trait (null when none was
+            reported) and its best links by phewas_q. A phenotype without a KPN trait
+            id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold,
+            not a negative.'
       required:
       - factor
       - generation_id
@@ -35852,7 +36582,7 @@ components:
       properties:
         source_id:
           type: string
-        generation_id: *id112
+        generation_id: *id113
         kind:
           type: string
           enum:
@@ -35918,7 +36648,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
-        generation_id: *id112
+        generation_id: *id113
         name:
           type: string
         library:
@@ -35935,12 +36665,12 @@ components:
           - type: 'null'
         object:
           anyOf:
-          - &id113
+          - &id114
             type: object
             additionalProperties: true
           - type: 'null'
-        metadata: *id113
-        provenance: *id113
+        metadata: *id114
+        provenance: *id114
         collection:
           anyOf:
           - type: object
@@ -35957,7 +36687,7 @@ components:
               gene_set_count: *id111
               object:
                 anyOf:
-                - *id113
+                - *id114
                 - type: 'null'
               payload_sha256:
                 anyOf:
@@ -35976,6 +36706,29 @@ components:
           type: array
           items:
             type: string
+        external_links:
+          type: array
+          items:
+            type: object
+            properties:
+              label:
+                type: string
+              href:
+                type: string
+                format: uri
+              kind:
+                type: string
+                enum:
+                - portal_gene_set
+                - portal_collection
+            required:
+            - label
+            - href
+            - kind
+            additionalProperties: false
+          description: Translator artifact-provenance portal pages of the gene set
+            and of its collection (the portal's collection id), built from ids and
+            never fetched.
       required:
       - id
       - generation_id
@@ -35989,10 +36742,14 @@ components:
       - collection
       - limitations
       additionalProperties: false
-      description: Imported public reference data, never an owner account graph. object
-        is the exact stored GeneSet or null; provenance preserves imported collection
-        prefixes, organizations, datasets, files and activities. Unknown/derived account
-        aliases return 404.
+      description: 'Imported public reference data, never an owner account graph.
+        object is the exact stored GeneSet or null. provenance is this gene set''s
+        own lineage in its collection''s provenance (prefixes kept whole): its generating
+        activities, their inputs, the datasets those derive from (including links
+        from REVEAL''s curated source-dataset map) and their organizations; inputs
+        of one activity that share one upstream lineage are represented by one of
+        them, and limitations say so. Gene sets the release does not reference (by
+        a projection or a beta) and unknown/derived account aliases return 404.'
     WorkspaceEvent:
       type: object
       properties:
@@ -36064,7 +36821,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id114
+        source_revision: *id115
       required:
       - id
       - source_id
@@ -36086,7 +36843,7 @@ components:
           type: string
         version_id:
           type: string
-        sha256: *id114
+        sha256: *id115
         size_bytes:
           type: integer
           minimum: 0
@@ -36111,7 +36868,7 @@ components:
         segment_count:
           type: integer
           minimum: 1
-        original_sha256: *id114
+        original_sha256: *id115
       required:
       - storage
       - format
@@ -36131,7 +36888,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id114
+        sha256: *id115
         status:
           type: string
           enum:
@@ -36182,7 +36939,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id114
+        sha256: *id115
       required:
       - draft_id
       - filename
@@ -36276,7 +37033,7 @@ components:
           - canonical_fixture
         fixture_version:
           type: string
-        content_sha256: *id114
+        content_sha256: *id115
         scientific_acceptance:
           type: string
           enum:
@@ -36294,7 +37051,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id114
+        payload_sha256: *id115
         raw:
           type: object
           additionalProperties: true
@@ -36443,7 +37200,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         duration_ms:
           anyOf:
@@ -36467,7 +37224,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id114
+              snapshot_sha256: *id115
             required:
             - scope
             - nodes
@@ -36591,7 +37348,7 @@ components:
           type: string
           const: analysis_outcome
         outcome_id: *id103
-        evidence_package_sha256: *id114
+        evidence_package_sha256: *id115
       required:
       - kind
       - outcome_id
@@ -36637,7 +37394,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id114
+        artifact_sha256: *id115
         download_url:
           anyOf:
           - type: string
@@ -36653,15 +37410,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id114
-        outcome_sha256: *id114
+        evidence_package_sha256: *id115
+        outcome_sha256: *id115
         runtime_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id114
+          - *id115
           - type: 'null'
         execution_mode:
           type: string
@@ -36723,8 +37480,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id114
-              response_sha256: *id114
+              request_sha256: *id115
+              response_sha256: *id115
             required:
             - sequence
             - graph
@@ -36997,13 +37754,13 @@ components:
     LeaderboardDirections:
       type: object
       properties:
-        SUPPORTS: &id115
+        SUPPORTS: &id116
           type: integer
           minimum: 0
-        DISPUTES: *id115
-        MIXED: *id115
-        NEUTRAL: *id115
-        UNKNOWN: *id115
+        DISPUTES: *id116
+        MIXED: *id116
+        NEUTRAL: *id116
+        UNKNOWN: *id116
       required:
       - SUPPORTS
       - DISPUTES
@@ -37014,14 +37771,14 @@ components:
     LeaderboardMetrics:
       type: object
       properties:
-        account_count: *id115
-        upvotes: *id115
-        downvotes: *id115
-        voter_count: *id115
-        account_gap_count: *id115
-        explored_gap_count: *id115
-        claim_count: *id115
-        researcher_count: *id115
+        account_count: *id116
+        upvotes: *id116
+        downvotes: *id116
+        voter_count: *id116
+        account_gap_count: *id116
+        explored_gap_count: *id116
+        claim_count: *id116
+        researcher_count: *id116
         net_votes:
           type: integer
         overall_score:
@@ -37131,18 +37888,18 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: *id115
-        voting_participants: *id115
+        cohort_size: *id116
+        voting_participants: *id116
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id115
-            uncredited_accounts: *id115
-            conflicting_accounts: *id115
-            invalid_public_accounts: *id115
-            excluded_evidence_paths: *id115
-            fixture_explorations: *id115
-            uncredited_explorations: *id115
+            fixture_accounts: *id116
+            uncredited_accounts: *id116
+            conflicting_accounts: *id116
+            invalid_public_accounts: *id116
+            excluded_evidence_paths: *id116
+            fixture_explorations: *id116
+            uncredited_explorations: *id116
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37223,20 +37980,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id116
+        cohort_size: &id117
           type: integer
           minimum: 0
-        voting_participants: *id116
+        voting_participants: *id117
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id116
-            uncredited_accounts: *id116
-            conflicting_accounts: *id116
-            invalid_public_accounts: *id116
-            excluded_evidence_paths: *id116
-            fixture_explorations: *id116
-            uncredited_explorations: *id116
+            fixture_accounts: *id117
+            uncredited_accounts: *id117
+            conflicting_accounts: *id117
+            invalid_public_accounts: *id117
+            excluded_evidence_paths: *id117
+            fixture_explorations: *id117
+            uncredited_explorations: *id117
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37379,20 +38136,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id117
+        cohort_size: &id118
           type: integer
           minimum: 0
-        voting_participants: *id117
+        voting_participants: *id118
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id117
-            uncredited_accounts: *id117
-            conflicting_accounts: *id117
-            invalid_public_accounts: *id117
-            excluded_evidence_paths: *id117
-            fixture_explorations: *id117
-            uncredited_explorations: *id117
+            fixture_accounts: *id118
+            uncredited_accounts: *id118
+            conflicting_accounts: *id118
+            invalid_public_accounts: *id118
+            excluded_evidence_paths: *id118
+            fixture_explorations: *id118
+            uncredited_explorations: *id118
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37460,7 +38217,7 @@ components:
           $ref: '#/components/schemas/LeaderboardEvidence'
         entry:
           $ref: '#/components/schemas/LeaderboardEntry'
-        total: *id115
+        total: *id116
         items:
           type: array
           items:
@@ -45736,7 +46493,7 @@ components:
       type: object
       properties:
         job_id: *id103
-        package_sha256: *id114
+        package_sha256: *id115
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -45802,7 +46559,7 @@ components:
     KpnTrait:
       type: object
       properties:
-        id: &id118
+        id: &id119
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         name:
@@ -45861,7 +46618,7 @@ components:
           - type: 'null'
         kpn_trait_id:
           anyOf:
-          - *id118
+          - *id119
           - type: 'null'
         label:
           anyOf:
@@ -45875,7 +46632,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        archived_reference_factor_id: &id121
+        archived_reference_factor_id: &id122
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -45902,19 +46659,19 @@ components:
         reason:
           type: string
           const: reference_generation_superseded
-        archived_at: &id120
+        archived_at: &id121
           type: string
           format: date-time
-        from_reference_generation: *id119
-        to_reference_generation: *id119
+        from_reference_generation: *id120
+        to_reference_generation: *id120
         history:
           type: array
           items:
             type: object
             properties:
-              from_reference_generation: *id119
-              to_reference_generation: *id119
-              archived_at: *id120
+              from_reference_generation: *id120
+              to_reference_generation: *id120
+              archived_at: *id121
             required:
             - from_reference_generation
             - to_reference_generation
@@ -45954,7 +46711,7 @@ components:
                 - type: 'null'
               source_revision:
                 anyOf:
-                - *id121
+                - *id122
                 - type: 'null'
             required:
             - id
@@ -45967,17 +46724,17 @@ components:
           properties:
             job_id:
               anyOf:
-              - &id122
+              - &id123
                 type: string
                 format: uuid
               - type: 'null'
             request_id:
               anyOf:
-              - *id122
+              - *id123
               - type: 'null'
             evidence_package_sha256:
               anyOf:
-              - *id121
+              - *id122
               - type: 'null'
             account_id:
               anyOf:
@@ -45988,7 +46745,7 @@ components:
               - type: 'null'
             outcome_id:
               anyOf:
-              - *id122
+              - *id123
               - type: 'null'
           required:
           - job_id
@@ -46022,8 +46779,8 @@ components:
         format:
           type: string
           const: reveal.archived-reference-factor/1
-        archive_id: *id121
-        generation_id: *id119
+        archive_id: *id122
+        generation_id: *id120
         model:
           type: string
           enum:
@@ -46040,7 +46797,7 @@ components:
           type: string
         kpn_trait_id:
           anyOf:
-          - *id118
+          - *id119
           - type: 'null'
         label:
           type: string
@@ -46073,7 +46830,7 @@ components:
             properties:
               symbol:
                 type: string
-              loading: &id123
+              loading: &id124
                 type: number
             required:
             - symbol
@@ -46109,15 +46866,15 @@ components:
                 - type: 'null'
               joint_loading:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
               marginal_loading:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
               score:
                 anyOf:
-                - *id123
+                - *id124
                 - type: 'null'
             required:
             - rank
@@ -46130,8 +46887,8 @@ components:
             - marginal_loading
             - score
             additionalProperties: false
-        generation_manifest_sha256: *id121
-        captured_at: *id120
+        generation_manifest_sha256: *id122
+        captured_at: *id121
       required:
       - format
       - archive_id
@@ -46194,7 +46951,7 @@ components:
     LocalWorkCreate:
       type: object
       properties:
-        draft_id: &id124
+        draft_id: &id125
           type: string
           format: uuid
         draft_version:
@@ -46207,15 +46964,15 @@ components:
     LocalWorkGrant:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: &id125
+        grant_id: *id125
+        expires_at: &id126
           type: string
           format: date-time
         revoked_at:
           anyOf:
-          - *id125
+          - *id126
           - type: 'null'
-        created_at: *id125
+        created_at: *id126
       required:
       - grant_id
       - expires_at
@@ -46223,7 +46980,7 @@ components:
     LocalResearchOperation:
       type: object
       properties:
-        id: *id124
+        id: *id125
         kind:
           type: string
           enum:
@@ -46243,13 +47000,13 @@ components:
           - rejected
           - failed
           - cancelled
-        local_work_id: *id124
-        created_at: *id125
-        completed_at: *id125
-        result: &id126
+        local_work_id: *id125
+        created_at: *id126
+        completed_at: *id126
+        result: &id127
           type: object
           additionalProperties: true
-        error: &id128
+        error: &id129
           anyOf:
           - type: object
             properties:
@@ -46262,7 +47019,7 @@ components:
             - detail
             additionalProperties: false
           - type: 'null'
-        report: *id126
+        report: *id127
         account_ids:
           type: array
           items:
@@ -46288,8 +47045,8 @@ components:
     LocalWork:
       type: object
       properties:
-        id: *id124
-        research_request_id: *id124
+        id: *id125
+        research_request_id: *id125
         request:
           $ref: '#/components/schemas/ResearchRequest'
         state:
@@ -46299,12 +47056,12 @@ components:
           - ready
           - preparation_failed
           - closed
-        created_at: *id125
-        last_activity: *id125
+        created_at: *id126
+        last_activity: *id126
         last_action:
           type: string
-        expires_at: *id125
-        reference_generation_id: &id127
+        expires_at: *id126
+        reference_generation_id: &id128
           type: string
           pattern: ^[a-f0-9]{64}$
         package_id:
@@ -46313,11 +47070,11 @@ components:
           - type: 'null'
         package_sha256:
           anyOf:
-          - *id127
+          - *id128
           - type: 'null'
-        last_error: *id128
-        closed_at: *id125
-        preparation_operation_id: *id124
+        last_error: *id129
+        closed_at: *id126
+        preparation_operation_id: *id125
         submissions:
           type: array
           items:
@@ -46331,7 +47088,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: &id129
+        instructions: &id130
           type: object
           properties:
             codex:
@@ -46342,7 +47099,7 @@ components:
           - codex
           - claude_code
           additionalProperties: false
-        local_work_id: *id124
+        local_work_id: *id125
       required:
       - id
       - research_request_id
@@ -46375,9 +47132,9 @@ components:
     LocalWorkGrantIssued:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: *id125
-        local_work_id: *id124
+        grant_id: *id125
+        expires_at: *id126
+        local_work_id: *id125
         token:
           type: string
           pattern: ^rvlm_
@@ -46387,7 +47144,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: *id129
+        instructions: *id130
       required:
       - grant_id
       - expires_at
@@ -46408,7 +47165,7 @@ components:
           type: string
         filename:
           type: string
-        sha256: *id127
+        sha256: *id128
         size_bytes:
           type: integer
           minimum: 0
@@ -46432,7 +47189,7 @@ components:
           type: string
         path:
           type: string
-        sha256: *id127
+        sha256: *id128
         size_bytes:
           type: integer
           minimum: 0
@@ -46459,9 +47216,9 @@ components:
           type: string
           enum:
           - reveal.context-manifest/2
-        seed_sha256: *id127
-        package_sha256: *id127
-        context_sha256: *id127
+        seed_sha256: *id128
+        package_sha256: *id128
+        context_sha256: *id128
         files:
           type: array
           items:
@@ -46483,9 +47240,9 @@ components:
           type: string
           enum:
           - reveal.validation-context-export/2
-        seed_sha256: *id127
-        package_sha256: *id127
-        context_sha256: *id127
+        seed_sha256: *id128
+        package_sha256: *id128
+        context_sha256: *id128
         receipt_ids:
           type: array
           items:
@@ -46545,8 +47302,8 @@ components:
           type: string
           enum:
           - progressive
-        research_request_id: *id124
-        reference_generation_id: *id127
+        research_request_id: *id125
+        reference_generation_id: *id128
       required:
       - package_version
       - seed_version
@@ -46565,10 +47322,10 @@ components:
         properties:
           package_id:
             type: string
-          package_sha256: *id127
+          package_sha256: *id128
           package:
             $ref: '#/components/schemas/ResearchSeed'
-          manifest: *id126
+          manifest: *id127
           artifacts:
             type: array
             items:
@@ -46589,7 +47346,7 @@ components:
             type: string
             enum:
             - preparing
-          operation_id: *id124
+          operation_id: *id125
         required:
         - state
         - operation_id
@@ -46612,7 +47369,7 @@ components:
           type: string
           pattern: ^rvls_[A-Za-z0-9_-]{43}$
           writeOnly: true
-        token_sha256: *id127
+        token_sha256: *id128
       required:
       - ticket
       - token_sha256
@@ -46624,10 +47381,10 @@ components:
     ResearchSetupConnection:
       type: object
       properties:
-        grant_id: *id124
-        expires_at: *id125
-        local_work_id: *id124
-        package_sha256: *id127
+        grant_id: *id125
+        expires_at: *id126
+        local_work_id: *id125
+        package_sha256: *id128
         mcp_url:
           type: string
           format: uri
@@ -46654,19 +47411,19 @@ components:
           enum:
           - codex
           - claude_code
-        local_work_id: &id130
+        local_work_id: &id131
           type: string
           format: uuid
-        research_request_id: *id130
-        reference_generation_id: &id131
+        research_request_id: *id131
+        reference_generation_id: &id132
           type: string
           pattern: ^[a-f0-9]{64}$
-        package_sha256: *id131
-        mcp_url: *id132
-        device_authorization_url: *id132
-        token_url: *id132
-        revocation_url: *id132
-        return_url: *id132
+        package_sha256: *id132
+        mcp_url: *id133
+        device_authorization_url: *id133
+        token_url: *id133
+        revocation_url: *id133
+        return_url: *id133
         files:
           type: array
           items:
@@ -46674,7 +47431,7 @@ components:
             properties:
               path:
                 type: string
-              sha256: *id131
+              sha256: *id132
               size_bytes:
                 type: integer
                 minimum: 0
@@ -46729,15 +47486,15 @@ components:
     ResearchOAuthRegistration:
       type: object
       properties:
-        client_name: &id133
+        client_name: &id134
           type: string
           maxLength: 120
-        redirect_uris: &id134
+        redirect_uris: &id135
           type: array
-          items: *id132
+          items: *id133
           maxItems: 10
           uniqueItems: true
-        grant_types: &id135
+        grant_types: &id136
           type: array
           items:
             type: string
@@ -46747,17 +47504,17 @@ components:
             - urn:ietf:params:oauth:grant-type:device_code
           minItems: 1
           uniqueItems: true
-        response_types: &id136
+        response_types: &id137
           type: array
           items:
             type: string
             enum:
             - code
-        token_endpoint_auth_method: &id137
+        token_endpoint_auth_method: &id138
           type: string
           enum:
           - none
-        scope: &id138
+        scope: &id139
           type: string
       required: []
       additionalProperties: false
@@ -46770,12 +47527,12 @@ components:
     ResearchOAuthClient:
       type: object
       properties:
-        client_name: *id133
-        redirect_uris: *id134
-        grant_types: *id135
-        response_types: *id136
-        token_endpoint_auth_method: *id137
-        scope: *id138
+        client_name: *id134
+        redirect_uris: *id135
+        grant_types: *id136
+        response_types: *id137
+        token_endpoint_auth_method: *id138
+        scope: *id139
         client_id:
           type: string
         client_id_issued_at:
@@ -46796,10 +47553,10 @@ components:
       properties:
         client_id:
           type: string
-        resource: *id132
+        resource: *id133
         scope:
           type: string
-        local_work_id: *id130
+        local_work_id: *id131
       required:
       - client_id
       - resource
@@ -46812,8 +47569,8 @@ components:
           writeOnly: false
         user_code:
           type: string
-        verification_uri: *id132
-        verification_uri_complete: *id132
+        verification_uri: *id133
+        verification_uri_complete: *id133
         expires_in:
           type: integer
           const: 600
@@ -46832,9 +47589,9 @@ components:
       oneOf:
       - type: object
         properties:
-          client_id: &id139
+          client_id: &id140
             type: string
-          resource: *id132
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46842,7 +47599,7 @@ components:
           code:
             type: string
             writeOnly: true
-          redirect_uri: *id132
+          redirect_uri: *id133
           code_verifier:
             type: string
             minLength: 43
@@ -46858,8 +47615,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id139
-          resource: *id132
+          client_id: *id140
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46875,8 +47632,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id139
-          resource: *id132
+          client_id: *id140
+          resource: *id133
           grant_type:
             type: string
             enum:
@@ -46909,11 +47666,11 @@ components:
           maximum: 900
         scope:
           type: string
-        resource: *id132
-        local_work_id: *id130
-        package_sha256: *id131
-        mcp_url: *id132
-        grant_id: *id130
+        resource: *id133
+        local_work_id: *id131
+        package_sha256: *id132
+        mcp_url: *id133
+        grant_id: *id131
       required:
       - access_token
       - token_type
@@ -46949,7 +47706,7 @@ components:
     ResearchOAuthConsent:
       type: object
       properties:
-        request_id: *id130
+        request_id: *id131
         kind:
           type: string
           enum:
@@ -46959,7 +47716,7 @@ components:
           type: string
         client_name:
           type: string
-        scopes: &id140
+        scopes: &id141
           type: array
           items:
             type: string
@@ -46968,16 +47725,16 @@ components:
             - research:write
           minItems: 1
           uniqueItems: true
-        resource: *id132
+        resource: *id133
         requested_local_work_id:
           anyOf:
-          - *id130
+          - *id131
           - type: 'null'
         redirect_uri:
           anyOf:
-          - *id132
+          - *id133
           - type: 'null'
-        expires_at: &id141
+        expires_at: &id142
           type: string
           format: date-time
         status:
@@ -47004,10 +47761,10 @@ components:
     ResearchOAuthDecision:
       type: object
       properties:
-        request_id: *id130
+        request_id: *id131
         user_code:
           type: string
-        local_work_id: *id130
+        local_work_id: *id131
         approve:
           type: boolean
       required:
@@ -47035,7 +47792,7 @@ components:
       oneOf:
       - type: object
         properties:
-          redirect_url: *id132
+          redirect_url: *id133
         required:
         - redirect_url
         additionalProperties: false
@@ -47043,19 +47800,19 @@ components:
         properties:
           approved:
             type: boolean
-          local_work_id: *id130
+          local_work_id: *id131
         required:
         - approved
         additionalProperties: false
     ResearchAuthorizationMetadata:
       type: object
       properties:
-        issuer: *id132
-        authorization_endpoint: *id132
-        token_endpoint: *id132
-        registration_endpoint: *id132
-        device_authorization_endpoint: *id132
-        revocation_endpoint: *id132
+        issuer: *id133
+        authorization_endpoint: *id133
+        token_endpoint: *id133
+        registration_endpoint: *id133
+        device_authorization_endpoint: *id133
+        revocation_endpoint: *id133
         response_types_supported:
           type: array
           items:
@@ -47097,11 +47854,11 @@ components:
     ResearchProtectedResourceMetadata:
       type: object
       properties:
-        resource: *id132
+        resource: *id133
         authorization_servers:
           type: array
-          items: *id132
-        scopes_supported: *id140
+          items: *id133
+        scopes_supported: *id141
         bearer_methods_supported:
           type: array
           items:
@@ -47122,7 +47879,7 @@ components:
       properties:
         path:
           type: string
-        sha256: *id131
+        sha256: *id132
         size_bytes:
           type: integer
           minimum: 0
@@ -47130,12 +47887,12 @@ components:
           type: string
           enum:
           - application/json
-        download_url: *id132
+        download_url: *id133
         authentication:
           type: string
           enum:
           - none
-        expires_at: *id141
+        expires_at: *id142
       required:
       - path
       - sha256
@@ -47152,15 +47909,15 @@ components:
           type: string
           enum:
           - reveal.public-reference-capture/1
-        capture_id: *id131
-        expires_at: *id141
+        capture_id: *id132
+        expires_at: *id142
         reference_generation_id:
           anyOf:
-          - *id131
+          - *id132
           - type: 'null'
         operation:
           type: string
-        arguments: &id142
+        arguments: &id143
           type: object
           additionalProperties: true
         reader_version:
@@ -47173,15 +47930,15 @@ components:
           - imported_reference
           - bioindex_small_phenotype
           - external_kg
-        source: *id142
-        result: *id142
-        raw_sha256: *id131
-        metric_definitions: *id142
-        dapper_context: *id142
-        source_artifacts: *id142
+        source: *id143
+        result: *id143
+        raw_sha256: *id132
+        metric_definitions: *id143
+        dapper_context: *id143
+        source_artifacts: *id143
         source_ref:
           anyOf:
-          - *id142
+          - *id143
           - type: 'null'
         dapper_file_id:
           anyOf:
@@ -47189,7 +47946,7 @@ components:
           - type: 'null'
         object_resolution:
           type: array
-          items: *id142
+          items: *id143
         artifacts:
           type: array
           items:
@@ -47228,7 +47985,7 @@ components:
               type: 'null'
         else:
           properties:
-            reference_generation_id: *id131
+            reference_generation_id: *id132
       description: MCP get_public_capture/data/connected-KG response. Exact server-retained
         public bytes and context; no researcher prompts, work IDs or private scientific
         closures. Default retention 7 days; use the explicit expires_at, never assume
@@ -47242,13 +47999,13 @@ components:
     AdminAccountSummary:
       type: object
       properties:
-        record_id: &id143
+        record_id: &id144
           type: string
           pattern: ^[a-f0-9]{64}$
-        owner_user_id: &id144
+        owner_user_id: &id145
           type: string
           format: uuid
-        summary: &id145
+        summary: &id146
           $ref: '#/components/schemas/AccountSummary'
       required:
       - record_id
@@ -47262,9 +48019,9 @@ components:
     AdminAccountDetail:
       type: object
       properties:
-        record_id: *id143
-        owner_user_id: *id144
-        summary: *id145
+        record_id: *id144
+        owner_user_id: *id145
+        summary: *id146
         result:
           $ref: '#/components/schemas/AccountResult'
         paragraph:
@@ -47288,9 +48045,9 @@ components:
     AdminExplorationSummary:
       type: object
       properties:
-        record_id: *id144
-        owner_user_id: *id144
-        summary: &id146
+        record_id: *id145
+        owner_user_id: *id145
+        summary: &id147
           $ref: '#/components/schemas/AnalysisOutcomeSummary'
       required:
       - record_id
@@ -47303,9 +48060,9 @@ components:
     AdminExplorationDetail:
       type: object
       properties:
-        record_id: *id144
-        owner_user_id: *id144
-        summary: *id146
+        record_id: *id145
+        owner_user_id: *id145
+        summary: *id147
         result:
           $ref: '#/components/schemas/AnalysisOutcome'
       required:
@@ -47509,10 +48266,10 @@ components:
     CfdeAssessment:
       type: object
       properties:
-        id: &id147
+        id: &id148
           type: string
           format: uuid
-        draft_id: *id147
+        draft_id: *id148
         draft_version:
           type: integer
           minimum: 1
@@ -47627,7 +48384,7 @@ components:
     LightningAuditInput:
       type: object
       properties:
-        draft_id: *id148
+        draft_id: *id149
         draft_version:
           type: integer
           minimum: 1
@@ -47677,7 +48434,7 @@ components:
                   its relevance; distinguish stored evidence from a proposed interpretation.'
               evidence_refs:
                 type: array
-                items: &id149
+                items: &id150
                   type: string
                 minItems: 1
                 description: Exact evidence_ref IDs in this package that support this
@@ -47695,20 +48452,20 @@ components:
             experimental program.'
         missing_evidence:
           type: array
-          items: *id149
+          items: *id150
           description: 'At most 2 items of 25 words each: specific missing observations
             or assumptions needed to test the proposed explanation, not claims that
             missing entities do not exist.'
         next_steps:
           type: array
-          items: *id149
+          items: *id150
           minItems: 1
           description: 'At most 2 items of 25 words each: prioritized concrete checks
             an agent could perform next to test the direction. State these as future
             work; at least one actionable check is required.'
         limitations:
           type: array
-          items: *id149
+          items: *id150
           minItems: 1
           description: 'At most 2 items of 25 words each: required scope caveats for
             this bounded package, including relevant coverage omissions, source/species
@@ -47789,9 +48546,9 @@ components:
           enum:
           - online
           - local
-        id: *id148
-        research_request_id: *id148
-        created_at: &id150
+        id: *id149
+        research_request_id: *id149
+        created_at: &id151
           type: string
           format: date-time
       required:
@@ -47828,7 +48585,7 @@ components:
     LightningAudit:
       type: object
       properties:
-        id: *id148
+        id: *id149
         kind:
           type: string
           const: lightning_audit
@@ -47840,8 +48597,8 @@ components:
           - succeeded
           - failed
           - interrupted
-        research_request_id: *id148
-        source_draft_id: *id148
+        research_request_id: *id149
+        source_draft_id: *id149
         source_draft_version:
           type: integer
           minimum: 1
@@ -47859,14 +48616,14 @@ components:
           - id
           - text
           additionalProperties: false
-        created_at: *id150
-        updated_at: *id150
+        created_at: *id151
+        updated_at: *id151
         completed_at:
           anyOf:
-          - *id150
+          - *id151
           - type: 'null'
-        continuation_expires_at: *id150
-        reference_generation_id: &id151
+        continuation_expires_at: *id151
+        reference_generation_id: &id152
           type: string
           pattern: ^[a-f0-9]{64}$
         result:
@@ -47888,9 +48645,9 @@ components:
               type: string
             prompt_version:
               type: string
-            source_state_sha256: *id151
-            request_sha256: *id151
-            response_sha256: *id151
+            source_state_sha256: *id152
+            request_sha256: *id152
+            response_sha256: *id152
           required:
           - model
           - prompt_version
@@ -47974,16 +48731,16 @@ components:
     ProvenanceAnnotation:
       type: object
       properties:
-        trace_count: &id152
+        trace_count: &id153
           type: integer
           minimum: 0
-        page_trace_count: *id152
-        trace_ids: &id153
+        page_trace_count: *id153
+        trace_ids: &id154
           type: array
           items:
             type: string
-        dataset_ids: *id153
-        organization_ids: *id153
+        dataset_ids: *id154
+        organization_ids: *id154
         resolution:
           type: string
           enum:
@@ -48078,8 +48835,9 @@ components:
             - evidence_derivation
             - inherited_source_claim
             - factor_projection
-        input_roles: *id153
-        organization_ids: *id153
+            - trait_gwas
+        input_roles: *id154
+        organization_ids: *id154
         organization_attributions:
           type: array
           items:
@@ -48091,7 +48849,7 @@ components:
                 type: string
               path_steps:
                 type: array
-                items: &id154
+                items: &id155
                   type: object
                   properties:
                     edge_id:
@@ -48112,8 +48870,8 @@ components:
             additionalProperties: false
         path_steps:
           type: array
-          items: *id154
-        path_edge_ids: *id153
+          items: *id155
+        path_edge_ids: *id154
         direction:
           type: string
           enum:
@@ -48170,6 +48928,14 @@ components:
           anyOf:
           - type: string
           - type: 'null'
+        href:
+          anyOf:
+          - type: string
+            description: 'A public page for the node: a KPN trait''s bottom-line GWAS
+              listing on the provenance portal (or its kpn-data-models page), or the
+              portal page of a bottom-line GWAS artifact for its Dataset and raw inputs.
+              Built from identifiers; nothing is fetched to make it.'
+          - type: 'null'
       required:
       - id
       - kind
@@ -48192,12 +48958,12 @@ components:
           type: string
         observations:
           type: array
-          items: &id155
+          items: &id156
             type: object
             additionalProperties: true
         provenance_source:
           type: array
-          items: *id155
+          items: *id156
       required:
       - id
       - subject
@@ -48210,36 +48976,40 @@ components:
       properties:
         dataset_id:
           type: string
-        claim_count: *id152
-        claim_ids: *id153
-        trace_count: *id152
+        claim_count: *id153
+        claim_ids: *id154
+        trace_count: *id153
         classification_claim_counts:
-          type: object
-          properties:
-            proposition_reference: *id152
-            evidence_derivation: *id152
-            inherited_source_claim: *id152
-            factor_projection: *id152
-          required:
-          - proposition_reference
-          - evidence_derivation
-          - inherited_source_claim
-          - factor_projection
-          additionalProperties: false
-        classification_claim_ids:
           type: object
           properties:
             proposition_reference: *id153
             evidence_derivation: *id153
             inherited_source_claim: *id153
             factor_projection: *id153
+            trait_gwas: *id153
           required:
           - proposition_reference
           - evidence_derivation
           - inherited_source_claim
           - factor_projection
+          - trait_gwas
           additionalProperties: false
-        input_roles: *id153
+        classification_claim_ids:
+          type: object
+          properties:
+            proposition_reference: *id154
+            evidence_derivation: *id154
+            inherited_source_claim: *id154
+            factor_projection: *id154
+            trait_gwas: *id154
+          required:
+          - proposition_reference
+          - evidence_derivation
+          - inherited_source_claim
+          - factor_projection
+          - trait_gwas
+          additionalProperties: false
+        input_roles: *id154
       required:
       - dataset_id
       - claim_count
@@ -48257,21 +49027,21 @@ components:
       properties:
         organization_id:
           type: string
-        claim_count: *id152
-        claim_ids: *id153
-        dataset_count: *id152
-        dataset_ids: *id153
-        claim_dataset_count: *id152
+        claim_count: *id153
+        claim_ids: *id154
+        dataset_count: *id153
+        dataset_ids: *id154
+        claim_dataset_count: *id153
         roles:
           type: object
           additionalProperties:
             type: object
             properties:
-              claim_count: *id152
-              claim_ids: *id153
-              dataset_count: *id152
-              dataset_ids: *id153
-              claim_dataset_count: *id152
+              claim_count: *id153
+              claim_ids: *id154
+              dataset_count: *id153
+              dataset_ids: *id154
+              claim_dataset_count: *id153
             required:
             - claim_count
             - claim_ids
@@ -48293,34 +49063,60 @@ components:
     ProvenanceCoverage:
       type: object
       properties:
-        status: &id156
+        status: &id157
           type: string
           enum:
           - complete
           - incomplete
         counts_are_lower_bounds:
           type: boolean
-        claim_count: *id152
-        resolved_claim_count: *id152
-        trace_count: *id152
+        claim_count: *id153
+        resolved_claim_count: *id153
+        trace_count: *id153
         lineage_resolution:
           type: object
           properties:
-            status: *id156
-            issue_count: *id152
+            status: *id157
+            issue_count: *id153
           required:
           - status
           - issue_count
           additionalProperties: false
         retained_projection_coverage:
           type: array
-          items: *id155
+          items: *id156
         recovery_status:
           type: array
-          items: *id155
+          items: *id156
         issues:
           type: array
-          items: *id155
+          items: *id156
+        upstream_gaps:
+          type: array
+          items:
+            type: object
+            properties:
+              route:
+                type: string
+                enum:
+                - proposition_reference
+                - evidence_derivation
+                - inherited_source_claim
+                - factor_projection
+                - trait_gwas
+              code:
+                type: string
+                description: not_a_gwas_trait (a rare-disease list), not_on_portal
+                  (no bottom-line GWAS listed), or no_upstream_organizations (the
+                  reached Dataset names no organization).
+              object_ids: *id154
+            required:
+            - route
+            - code
+            - object_ids
+            additionalProperties: false
+          description: 'Gaps of the upstream sources themselves: absent, never inferred.
+            They do not make the trace incomplete.'
       required:
       - status
       - counts_are_lower_bounds
@@ -48332,9 +49128,15 @@ components:
       - recovery_status
       - issues
       additionalProperties: false
-      description: Independent lineage, retained projection and source-recovery coverage.
+      description: 'Independent lineage, retained projection and source-recovery coverage.
         Complete retained projection rows do not establish complete model-construction
-        lineage. Missing or withheld sources make counts lower bounds.
+        lineage. Missing or withheld sources make counts lower bounds. Issue codes
+        include external_provenance_unavailable (a trait''s portal GWAS graph could
+        not be read: object_id is the trait), reference_release_superseded (the account''s
+        captures pin a release that is no longer published; only capture bytes and
+        archived snapshots were read), trait_unavailable and unlinked_inputs ({activity,
+        count}: more inputs of one activity than the fan-out bound, none with recorded
+        lineage).'
     ProvenanceSnapshot:
       type: object
       properties:
@@ -48351,9 +49153,9 @@ components:
           type: string
         document_sha256:
           type: string
-        publication_version: *id152
-        reference_generation_ids: *id153
-        supplement_ids: *id153
+        publication_version: *id153
+        reference_generation_ids: *id154
+        supplement_ids: *id154
         source_observations:
           type: array
           items:
@@ -48370,6 +49172,9 @@ components:
             - key
             - sha256
             additionalProperties: false
+          description: 'Hashes of every source read. kind portal_bottom_line: key
+            is the portal URL read, sha256 that of the compacted GWAS graph (canonical
+            JSON); a changed portal graph expires cursors.'
       required:
       - id
       - policy_version
@@ -48429,8 +49234,8 @@ components:
               type: integer
               minimum: 1
               maximum: 250
-            offset: *id152
-            total: *id152
+            offset: *id153
+            total: *id153
             next_cursor:
               anyOf:
               - type: string
@@ -48455,6 +49260,409 @@ components:
       - snapshot
       - page
       additionalProperties: false
+    TraitDetail:
+      type: object
+      properties:
+        kpn_trait_id: &id159
+          type: string
+          pattern: ^KPN\.TRAIT:[0-9]{7}$
+        phenotype:
+          type: string
+        name:
+          type: string
+        category:
+          anyOf:
+          - type: string
+          - type: 'null'
+        is_atlas: &id163
+          type: boolean
+        legacy_phenotype_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        trait_group:
+          anyOf:
+          - type: string
+          - type: 'null'
+        trait_type:
+          anyOf:
+          - type: string
+          - type: 'null'
+        description:
+          anyOf:
+          - type: string
+          - type: 'null'
+        kpn_url:
+          type: string
+          format: uri
+        gwas:
+          type: object
+          properties:
+            status:
+              type: string
+              enum:
+              - available
+              - not_a_gwas_trait
+              - not_on_portal
+            portal_trait_id:
+              anyOf:
+              - type: string
+              - type: 'null'
+            gwas_artifact_id:
+              anyOf:
+              - type: string
+              - type: 'null'
+            portal_href:
+              anyOf:
+              - type: string
+                format: uri
+              - type: 'null'
+            artifacts:
+              type: array
+              items:
+                type: object
+                properties:
+                  ancestry_code:
+                    type: string
+                  ancestry_name:
+                    type: string
+                  artifact_id:
+                    type: string
+                  href:
+                    type: string
+                    format: uri
+                required:
+                - ancestry_code
+                - ancestry_name
+                - artifact_id
+                - href
+                additionalProperties: false
+          required:
+          - status
+          - portal_trait_id
+          - gwas_artifact_id
+          - portal_href
+          - artifacts
+          additionalProperties: false
+          description: The Translator provenance portal's bottom-line GWAS of the
+            trait, as links built from stored ids (never fetched). gwas_artifact_id
+            is the one artifact the account trace's GWAS route uses. Rare-disease
+            gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts
+            are not_on_portal.
+        factors:
+          type: array
+          items:
+            type: object
+            properties:
+              source_id:
+                type: string
+              label:
+                type: string
+              factor_number: &id161
+                type: integer
+                minimum: 1
+            required:
+            - source_id
+            - label
+            - factor_number
+            additionalProperties: false
+        gene_set_libraries:
+          type: array
+          items:
+            type: object
+            properties:
+              library:
+                type: string
+              n_gene_sets: &id158
+                type: integer
+                minimum: 0
+              n_nonzero: *id158
+              top_gene_sets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TraitGeneSet'
+                maxItems: 5
+            required:
+            - library
+            - n_gene_sets
+            - n_nonzero
+            - top_gene_sets
+            additionalProperties: false
+        linked_factors:
+          type: object
+          properties:
+            n_factors: *id158
+          required:
+          - n_factors
+          additionalProperties: false
+        release_id: &id162
+          type: string
+          description: The published reference release these rows were read from.
+          pattern: ^[a-f0-9]{64}$
+      required:
+      - kpn_trait_id
+      - phenotype
+      - name
+      - category
+      - is_atlas
+      - legacy_phenotype_id
+      - trait_group
+      - trait_type
+      - description
+      - kpn_url
+      - gwas
+      - factors
+      - gene_set_libraries
+      - linked_factors
+      - release_id
+      additionalProperties: false
+      description: A KPN trait of the published reference release. Atlas traits (is_atlas)
+        have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage
+        linked factors to, with no factors, betas or trait group of its own. phenotype
+        is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back
+        to its EAGGL phenotype code). factors are fitted on this trait, in factor
+        order; gene_set_libraries count its PIGEAN-kept gene sets per library and
+        those with a nonzero beta_uncorrected, with its best 5 nonzero gene sets of
+        each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors
+        counts factors of other traits linked to this trait.
+    TraitGeneSet:
+      type: object
+      properties:
+        kpn_trait_id: *id159
+        trait_name:
+          type: string
+        gene_set_id:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+        gene_set_name:
+          type: string
+        library:
+          type: string
+        collection_id:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}$
+        n_genes: *id158
+        beta_uncorrected: &id160
+          type: number
+        beta: *id160
+        avg_postp: &id164
+          type: number
+          minimum: 0
+          maximum: 1
+        library_rank: *id161
+      required:
+      - kpn_trait_id
+      - trait_name
+      - gene_set_id
+      - gene_set_name
+      - library
+      - collection_id
+      - n_genes
+      - beta_uncorrected
+      - beta
+      - avg_postp
+      - library_rank
+      additionalProperties: false
+      description: One trait x gene-set row of the release's PIGEAN betas mode (one
+        fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs).
+        beta_uncorrected is the gene set's uncorrected effect, beta its effect corrected
+        for the library's other gene sets, avg_postp its average posterior inclusion
+        probability; library_rank orders the trait's gene sets within the library
+        by beta_uncorrected. These are not the BioIndex small-model values.
+    TraitGeneSets:
+      type: object
+      properties:
+        trait_id:
+          anyOf:
+          - *id159
+          - type: 'null'
+        gene_set_id:
+          anyOf:
+          - type: string
+            description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+              path values.
+            pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
+          - type: 'null'
+        library:
+          anyOf:
+          - type: string
+            maxLength: 64
+          - type: 'null'
+        sort:
+          type: string
+          enum:
+          - beta_uncorrected
+          - beta
+          - avg_postp
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TraitGeneSet'
+        total: *id158
+        next_offset: &id165
+          anyOf:
+          - *id158
+          - type: 'null'
+        coverage: &id166
+          type: string
+        release_id: *id162
+      required:
+      - trait_id
+      - gene_set_id
+      - library
+      - sort
+      - items
+      - total
+      - next_offset
+      - coverage
+      - release_id
+      additionalProperties: false
+      description: 'Bounded page of gene-set betas for one trait (trait_id) or of
+        one gene set across traits (gene_set_id). Sorted descending by sort with zero
+        values last (below the few negative corrected betas), ties by library_rank
+        then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows:
+        an absent pair is not a zero beta, and some kept rows are exactly 0.'
+    FactorTraitLink:
+      type: object
+      properties:
+        source_id:
+          type: string
+        factor_label:
+          type: string
+        fitted_kpn_trait_id: *id159
+        fitted_trait_name:
+          type: string
+        phenotype:
+          type: string
+        phenotype_kpn_trait_id:
+          anyOf:
+          - *id159
+          - type: 'null'
+        phenotype_name:
+          type: string
+        is_own_trait: *id163
+        is_atlas_trait: *id163
+        nnls_loading: *id160
+        phewas_beta: *id160
+        phewas_p_onesided: *id164
+        phewas_q: *id164
+      required:
+      - source_id
+      - factor_label
+      - fitted_kpn_trait_id
+      - fitted_trait_name
+      - phenotype
+      - phenotype_kpn_trait_id
+      - phenotype_name
+      - is_own_trait
+      - is_atlas_trait
+      - nnls_loading
+      - phewas_beta
+      - phewas_p_onesided
+      - phewas_q
+      additionalProperties: false
+      description: A factor linked to a PIGEAN phenotype at BH q <= 0.05. nnls_loading
+        is the factor's non-negative least-squares loading in eaggl's trait linkage;
+        phewas_beta, phewas_p_onesided and phewas_q are the factor-PheWAS effect,
+        its one-sided p value and its Benjamini-Hochberg q over all factor x phenotype
+        tests. is_own_trait marks the phenotype the factor was fitted on; is_atlas_trait
+        a phenotype that is an atlas trait. phenotype_name is the display name; phenotypes
+        without a KPN id have a null phenotype_kpn_trait_id.
+    FactorTraitLinks:
+      type: object
+      properties:
+        source_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+        trait_id:
+          anyOf:
+          - *id159
+          - type: 'null'
+        scope:
+          type: string
+          enum:
+          - atlas
+          - all
+        sort:
+          type: string
+          enum:
+          - phewas_q
+          - phewas_beta
+          - nnls_loading
+        summary:
+          anyOf:
+          - type: object
+            properties:
+              n_phenotypes: *id158
+              n_linked: *id158
+              n_linked_kpn_traits: *id158
+              n_linked_atlas_traits: *id158
+              own_trait_q:
+                anyOf:
+                - *id164
+                - type: 'null'
+            required:
+            - n_phenotypes
+            - n_linked
+            - n_linked_kpn_traits
+            - n_linked_atlas_traits
+            - own_trait_q
+            additionalProperties: false
+          - type: 'null'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/FactorTraitLink'
+        total: *id158
+        next_offset: *id165
+        coverage: *id166
+        release_id: *id162
+      required:
+      - source_id
+      - trait_id
+      - scope
+      - sort
+      - summary
+      - items
+      - total
+      - next_offset
+      - coverage
+      - release_id
+      additionalProperties: false
+      description: 'Bounded page of the phenotypes linked to one factor (source_id),
+        or of the factors linked to one trait (trait_id; the trait''s own factors
+        are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas
+        trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending,
+        ties by phenotype then factor, before pagination. summary (source_id only)
+        is the factor''s linkage over every phenotype tested: own_trait_q is null
+        when its own trait was not tested.'
+    MechanismObject:
+      type: object
+      properties:
+        dapper_id:
+          type: string
+          description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
+            path values.
+          pattern: ^dapper:Mechanism\.[A-Za-z0-9_-]{32}$
+        status:
+          type: string
+          const: current
+        source_id:
+          type: string
+        release_id: *id162
+      required:
+      - dapper_id
+      - status
+      - source_id
+      - release_id
+      additionalProperties: false
+      description: The served factor whose minted DAPPER Mechanism this id is. Resolve
+        the factor at /v1/mechanisms/{source_id}.
 x-dapper-dependency:
   base_commit: e44a913619c4c9832df6aeaac6a80dbf691ba120
   schema_sha256: 305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25

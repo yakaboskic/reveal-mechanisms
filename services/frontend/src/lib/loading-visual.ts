@@ -4,6 +4,8 @@ export type LoadingCell = {
   label: string;
   loading: number | null;
   rank: number;
+  /** What the rank is within, such as a gene set's library; omitted for ranks over the whole factor. */
+  rankScope?: string;
   description?: string;
   href?: string;
   details?: readonly { label: string; value: string }[];
@@ -24,6 +26,7 @@ export function loadingLevel(value: number | null, min: number | null, max: numb
 
 /** Preserve the reported number, including small values and genuine zeroes. */
 export const loadingValue = (value: number | null) => value !== null && Number.isFinite(value) ? String(value) : "Not available";
+export const loadingRank = (item: Pick<LoadingCell, "rank" | "rankScope">) => item.rankScope ? `${item.rank} in ${item.rankScope}` : String(item.rank);
 
 /** Membership annotates a loading without changing its numeric color scale. */
 export function loadingAppearance(item: LoadingCell, min: number | null, max: number | null, overlayLabel?: string) {

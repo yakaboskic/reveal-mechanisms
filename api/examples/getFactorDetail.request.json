@@ -57,7 +57,7 @@
           },
           "generation_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
           "provenance": {
-            "eaggl_import_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "eaggl_import_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
             "factor_id": "T2D::Factor1",
             "factor_key": "KPN.TRAIT:0000398::Factor1",
             "model": "eaggl-capped-v1"
@@ -73,10 +73,31 @@
             "total": 71,
             "min": 0.0003,
             "max": 0.24,
-            "coverage": "Retained per-trait projections: gene sets in the top 50 by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
+            "coverage": "Retained projections, ranked within each gene-set library: the gene sets in the top 50 of their library by joint or marginal loading. Search covers this retained subset, not every gene set in the source library.",
             "available": true
           },
-          "gnomad": null
+          "gnomad": null,
+          "trait_links": {
+            "n_phenotypes": 6698,
+            "n_linked": 412,
+            "n_linked_kpn_traits": 398,
+            "n_linked_atlas_traits": 97,
+            "own_trait_q": 2.1e-14,
+            "top_linked": [
+              {
+                "phenotype": "T2D",
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "name": "Type 2 diabetes",
+                "phewas_q": 2.1e-14
+              },
+              {
+                "phenotype": "HbA1c_example",
+                "kpn_trait_id": null,
+                "name": "HbA1c (illustrative phenotype without a KPN id)",
+                "phewas_q": 3.4e-09
+              }
+            ]
+          }
         }
       }
     }

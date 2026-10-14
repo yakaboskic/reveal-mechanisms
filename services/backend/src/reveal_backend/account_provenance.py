@@ -4,6 +4,13 @@ This module performs no I/O. The caller supplies retained reference observations
 projection edges and registered recovery supplements; ordinary scientific objects
 are never rewritten. Projection is a recorded fitted-model relationship, not proof
 of the complete construction lineage of a Mechanism.
+
+A KPN trait (`traits`, synthesized by the trace from the release) is reached from a
+Mechanism by reveal:fittedOnTrait or from a proposition citing it; its GWAS route is
+trait -reveal:publishedGwas-> the portal's bottom-line Dataset (route trait_gwas). The
+portal's raw inputs hang off that Dataset by reveal:portalTransitiveInput, which is
+shown but never traversed. An activity's used inputs are followed one per lineage
+signature once a signature groups more than GROUP_THRESHOLD of them.
 """
 from collections import defaultdict, deque
 from copy import deepcopy
@@ -17,14 +24,15 @@ MAX_NODES = 10_000
 MAX_EDGES = 50_000
 MAX_DEPTH = 128
 MAX_STATES = 100_000
-TRACING_POLICY_VERSION = 'account-provenance-v1'
-CLASSIFICATIONS = ('proposition_reference', 'evidence_derivation', 'inherited_source_claim', 'factor_projection')
+GROUP_THRESHOLD = 25  # = reference_lineage.GROUP_THRESHOLD (not imported: reference_lineage imports this module)
+TRACING_POLICY_VERSION = 'account-provenance-v2'
+CLASSIFICATIONS = ('proposition_reference', 'evidence_derivation', 'inherited_source_claim', 'factor_projection', 'trait_gwas')
 DIRECTIONS = frozenset(('SUPPORTS', 'DISPUTES', 'MIXED', 'NEUTRAL', 'UNKNOWN'))
 KINDS = {'scientific_accounts': 'account', 'claims': 'claim', 'propositions': 'proposition',
          'evidence_items': 'evidence', 'datasets': 'dataset', 'files': 'file', 'c2m2_files': 'file',
          'activities': 'activity', 'gene_sets': 'gene_set', 'mechanisms': 'mechanism',
          'mechanistic_models': 'mechanistic_model', 'causal_steps': 'causal_step', 'organizations': 'organization',
-         'persons': 'person', 'software': 'software'}
+         'persons': 'person', 'software': 'software', 'traits': 'trait'}
 FIELDS = {'was_derived_from': 'prov:wasDerivedFrom', 'was_generated_by': 'prov:wasGeneratedBy',
           'used': 'prov:used', 'has_file': 'dapper:hasFile', 'had_member': 'prov:hadMember',
           'was_attributed_to': 'prov:wasAttributedTo', 'was_associated_with': 'prov:wasAssociatedWith',
@@ -36,6 +44,12 @@ FIELDS = {'was_derived_from': 'prov:wasDerivedFrom', 'was_generated_by': 'prov:w
           'has_evidence': 'dapper:hasEvidence', 'component_claims': 'dapper:componentClaims',
           'conclusion_claims': 'dapper:conclusionClaims', 'step_subject': 'dapper:stepSubject',
           'step_object': 'dapper:stepObject', 'via_mechanism': 'dapper:viaMechanism'}
+# Relations the trace adds (group <relation>_edges): fitted projections, a factor's fitted trait, a trait's published GWAS
+# and the portal's raw inputs of that GWAS (shown, never traversed).
+REVEAL = {'factor_projection': 'reveal:factorProjection', 'fitted_on_trait': 'reveal:fittedOnTrait',
+          'published_gwas': 'reveal:publishedGwas', 'portal_transitive_input': 'reveal:portalTransitiveInput'}
+# A KPN trait as cited: its CURIE or its kpn-data-models page.
+TRAIT_ID = re.compile(r'(?:KPN\.TRAIT:|https://broadinstitute\.github\.io/kpn-data-models/kpn\.trait/)(\d{7})/?')
 ORG_ROLES = {'was_attributed_to': 'attribution', 'has_creator': 'creator',
              'has_contributor': 'contributor', 'publisher': 'publisher', 'funded_by': 'funder',
              'was_associated_with': 'generation_agent'}
@@ -45,7 +59,7 @@ PREDICATES.update({f'dapper:{key}': key for key in FIELDS})
 PREDICATES.update({'dcterms:creator': 'has_creator', 'schema:contributor': 'has_contributor',
                    'schema:publisher': 'publisher', 'FRAPO:isSupportedBy': 'funded_by',
                    'dapper:fundedBy': 'funded_by', 'dcat:distribution': 'has_file',
-                   'reveal:factorProjection': 'factor_projection'})
+                   **{predicate: relation for relation, predicate in REVEAL.items()}})
 NAMESPACES = {'https://broadinstitute.github.io/dapper/ns#': 'dapper:',
               'http://www.w3.org/ns/prov#': 'prov:', 'http://purl.org/dc/terms/': 'dcterms:',
               'http://www.w3.org/ns/dcat#': 'dcat:', 'https://schema.org/': 'schema:',
@@ -62,10 +76,16 @@ def _refs(value):
                    if isinstance(item, str) and item})
 
 
+def kpn_trait(identity):
+    """The KPN.TRAIT CURIE of a cited trait id, or None."""
+    match = TRAIT_ID.fullmatch(identity) if isinstance(identity, str) else None
+    return 'KPN.TRAIT:' + match.group(1) if match else None
+
+
 def _relation(predicate, group=''):
-    expected = 'factor_projection' if group == 'factor_projection_edges' else group.removesuffix('_edges')
+    expected = group.removesuffix('_edges')
     if predicate is None:
-        return expected if expected in FIELDS or expected == 'factor_projection' else None
+        return expected if expected in FIELDS or expected in REVEAL else None
     if not isinstance(predicate, str):
         return None
     for namespace, prefix in NAMESPACES.items():
@@ -73,7 +93,7 @@ def _relation(predicate, group=''):
             predicate = prefix + predicate[len(namespace):]
             break
     relation = PREDICATES.get(predicate)
-    if expected in FIELDS or expected == 'factor_projection':
+    if expected in FIELDS or expected in REVEAL:
         return relation if relation == expected else None
     return relation
 
@@ -130,7 +150,7 @@ class _Graph:
                     continue
                 metadata = {key: deepcopy(value) for key, value in row.items()
                             if key not in ('subject', 'object', 'predicate', 'id')}
-                self._edge(subject, target, predicate or 'reveal:factorProjection', relation, metadata)
+                self._edge(subject, target, predicate or REVEAL[relation], relation, metadata)
         for edge in self._input_edges.values():
             self.adj[edge['subject']].append(edge)
             if edge['relation'] in ('has_file', 'had_member') and self.kinds.get(edge['subject']) == 'dataset':
@@ -171,7 +191,7 @@ class _Graph:
             status = 'conflicting' if identity in self.conflicts else 'resolved' if node else 'unresolved'
             compact = {'id': identity, 'kind': self.kinds.get(identity, 'unresolved'), 'status': status}
             if node and status == 'resolved':
-                for key in ('name', 'sha256', 'filename', 'ror'):
+                for key in ('name', 'sha256', 'filename', 'ror', 'href'):
                     if key in node:
                         compact[key] = deepcopy(node[key])
             self.nodes[identity] = compact
@@ -192,6 +212,42 @@ class _Graph:
         key = (code, origin)
         self.issues[key] = {'code': code, 'origin_id': origin}
         self.issue_origins[origin].add(code)
+
+    def signature(self, identity):
+        """An input's onward lineage (reference_lineage's grouping): its generating activities, and the entities it derives
+        from or belongs to."""
+        return (frozenset(edge['object'] for edge in self.outgoing(identity, {'was_generated_by'})),
+                frozenset([edge['object'] for edge in self.outgoing(identity, {'was_derived_from'})]
+                          + [edge['subject'] for edge in self.parents.get(identity, ())]))
+
+    def inputs(self, activity, origin):
+        """The used edges of an activity to follow. Datasets are endpoints and always followed. Other inputs are grouped by
+        lineage signature: a group of more than GROUP_THRESHOLD inputs is followed through its smallest id, with
+        collapsed_inputs observed on that edge; such a group with no lineage at all is one unlinked_inputs coverage entry
+        instead. Unrecorded inputs of an activity whose retained closure already collapsed its inputs are the dropped ones."""
+        edges = self.outgoing(activity, {'used'})
+        dropped = any('collapsed_inputs' in item for edge in edges for item in edge.get('observations', ()))
+        follow, groups = [], defaultdict(list)
+        for edge in edges:
+            target = edge['object']
+            if self.kinds.get(target) == 'dataset' and target not in self.conflicts: follow.append(edge)
+            elif not (dropped and target not in self.records): groups[self.signature(target)].append(edge)
+        for signature, items in groups.items():
+            targets = sorted({edge['object'] for edge in items})
+            if len(targets) <= GROUP_THRESHOLD:
+                follow += items
+            elif any(signature):
+                for edge in items:
+                    if edge['object'] != targets[0]: continue
+                    observations = edge.setdefault('observations', [])
+                    if {'collapsed_inputs': len(targets)} not in observations:
+                        observations.append({'collapsed_inputs': len(targets)})
+                        observations.sort(key=lambda item: json.dumps(item, sort_keys=True))
+                    follow.append(edge)
+            else:
+                self.issues[('unlinked_inputs', activity)] = {'code': 'unlinked_inputs', 'activity': activity, 'count': len(targets)}
+                self.issue_origins[origin].add('unlinked_inputs')
+        return sorted(follow, key=lambda edge: (edge['relation'], edge['object'], edge['id']))
 
     def outgoing(self, identity, relations):
         return [edge for edge in self.adj.get(identity, ()) if edge['relation'] in relations]
@@ -268,6 +324,9 @@ class _Graph:
             if depth > MAX_DEPTH:
                 _limit()
             seen.add(state)
+            if kpn_trait(identity) and identity not in self.records:
+                # A trait the trace could not synthesize is terminal; the trace reports it (trait_unavailable).
+                self.reference_origins[identity].add(origin); self.add(identity); continue
             if not self.resolve(identity, origin):
                 continue
             kind, node = self.kinds[identity], self.records[identity]
@@ -285,6 +344,8 @@ class _Graph:
                 row['id'] = _id('trace', {key: value for key, value in row.items()
                                         if key not in ('path_steps', 'path_edge_ids', 'organization_attributions')})
                 traces.append(row)
+                for edge in self.outgoing(identity, {'portal_transitive_input'}):
+                    self.use(edge)
                 if membership:
                     continue
             links = self.outgoing(identity, {'was_derived_from', 'was_generated_by'}) if kind in ENTITY_KINDS else []
@@ -292,8 +353,11 @@ class _Graph:
                 for edge in self.parents.get(identity, ()):
                     push((edge['subject'], path + [self.use(edge, reverse=True)], classes, roles, True, depth + 1, next_ancestors))
             if kind == 'activity':
-                links += self.outgoing(identity, {'used'})
+                links += self.inputs(identity, origin)
+            elif kind == 'trait':
+                links += self.outgoing(identity, {'published_gwas'})
             elif kind == 'mechanism':
+                links += self.outgoing(identity, {'fitted_on_trait'})
                 projections = self.outgoing(identity, {'factor_projection'})
                 if projections or identity in self.factor_bindings:
                     self.projections.add(identity)
@@ -311,7 +375,9 @@ class _Graph:
                 links += self.outgoing(identity, {'was_derived_from', 'source_claims', 'mechanistic_model'})
             elif kind == 'claim':
                 links += self.outgoing(identity, {'proposition'}) + self.evidence(identity, origin)
-            if kind in ('gene_set', 'file', 'activity', 'mechanistic_model') and not links and not (kind == 'file' and self.parents.get(identity)):
+            # An activity whose inputs were all summarized (unlinked_inputs) already has its coverage entry.
+            if (kind in ('gene_set', 'file', 'activity', 'mechanistic_model') and not links and not (kind == 'file' and self.parents.get(identity))
+                    and not (kind == 'activity' and self.outgoing(identity, {'used'}))):
                 self.issue('MISSING_LINEAGE', origin)
             for edge in links:
                 relation, target = edge['relation'], edge['object']
@@ -324,6 +390,7 @@ class _Graph:
                 next_classes = classes
                 if relation == 'source_claims': next_classes |= {'inherited_source_claim'}
                 if relation == 'factor_projection': next_classes |= {'factor_projection'}
+                if relation == 'published_gwas': next_classes |= {'trait_gwas'}
                 if kind == 'proposition': next_classes |= {'proposition_reference'}
                 if relation == 'has_evidence': next_classes |= {'evidence_derivation'}
                 next_roles = roles | {edge['input_role']} if relation == 'used' else roles
@@ -331,7 +398,8 @@ class _Graph:
         return traces
 
     def relevant(self, identity):
-        return (self.kinds.get(identity) in ENTITY_KINDS or identity in self.conflicts
+        return (self.kinds.get(identity) in ENTITY_KINDS or self.kinds.get(identity) == 'trait' or identity in self.conflicts
+                or bool(kpn_trait(identity))
                 or bool(re.match(r'dapper:(GeneSet|Mechanism|MechanisticModel|Dataset|File|Activity)\.', identity)))
 
 
@@ -432,7 +500,7 @@ def collect(document, account_id):
             traces_by_id.setdefault(row['id'], row)
     traces = sorted(traces_by_id.values(), key=lambda row: (row['claim_id'] or '', row['origin_id'], row['source_field'], row['dataset_id'], row['id']))
     additional = document.get('_provenance_coverage', {})
-    issues = sorted(graph.issues.values(), key=lambda row: (row['code'], row['origin_id']))
+    issues = sorted(graph.issues.values(), key=lambda row: (row['code'], row.get('origin_id', row.get('activity', ''))))
     issues += deepcopy(additional.get('issues', []))
     # Enrichment failures may be attached to a reached reference rather than
     # an account record. Propagate them to every originating scientific use,
@@ -466,6 +534,14 @@ def collect(document, account_id):
             'resolution': 'incomplete' if bad else 'complete' if matches else 'not_applicable'}}
     account_wrapper = wrapper(account_id, traces, set(graph.issue_origins))
     if incomplete: account_wrapper['provenance']['resolution'] = 'incomplete'
+    # Absent upstream organizations (the portal's GWAS graphs name none) and traits without a GWAS route are recorded
+    # gaps of the sources, not unresolved lineage: they never make the trace incomplete.
+    gaps = defaultdict(set)
+    for item in additional.get('upstream_gaps', []):
+        gaps[item['route'], item['code']].update(item['object_ids'])
+    for row in traces:
+        if 'trait_gwas' in row['route_classifications'] and not row['organization_ids']:
+            gaps['trait_gwas', 'no_upstream_organizations'].add(row['dataset_id'])
     projection_coverage = deepcopy(additional.get('retained_projection_coverage', []))
     if not projection_coverage:
         projection_coverage = [{'mechanism_id': identity, 'retained_projection_count': len(graph.outgoing(identity, {'factor_projection'})),
@@ -482,11 +558,13 @@ def collect(document, account_id):
                          'claim_count': len(claim_ids), 'resolved_claim_count': len(included_claims), 'trace_count': len(traces),
                          'lineage_resolution': {'status': 'incomplete' if incomplete else 'complete', 'issue_count': len(issues)},
                          'retained_projection_coverage': projection_coverage,
-                         'recovery_status': deepcopy(additional.get('recovery_status', [])), 'issues': issues}}
+                         'recovery_status': deepcopy(additional.get('recovery_status', [])), 'issues': issues,
+                         **({'upstream_gaps': [{'route': route, 'code': code, 'object_ids': sorted(ids)}
+                                               for (route, code), ids in sorted(gaps.items())]} if gaps else {})}}
 
 
 def eligible_reference_ids(document, account_id=None):
-    """Return reached reference entities/files, excluding unrelated capture rows.
+    """Return reached reference entities/files and KPN traits, excluding unrelated capture rows.
 
     Enrichment may call this again after adding exact captured/projection links.
     Nothing is loaded here and the same bounds and scientific-use rules apply.
@@ -497,7 +575,7 @@ def eligible_reference_ids(document, account_id=None):
     for identity in accounts:
         result = collect(document, identity)
         for node in result['nodes']:
-            if node['status'] != 'conflicting' and (node['kind'] in ('gene_set', 'mechanism', 'file')
-                    or re.match(r'dapper:(GeneSet|Mechanism|File)\.', node['id'])):
+            if node['status'] != 'conflicting' and (node['kind'] in ('gene_set', 'mechanism', 'file', 'trait')
+                    or re.match(r'dapper:(GeneSet|Mechanism|File)\.', node['id']) or kpn_trait(node['id'])):
                 identities.add(node['id'])
     return identities

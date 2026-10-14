@@ -1,0 +1,135 @@
+{
+  "operation_id": "getTrait",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/traits/{kpn_trait_id}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398",
+    "path": {
+      "kpn_trait_id": "KPN.TRAIT:0000398"
+    },
+    "query": {},
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "atlas_trait": {
+          "kpn_trait_id": "KPN.TRAIT:0000398",
+          "phenotype": "T2D",
+          "name": "Type 2 diabetes (T2D)",
+          "category": "KPN",
+          "is_atlas": true,
+          "legacy_phenotype_id": "T2D",
+          "trait_group": "metabolic",
+          "trait_type": "phenotype",
+          "description": null,
+          "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0000398/",
+          "gwas": {
+            "status": "available",
+            "portal_trait_id": "T2D",
+            "gwas_artifact_id": "bl-t2d-mixed",
+            "portal_href": "https://translator.broadinstitute.org/artifact_provenance/bottom_line/T2D",
+            "artifacts": [
+              {
+                "ancestry_code": "EU",
+                "ancestry_name": "European",
+                "artifact_id": "bl-t2d-eu",
+                "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-eu"
+              },
+              {
+                "ancestry_code": "Mixed",
+                "ancestry_name": "Mixed ancestry",
+                "artifact_id": "bl-t2d-mixed",
+                "href": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed"
+              }
+            ]
+          },
+          "factors": [
+            {
+              "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+              "label": "Metabolic Dysregulation Indicators",
+              "factor_number": 1
+            }
+          ],
+          "gene_set_libraries": [
+            {
+              "library": "GTEx",
+              "n_gene_sets": 140,
+              "n_nonzero": 112,
+              "top_gene_sets": [
+                {
+                  "kpn_trait_id": "KPN.TRAIT:0000398",
+                  "trait_name": "Type 2 diabetes (T2D)",
+                  "gene_set_id": "dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "gene_set_name": "Example imported gene set",
+                  "library": "GTEx",
+                  "collection_id": "dapper:GeneSetCollection.cccccccccccccccccccccccccccccccc",
+                  "n_genes": 120,
+                  "beta_uncorrected": 0.031,
+                  "beta": 0.027,
+                  "avg_postp": 0.62,
+                  "library_rank": 1
+                }
+              ]
+            },
+            {
+              "library": "MoTrPAC",
+              "n_gene_sets": 64,
+              "n_nonzero": 41,
+              "top_gene_sets": [
+                {
+                  "kpn_trait_id": "KPN.TRAIT:0000398",
+                  "trait_name": "Type 2 diabetes (T2D)",
+                  "gene_set_id": "dapper:GeneSet.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                  "gene_set_name": "Second example gene set",
+                  "library": "MoTrPAC",
+                  "collection_id": "dapper:GeneSetCollection.dddddddddddddddddddddddddddddddd",
+                  "n_genes": 85,
+                  "beta_uncorrected": 0.012,
+                  "beta": 0.0,
+                  "avg_postp": 0.18,
+                  "library_rank": 1
+                }
+              ]
+            }
+          ],
+          "linked_factors": {
+            "n_factors": 37
+          },
+          "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+        },
+        "linked_phenotype": {
+          "kpn_trait_id": "KPN.TRAIT:0001360",
+          "phenotype": "gcat_trait_illustrative_phenotype",
+          "name": "illustrative phenotype",
+          "category": null,
+          "is_atlas": false,
+          "legacy_phenotype_id": null,
+          "trait_group": null,
+          "trait_type": null,
+          "description": null,
+          "kpn_url": "https://broadinstitute.github.io/kpn-data-models/kpn.trait/0001360/",
+          "gwas": {
+            "status": "not_on_portal",
+            "portal_trait_id": null,
+            "gwas_artifact_id": null,
+            "portal_href": null,
+            "artifacts": []
+          },
+          "factors": [],
+          "gene_set_libraries": [],
+          "linked_factors": {
+            "n_factors": 1
+          },
+          "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c"
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/traits/KPN.TRAIT%3A0000398 -H 'Accept: application/json'"
+}

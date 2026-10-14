@@ -443,7 +443,9 @@ class ReferenceEvidenceTests(unittest.TestCase):
             self.assertNotIn(self.gene_sets[key], context)
             self.assertIn(reason, resolution[self.gene_sets[key]]['reason'])
         collections = self.artifact(package, 'gene-set-collections')['data']
-        self.assertEqual(set(collections[0]), {'collection_id', 'cfde_label', 'library', 'n_sets', 'provenance'})
+        self.assertEqual(set(collections[0]), {'collection_id', 'cfde_label', 'library', 'n_sets', 'provenance', 'curated_provenance'})
+        self.assertIsNone(collections[0]['curated_provenance'])  # the producer's provenance names its sources
+        self.assertEqual({row['gene_set_id']: row['collapsed_inputs'] for row in resolution.values()}, {gene_set: [] for gene_set in resolution})
         self.assertEqual(len(collections[0]['provenance']['activities']), 2)  # only the referenced Activity joins the package
 
     def test_captures_record_sql_origin_and_release(self):
@@ -577,6 +579,42 @@ class ReferenceEvidenceTests(unittest.TestCase):
         self.assertEqual(package['dapper_context']['datasets'], [dataset])
         self.runtime.validate(package['dapper_context'])
         validate_package_shape(package, SCHEMA)
+
+    def test_curated_lineage_joins_the_package_and_shared_inputs_are_represented_by_one(self):
+        """A LINCS/GlyGen-like collection: the producer's extractor used 30 raw files and names no Dataset; the curated map
+        links every file to one Dataset and its Organization."""
+        database = self.root / 'with-curated-lineage.sqlite3'
+        shutil.copyfile(self.database, database)
+        organization = {'name': 'Icahn School of Medicine at Mount Sinai'}
+        organization['id'] = self.runtime.compute_id(organization, 'Organization', self.runtime.schema)
+        dataset = {'name': 'LINCS L1000 chemical perturbation signatures', 'publisher': organization['id']}
+        dataset['id'] = self.runtime.compute_id(dataset, 'Dataset', self.runtime.schema)
+        files = sorted((self.runtime.file(f'G{index:05d}AB.json', str(index).encode(), 'application/json') for index in range(30)), key=lambda node: node['id'])
+        used = [{'subject': self.activity['id'], 'predicate': 'prov:used', 'object': node['id'], 'edge_role': 'data_input'} for node in files]
+        derived = [{'subject': node['id'], 'predicate': 'prov:wasDerivedFrom', 'object': dataset['id']} for node in files]
+        curated = {'source': 'lap/config/source_datasets.yaml', 'source_sha256': '0' * 64, 'notes': [],
+                   'groups': {'organizations': [organization], 'datasets': [dataset], 'was_derived_from_edges': derived}}
+        with sqlite3.connect(database) as db:
+            payload = json.loads(db.execute('SELECT payload FROM reveal_ref_collections').fetchone()[0])
+            payload['provenance'].update(files=files, used_edges=used)
+            payload['curated_provenance'] = curated
+            db.execute('UPDATE reveal_ref_collections SET payload=?', (json.dumps(payload),))
+        package = self.collect('curated-lineage', [ANCHOR], database=database).package
+        context = package['dapper_context']
+        self.assertEqual((context['datasets'], context['organizations']), ([dataset], [organization]))
+        raw = {node['id'] for node in files}  # the package's files also list its captures
+        self.assertEqual([node for node in context['files'] if node['id'] in raw], files[:1])  # one input represents the 30 that share the Dataset
+        self.assertEqual((context['used_edges'], context['was_derived_from_edges']), (used[:1], derived[:1]))
+        self.runtime.validate(context)
+        validate_package_shape(package, SCHEMA)
+        resolution = {row['gene_set_id']: row for row in self.artifact(package, 'gene-set-resolution', 'curated-lineage')['gene_sets']}
+        self.assertEqual(resolution[self.gene_sets['A']]['collapsed_inputs'],
+                         [{'activity': self.activity['id'], 'representative': files[0]['id'], 'collapsed_inputs': 30}])
+        self.assertIn(dataset['id'], resolution[self.gene_sets['A']]['dependency_ids'])
+        collections = self.artifact(package, 'gene-set-collections', 'curated-lineage')['data']
+        self.assertEqual(collections[0]['curated_provenance'], curated)
+        recognized = cfde_source_files(package, self.root / 'curated-lineage' / 'package' / 'evidence-package.json')
+        self.assertIn(package['source_artifacts']['gene-set-collections']['dapper_file_id'], recognized)
 
     def test_selection_provenance_is_frozen_like_collect_package(self):
         metadata = {'origins': {ANCHOR: 'automatic'}, 'dismissed_eaggl_ids': [SIBLING],

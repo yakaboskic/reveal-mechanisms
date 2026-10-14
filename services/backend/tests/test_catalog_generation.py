@@ -587,8 +587,9 @@ class CatalogReleaseTests(unittest.TestCase):
         self.clock.now += 2
         catalog.load(); catalog.gap(LINKED_GAP['id'])
         self.assertEqual((catalog.release_id, self.repo.reads), (R1, 0))  # Requests never check: the poller does.
-        self.assertTrue(catalog.refresh_if_changed())
-        self.assertEqual((catalog.release_id, self.repo.reads), (R2, 1))
+        with patch.object(catalog_module.factor_details, 'clear_caches') as cleared:
+            self.assertTrue(catalog.refresh_if_changed())
+        self.assertEqual((catalog.release_id, self.repo.reads, cleared.call_count), (R2, 1, 1))  # The factor pages' caches are dropped.
         self.assertEqual((catalog.factors[T2D1]['reference_generation_id'], catalog.factors[T2D1]['cfde_anchor']['label']), (R2, 'insulin secretion (refit)'))
         self.assertEqual({catalog.bindings[T2D1][key] for key in ('gene_set_import_id', 'reference_generation_id')}, {R2})
         # Same embedding space: anchors bound under either release share their runs (evidence_package compares them).
@@ -599,8 +600,9 @@ class CatalogReleaseTests(unittest.TestCase):
         self.assertTrue(catalog.loaded)
         opened = self.db.opened
         self.clock.now += RELEASE_TTL_SECONDS
-        self.assertFalse(catalog.refresh_if_changed())  # The same release is never reloaded.
-        self.assertEqual((self.db.opened, self.repo.reads), (opened, 2))
+        with patch.object(catalog_module.factor_details, 'clear_caches') as cleared:
+            self.assertFalse(catalog.refresh_if_changed())  # The same release is never reloaded, nor its caches cleared.
+        self.assertEqual((self.db.opened, self.repo.reads, cleared.call_count), (opened, 2, 0))
 
     def test_readiness_monitor_reads_replace_the_pollers_own(self):
         catalog = self.load(); reads = self.repo.reads

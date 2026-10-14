@@ -24,6 +24,7 @@ import re
 import threading
 from time import monotonic
 from .auth import Problem
+from . import factor_details
 from .repository import Repository, application_prefix, application_sql, now
 from .runtime_config import CURRENT_DAPPER_SNAPSHOT, setting, mysql_connection, reference_mysql_connection
 from .evidence_package import DapperRuntime, canonical_json, sha256
@@ -267,7 +268,7 @@ class Catalog:
         the read; without one for two TTLs the poller reads itself. The new release loads beside the
         serving state, which keeps serving meanwhile, and replaces it at once. A failed check keeps
         serving; a failed reload fails closed (loaded=False, so the next load() retries and raises
-        until the release loads).
+        until the release loads). A swap clears factor_details' per-release caches.
         """
         checked = self.release_checked_at
         if not self.loaded or checked is None: return False
@@ -295,6 +296,8 @@ class Catalog:
                 raise
             fresh.release_checked_at = self.release_checked_at
             with self.lock: self.adopt(fresh)
+            # The factor pages' facts are keyed by release id; the previous release's are dropped, not kept until evicted.
+            factor_details.clear_caches()
             LOGGER.info('Reference release changed to %s; catalog reloaded', self.release_id)
             return True
         finally: self.refresh_lock.release()
