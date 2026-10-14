@@ -215,6 +215,20 @@ def test_bounded_dispatch_rejects_without_freezing_or_writing(case, monkeypatch)
     case.provider.assert_not_called()
 
 
+def test_anchors_saved_under_several_releases_pin_none_without_raising(case):
+    freeze = case.freeze
+    def mixed(*args, **kwargs):
+        frozen, binding, rows = freeze(*args, **kwargs)
+        binding['anchors'].append({'reference_generation_id': 'b' * 64})
+        return frozen, binding, rows
+    case.freeze = mixed
+    with pytest.raises(Problem) as caught: start(case)
+    assert (caught.value.status, caught.value.code) == (503, 'SOURCE_NOT_READY')
+    with case.repo.read_transaction() as tx: assert tx.list(audits.KIND, case.owner) == []
+    case.freeze = freeze
+    assert start(case)['reference_generation_id'] == 'a' * 64
+
+
 def test_daily_quota_counts_creation_time_and_allows_idempotent_replay(case):
     first = start(case); case.queue.run()
     old = (datetime.now(timezone.utc) - timedelta(days=5)).isoformat().replace('+00:00', 'Z')

@@ -27,7 +27,18 @@ Hosted Boxes must reach that backend over public HTTPS. To run a hosted agent ag
 
 ## Evidence and reuse
 
-Public loaded-data operations require an exact retained `reference_generation_id`; the downloaded helper supplies it. They never fall back to a newer import or an external reference service. Authenticated queries use the work's pinned generation. `get_gene_gene_sets` lists the CFDE gene sets whose stored membership contains a gene, matched on the symbol without case. Each row gives the exact stored `member` and its `source_pointer` in the GeneSet. With `factor_id`, it reads only that factor's retained per-trait projections, with their joint and marginal loadings. Read the trusted GeneSet with `get_gene_set` before citing membership.
+Public loaded-data operations require an exact retained `reference_generation_id`; the downloaded helper supplies it. They never fall back to a newer import or an external reference service. Authenticated queries use the work's pinned generation. `get_gene_gene_sets` lists the CFDE gene sets whose stored membership contains a gene, matched on the symbol without case. Each row gives the exact stored `member` and its `source_pointer` in the GeneSet. With `factor_id`, it reads only that factor's retained projections, with their joint and marginal loadings. Read the trusted GeneSet with `get_gene_set` before citing membership.
+
+A `reference_generation_id` may name the environment's published reference release. Its captures carry `source.release_id`, `source.source_kind: reference_release` and reader `reveal.reference-query/3`; a release that a later publish replaced answers `409 SOURCE_UNAVAILABLE` with reason `reference_release_superseded`. In a release:
+- Gene-set projections are the top 50 per library, ranked within the library.
+- Only the gene sets the release references (a projection or a trait beta) are stored, so `get_gene_gene_sets` covers those alone: a gene set it does not list may still contain the gene.
+- Genes are the symbols loaded on some factor (`gene_index` is null; `source_local_id` is `urn:reveal:release-gene:<release>:<symbol>`).
+- `get_gene_set` returns the set's definition and only the lineage closure of its construction (`payload.provenance`; inputs sharing their onward lineage are represented by one, listed in `payload.collapsed`), not the whole collection.
+- `get_connections` and `get_imported_graph` are `not_stored`.
+- `get_trait_gene_sets` (`trait_id`, optional `library` and `q`) and `get_gene_set_traits` (`gene_set_id`) read the PIGEAN betas-mode gene-set betas (`beta_uncorrected`, `beta`, `avg_postp`, `library_rank`), by `beta_uncorrected`. They are not the BioIndex small-model values. An absent pair is not a zero beta, and some kept rows are exactly 0.
+- `get_factor_trait_links` (`factor_id`, optional `scope` `atlas`/`all`) and `get_trait_factor_links` (`trait_id`, optional `scope`; the trait's own factors are flagged `is_own_trait`) read the factor-phenotype links (`nnls_loading`, `phewas_beta`, `phewas_p_onesided`, `phewas_q`), kept at q ≤ 0.05, by `phewas_q`. An absent phenotype is unlinked at that threshold, not a negative result.
+
+These four operations are `not_stored` for a reload-era generation.
 
 Only `get_pigean_gene_phenotype` and `get_pigean_gene_set_phenotype` may use BioIndex. Both are fixed to `bioindex.hugeamp.org`, model `small` and sigma `2`. Other model, index and host overrides are rejected.
 
