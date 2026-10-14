@@ -508,9 +508,9 @@ class ReferenceQueryService:
             if generation.get('source_kind') == RELEASE:
                 phenotypes = ('SELECT kpn_trait_id,legacy_phenotype_id,display_name,category FROM reveal_ref_phenotypes'
                               ' WHERE is_atlas=0 AND kpn_trait_id IS NOT NULL AND legacy_phenotype_id IS NOT NULL AND {}')
-                if plain:
+                if plain:  # the OR parenthesized: an atlas trait's phenotype row (is_atlas 1) is never a second match
                     select = ('SELECT kpn_trait_id,legacy_phenotype_id,phenotype_name,gwas_source_category FROM reveal_ref_traits WHERE {} UNION '
-                              + phenotypes).format('kpn_trait_id=%s OR legacy_phenotype_id=%s', 'kpn_trait_id=%s OR legacy_phenotype_id=%s')
+                              + phenotypes).format('kpn_trait_id=%s OR legacy_phenotype_id=%s', '(kpn_trait_id=%s OR legacy_phenotype_id=%s)')
                 else: select = phenotypes.format('legacy_phenotype_id=%s')
                 rows = self._rows(connection, application_sql(select, application_prefix(self.prefix)), [phenotype] * (4 if plain else 1), columns)
             elif not plain: return None  # kpn_traits keeps both ids in ascii_bin columns
@@ -809,7 +809,8 @@ class ReferenceQueryService:
         def missing(reason='The requested records are not stored in this import.'):
             return {'status': 'not_stored', 'items': [], 'reason': reason, 'import_coverage': 'No stored observation; this is not a biological negative.'}, tables
         if op in RELEASE_OPERATIONS: return missing(RELEASE_ONLY)
-        if kpn and _foreign(a): return missing()  # migration 008 keys are ascii_bin too
+        # Migration 008 keys are ascii_bin too; a legacy import's factor ids are utf8mb4, its gene sets ascii dapper ids.
+        if _foreign(a if kpn else {'gene_set_id': a.get('gene_set_id')}): return missing()
         def factor(identity):
             _text(identity, 'factor_id')
             if kpn:

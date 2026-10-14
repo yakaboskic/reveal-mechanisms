@@ -322,6 +322,12 @@ CREATE TABLE reveal_ref_release(release_id TEXT PRIMARY KEY,published_at TEXT NO
         self.assertEqual(self.query('get_gene_set_members',{'gene_set_id':SET},legacy).result['items'][0]['member'],'HGNC.SYMBOL:GENE_A')
         self.assertEqual(self.query('get_gene_set_factors',{'gene_set_id':SET},legacy).result['status'],'not_stored')
         self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A'},legacy).result['status'],'not_stored')
+        for op in ('get_gene_set','get_gene_set_members'):  # dapper ids are ascii_bin (MySQL 1267): never compared with a non-ASCII id
+            del self.queries[:]
+            self.assertEqual(self.query(op,{'gene_set_id':'dapper:GeneSet.TNFα'+'a'*28},legacy).result['status'],'not_stored')
+            self.assertFalse(any('cfde_gene_set_aliases' in sql for sql,_ in self.queries))
+        self.assertEqual(self.query('get_factor',{'factor_id':'TNFα'},legacy).result['status'],'not_stored')  # utf8mb4 factor ids: looked up
+        self.assertIn('eaggl_factors',self.queries[-1][0])
         catalog=self.service.catalog(legacy)
         self.assertEqual(catalog['generation']['model'],'cfde-inc-v2')
         self.assertEqual(catalog['generation']['legacy_mapping_run_id'],mapping)
@@ -652,6 +658,9 @@ class ReleaseQueryTests(unittest.TestCase):
         self.assertEqual(self.service.phenotype_trait(RELEASE,'T2D'),expected)
         self.assertEqual(self.service.phenotype_trait(RELEASE,'LDL')['gwas_source_category'],'KPN')
         self.assertIsNone(self.service.phenotype_trait(RELEASE,'height'))
+        with sqlite3.connect(self.path) as c:  # an atlas trait's own phenotype row is never a second, ambiguous match
+            c.execute('UPDATE reveal_ref_phenotypes SET display_name=? WHERE phenotype=?',('Type 2 diabetes (T2D)','T2D'))
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'T2D'),expected)
 
     def test_release_has_no_graph(self):
         for op,args in (('get_connections',{'factor_id':FACTOR}),('get_imported_graph',{'node_id':'T2D::Factor1'})):
