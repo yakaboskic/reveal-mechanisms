@@ -163,7 +163,8 @@ links:
 
 # Raw inputs that record the run itself. RummaGEO HZ1 and HZ2 (all_signatures; 4,978 and 5,354 gene sets) each use
 # two such files besides the RummaGEO 2.5 GMTs and NCBI tables, which their producer already links to Datasets.
-# Neither is public data, so no Dataset covers it (pigean's map leaves both unlinked as workflow artefacts).
+# Both are the producer's own files under its S3 workflow folder, which no data provider publishes, so no Dataset covers
+# them; pigean's map registers neither.
 bookkeeping:
   - libraries: [RummaGEO]
     files: ['^source_manifest\.json$']
@@ -175,7 +176,7 @@ bookkeeping:
     files: ['^selection_manifest\.tsv$']
     note: >-
       Role recorded_selection_manifest: the producer's recorded selection of which RummaGEO 2.5 signature terms to emit
-      (selection_method recorded_harmonizome_query_manifest; 1.46 MB in HZ1 and 1.72 MB in HZ2 for 3,815 selected source
-      terms in HZ1, a per-term list, not memberships), kept in the producer's workflow/selection folder. Neither
+      (selection_method recorded_harmonizome_query_manifest; 1.46 MB for HZ1's 3,815 and 1.72 MB for HZ2's 4,482 selected
+      source terms, a per-term list, not memberships), kept in the producer's workflow/selection folder. Neither
       RummaGEO nor Harmonizome publishes it. It chooses the signatures; every gene comes from the RummaGEO 2.5 GMTs and
       NCBI tables, already linked to their Datasets.

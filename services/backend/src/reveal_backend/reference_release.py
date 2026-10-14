@@ -1800,8 +1800,8 @@ def write_record(repository, current, release_id, notification_namespace):
 
 def publish_environment(services, release, manifest, env, *, vectors=True, tables=True, unchanged_folder=lambda: None):
     """One environment (module docstring): add the missing vectors; then, under the environment's lock, store new frozen
-    snapshots, list them in the environment's archive index and swap the tables; once its tables hold the release, update
-    changed vectors, delete stale ones, write the record."""
+    snapshots, swap the tables and, once its tables hold the release, list the snapshots in the environment's archive
+    index, update changed vectors, delete stale ones and write the record."""
     prefix, release_id, lock = ENVIRONMENTS[env], manifest['release_id'], f'reveal:publish:{ENVIRONMENTS[env]}'
     seconds, started = {}, time.monotonic()
     result = {'env': env, 'prefix': prefix, 'release_id': release_id, 'seconds': seconds}
