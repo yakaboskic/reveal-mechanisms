@@ -30,6 +30,15 @@ test("issues group by code, most frequent first, with readable labels", () => {
   assert.equal(gapLabel("not_a_gwas_trait"), "Rare-disease gene list, with no GWAS");
 });
 
+test("every upstream gap code the contract documents has its own label", () => {
+  const description: string = spec.components.schemas.ProvenanceCoverage.properties.upstream_gaps.items.properties.code.description;
+  const codes = [...description.matchAll(/\b([a-z]+(?:_[a-z]+)+) \(/g)].map(match => match[1]);
+  assert.deepEqual(codes, ["not_a_gwas_trait", "not_on_portal", "no_gwas_ancestry_artifact", "no_upstream_organizations"]);
+  const fallback = (code: string) => code.replaceAll("_", " ").replace(/^./, c => c.toUpperCase());
+  for (const code of codes) assert.notEqual(gapLabel(code), fallback(code), code);
+  assert.match(gapLabel("no_gwas_ancestry_artifact"), /Mixed/);
+});
+
 test("node names and pages come from the traced graph; only public pages are links", () => {
   const value = lineage();
   value.nodes.push({ id: "KPN.TRAIT:0000398", kind: "trait", status: "resolved", name: "Type 2 diabetes", href: "https://translator.broadinstitute.org/artifact_provenance/bottom_line/T2D" },

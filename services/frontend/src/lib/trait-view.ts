@@ -1,5 +1,6 @@
 import { ApiError, type Schema } from "./client";
 import { factorHref, traitHref, traitPageHref } from "./factor-links";
+import { publicSourceHref } from "./provenance-view";
 
 export type BetaSort = Schema<"TraitGeneSets">["sort"];
 export type LinkSort = Schema<"FactorTraitLinks">["sort"];
@@ -30,6 +31,22 @@ export const gwasReasons: Record<Schema<"TraitDetail">["gwas"]["status"], string
   not_on_portal: "The Translator provenance portal lists no bottom-line GWAS for this trait.",
   no_gwas_ancestry_artifact: "The portal lists bottom-line GWAS for this trait, but none of the ancestry the trace uses (Mixed).",
 };
+
+/** The GWAS link-outs of a trait: the portal listing and each ancestry's artifact whenever the portal has any, including
+ * a trait whose artifacts lack the traced ancestry; a note says why the trace has no GWAS. Only public pages are links. */
+export function gwasLinks(gwas: Schema<"TraitDetail">["gwas"]) {
+  const listing = publicSourceHref(gwas.portal_href);
+  const note = gwas.status !== "available" ? gwasReasons[gwas.status] : listing ? null : "The GWAS listing is not available as a public link.";
+  return {
+    note,
+    listing: listing && (gwas.status === "available" || gwas.artifacts.length > 0) ? listing : null,
+    artifacts: gwas.artifacts.map(artifact => ({ id: artifact.artifact_id, name: artifact.ancestry_name, href: publicSourceHref(artifact.href), traced: artifact.artifact_id === gwas.gwas_artifact_id })),
+  };
+}
+
+/** A listing route answers 404 when the published release does not include its optional file: a fact of the release to
+ * state, not a failure to retry. */
+export const releaseLacks = (error: unknown) => error instanceof ApiError && error.status === 404;
 
 /** Atlas traits open in the app; other phenotypes are text, with the KPN catalog page when they have a KPN id. */
 export function phenotypeTarget(link: Pick<Schema<"FactorTraitLink">, "phenotype_kpn_trait_id" | "is_atlas_trait">, from?: string | null) {

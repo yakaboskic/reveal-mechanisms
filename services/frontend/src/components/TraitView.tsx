@@ -6,7 +6,7 @@ import { messageOf, type Schema } from "@/lib/client";
 import { factorApi } from "@/lib/factor-api";
 import { factorHref, geneSetHref, traitPageHref } from "@/lib/factor-links";
 import { publicSourceHref } from "@/lib/provenance-view";
-import { appendRows, betaKey, betaSortLabels, gwasReasons, metricDefinitions, metricValue, type BetaSort } from "@/lib/trait-view";
+import { appendRows, betaKey, betaSortLabels, gwasLinks, gwasReasons, metricDefinitions, metricValue, releaseLacks, type BetaSort } from "@/lib/trait-view";
 import { ReferenceNavigation } from "./FactorView";
 import { LoadingSurface } from "./LoadingSurface";
 import { Record } from "./Scientific";
@@ -55,10 +55,11 @@ function TraitContent({ detail, self }: { detail: Schema<"TraitDetail">; self: s
 }
 
 function GwasSource({ gwas }: { gwas: Schema<"TraitDetail">["gwas"] }) {
-  const listing = publicSourceHref(gwas.portal_href);
-  if (gwas.status !== "available" || !listing) return <p className="reference-notice trait-gwas">{gwas.status === "available" ? "The GWAS listing is not available as a public link." : gwasReasons[gwas.status]}</p>;
-  return <section className="reference-notice trait-gwas" aria-label="GWAS source"><p><a href={listing} target="_blank" rel="noopener noreferrer">{gwasReasons.available} ↗<span className="sr-only"> (opens in a new tab)</span></a></p>
-    {!!gwas.artifacts.length && <ul>{gwas.artifacts.map(artifact => { const href = publicSourceHref(artifact.href); return <li key={artifact.artifact_id}>{href ? <a href={href} target="_blank" rel="noopener noreferrer">{artifact.ancestry_name} ↗</a> : artifact.ancestry_name}{artifact.artifact_id === gwas.gwas_artifact_id && <span className="link-flag">Traced in account lineage</span>}</li>; })}</ul>}
+  const { note, listing, artifacts } = gwasLinks(gwas);
+  if (!listing && !artifacts.length) return <p className="reference-notice trait-gwas">{note}</p>;
+  return <section className="reference-notice trait-gwas" aria-label="GWAS source">{note && <p>{note}</p>}
+    {listing && <p><a href={listing} target="_blank" rel="noopener noreferrer">{gwasReasons.available} ↗<span className="sr-only"> (opens in a new tab)</span></a></p>}
+    {!!artifacts.length && <ul>{artifacts.map(artifact => <li key={artifact.id}>{artifact.href ? <a href={artifact.href} target="_blank" rel="noopener noreferrer">{artifact.name} ↗<span className="sr-only"> GWAS (opens in a new tab)</span></a> : artifact.name}{artifact.traced && <span className="link-flag">Traced in account lineage</span>}</li>)}</ul>}
   </section>;
 }
 
@@ -70,7 +71,7 @@ export function TraitGeneSets({ traitId, geneSetId, libraries, release, self }: 
   const binding = JSON.stringify([traitId, geneSetId, library, sort]);
   const requestKey = `${binding}:${offset}:${attempt}`;
   const [loaded, setLoaded] = useState<{ binding: string; result: Schema<"TraitGeneSets"> } | null>(null);
-  const [failure, setFailure] = useState<{ key: string; message: string } | null>(null), [settled, setSettled] = useState("");
+  const [failure, setFailure] = useState<{ key: string; message: string; absent: boolean } | null>(null), [settled, setSettled] = useState("");
   const busy = settled !== requestKey, latest = useRef(loaded);
   latest.current = loaded;
   useEffect(() => {
@@ -81,13 +82,14 @@ export function TraitGeneSets({ traitId, geneSetId, libraries, release, self }: 
       const previous = latest.current, append = offset > 0 && previous?.binding === binding;
       if ((release && result.release_id !== release) || (append && previous.result.release_id !== result.release_id)) throw new Error("The reference release changed while loading. Reload the page.");
       setLoaded({ binding, result: { ...result, items: append ? appendRows(previous.result.items, result.items, betaKey) : result.items } });
-    }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error) }); })
+    }).catch(error => { if (!controller.signal.aborted) setFailure({ key: requestKey, message: messageOf(error), absent: offset === 0 && releaseLacks(error) }); })
       .finally(() => { if (!controller.signal.aborted) setSettled(requestKey); });
     return () => controller.abort();
   }, [binding, requestKey, byTrait, traitId, geneSetId, release, library, sort, offset]);
   const result = loaded?.binding === binding ? loaded.result : null;
-  const error = failure?.key === requestKey ? failure.message : "";
+  const error = failure?.key === requestKey ? failure.message : "", absent = failure?.key === requestKey && failure.absent;
   const title = byTrait ? "Gene-set betas" : "Associated traits";
+  if (absent && !result) return <section className="factor-loadings trait-gene-sets" aria-labelledby={`${id}-title`}><h2 id={`${id}-title`}>{title}</h2><p className="loading-empty">The published reference release does not include gene-set betas.</p></section>;
   return <section className="factor-loadings trait-gene-sets" aria-labelledby={`${id}-title`}>
     <div className="loading-heading"><div><h2 id={`${id}-title`}>{title}</h2><p>{result?.coverage || "Gene-set betas from the release’s PIGEAN betas mode, for the gene sets PIGEAN kept. An absent pair is not a zero beta."}</p></div></div>
     <div className="loading-tools">
