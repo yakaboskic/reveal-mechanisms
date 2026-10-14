@@ -1,19 +1,27 @@
-# Curated source datasets for the CFDE collections whose producer provenance ends at raw files.
+# Curated source datasets for the raw input files the CFDE producers left without lineage.
 #
 # What: DAPPER Dataset nodes (and the Organizations behind them) that the reference release build links to the raw
-# input files of collection documents, as extra was_derived_from edges (raw File -> Dataset). The producer document
-# itself is never changed: the build stores the curated nodes and edges beside it (payload.curated_provenance).
+# input files of collection documents, as extra was_derived_from edges (raw File -> Dataset), and the raw inputs that
+# are run bookkeeping rather than data. The producer document itself is never changed: the build stores the curated
+# nodes and edges beside it (payload.curated_provenance).
 #
 # Why: in the 2026-10-05 snapshot only 146 of the 532 collection documents reach a Dataset through a was_derived_from
 # edge. The other 386 (LINCS_L1000 HZ3 and the 383 HZ4 collections, IDG HZ2, GlyGen HZ2) end at a raw file whose
 # name pigean's raw/cfde_source_datasets.yaml does not know, so their gene sets trace to no dataset or organization.
+# Three collections that do reach a Dataset also use raw inputs that reach none (GTEx all_detailed_tissues HZ2's TPM
+# matrix, RummaGEO HZ1/HZ2's two workflow manifests), so the lineage of their gene sets was incomplete too.
 #
 # How the release build applies it:
-#   * only to collections whose producer provenance reaches no Dataset; a collection that does is left alone;
-#   * a link applies to the collections of its `libraries`; its `files` are regular expressions (anchored, so search
-#     and full match agree) tried on each raw file's `filename`, or its `name` when it has no filename;
-#   * a raw file is a File or C2M2File node (sections files, c2m2_files) that is never the subject of a
-#     was_generated_by edge; every match gets one was_derived_from edge to the link's dataset.
+#   * to every raw file the producer left without lineage, in any collection: a File or C2M2File node (sections files,
+#     c2m2_files) that is never generated (no was_generated_by), derives from nothing (no was_derived_from) and belongs
+#     to no Dataset; the producer's own nodes and edges are untouched;
+#   * a link or bookkeeping entry applies to the collections of its `libraries`; its `files` are regular expressions
+#     (anchored, so search and full match agree) tried on each raw file's `filename`, or its `name` when it has none;
+#   * a raw file matched by a link gets one was_derived_from edge to the link's dataset; one matched by a bookkeeping
+#     entry is listed in payload.curated_provenance.bookkeeping_inputs and left out of every gene set's lineage
+#     closure; a file matched by both refuses the build;
+#   * the build refuses while a referenced gene set's lineage closure reaches no Dataset or uses a raw input that
+#     reaches none. The manifest's curated block counts the edges per dataset and the inputs per bookkeeping entry.
 #
 # organizations: key -> an existing DAPPER Organization node, copied verbatim (id and every field) from a producer
 #   collection document.
@@ -22,12 +30,16 @@
 #   from name, description, version, alternate_identifier, publisher (an organizations key) and attributed_to
 #   (organizations keys; -> was_attributed_to); location is not hashed.
 # links: which raw files of which libraries derive from which dataset.
+# bookkeeping: which raw files of which libraries record the run itself, not data a gene set was computed from; the
+#   note (required) says why.
 #
 # glygen_v1_12_1 is a patch, not lineage the producer recorded: GlyGen HZ2's raw files are cached api.glygen.org
 # glycan-detail responses, which the producer does not tie to a release.
 #
-# Checked 2026-10-10 against all 532 documents of the snapshot: every collection that reaches no Dataset has a raw
-# file matched by a link of its library (LINCS 384 collections / 384 files, IDG 1 / 1, GlyGen 1 / 6,620).
+# Checked 2026-10-14 against all 532 documents of the snapshot (provenance sections only): every raw file without
+# lineage that a referenced gene set's closure uses is matched (LINCS 384 collections / 384 files, IDG 1 / 1,
+# GlyGen 1 / 6,620, GTEx 1 / 1; RummaGEO bookkeeping 2 / 4), and no referenced gene set's closure is left with a raw
+# input that reaches no Dataset.
 
 organizations:
   mount_sinai:
@@ -47,6 +59,13 @@ organizations:
   glygen_consortium:
     id: dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
     name: GlyGen Consortium
+  broad:
+    id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+    name: Broad Institute
+    ror: ror:05a0ya142
+  gtex_consortium:
+    id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+    name: GTEx Consortium
 
 datasets:
   lincs_l1000_level5_cp_2020:
@@ -98,6 +117,24 @@ datasets:
     was_attributed_to:
       - dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
 
+  # Copied verbatim from GTEx all_detailed_tissues HZ2 (GeneSetCollection.cViAiotyF9vd3HGHyonQ9Ko2fAYOdfG9.yaml), whose
+  # producer already links its sample and subject tables to it; the GTEx HZ1 documents carry the same node.
+  gtex_v8:
+    id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+    name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)
+    description: >-
+      Genotype-Tissue Expression project release V8 (dbGaP phs000424.v8.p2; RNA-SeQC v1.1.9 gene read counts dated
+      2017-06-05) with the open-access sample attribute and subject phenotype tables, as distributed by the GTEx
+      Portal. The CFDE GTEx aging signatures were computed from these files.
+    version: v8
+    alternate_identifier:
+      - phs000424.v8.p2
+      - https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    publisher: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+    was_attributed_to:
+      - dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+
 links:
   - dataset: lincs_l1000_level5_cp_2020
     libraries: [LINCS_L1000]
@@ -114,3 +151,31 @@ links:
     libraries: [GlyGen]
     files: ['^G\d{5}[A-Z]{2}\.json$']
     note: "Patch: the producer provenance records cached api.glygen.org glycan-detail responses, not this release; linked so GlyGen HZ2 gene sets trace to GlyGen."
+  - dataset: gtex_v8
+    libraries: [GTEx]
+    files: ['^GTEx_Analysis_2017-06-05_v8_RNASeQCv1\.1\.9_gene_tpm\.gct\.gz$']
+    note: >-
+      GTEx all_detailed_tissues HZ2 (511 gene sets, role gtex_v8_tpm) reads the gene TPM matrix of the same GTEx V8
+      release and RNA-SeQC v1.1.9 run (2017-06-05) whose sample and subject tables its producer links to this Dataset;
+      the matrix is distributed beside the read counts on the GTEx Portal's V8 bulk tissue expression downloads
+      (https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct.gz,
+      the File's own location). The Dataset's name lists the read counts because pigean's map registered only those.
+
+# Raw inputs that record the run itself. RummaGEO HZ1 and HZ2 (all_signatures; 4,978 and 5,354 gene sets) each use
+# two such files besides the RummaGEO 2.5 GMTs and NCBI tables, which their producer already links to Datasets.
+# Neither is public data, so no Dataset covers it (pigean's map leaves both unlinked as workflow artefacts).
+bookkeeping:
+  - libraries: [RummaGEO]
+    files: ['^source_manifest\.json$']
+    note: >-
+      Role input_provenance_manifest: by its role and size, the extractor's own 1,387-byte record of where the run's
+      inputs came from, kept in its workflow folder (access_level local_only in geneset.meta.json). It describes the
+      inputs (the GMTs and NCBI tables, each a File of its own with a Dataset) and contributes nothing to a gene set.
+  - libraries: [RummaGEO]
+    files: ['^selection_manifest\.tsv$']
+    note: >-
+      Role recorded_selection_manifest: the producer's recorded selection of which RummaGEO 2.5 signature terms to emit
+      (selection_method recorded_harmonizome_query_manifest; 1.46 MB in HZ1 and 1.72 MB in HZ2 for 3,815 selected source
+      terms in HZ1, a per-term list, not memberships), kept in the producer's workflow/selection folder. Neither
+      RummaGEO nor Harmonizome publishes it. It chooses the signatures; every gene comes from the RummaGEO 2.5 GMTs and
+      NCBI tables, already linked to their Datasets.

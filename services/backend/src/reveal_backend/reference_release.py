@@ -8,10 +8,10 @@ and exits non-zero on any failure:
            same release is reused untouched). Only factor labels and DisMech contexts have vectors; factor labels
            missing from the cache are embedded, and only after re-embedded cached texts reproduce their stored vectors.
   publish  every file checked against the manifest; then for each --env, in order: add the vectors its fixed
-           Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors and list
-           them in the environment's <prefix>_archive_index, replace its <prefix>_ref_* tables with one RENAME (and
-           drop the RETIRED_TABLES), overwrite changed vectors and delete the ones the release no longer has, and
-           record the release in <prefix>_records. Re-running a published release changes nothing; re-running a
+           Upstash namespaces lack, add new frozen factor snapshots to the shared archived_reference_factors, replace
+           its <prefix>_ref_* tables with one RENAME (and drop the RETIRED_TABLES), list the snapshots in the
+           environment's <prefix>_archive_index, overwrite changed vectors and delete the ones the release no longer
+           has, and record the release in <prefix>_records. Re-running a published release changes nothing; re-running a
            failed publish finishes it. A folder naming a file this checkout does not know is refused: publish (and roll
            back) with the newest checkout.
 
@@ -47,7 +47,7 @@ import uuid
 
 from . import reference_generation as rg
 from .provenance_schema import PROVENANCE_EDGES, PROVENANCE_GROUPS, validate_provenance_edges
-from .reference_lineage import ORG_FIELDS, _refs
+from .reference_lineage import ORG_FIELDS, RAW_GROUPS, _refs, collection_lineage, lineage_closure, lineage_index, unlinked_inputs
 from .repository import Repository, application_sql, canonical, digest, now
 from .runtime_config import ROOT
 
@@ -65,6 +65,7 @@ DEFAULT_TOP_N = 50
 TOP_GENES, TOP_GENE_SETS = 50, 10  # archived snapshots: top genes by loading; top gene sets of each library by joint rank
 CALIBRATION_TEXTS, CALIBRATION_THRESHOLD = 8, 0.999
 UPSERT_BATCH, UPSERT_WORKERS, RANGE_PAGE, DELETE_BATCH = 200, 4, 200, 1000
+ARCHIVE_CHUNK = 1000  # archived factor rows read, looked up and restamped (one UPDATE) at a time
 INSERT_BYTES = 512 << 10  # per INSERT batch; pymysql splits executemany statements at ~1 MB (escaping included)
 DUPLICATE_KEY = 1062  # the only MySQL warning INSERT IGNORE may raise here
 # DDL on live tables waits at most SWAP_LOCK_WAIT seconds per attempt for their metadata locks: a RENAME queued behind a long
@@ -102,10 +103,12 @@ TOP_LINKED = 5
 VECTOR_COLUMNS = ('row', 'id', 'input_sha256', 'vector_sha256')
 # A collection document's `embeddings` and `has_embedding_edges` are skipped: the release embeds no gene set or collection.
 SKIPPED_SECTIONS = ('embeddings', 'has_embedding_edges')
-# Curated lineage (lap/config/source_datasets.yaml): Datasets for the raw files of collections whose producer names none.
+# Curated lineage (lap/config/source_datasets.yaml): Datasets for the raw files the producers left without lineage, and the
+# raw inputs that are run bookkeeping rather than data.
 SOURCE_DATASETS = 'lap/config/source_datasets.yaml'
 NEW_DATASET_KEYS = frozenset({'name', 'description', 'version', 'alternate_identifier', 'publisher', 'attributed_to', 'location'})
 LINK_KEYS = frozenset({'dataset', 'libraries', 'files', 'note'})
+BOOKKEEPING_KEYS = frozenset({'libraries', 'files', 'note'})
 # The portal's bottom-line GWAS artifact a trait's GWAS route uses (one per build; --gwas-ancestry).
 DEFAULT_GWAS_ANCESTRY = 'Mixed'
 # A top-level section of a collection document starts with its key at column 0.
@@ -526,6 +529,13 @@ def _double_text(value, where):
     return '0' if number and abs(number) < DOUBLE_MIN else value
 
 
+def _double(value):
+    """A DOUBLE column's number from a release file's number text: 0.0 for a subnormal, which MySQL DOUBLE cannot store
+    (projections keep LAP's text, a few underflowed loadings included, and only their DOUBLE columns are clamped)."""
+    number = float(value)
+    return 0.0 if number and abs(number) < DOUBLE_MIN else number
+
+
 def bottom_lines(rows):
     """{kpn_trait_id: (portal_trait_id, artifacts)} of the portal's bottom-line GWAS artifacts (the LAP
     provenance_bottom_line_cmd, one row per artifact); rows of portal traits without a KPN id are not joinable."""
@@ -924,7 +934,9 @@ def _tasks(workers):
 
 def write_projections(path, futures, keys, index_rows, libraries, referenced):
     """projections.tsv.gz in factor_key order from the long-file results [(kpn_trait_id, future)], each released once written;
-    the gene sets written are added to `referenced`."""
+    the gene sets written are added to `referenced`. Loadings are finite and keep LAP's text, so ref_projections'
+    *_loading_text columns hold it exactly; a subnormal one (LAP writes a few underflowed loadings such as 1.501e-318)
+    is 0 only in the DOUBLE columns and the frozen snapshots (_double)."""
     seen, count = set(), 0
     futures = sorted(futures, key=lambda item: item[0], reverse=True)
     with _writer(path) as out:
@@ -943,7 +955,7 @@ def write_projections(path, futures, keys, index_rows, libraries, referenced):
                     where = f'{factor_id}/{gene_set}'
                     if libraries.get(gene_set) != library or gene_set in sets: raise Refused(f'{where}: unknown, repeated or misfiled gene set')
                     for value in (joint, marginal):
-                        _number(value, where, float)
+                        _finite(value, where)
                         if len(value) > 32: raise Refused(f'{where}: loading text too long')
                     if flag not in ('0', '1'): raise Refused(f'{where}: invalid is_joint_top_factor')
                     sets.add(gene_set)
@@ -955,16 +967,19 @@ def write_projections(path, futures, keys, index_rows, libraries, referenced):
 
 
 def load_source_datasets(path, runtime):
-    """lap/config/source_datasets.yaml, validated once: {sha256, organizations: {key: node}, datasets: {key: node}, links}.
+    """lap/config/source_datasets.yaml, validated once: {sha256, organizations: {key: node}, datasets: {key: node}, links,
+    bookkeeping}.
 
     organizations and datasets with an id are verbatim copies of existing DAPPER nodes (their id must recompute); a new
     Dataset names its publisher and attributed_to organizations by key and gets a minted id. A link maps raw-file name
-    patterns of some libraries to one dataset (curate)."""
+    patterns of some libraries to one dataset; a bookkeeping entry maps them to no dataset, with a note on why the
+    files are run bookkeeping rather than data (curate)."""
     import yaml
     path = Path(path); name = path.name
     try: data = yaml.safe_load(path.read_text(encoding='utf-8'))
     except (OSError, yaml.YAMLError) as error: raise Refused(f'{path}: unreadable source datasets ({error})') from error
-    if not isinstance(data, dict) or set(data) - {'organizations', 'datasets', 'links'}: raise Refused(f'{name}: expected organizations, datasets and links')
+    if not isinstance(data, dict) or set(data) - {'organizations', 'datasets', 'links', 'bookkeeping'}:
+        raise Refused(f'{name}: expected organizations, datasets, links and bookkeeping')
     def entries(section):
         value = data.get(section) or {}
         if not isinstance(value, dict) or any(not isinstance(key, str) or not isinstance(node, dict) for key, node in value.items()):
@@ -996,47 +1011,62 @@ def load_source_datasets(path, runtime):
         for key, node in nodes.items():
             results = check.validate(node, cls).results if check else []
             if results: raise Refused(f'{name}: {key} is not a valid {cls}: {[result.message for result in results][:3]}')
-    links = []
-    for position, link in enumerate(data.get('links') or []):
-        where = f'{name}: links[{position}]'
-        if not isinstance(link, dict) or set(link) - LINK_KEYS or link.get('dataset') not in datasets: raise Refused(f'{where}: unknown keys or dataset')
-        libraries, files = link.get('libraries'), link.get('files')
+    def patterns(section, keys, position, entry):
+        """(libraries, compiled file patterns) of links[position] or bookkeeping[position]."""
+        where = f'{name}: {section}[{position}]'
+        if not isinstance(entry, dict) or set(entry) - keys or (section == 'links' and entry.get('dataset') not in datasets):
+            raise Refused(f'{where}: unknown keys or dataset')
+        libraries, files = entry.get('libraries'), entry.get('files')
         if not isinstance(libraries, list) or not libraries or not isinstance(files, list) or not files \
-                or any(not isinstance(value, str) or not value for value in libraries + files) or not isinstance(link.get('note', ''), str):
+                or any(not isinstance(value, str) or not value for value in libraries + files) or not isinstance(entry.get('note', ''), str):
             raise Refused(f'{where}: libraries and files must be non-empty lists of strings')
-        try: patterns = [re.compile(pattern) for pattern in files]
+        if section == 'bookkeeping' and not entry.get('note'): raise Refused(f'{where}: a note must say why these files are bookkeeping')
+        try: return frozenset(libraries), [re.compile(pattern) for pattern in files]
         except re.error as error: raise Refused(f'{where}: invalid file pattern ({error})') from error
-        links.append({'dataset': link['dataset'], 'libraries': frozenset(libraries), 'patterns': patterns, 'note': link.get('note') or ''})
+    links, bookkeeping = [], []
+    for position, link in enumerate(data.get('links') or []):
+        libraries, compiled = patterns('links', LINK_KEYS, position, link)
+        links.append({'dataset': link['dataset'], 'libraries': libraries, 'patterns': compiled, 'note': link.get('note') or ''})
+    for position, entry in enumerate(data.get('bookkeeping') or []):
+        libraries, compiled = patterns('bookkeeping', BOOKKEEPING_KEYS, position, entry)
+        bookkeeping.append({'libraries': libraries, 'files': list(entry['files']), 'patterns': compiled, 'note': entry['note']})
     path = Path(path).resolve()
     source = str(path.relative_to(ROOT)) if path.is_relative_to(ROOT) else str(path)  # the map this release read
-    return {'source': source, 'sha256': _sha256_file(path), 'organizations': organizations, 'datasets': datasets, 'links': links}
-
-
-def reaches_dataset(provenance):
-    """Whether a collection's provenance has a was_derived_from edge to one of its own Datasets."""
-    datasets = {node.get('id') for node in provenance.get('datasets') or []}
-    return any(edge.get('object') in datasets for edge in provenance.get('was_derived_from_edges') or [])
+    return {'source': source, 'sha256': _sha256_file(path), 'organizations': organizations, 'datasets': datasets, 'links': links,
+            'bookkeeping': bookkeeping}
 
 
 def curate(provenance, library, curated):
-    """(payload.curated_provenance or None, {dataset key: edges}) of a collection whose producer's provenance reaches no
-    Dataset: every raw File (in files or c2m2_files, never generated) whose filename (or name) matches a pattern of a
-    link of the collection's library gets a was_derived_from edge to the link's Dataset. The groups hold only the
-    Datasets and Organizations those edges reach, and are validated as retained provenance."""
-    if reaches_dataset(provenance): return None, {}
-    generated = {edge.get('subject') for edge in provenance.get('was_generated_by_edges') or []}
-    raw = sorted((node for group in ('files', 'c2m2_files') for node in provenance.get(group) or []
-                  if node.get('id') not in generated and not node.get('was_generated_by')), key=lambda node: node['id'])
-    edges, counts, notes = {}, Counter(), {}
+    """(payload.curated_provenance or None, {dataset key: edges}, {bookkeeping position: inputs}) of one collection.
+
+    A raw input the producer left without lineage is a File or C2M2File node no activity generated that derives from
+    nothing and belongs to no Dataset (reference_lineage's lineage signature is empty), in any collection: one whose
+    filename (or name) matches a pattern of a link of the collection's library gets a was_derived_from edge to the link's
+    Dataset; one that matches a bookkeeping entry instead is listed in bookkeeping_inputs, which lineage_closure leaves
+    out. The producer's nodes and edges are never changed. The groups hold only the Datasets and Organizations the edges
+    reach, and are validated as retained provenance; notes carry each link's and bookkeeping entry's note."""
+    index = lineage_index(provenance)
+    raw = sorted((node for group in RAW_GROUPS for node in provenance.get(group) or []
+                  if isinstance(node.get('id'), str) and index.lineage(node['id']) == (frozenset(), frozenset())), key=lambda node: node['id'])
+    def matches(entry, node): return library in entry['libraries'] and any(
+        pattern.search(node.get('filename') or node.get('name') or '') for pattern in entry['patterns'])
+    edges, counts, notes, ignored = {}, Counter(), {}, defaultdict(list)
     for link in curated['links']:
-        if library not in link['libraries']: continue
         dataset = curated['datasets'][link['dataset']]['id']
         for node in raw:
-            if (node['id'], dataset) not in edges and any(pattern.search(node.get('filename') or node.get('name') or '') for pattern in link['patterns']):
+            if (node['id'], dataset) not in edges and matches(link, node):
                 edges[node['id'], dataset] = {'subject': node['id'], 'predicate': 'prov:wasDerivedFrom', 'object': dataset}
                 counts[link['dataset']] += 1
                 if link['note']: notes[dataset, link['note']] = {'dataset': dataset, 'note': link['note']}
-    if not edges: return None, {}
+    linked = {subject for subject, _ in edges}
+    for position, entry in enumerate(curated['bookkeeping']):
+        for node in raw:
+            if not matches(entry, node): continue
+            if node['id'] in linked:
+                raise Refused(f"curated lineage of {library}: {node.get('filename') or node.get('name')} matches both a link and a bookkeeping entry")
+            ignored[position].append(node['id'])
+    bookkeeping = sorted({identity for identities in ignored.values() for identity in identities})
+    if not edges and not bookkeeping: return None, {}, {}
     reached = {edge['object'] for edge in edges.values()}
     datasets = sorted((node for node in curated['datasets'].values() if node['id'] in reached), key=lambda node: node['id'])
     named = {org for node in datasets for field in ORG_FIELDS for org in _refs(node.get(field))}
@@ -1045,8 +1075,30 @@ def curate(provenance, library, curated):
     groups = {group: items for group, items in groups.items() if items}
     try: validate_provenance_edges(groups)
     except ValueError as error: raise Refused(f'curated lineage of {library}: {error}') from error  # EvidenceBuildError
-    return {'source': curated['source'], 'source_sha256': curated['sha256'], 'groups': groups,
-            'notes': [notes[key] for key in sorted(notes)]}, dict(counts)
+    lineage = {'source': curated['source'], 'source_sha256': curated['sha256'], 'groups': groups,
+               'notes': [notes[key] for key in sorted(notes)] + [{'inputs': sorted(ignored[position]), 'note': curated['bookkeeping'][position]['note']}
+                                                                for position in sorted(ignored)]}
+    if bookkeeping: lineage['bookkeeping_inputs'] = bookkeeping
+    return lineage, dict(counts), {position: len(identities) for position, identities in ignored.items()}
+
+
+def closure_gaps(payload, gene_sets):
+    """What keeps the lineage closures of `gene_sets` (exact GeneSet nodes of the collection `payload` describes) from
+    tracing to datasets: the names of raw inputs that reach no Dataset (reference_lineage.unlinked_inputs; bookkeeping
+    inputs are never in a closure), or 'no Dataset' for a closure that reaches none. Gene sets generated by the same
+    activities share one closure, unless the lineage relates the gene set itself."""
+    lineage = collection_lineage(payload); index = lineage_index(lineage)
+    gaps, closures = set(), {}
+    for node in gene_sets:
+        own = node.get('id') if index.targets('was_generated_by', node.get('id')) else None
+        key = (tuple(sorted(_refs(node.get('was_generated_by')))), own)
+        if key in closures: continue
+        provenance = closures[key] = lineage_closure({**({'id': own} if own else {}), 'was_generated_by': list(key[0])}, lineage, index=index)['provenance']
+        if not provenance.get('datasets'): gaps.add('no Dataset')
+        for identity in unlinked_inputs(provenance):
+            node = index.records.get(identity) or {}
+            gaps.add(node.get('filename') or node.get('name') or identity)
+    return sorted(gaps)
 
 
 def write_collections(directory, lap, documents, submit, in_flight, *, referenced, curated):
@@ -1054,13 +1106,15 @@ def write_collections(directory, lap, documents, submit, in_flight, *, reference
     document at a time in collection_id order, with at most `in_flight` parsed documents in memory.
 
     A collection's payload.provenance is its document's collection_provenance (every provenance node and edge group), and
-    payload.curated_provenance the curated lineage of its raw files when the producer names no Dataset (curate). Every
-    document's gene sets must be its gene_set_index rows; only the `referenced` ones (projected or with betas) are
-    written. A collection holding a referenced gene set must reach a Dataset. Returns (counts, the manifest's curated block).
+    payload.curated_provenance the curated lineage of the raw files its producer left without lineage, and its bookkeeping
+    inputs (curate). Every document's gene sets must be its gene_set_index rows; only the `referenced` ones (projected or
+    with betas) are written, and each one's lineage closure must reach a Dataset with no raw input that reaches none
+    (closure_gaps). Returns (counts, the manifest's curated block: edges per dataset, inputs per bookkeeping entry).
     """
     by_collection = {}
     for row in lap['gene_sets']: by_collection.setdefault(row['collection_id'], []).append(row)
-    counts, used, gaps = {'collections': 0, 'gene_sets': 0, 'gene_sets_indexed': 0}, defaultdict(Counter), []
+    counts, used, gaps = {'collections': 0, 'gene_sets': 0, 'gene_sets_indexed': 0}, defaultdict(Counter), {}
+    ignored = defaultdict(Counter)
     order = iter(sorted(documents))
     pending = deque((identity, submit(read_collection, documents[identity])) for identity in islice(order, in_flight))
     with _writer(directory / 'collections.jsonl.gz') as collections_out, _writer(directory / 'gene_sets.jsonl.gz') as gene_sets_out:
@@ -1076,20 +1130,26 @@ def write_collections(directory, lap, documents, submit, in_flight, *, reference
             if set(parsed['gene_sets']) != {member['gene_set_id'] for member in members}:
                 raise Refused(f"{row['label']}: document gene sets differ from gene_set_index")
             payload = {'collection': document, 'index': row, 'document_sha256': parsed['sha256'], 'provenance': parsed['provenance']}
-            lineage, edges = curate(parsed['provenance'], row['library'], curated)
+            lineage, edges, inputs = curate(parsed['provenance'], row['library'], curated)
             if lineage: payload['curated_provenance'] = lineage
             for key, number in edges.items(): used[key]['collections'] += 1; used[key]['edges'] += number
-            kept = [member for member in members if member['gene_set_id'] in referenced]
-            if kept and not lineage and not reaches_dataset(parsed['provenance']): gaps.append(row['label'])
+            for position, number in inputs.items(): ignored[position]['collections'] += 1; ignored[position]['inputs'] += number
+            kept = [(member, json.loads(parsed['gene_sets'][member['gene_set_id']])) for member in members if member['gene_set_id'] in referenced]
+            missing = closure_gaps(payload, [node for _, node in kept]) if kept else []
+            if missing: gaps[row['label']] = missing
             collections_out.write(canonical({'collection_id': collection_id, 'cfde_label': row['label'], 'library': row['library'], 'n_sets': count,
                                              'portal_collection_id': lap['portal'][collection_id], 'payload': payload}) + '\n')
-            for member in kept:
-                gene_sets_out.write(canonical({**member, 'metadata': {**member['metadata'], 'dapper_gene_set': json.loads(parsed['gene_sets'][member['gene_set_id']])}}) + '\n')
+            for member, node in kept:
+                gene_sets_out.write(canonical({**member, 'metadata': {**member['metadata'], 'dapper_gene_set': node}}) + '\n')
             counts['collections'] += 1; counts['gene_sets'] += len(kept); counts['gene_sets_indexed'] += len(members)
-            del parsed
-    if gaps: raise Refused(f'{len(gaps)} collections holding referenced gene sets reach no Dataset (link them in {SOURCE_DATASETS}): {sorted(gaps)[:20]}')
+            del parsed, kept
+    if gaps:
+        raise Refused(f'{len(gaps)} collections hold referenced gene sets whose lineage reaches no Dataset or uses raw inputs that reach none '
+                      f'(link them, or list run bookkeeping, in {SOURCE_DATASETS}): {dict(sorted(gaps.items())[:20])}')
     return counts, {'source': curated['source'], 'source_sha256': curated['sha256'],
-                    'datasets': {key: dict(used[key]) or {'collections': 0, 'edges': 0} for key in sorted({link['dataset'] for link in curated['links']})}}
+                    'datasets': {key: dict(used[key]) or {'collections': 0, 'edges': 0} for key in sorted({link['dataset'] for link in curated['links']})},
+                    'bookkeeping': [{'libraries': sorted(entry['libraries']), 'files': entry['files'], 'collections': ignored[position]['collections'],
+                                     'inputs': ignored[position]['inputs']} for position, entry in enumerate(curated['bookkeeping'])]}
 
 
 class VectorCache:
@@ -1223,7 +1283,8 @@ def _archived_row(snapshot, source_revision):
 
 def archived_rows(release_id, factors, traits, top_genes, projections_path, gene_sets, runtime):
     """One frozen snapshot per factor (reference_archive's format), generation_id = the release id: the top TOP_GENES
-    genes by loading, and each library's top TOP_GENE_SETS gene sets by joint rank (from the factor_key-ordered projections)."""
+    genes by loading, and each library's top TOP_GENE_SETS gene sets by joint rank (from the factor_key-ordered projections;
+    their loadings are the DOUBLE columns' numbers, a subnormal one 0)."""
     mint = (lambda node: runtime.compute_id(dict(node), 'Mechanism', runtime.schema)) if runtime else (lambda node: None)
     info = {row['gene_set_id']: row for row in gene_sets}
     groups = groupby(tsv_rows(projections_path, PROJECTION_COLUMNS), key=lambda row: row['factor_key'])
@@ -1241,8 +1302,8 @@ def archived_rows(release_id, factors, traits, top_genes, projections_path, gene
             'metadata': factor['metadata'], 'top_genes': top_genes[key],
             'top_gene_sets': [{'rank': int(row['joint_rank']), 'gene_set_id': row['gene_set_id'], 'name': info[row['gene_set_id']]['gene_set_name'],
                                'library': row['library'], 'collection_id': info[row['gene_set_id']]['collection_id'],
-                               'source_key': info[row['gene_set_id']]['legacy_source_key'], 'joint_loading': float(row['joint_loading']),
-                               'marginal_loading': float(row['marginal_loading']), 'score': None} for row in rows],
+                               'source_key': info[row['gene_set_id']]['legacy_source_key'], 'joint_loading': _double(row['joint_loading']),
+                               'marginal_loading': _double(row['marginal_loading']), 'score': None} for row in rows],
             'generation_manifest_sha256': release_id}, factor['source_revision'])
     if pending: raise RuntimeError(f'projections.tsv.gz holds the unknown factor {pending[0]}')
 
@@ -1372,7 +1433,9 @@ def build_release(services, project_dir, long_files, cache_path, out, *, gene_se
             collection_counts, curated_block = write_collections(temporary, lap, documents, submit, workers + 1, referenced=referenced, curated=curated)
         counts.update(collection_counts)
         progress('curated lineage edges: ' + ', '.join(f"{key} {value['edges']} in {value['collections']} collections"
-                                                      for key, value in curated_block['datasets'].items()))
+                                                      for key, value in curated_block['datasets'].items())
+                 + '; bookkeeping inputs: ' + (', '.join(f"{'|'.join(entry['files'])} {entry['inputs']} in {entry['collections']} collections"
+                                                         for entry in curated_block['bookkeeping']) or 'none'))
         files_sha = {name: _sha256_file(temporary / name) for name in DATA_FILES}
         release_id = release_identity(files_sha)
         progress(f'release {release_id[:12]}; archived factor snapshots')
@@ -1503,7 +1566,8 @@ def watch_release(release):
 
 def table_rows(release, manifest, published_at):
     """(table, rows(), batch size) of every reference table (COLUMNS order), ref_release last. A table whose optional file the
-    folder lacks (an older release) gets no rows; the stored manifest lists those files under absent_files."""
+    folder lacks (an older release) gets no rows; the stored manifest lists those files under absent_files. Every DOUBLE
+    column's number is _double's, so a subnormal number of any folder (MySQL DOUBLE stores none) loads as 0."""
     r, absent = Path(release), sorted(name for name in OPTIONAL_FILES if name not in manifest['files'])
     def jsonl(table):
         columns = COLUMNS[table]
@@ -1512,19 +1576,19 @@ def table_rows(release, manifest, published_at):
                 if any(c not in row for c in columns): raise Refused(f'{path.name} lacks {[c for c in columns if c not in row]}: rebuild this release')
                 yield tuple(canonical(row[c]) if c in JSON_COLUMNS else row[c] for c in columns)
         return rows
-    def projections(path):
+    def projections(path):  # the DOUBLE columns clamped (_double), the text columns LAP's text
         for row in tsv_rows(path, PROJECTION_COLUMNS):
-            yield (row['factor_key'], row['gene_set_id'], row['library'], float(row['joint_loading']), float(row['marginal_loading']),
+            yield (row['factor_key'], row['gene_set_id'], row['library'], _double(row['joint_loading']), _double(row['marginal_loading']),
                    row['joint_loading'], row['marginal_loading'], int(row['joint_rank']), int(row['marginal_rank']), int(row['is_joint_top_factor']))
     def links(path):
         for row in tsv_rows(path, FACTOR_LINK_COLUMNS):
             yield (row['factor_key'], row['phenotype'], row['phenotype_kpn_trait_id'] or None, int(row['is_own_trait']), int(row['is_atlas_trait']),
-                   *(float(row[c]) for c in ('nnls_loading', 'phewas_beta', 'phewas_p_onesided', 'phewas_q')))
+                   *(_double(row[c]) for c in ('nnls_loading', 'phewas_beta', 'phewas_p_onesided', 'phewas_q')))
     readers = {'traits': (jsonl('traits'), 1000), 'factors': (jsonl('factors'), 1000), 'collections': (jsonl('collections'), 20),
-               'factor_genes': (lambda path: ((row['factor_key'], row['gene'], float(row['loading'])) for row in tsv_rows(path, FACTOR_GENE_COLUMNS)), 10000),
+               'factor_genes': (lambda path: ((row['factor_key'], row['gene'], _double(row['loading'])) for row in tsv_rows(path, FACTOR_GENE_COLUMNS)), 10000),
                'gene_sets': (jsonl('gene_sets'), 500), 'projections': (projections, 5000),
-               'trait_gene_sets': (lambda path: ((row['kpn_trait_id'], row['gene_set_id'], row['library'], float(row['beta_uncorrected']),
-                                                  float(row['beta']), float(row['avg_postp']), int(row['library_rank']))
+               'trait_gene_sets': (lambda path: ((row['kpn_trait_id'], row['gene_set_id'], row['library'], _double(row['beta_uncorrected']),
+                                                  _double(row['beta']), _double(row['avg_postp']), int(row['library_rank']))
                                                  for row in tsv_rows(path, TRAIT_GENE_SET_COLUMNS)), 5000),
                'factor_trait_links': (links, 5000), 'phenotypes': (jsonl('phenotypes'), 1000)}
     stamp = published_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
@@ -1593,7 +1657,7 @@ def insert_archived(connection, release):
     execute(connection, ARCHIVED_TABLE)
     total = inserted = 0
     rows = read_jsonl(Path(release) / ARCHIVE_FILE)
-    while chunk := list(islice(rows, 1000)):
+    while chunk := list(islice(rows, ARCHIVE_CHUNK)):
         total += len(chunk)
         ids = [row['archive_id'] for row in chunk]
         stored = {row[0] for row in query(connection, f"SELECT archive_id FROM archived_reference_factors WHERE archive_id IN ({','.join(['%s'] * len(ids))})", ids)}
@@ -1604,30 +1668,38 @@ def insert_archived(connection, release):
 
 def index_archived(connection, release, prefix, published_at):
     """List in <prefix>_archive_index (created when absent) every frozen snapshot of the release, stamped with this publish
-    (a republish of an earlier release restamps its rows, so the catalog serves that release's snapshot again), and once
-    (INSERT IGNORE) the shared snapshots of the SHARED_GENERATIONS: the archived factors this environment serves. The
-    shared archived_reference_factors is never altered."""
+    (a republish of an earlier release restamps its rows, one UPDATE per ARCHIVE_CHUNK, so the catalog serves that
+    release's snapshot again), and once the shared snapshots of the SHARED_GENERATIONS the index lacks: the archived
+    factors this environment serves. The shared archived_reference_factors is never altered."""
     table, stamp = application_sql('reveal_archive_index', prefix), published_at.astimezone(timezone.utc).strftime('%Y-%m-%d %H:%M:%S.%f')
     execute(connection, application_sql(ARCHIVE_INDEX, prefix))
     total = inserted = 0
     rows = read_jsonl(Path(release) / ARCHIVE_FILE)
-    while chunk := list(islice(rows, 1000)):
+    while chunk := list(islice(rows, ARCHIVE_CHUNK)):
         total += len(chunk)
         hashes = sorted({row['source_id_sha256'] for row in chunk})
         stored = set(query(connection, f"SELECT source_id_sha256,archive_id FROM {table} WHERE source_id_sha256 IN ({','.join(['%s'] * len(hashes))})", hashes))
         inserted += insert_rows(connection, table, ARCHIVE_INDEX_COLUMNS, ((row['source_id_sha256'], row['archive_id'], (row['snapshot'].get('mechanism') or {}).get('id'), stamp)
                                 for row in chunk if (row['source_id_sha256'], row['archive_id']) not in stored), 1000, ignore=True)
-        restamp = [(stamp, row['source_id_sha256'], row['archive_id']) for row in chunk if (row['source_id_sha256'], row['archive_id']) in stored]
+        restamp = [(row['source_id_sha256'], row['archive_id']) for row in chunk if (row['source_id_sha256'], row['archive_id']) in stored]
         if restamp:
-            with connection.cursor() as cursor: cursor.executemany(f'UPDATE {table} SET published_at=%s WHERE source_id_sha256=%s AND archive_id=%s', restamp)
+            execute(connection, f"UPDATE {table} SET published_at=%s WHERE (source_id_sha256,archive_id) IN ({','.join(['(%s,%s)'] * len(restamp))})",
+                    (stamp, *(value for pair in restamp for value in pair)))
             connection.commit()
+    # The shared rows the index lacks, by an anti-join (a plain INSERT: any warning or error refuses). Its SELECT reads the
+    # shared table READ COMMITTED, without the shared next-key locks an INSERT ... SELECT takes under REPEATABLE READ, so a
+    # publish to another environment adding snapshots is never blocked. SET TRANSACTION applies to the next transaction:
+    # the commit ends any open one.
+    connection.commit()
     with connection.cursor() as cursor:
-        cursor.execute(f"INSERT IGNORE INTO {table} ({','.join(ARCHIVE_INDEX_COLUMNS)}) SELECT source_id_sha256,archive_id,"
-                       "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(snapshot,'$.mechanism.id')),'null'),%s FROM archived_reference_factors "
-                       f"WHERE generation_id IN ({','.join(['%s'] * len(SHARED_GENERATIONS))})", (stamp, *SHARED_GENERATIONS))
+        cursor.execute('SET TRANSACTION ISOLATION LEVEL READ COMMITTED')
+        cursor.execute(f"INSERT INTO {table} ({','.join(ARCHIVE_INDEX_COLUMNS)}) SELECT a.source_id_sha256,a.archive_id,"
+                       "NULLIF(JSON_UNQUOTE(JSON_EXTRACT(a.snapshot,'$.mechanism.id')),'null'),%s FROM archived_reference_factors a "
+                       f"LEFT JOIN {table} i ON i.source_id_sha256=a.source_id_sha256 AND i.archive_id=a.archive_id "
+                       f"WHERE a.generation_id IN ({','.join(['%s'] * len(SHARED_GENERATIONS))}) AND i.archive_id IS NULL", (stamp, *SHARED_GENERATIONS))
         shared = cursor.rowcount
         cursor.execute('SHOW WARNINGS')
-        warnings = [row for row in cursor.fetchall() if int(row[1]) != DUPLICATE_KEY]
+        warnings = cursor.fetchall()
     if warnings: raise RuntimeError(f'MySQL warning indexing the shared archived factors: {warnings[0][2]}')
     connection.commit()
     return {'rows': total, 'inserted': inserted, 'shared_inserted': shared}

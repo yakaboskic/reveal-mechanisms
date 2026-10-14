@@ -470,18 +470,27 @@ labels missing from the cache are embedded, with `EMBEDDING_SERVICE_URL` from th
 
 **Curated source datasets** (`config/source_datasets.yaml`). Only 146 of the 532 collection documents reach a DAPPER
 Dataset through a `was_derived_from` edge. The other 386 end at a raw file that pigean's `raw/cfde_source_datasets.yaml`
-does not know: LINCS_L1000 HZ3 and HZ4 (384 collections), IDG HZ2 and GlyGen HZ2. The map closes them:
+does not know: LINCS_L1000 HZ3 and HZ4 (384 collections), IDG HZ2 and GlyGen HZ2. Three that do reach one also use a raw
+input that reaches none: GTEx all_detailed_tissues HZ2 (its TPM matrix) and RummaGEO HZ1/HZ2 (two workflow manifests).
+The map closes them:
 - `organizations` are existing Organization nodes and `datasets` existing Dataset nodes, both copied verbatim from
   producer documents, or new Datasets without an id, which the build mints.
-- `links` tie a dataset to the raw files of some libraries by file-name regex. A raw file is a File or C2M2File that
-  no `was_generated_by` edge has as its subject. Links apply only to collections that reach no Dataset.
+- `links` tie a dataset to the raw files of some libraries by file-name regex. They apply, in any collection, to every
+  raw File or C2M2File the producer left without lineage (never generated, derived from nothing, in no Dataset).
 - They add LINCS L1000 Level-5 chemical CD-coefficient signatures (`cp_coeff_mat.gctx`) for LINCS HZ3/HZ4 and Enrichr
   `ARCHS4_IDG_Coexp` for IDG HZ2. GlyGen HZ2's 6,620 cached glycan-detail API responses are linked to the existing
-  GlyGen v1.12.1 release Dataset; that one is a patch (the producer records the API cache, not the release).
+  GlyGen v1.12.1 release Dataset; that one is a patch (the producer records the API cache, not the release). GTEx HZ2's
+  TPM matrix is linked to the existing GTEx V8 Dataset, whose sample and subject tables the producer already links.
+- `bookkeeping` lists raw inputs that record the run rather than data (RummaGEO's `source_manifest.json` and
+  `selection_manifest.tsv`, with a note on each): they are recorded in `curated_provenance.bookkeeping_inputs` and left
+  out of every gene set's lineage closure.
 - The producer provenance is kept as it is. The curated nodes and edges are stored beside it.
+- The build fails while a referenced gene set's lineage closure reaches no Dataset or uses a raw input that reaches
+  none. The manifest's `curated` block counts the edges per dataset (LINCS 384, IDG 1, GlyGen 6,620, GTEx 1) and the
+  inputs per bookkeeping entry (2 and 2, in the 2 RummaGEO collections).
 - The map is a plain key of `release_build_cmd`, not a tracked input: after editing it, delete `*.release.json` to rebuild.
 
-**Publish** (by hand, from this host; about 5 minutes per environment):
+**Publish** (by hand, from this host; about 8-15 minutes per environment):
 
 ```bash
 ../services/backend/.venv/bin/python -m reveal_backend.reference_release publish \

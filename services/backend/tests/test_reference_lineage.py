@@ -1,7 +1,7 @@
 """Collection lineage: producer + curated provenance, and one gene set's bounded closure (no I/O)."""
 from reveal_backend.account_provenance import ORG_ROLES
 from reveal_backend.provenance_schema import PROVENANCE_GROUPS
-from reveal_backend.reference_lineage import GROUP_THRESHOLD, ORG_FIELDS, collection_lineage, lineage_closure
+from reveal_backend.reference_lineage import BOOKKEEPING, GROUP_THRESHOLD, ORG_FIELDS, collection_lineage, lineage_closure, lineage_index, unlinked_inputs
 from reveal_backend.repository import canonical
 
 
@@ -122,3 +122,53 @@ def test_cycles_and_memberships_terminate_and_never_reach_siblings():
     closure = lineage_closure({'id': GENE_SET, 'was_generated_by': activity}, lineage)
     assert ids(closure, 'files') == sorted([a, b, member]) and ids(closure, 'datasets') == [parent]  # a File's Dataset, not its siblings
     assert closure['provenance']['was_derived_from_edges'] == sorted([derived(a, b), derived(b, a)], key=lambda e: e['subject'])
+
+
+def rummageo_like(manifests=('source_manifest.json', 'selection_manifest.tsv')):
+    """A RummaGEO HZ1 document's provenance: the extractor used a GMT the producer links to its Dataset and two workflow
+    manifests it links to nothing."""
+    extract = ref('Activity', 'rumma')
+    files = [ref('File', name.split('.')[0].replace('_', '')) for name in manifests]
+    return extract, files, {
+        'organizations': [{'id': BROAD, 'name': 'Lab'}], 'datasets': [{'id': GTEX, 'name': 'RummaGEO 2.5', 'publisher': BROAD}],
+        'files': [{'id': READS, 'filename': 'human-geo-auto.gmt.gz'}] + [{'id': node, 'filename': name} for node, name in zip(files, manifests)],
+        'activities': [{'id': extract}],
+        'used_edges': [used(extract, READS, 'metadata_input')] + [used(extract, node, 'metadata_input') for node in files],
+        'was_derived_from_edges': [derived(READS, GTEX)]}
+
+
+def test_bookkeeping_inputs_are_carried_by_collection_lineage_and_left_out_of_every_closure():
+    extract, manifests, producer = rummageo_like()
+    curated = {'source': 'lap/config/source_datasets.yaml', 'groups': {}, 'bookkeeping_inputs': [manifests[1], manifests[0], manifests[1]]}
+    lineage = collection_lineage({'provenance': producer, 'curated_provenance': curated})
+    assert lineage[BOOKKEEPING] == sorted(manifests) and list(lineage)[-1] == BOOKKEEPING  # after the groups, deduplicated
+    assert BOOKKEEPING not in collection_lineage({'provenance': producer, 'curated_provenance': {**curated, 'bookkeeping_inputs': []}})
+    plain = lineage_closure({'id': GENE_SET, 'was_generated_by': extract}, producer)
+    assert set(manifests) <= set(ids(plain, 'files')) and unlinked_inputs(plain['provenance']) == sorted(manifests)
+    closure = lineage_closure({'id': GENE_SET, 'was_generated_by': extract}, lineage)
+    assert ids(closure, 'files') == [READS] and closure['provenance']['used_edges'] == [used(extract, READS, 'metadata_input')]
+    assert ids(closure, 'datasets') == [GTEX] and unlinked_inputs(closure['provenance']) == [] and BOOKKEEPING not in closure['provenance']
+    assert lineage_closure({'id': GENE_SET, 'was_generated_by': extract}, lineage, index=lineage_index(lineage)) == closure
+    # Never a collapsed group's representative: with the threshold below the group, the kept input is a data input.
+    many = [ref('File', f'run{index}') for index in range(4)]
+    wide = {**producer, 'files': producer['files'] + [{'id': node} for node in many],
+            'used_edges': producer['used_edges'] + [used(extract, node) for node in many]}
+    collapsed = lineage_closure({'id': GENE_SET, 'was_generated_by': extract}, collection_lineage({'provenance': wide, 'curated_provenance': curated}), threshold=2)
+    assert collapsed['collapsed'] == [{'activity': extract, 'representative': min(many), 'collapsed_inputs': 4}]
+    assert not set(manifests) & set(ids(collapsed, 'files'))
+
+
+def test_unlinked_inputs_are_the_raw_inputs_that_reach_no_dataset():
+    lineage = gtex_like()
+    assert unlinked_inputs(lineage_closure({'id': GENE_SET, 'was_generated_by': EXTRACT}, lineage)['provenance']) == []
+    assert unlinked_inputs(lineage) == []  # the generated DEG table, GMT and vectors are never raw inputs
+    tpm, copy, member, orphan, gone = (ref('File', name) for name in ('tpm', 'copy', 'member', 'orphan', 'gone'))
+    lineage = {**lineage, 'files': lineage['files'] + [{'id': tpm, 'filename': 'gene_tpm.gct.gz'}, {'id': copy}, {'id': member}, {'id': orphan}],
+               'datasets': lineage['datasets'] + [{'id': ref('Dataset', 'parent'), 'has_file': [member]}],
+               'used_edges': lineage['used_edges'] + [used(PREPARE, node) for node in (tpm, copy, member, gone)],
+               'was_derived_from_edges': lineage['was_derived_from_edges'] + [derived(copy, READS), derived(orphan, ref('Dataset', 'unknown'))]}
+    closure = lineage_closure({'id': GENE_SET, 'was_generated_by': EXTRACT}, lineage)['provenance']
+    # The TPM matrix reaches nothing; a copy of a GTEx file and a Dataset's member are linked; an input with no node is unlinked.
+    assert unlinked_inputs(closure) == sorted([tpm, gone])
+    # A derivation to a Dataset the lineage lacks is no Dataset either (the orphan is in no closure: checked on the lineage).
+    assert unlinked_inputs(lineage) == sorted([tpm, gone, orphan])

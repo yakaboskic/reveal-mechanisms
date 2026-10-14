@@ -1,11 +1,12 @@
 """Collection lineage of a reference release, for serving: no database, files or network.
 
 A reveal_ref_collections payload carries `provenance` (every provenance group of the producer's collection document,
-reference_release.collection_provenance) and, where lap/config/source_datasets.yaml linked the raw files of a collection
-whose producer names no Dataset, `curated_provenance.groups` (reference_release.curate). collection_lineage merges the
-two; lineage_closure keeps what one gene set's construction depended on, with the fan-in of an activity's inputs bounded:
-inputs that share their onward lineage are represented by one of them (GlyGen HZ2's 6,620 cached API responses all
-derive from the GlyGen release, so they become one path to it).
+reference_release.collection_provenance) and, where lap/config/source_datasets.yaml linked raw files the producer left
+without lineage, `curated_provenance.groups` (reference_release.curate); the raw inputs the map calls run bookkeeping are
+listed in `curated_provenance.bookkeeping_inputs`. collection_lineage merges the two; lineage_closure keeps what one gene
+set's construction depended on, bookkeeping inputs left out, with the fan-in of an activity's inputs bounded: inputs that
+share their onward lineage are represented by one of them (GlyGen HZ2's 6,620 cached API responses all derive from the
+GlyGen release, so they become one path to it). unlinked_inputs names the raw inputs of a lineage that reach no Dataset.
 """
 from collections import defaultdict, deque
 
@@ -18,6 +19,9 @@ ORG_FIELDS = tuple(field for field in ORG_ROLES if field != 'was_associated_with
 AGENT_FIELDS = tuple(ORG_ROLES)
 GROUP_THRESHOLD = 25  # more inputs of one activity with one lineage signature than this keep one representative
 EDGE_KEY = ('subject', 'predicate', 'object')
+# collection_lineage's one key that is no provenance group: the ids of payload.curated_provenance.bookkeeping_inputs.
+BOOKKEEPING = 'bookkeeping_inputs'
+RAW_GROUPS = ('files', 'c2m2_files')  # a raw input is a node of these groups that no activity generated
 
 
 def _refs(value):
@@ -30,9 +34,11 @@ def _edge_key(edge): return tuple(edge.get(key) for key in EDGE_KEY)
 def collection_lineage(payload):
     """{group: list} of a collection: payload['provenance'] merged with payload['curated_provenance']['groups']. Node
     groups are deduplicated by id (the producer's node wins), edge groups by (subject, predicate, object), and prefixes
-    merged (the producer's wins); producer items come first."""
+    merged (the producer's wins); producer items come first. The curated bookkeeping inputs, if any, follow as sorted ids
+    under BOOKKEEPING (no provenance group), which lineage_closure leaves out."""
     producer = payload.get('provenance') or {}
     curated = (payload.get('curated_provenance') or {}).get('groups') or {}
+    bookkeeping = sorted(set(_refs((payload.get('curated_provenance') or {}).get(BOOKKEEPING))))
     merged = {}
     for group in PROVENANCE_GROUPS:
         sources = [source[group] for source in (producer, curated) if source.get(group)]
@@ -45,6 +51,7 @@ def collection_lineage(payload):
             for item in source:
                 if isinstance(item, dict): kept.setdefault(key(item), item)
         merged[group] = list(kept.values())
+    if bookkeeping: merged[BOOKKEEPING] = bookkeeping
     return merged
 
 
@@ -52,6 +59,7 @@ class _Index:
     """A lineage's nodes and relations: relation -> {id: [(target, edge group or None, edge or None)]}; a relation stated by
     a node field has no edge record."""
     def __init__(self, lineage):
+        self.bookkeeping = frozenset(_refs(lineage.get(BOOKKEEPING)))
         self.nodes = {node['id']: group for group in PROVENANCE_NODES for node in lineage.get(group) or []
                       if isinstance(node, dict) and isinstance(node.get('id'), str)}
         self.records = {node['id']: node for group in PROVENANCE_NODES for node in lineage.get(group) or []
@@ -89,7 +97,8 @@ def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD, index=None)
     From the gene set's was_generated_by activities (a string or a list, or was_generated_by edges): each activity's used
     inputs (used edges keep their edge_role) and agents; an input's generating activity, recursively; an entity's
     was_derived_from targets and the Datasets it belongs to (has_file / had_member); a Dataset's organizations
-    (ORG_FIELDS). An activity's inputs are grouped by their lineage signature (generating activities, derived-from and
+    (ORG_FIELDS). The lineage's BOOKKEEPING inputs (run bookkeeping, not data) are never reached, so their nodes and edges
+    are left out. An activity's inputs are grouped by their lineage signature (generating activities, derived-from and
     parent entities); a group larger than `threshold` keeps its smallest id and drops the others with their edges.
     Groups are PROVENANCE_GROUPS keys holding only reached nodes and edges (both ends reached), sorted by id or
     (subject, predicate, object); prefixes are kept whole. Relations stated by node fields stay on the nodes. `index` is
@@ -109,12 +118,13 @@ def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD, index=None)
             pending.append((target, kind))
     while pending:
         identity, kind = pending.popleft()
-        if identity in reached: continue
+        if identity in reached or identity in index.bookkeeping: continue
         reached.add(identity)
         if index.nodes.get(identity) == 'activities': kind = 'activity'
         if kind == 'activity':
             inputs = defaultdict(list)
-            for item in index.targets('used', identity): inputs[index.lineage(item[0])].append(item)
+            for item in index.targets('used', identity):
+                if item[0] not in index.bookkeeping: inputs[index.lineage(item[0])].append(item)
             for signature, items in sorted(inputs.items(), key=lambda pair: min(item[0] for item in pair[1])):
                 if len({item[0] for item in items}) > threshold:
                     representative = min(item[0] for item in items)
@@ -145,3 +155,26 @@ def lineage_closure(gene_set, lineage, *, threshold=GROUP_THRESHOLD, index=None)
             kept = sorted((edge for (name, key), edge in edges.items() if name == group and key[0] in reached and key[2] in reached), key=_edge_key)
             if kept: provenance[group] = kept
     return {'provenance': provenance, 'collapsed': sorted(collapsed, key=lambda item: (item['activity'], item['representative']))}
+
+
+def unlinked_inputs(lineage):
+    """The sorted ids of a lineage's raw inputs that trace to no Dataset: RAW_GROUPS nodes no activity generated that reach
+    no Dataset node of it through was_derived_from targets and parent Datasets (has_file / had_member), followed
+    recursively, and used inputs with no node at all. Of a lineage_closure's provenance: the inputs of one gene set's
+    construction that trace to no dataset."""
+    index, found = _Index(lineage), []
+    used = {target for targets in index.out['used'].values() for target, _, _ in targets}
+    for identity in sorted({identity for identity, group in index.nodes.items() if group in RAW_GROUPS} | (used - set(index.nodes))):
+        if identity not in index.nodes:
+            found.append(identity); continue
+        if index.targets('was_generated_by', identity): continue
+        pending, seen = deque([identity]), set()
+        while pending:
+            current = pending.popleft()
+            if current in seen: continue
+            seen.add(current)
+            if index.nodes.get(current) == 'datasets': break
+            pending.extend(target for target, _, _ in index.targets('was_derived_from', current))
+            pending.extend(parent for parent, _, _ in index.members.get(current, ()))
+        else: found.append(identity)
+    return found
