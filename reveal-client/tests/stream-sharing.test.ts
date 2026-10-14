@@ -168,3 +168,10 @@ test("opening a finished, review-retried job reads it again and ends on the save
   assert.equal(requests.length, 2); assert.match(requests[1], /\/jobs\/job-1$/);
   assert.equal(shown.status, "succeeded"); assert.equal(shown.last_event_id, "5");
 });
+
+test("a terminal event marks when the job completed; a running event keeps the saved completion", () => {
+  const running = { ...savedJob("running", "1"), completed_at: null } as Job;
+  assert.equal(withJobEvent(running, item("2")).completed_at, null);
+  const finished = withJobEvent(running, { ...item("3", "succeeded"), occurred_at: "2026-10-07T00:05:00Z" });
+  assert.equal(finished.completed_at, "2026-10-07T00:05:00Z"); assert.equal(finished.status, "succeeded");
+});

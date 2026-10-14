@@ -5,6 +5,7 @@ import Link from "next/link";
 import { downloadLocalBlob, localClientPreference, localClientPreferenceKey, localErrorMessage, localLaunchCommand, localResearchPrompt, localStateLabel, localWorkApi, localWorkHref, localWorkTitle, LocalWorkError, submissionAccounts, type LocalAgentClient, type LocalSetupProgress, type LocalWork, type LocalSubmission } from "@/lib/local-work";
 import { createLocalWorkRefresher } from "@/lib/local-work-refresh";
 import { followWorkspace } from "@/lib/events";
+import { workspaceFence } from "@/lib/api";
 import { LocalWorkspaceDownload } from "./LocalWorkspaceDownload";
 import "./local-work.css";
 
@@ -88,6 +89,8 @@ export function LocalWorkView({ id, standalone = false }: { id: string; standalo
       hidden: () => document.visibilityState === "hidden", terminal: accessLost,
       load: async () => {
         try {
+          // A guest's writes carry the workspace this page read (api.ts); read it before any write is offered.
+          await workspaceFence();
           const value = await localWorkApi.get(id, controller.signal);
           if (!controller.signal.aborted) { setWork(value); setError(""); }
           return value;

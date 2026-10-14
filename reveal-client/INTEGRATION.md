@@ -6,6 +6,22 @@ supplied gateway credentials are the authorized shared trust relationship;
 do not introduce an app-key layer, a separate research database, or manual
 user-token handoffs.
 
+The supplied Vercel deployment uses the optional `REVEAL_SESSION_MODE=guest`
+adapter: each browser receives its own backend anonymous principal and a signed
+HttpOnly cookie, with no shared demo identity. It uses the backend anonymous
+provisioning endpoint and retains the backend's guest expiry and permissions.
+See [README.md](README.md#hosted-cfde-testing-site) for deployment and access
+limitations. The registered-login integration below remains the contract for
+applications that authenticate their users; guest access must never be
+represented as a registered identity.
+Browser guest provisioning is serialized with Web Locks and rechecks the
+existing session before creating another. Guest mutations to `/api/backend`
+carry `X-Reveal-Workspace-ID` from the active session; the gateway compares it
+with the signed cookie and rejects a mismatch with `409 WORKSPACE_CHANGED`.
+The header is a consistency check, never proof of identity, and is not forwarded
+to the backend. Use `src/lib/browser-session.ts` and `src/lib/api.ts` to preserve
+this behavior when hosting the guest adapter.
+
 ## 1. Establish the working reference
 
 Run `npm ci`, `npm run setup -- --credentials /private/path/to/dk-qa.env`, then
