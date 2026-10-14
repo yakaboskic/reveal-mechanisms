@@ -124,7 +124,7 @@ MAX_PACKAGE_BYTES = 2_000_000
 IN_BATCH = 500
 DEFAULT_GENE_SET_PREFIXES = {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:'}
 NON_IDENTITY_GENE_SET_SLOTS = ('in_gene_set_collection', 'in_gmt_file', 'gmt_entry', 'has_embedding')
-DAPPER_REFERENCE = re.compile(r'dapper:([A-Za-z]+)\.[A-Za-z0-9_-]+')
+DAPPER_REFERENCE = re.compile(r'dapper:([A-Za-z][A-Za-z0-9]*)\.[A-Za-z0-9_-]+')  # C2M2File too
 # The only capture gaps a KPN package may have (box_adapter dispatches such a package): MySQL holds no
 # PIGEAN trait-level phenotype associations.
 TRAIT_CAPTURE_BLOCKER = re.compile(r'bioindex:trait:trait:kpn:\d{7}:(?:gene|gene_set):not_captured')

@@ -28,6 +28,7 @@ export const gwasReasons: Record<Schema<"TraitDetail">["gwas"]["status"], string
   available: "Bottom-line GWAS on the Translator provenance portal",
   not_a_gwas_trait: "This trait is a rare-disease gene list, so it has no GWAS.",
   not_on_portal: "The Translator provenance portal lists no bottom-line GWAS for this trait.",
+  no_gwas_ancestry_artifact: "The portal lists bottom-line GWAS for this trait, but none of the ancestry the trace uses (Mixed).",
 };
 
 /** Atlas traits open in the app; other phenotypes are text, with the KPN catalog page when they have a KPN id. */

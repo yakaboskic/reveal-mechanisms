@@ -49107,8 +49107,9 @@ components:
               code:
                 type: string
                 description: not_a_gwas_trait (a rare-disease list), not_on_portal
-                  (no bottom-line GWAS listed), or no_upstream_organizations (the
-                  reached Dataset names no organization).
+                  (no bottom-line GWAS listed), no_gwas_ancestry_artifact (artifacts,
+                  but none of the release's GWAS ancestry), or no_upstream_organizations
+                  (the reached Dataset names no organization).
               object_ids: *id154
             required:
             - route
@@ -49304,6 +49305,7 @@ components:
               - available
               - not_a_gwas_trait
               - not_on_portal
+              - no_gwas_ancestry_artifact
             portal_trait_id:
               anyOf:
               - type: string
@@ -49348,7 +49350,8 @@ components:
             trait, as links built from stored ids (never fetched). gwas_artifact_id
             is the one artifact the account trace's GWAS route uses. Rare-disease
             gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts
-            are not_on_portal.
+            are not_on_portal; a trait with artifacts but none of the release's GWAS
+            ancestry (Mixed) is no_gwas_ancestry_artifact.
         factors:
           type: array
           items:

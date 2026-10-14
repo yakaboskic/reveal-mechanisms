@@ -626,6 +626,14 @@ class ReferenceEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceBuildError, 'Selection provenance differs'):
             self.collect('selection-mismatch', [ANCHOR], selection_metadata={**deepcopy(metadata), 'origins': {SECOND: 'manual'}})
 
+class DapperReferenceTests(unittest.TestCase):
+    def test_class_names_with_digits_are_dapper_references(self):
+        from reveal_backend.reference_evidence import DAPPER_REFERENCE, _class_of
+        # LINCS and IDG raw inputs are C2M2Files; their curated Dataset is reached only through them.
+        self.assertEqual(_class_of('dapper:C2M2File.P_8LlALjxAQmkR1mt8fNAJylqV_LK-Ny'), 'C2M2File')
+        self.assertTrue(DAPPER_REFERENCE.fullmatch('dapper:Dataset.FmQSAEuZvxkdNNke-c_GGbHOmg199fj6'))
+        self.assertIsNone(DAPPER_REFERENCE.fullmatch('dapper:2File.x'))
+
 
 if __name__ == '__main__':
     unittest.main()

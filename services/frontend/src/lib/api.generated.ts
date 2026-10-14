@@ -9381,7 +9381,7 @@ export interface components {
             upstream_gaps?: {
                 /** @enum {string} */
                 route: "proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas";
-                /** @description not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), or no_upstream_organizations (the reached Dataset names no organization). */
+                /** @description not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), no_gwas_ancestry_artifact (artifacts, but none of the release's GWAS ancestry), or no_upstream_organizations (the reached Dataset names no organization). */
                 code: string;
                 object_ids: string[];
             }[];
@@ -9435,10 +9435,10 @@ export interface components {
             description: string | null;
             /** Format: uri */
             kpn_url: string;
-            /** @description The Translator provenance portal's bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace's GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal. */
+            /** @description The Translator provenance portal's bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace's GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal; a trait with artifacts but none of the release's GWAS ancestry (Mixed) is no_gwas_ancestry_artifact. */
             gwas: {
                 /** @enum {string} */
-                status: "available" | "not_a_gwas_trait" | "not_on_portal";
+                status: "available" | "not_a_gwas_trait" | "not_on_portal" | "no_gwas_ancestry_artifact";
                 portal_trait_id: string | null;
                 gwas_artifact_id: string | null;
                 portal_href: string | null;

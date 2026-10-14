@@ -174,6 +174,9 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         self.validate(go, 'FactorLoadings')
         with self.assertRaises(Problem) as caught: self.loadings(kind='gene_set', library='x' * 65)
         self.assertEqual(caught.exception.status, 422)
+        over_http = self.client.get('/v1/factor-loadings', params={'source_id': FACTOR['source_id'], 'kind': 'gene_set', 'library': 'GO'})
+        self.assertEqual(over_http.status_code, 200, over_http.text)
+        self.assertEqual([item['id'] for item in over_http.json()['items']], [SET1, SET2])  # the route passes library through
 
     def test_alphabetical_gene_order_is_global_case_insensitive_and_preserves_loading_rank(self):
         with sqlite3.connect(self.path) as c:

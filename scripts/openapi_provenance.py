@@ -53,7 +53,8 @@ def extend(b, fixture, examples):
         'lineage_resolution': obj({'status': status, 'issue_count': count}),
         'retained_projection_coverage': array(raw), 'recovery_status': array(raw), 'issues': array(raw)}
     b.add('ProvenanceCoverage', obj({**coverage, 'upstream_gaps': array(obj({'route': b.enum(*CLASSIFICATIONS),
-            'code': string('not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), or '
+            'code': string('not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), '
+                           'no_gwas_ancestry_artifact (artifacts, but none of the release\'s GWAS ancestry), or '
                            'no_upstream_organizations (the reached Dataset names no organization).'),
             'object_ids': strings}),
             description='Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete.')},
