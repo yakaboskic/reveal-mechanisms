@@ -30,7 +30,9 @@ def extend(b, fixture, examples):
                   'dataset_id', 'route_classifications', 'input_roles', 'organization_ids',
                   'organization_attributions', 'path_steps', 'path_edge_ids'],
         description='Deterministic witness path for an originating scientific use. Direction is present only for evidence-origin traces and is not multiplied through source claims. Alternative recorded branches remain in the shared graph.'))
-    b.add('ProvenanceNode', obj({'id': string(), 'kind': string(), 'status': b.enum('resolved', 'unresolved', 'conflicting'),
+    b.add('ProvenanceNode', obj({'id': string(), 'kind': string('The node\'s kind: dataset, file, activity, organization, gene_set, '
+        'mechanism, trait, ..., or capture (a cited research or Box capture file whose retained bytes verify: a lineage endpoint, '
+        'never missing lineage).'), 'status': b.enum('resolved', 'unresolved', 'conflicting'),
         'name': nullable(string()), 'sha256': nullable(string()), 'filename': nullable(string()), 'ror': nullable(string()),
         'href': nullable(string('A public page for the node: a KPN trait\'s bottom-line GWAS listing on the provenance portal (or its '
                                 'kpn-data-models page), or the portal page of a bottom-line GWAS artifact for its Dataset and raw inputs. '
@@ -59,7 +61,7 @@ def extend(b, fixture, examples):
             'object_ids': strings}),
             description='Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete.')},
         required=list(coverage),
-        description='Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait\'s portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account\'s captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage).'))
+        description='Independent lineage, retained projection and source-recovery coverage. A release Mechanism\'s retained_projection_coverage entry states its sample: retained_rows (all retained projections), traced_rows (those followed) and trace_bound ({per_library, order, plus}: the top gene sets per library by joint rank, the account\'s own gene sets, and each further gene set reaching a Dataset not yet reached). Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait\'s portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account\'s captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage).'))
     b.add('ProvenanceSnapshot', obj({'id': string(), 'policy_version': string(), 'account_id': b.did('ScientificAccount'),
         'account_payload_sha256': string(), 'document_sha256': string(), 'publication_version': count,
         'reference_generation_ids': strings, 'supplement_ids': strings,

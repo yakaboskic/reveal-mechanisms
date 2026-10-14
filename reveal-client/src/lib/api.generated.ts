@@ -9390,6 +9390,7 @@ export interface components {
         };
         ProvenanceNode: {
             id: string;
+            /** @description The node's kind: dataset, file, activity, organization, gene_set, mechanism, trait, ..., or capture (a cited research or Box capture file whose retained bytes verify: a lineage endpoint, never missing lineage). */
             kind: string;
             /** @enum {string} */
             status: "resolved" | "unresolved" | "conflicting";
@@ -9453,7 +9454,7 @@ export interface components {
                 };
             };
         };
-        /** @description Independent lineage, retained projection and source-recovery coverage. Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait's portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account's captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage). */
+        /** @description Independent lineage, retained projection and source-recovery coverage. A release Mechanism's retained_projection_coverage entry states its sample: retained_rows (all retained projections), traced_rows (those followed) and trace_bound ({per_library, order, plus}: the top gene sets per library by joint rank, the account's own gene sets, and each further gene set reaching a Dataset not yet reached). Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait's portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account's captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage). */
         ProvenanceCoverage: {
             /** @enum {string} */
             status: "complete" | "incomplete";

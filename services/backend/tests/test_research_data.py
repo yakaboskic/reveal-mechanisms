@@ -883,10 +883,12 @@ class ReleaseQueryTests(unittest.TestCase):
             for identity in foreign:
                 with self.subTest(op=op,identity=identity):
                     del self.queries[:]
-                    self.assertEqual(self.query(op,{field:identity}).result['status'],'not_stored')
+                    # As an unknown id of its kind: an unknown trait has no rows (empty); an unknown factor or gene set is not stored.
+                    self.assertEqual(self.query(op,{field:identity}).result['status'],'empty' if field=='trait_id' else 'not_stored')
                     self.assertEqual([sql for sql,_ in self.queries],['SELECT release_id,published_at,manifest FROM reveal_ref_release'])
         del self.queries[:]
-        self.assertEqual(self.query('get_trait',{'trait_id':'trait:kpn:٠٠٠٠٣٩٨'}).result['status'],'not_stored')  # never read as KPN.TRAIT:0000398
+        self.assertEqual(self.query('get_trait',{'trait_id':'trait:kpn:٠٠٠٠٣٩٨'}).result['status'],'empty')  # never read as KPN.TRAIT:0000398
+        self.assertEqual(self.query('get_trait',{'trait_id':'KPN.TRAIT:9999999'}).result['status'],'empty')  # the same answer as an unknown ASCII trait
         self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':'TNFα'}).result['status'],'not_stored')
         self.assertFalse(any('JSON_EXTRACT' in sql for sql,_ in self.queries))
         connection=ReleaseConnection(self.path,self.queries)

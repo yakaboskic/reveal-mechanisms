@@ -620,7 +620,9 @@ class ReferenceQueryService:
         if op in GRAPH_OPERATIONS: return missing(NO_GRAPH)
         if RELEASE_FILES.get(op) in (g['manifest'].get('absent_files') or ()):
             return missing(f'This release was published without {RELEASE_FILES[op]}.')
-        if _foreign(a): return missing()
+        if _foreign(a):  # answered like an unknown id of the same kind: an unknown trait has no rows, an unknown factor or gene set is not stored
+            if _foreign({key: a.get(key) for key in IDENTIFIERS if key != 'trait_id'}): return missing()
+            return {'items': [], 'import_coverage': 'No stored observation; this is not a biological negative.'}, tables
         if op in ('get_factor', 'get_factor_loadings', 'get_factor_trait_links'):
             item = factor(a.get('factor_id'))
             if not item: return missing()
