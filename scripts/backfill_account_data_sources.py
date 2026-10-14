@@ -18,6 +18,7 @@ Pass the environment's storage settings, as the API uses them, so retained captu
 import argparse
 from collections import Counter
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -37,6 +38,9 @@ def main(argv=None):
     if args.env_file.is_file():
         from dotenv import load_dotenv
         load_dotenv(args.env_file, override=False, interpolate=False)
+    # The trace reads this environment's reference release (<prefix>_ref_*, reference_pin): pin the process to --prefix so
+    # its records are never traced against another environment's release.
+    os.environ['REVEAL_APPLICATION_TABLE_PREFIX'] = args.prefix
     from reveal_backend import account_data_sources as sources
     from reveal_backend.app import scientific_source
     from reveal_backend.auth import Problem

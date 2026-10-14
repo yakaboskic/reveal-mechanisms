@@ -201,5 +201,29 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(contract.errors({key: stored[key] for key in sources.SERVED if key in stored}, 'AccountDataSources'), [])
 
 
+class BackfillTests(unittest.TestCase):
+    def test_the_backfill_reads_the_reference_release_of_its_own_prefix(self):
+        # Release tables are per environment (<prefix>_ref_*): a QA backfill must never trace against another environment's
+        # release because the shell (or .env) names no REVEAL_APPLICATION_TABLE_PREFIX, or names another one.
+        import os
+        from pathlib import Path
+        import sys
+        from reveal_backend.reference_pin import RELEASE_SQL
+        from reveal_backend.repository import application_prefix, application_sql
+        sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+        import backfill_account_data_sources as backfill
+        class Stop(Exception): pass
+        seen = []
+        def repository(table_prefix):
+            seen.append((table_prefix, application_sql(RELEASE_SQL, application_prefix()))); raise Stop
+        for configured in (None, 'reveal'):
+            environment = {key: value for key, value in os.environ.items() if key != 'REVEAL_APPLICATION_TABLE_PREFIX'}
+            if configured: environment['REVEAL_APPLICATION_TABLE_PREFIX'] = configured
+            with self.subTest(configured=configured), patch.dict(os.environ, environment, clear=True), \
+                    patch('reveal_backend.repository.Repository', side_effect=repository):
+                with self.assertRaises(Stop): backfill.main(['--prefix', 'reveal_workflow_qa', '--env-file', '/nonexistent/.env'])
+        self.assertEqual(seen, [('reveal_workflow_qa', 'SELECT release_id,published_at,manifest FROM reveal_workflow_qa_ref_release')] * 2)
+
+
 if __name__ == '__main__':
     unittest.main()

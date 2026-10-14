@@ -54,7 +54,7 @@ def owner_of(tx, prefix, account_id):
 
 def summarize(response, elapsed):
     names = {node['id']: node.get('name') for node in response['nodes']}
-    return {'snapshot': response['snapshot'].get('snapshot_id') if isinstance(response.get('snapshot'), dict) else None,
+    return {'snapshot': response['snapshot'].get('id') if isinstance(response.get('snapshot'), dict) else None,
             'reference_generation_ids': response['snapshot'].get('reference_generation_ids'),
             'coverage': {key: response['coverage'][key] for key in ('status', 'trace_count', 'counts_are_lower_bounds') if key in response['coverage']},
             'issue_codes': dict(Counter(issue['code'] for issue in response['coverage'].get('issues', []))),
@@ -66,6 +66,9 @@ def summarize(response, elapsed):
                               for row in response['organization_reuse']],
             'curated_used_edges': sum(1 for edge in response['edges'] if edge['relation'] == 'used'
                                       and any(source.get('kind') == 'curated_lineage' for source in edge.get('provenance_source', []))),
+            # A release's curated edges (payload.curated_provenance) are was_derived_from edges.
+            'curated_edges': sum(1 for edge in response['edges']
+                                 if any(source.get('kind') == 'curated_lineage' for source in edge.get('provenance_source', []))),
             'response_bytes': len(json.dumps(response)), 'seconds': round(elapsed, 2)}
 
 
@@ -81,6 +84,8 @@ def main(argv=None):
     if args.env_file.is_file():
         from dotenv import load_dotenv
         load_dotenv(args.env_file, override=False, interpolate=False)
+    # The trace reads this environment's reference release (<prefix>_ref_*, reference_pin): pin the process to --prefix.
+    os.environ['REVEAL_APPLICATION_TABLE_PREFIX'] = args.prefix
     os.environ.setdefault('REVEAL_GATEWAY_SECRET', 'read-only-preview-cursor-signing-key-0000')  # cursors only, this process
     from reveal_backend import runtime_config
     from reveal_backend.app import scientific_source
