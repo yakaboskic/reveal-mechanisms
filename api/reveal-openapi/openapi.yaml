@@ -464,7 +464,7 @@ paths:
                     dismissed_source_ids: []
                     mechanism_subquery: CADinT2D
                     model: cfde-inc-v2
-                    selected_kgs: &id055
+                    selected_kgs: &id061
                     - biomarkerkg
                     - prokn
       x-codeSamples:
@@ -914,7 +914,7 @@ paths:
                         - biomarkerkg
                         - prokn
                       question_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      document: &id038
+                      document: &id044
                         knowledge_gaps: &id019
                         - &id011
                           text: Are the CAD PGS×context interactions driven by adverse
@@ -940,7 +940,7 @@ paths:
                           about_entities:
                           - http://purl.obolibrary.org/obo/MONDO_0021661
                           id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      attribution: &id053
+                      attribution: &id059
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -2035,7 +2035,7 @@ paths:
                       id: dapper:File.pD1t7so66hPVDxDeNYyXaoZyUJIuQwEQ
                 kpn_factor:
                   summary: Kpn factor
-                  value: &id070
+                  value: &id076
                     source: eaggl
                     source_id: factor:kpn:0000398:eaggl-capped-v1:Factor1
                     source_revision: 191055aeb63ba725d7254b602556a76546a1857662c79f9e40da3eefbb8c2550
@@ -2117,7 +2117,7 @@ paths:
                     detail: This factor belongs to a superseded reference generation.
                     request_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
                     retryable: false
-                    archived_reference_factor: &id069
+                    archived_reference_factor: &id075
                       format: reveal.archived-reference-factor/1
                       generation_id: 16e78f6a1282320367b4e6507ad828fc71bdb38ad06e0e0a7d384026f4414e19
                       model: cfde-inc-v2
@@ -2596,9 +2596,9 @@ paths:
                         - 55555555-5555-4555-8555-555555555555
                         evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       failure: null
-                      warnings: &id042 []
+                      warnings: &id048 []
                       last_event_id: '4'
-                      links: &id043
+                      links: &id049
                         self: /v1/jobs/44444444-4444-4444-8444-444444444444
                         events: /v1/jobs/44444444-4444-4444-8444-444444444444/events
                         cancel: /v1/jobs/44444444-4444-4444-8444-444444444444/cancel
@@ -3453,11 +3453,11 @@ paths:
                   summary: Document
                   value:
                     root_id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
-                    schema: &id029
+                    schema: &id035
                       schema_sha256: 305fbd8f3a3ad01a7584892c1be2937b5a25a5741a8fef17851039ff8cf44e25
                       dependency_snapshot_sha256: bdbbc8d7583754a868a3bc22d7c976e21bccedd5ce24b600c2b43972e5b31a23
                       identity_profile: DAPPER-ID-1
-                    document: &id030
+                    document: &id036
                       knowledge_gaps: *id019
                       mechanisms:
                       - id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
@@ -3468,7 +3468,7 @@ paths:
                       persons:
                       - *id020
                       activities:
-                      - &id033
+                      - &id039
                         name: CFDE GeneSet catalog encoding
                         activity_type: CFDEGeneSetCatalogImport
                         description: Encodes advertised CFDE named gene-set identities;
@@ -3516,7 +3516,7 @@ paths:
                         description: Invented assertions for UI design. Not retrieved
                           from ProKN or BiomarkerKG; not verified GeneSet membership.
                       gene_sets:
-                      - &id032
+                      - &id038
                         name: AMP AD / all brain / AMP AD MAYO TCX Diagnosis.AOD AD-CONTROL
                           ALL dn | GTEx / brain / GTEx aging Brain 20-29 60-69 dn
                         member_type: gene
@@ -4085,7 +4085,7 @@ paths:
                         was_attributed_to:
                         - dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       scientific_accounts:
-                      - &id044
+                      - &id050
                         id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                         name: Genes and gene programs in a shared CAD-in-T2D mechanism
                         question: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
@@ -4093,7 +4093,7 @@ paths:
                           selected broader CAD gap. This authored design packet combines
                           captured CFDE observations with explicitly illustrative
                           KG membership assertions. No live agent ran.
-                        component_claims: &id051
+                        component_claims: &id057
                         - dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
                         - dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc
                         - dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9
@@ -4248,8 +4248,8 @@ paths:
                       payload_sha256: 3040d19892c3493e3a0d8af4a318c038cf7e3bbb61889442fb16649806760f18
                     - object_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       payload_sha256: 2afbaa5884ee40c8c1fdb2247ddcff9714ee4a027fd8133a1e9ad10b8fd26865
-                    citation_metadata: &id031
-                    - &id039
+                    citation_metadata: &id037
+                    - &id045
                       target_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                       target_class: KnowledgeGap
                       dapper_schema_version: sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345
@@ -4286,7 +4286,7 @@ paths:
                       canonical_url: http://127.0.0.1:8767/data/cad-account/scientific-account.json#/knowledge_gaps/0
                       access_level: private
                       publication_state: unpublished
-                    - &id040
+                    - &id046
                       target_id: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
                       target_class: Claim
                       dapper_schema_version: sha256:219769c9874a3c0a7d6972360d5847a8b344e412a8b9f4e2648f059682440345
@@ -4776,11 +4776,133 @@ paths:
                       complete: true
                       missing_ids: []
                       next_cursor: null
-                    research_statement: &id045
+                    research_statement: &id051
                       status: succeeded
                       job_id: 55555555-5555-4555-8555-555555555555
                       paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
-                    publication: &id046
+                    data_sources:
+                      status: incomplete
+                      traced_at: '2026-10-12T00:00:00Z'
+                      reference_generation_ids:
+                      - ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a
+                      coverage:
+                        trace_count: 3
+                        counts_are_lower_bounds: true
+                        issue_counts:
+                          MISSING_LINEAGE: 3
+                      claims:
+                      - claim_id: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
+                        resolution: complete
+                        datasets:
+                        - dataset_id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                          input_roles:
+                          - data_input
+                          routes: &id025
+                          - factor_projection
+                          - proposition_reference
+                          via_ids: &id026
+                          - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                          curation_ids: &id027 []
+                          trace_count: 1
+                          organizations:
+                          - organization_id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                            roles:
+                            - publisher
+                          - organization_id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                            roles:
+                            - attribution
+                        - dataset_id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                          input_roles:
+                          - metadata_input
+                          routes: *id025
+                          via_ids: *id026
+                          curation_ids: *id027
+                          trace_count: 1
+                          organizations:
+                          - organization_id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                            roles:
+                            - publisher
+                        - dataset_id: gwas-bottom-line:bl-t2d-mixed
+                          input_roles:
+                          - unknown
+                          routes:
+                          - proposition_reference
+                          - trait_gwas
+                          via_ids:
+                          - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                          organizations: []
+                          curation_ids: []
+                          trace_count: 1
+                      - claim_id: dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-
+                        resolution: not_applicable
+                        datasets: []
+                      datasets:
+                      - id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                        name: NCBI Gene Homo_sapiens.gene_info
+                        version: undated snapshot
+                        description: NCBI Gene per-species gene_info table for human,
+                          used for Ensembl-to-symbol mapping.
+                        location: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/
+                      - id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                        name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts,
+                          sample and subject annotations)
+                        version: v8
+                        description: Genotype-Tissue Expression project release V8,
+                          as distributed by the GTEx Portal.
+                        location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+                      - id: gwas-bottom-line:bl-t2d-mixed
+                        name: Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)
+                        location: https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed
+                        kind: gwas_bottom_line
+                        artifact_id: bl-t2d-mixed
+                        ancestry_code: Mixed
+                        ancestry_name: Mixed ancestry
+                        kpn_trait_id: KPN.TRAIT:0000398
+                        portal_trait_id: T2D
+                      organizations:
+                      - id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                        name: GTEx Consortium
+                      - id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                        name: National Center for Biotechnology Information
+                        ror: ror:02meqm098
+                      - id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                        name: Broad Institute
+                        ror: ror:05a0ya142
+                      via:
+                      - id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                        kind: mechanism
+                        name: CAD-in-T2D mechanism Factor1
+                    publication: &id052
                       visibility: private
                       version: 0
                       published_at: null
@@ -4844,7 +4966,7 @@ paths:
                         software_version: 0.2.0
                         command: python3 design/build_account_example.py
                       files:
-                      - &id025
+                      - &id028
                         id: dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ
                         filename: pigean-gene-factor.response.json
                         mime_type: application/json
@@ -4852,7 +4974,7 @@ paths:
                         size_in_bytes: 2945
                         description: Original CFDE response bytes captured September
                           25, 2026; not a new retrieval.
-                      - &id026
+                      - &id029
                         id: dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83
                         filename: pigean-gene-set-factor.response.json
                         mime_type: application/json
@@ -4860,7 +4982,7 @@ paths:
                         size_in_bytes: 3785
                         description: Original CFDE response bytes captured September
                           25, 2026; not a new retrieval.
-                      - &id027
+                      - &id030
                         id: dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT
                         filename: dismech-gap.source.json
                         mime_type: application/json
@@ -4868,7 +4990,7 @@ paths:
                         size_in_bytes: 3382
                         description: Frozen DisMech source discussion; its exact question
                           frames this example.
-                      - &id028
+                      - &id031
                         id: dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag
                         filename: illustrative-kg-assertions.json
                         mime_type: application/json
@@ -6106,22 +6228,22 @@ paths:
                       access_level: private
                       publication_state: unpublished
                     artifacts:
-                    - file: *id025
-                      download_url: null
-                      expires_at: null
-                      availability: not_available
-                      verification: checksum_verified
-                    - file: *id026
-                      download_url: null
-                      expires_at: null
-                      availability: not_available
-                      verification: checksum_verified
-                    - file: *id027
-                      download_url: null
-                      expires_at: null
-                      availability: not_available
-                      verification: checksum_verified
                     - file: *id028
+                      download_url: null
+                      expires_at: null
+                      availability: not_available
+                      verification: checksum_verified
+                    - file: *id029
+                      download_url: null
+                      expires_at: null
+                      availability: not_available
+                      verification: checksum_verified
+                    - file: *id030
+                      download_url: null
+                      expires_at: null
+                      availability: not_available
+                      verification: checksum_verified
+                    - file: *id031
                       download_url: null
                       expires_at: null
                       availability: not_available
@@ -6137,6 +6259,128 @@ paths:
                       status: succeeded
                       job_id: 55555555-5555-4555-8555-555555555555
                       paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
+                    data_sources:
+                      status: incomplete
+                      traced_at: '2026-10-12T00:00:00Z'
+                      reference_generation_ids:
+                      - ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a
+                      coverage:
+                        trace_count: 3
+                        counts_are_lower_bounds: true
+                        issue_counts:
+                          MISSING_LINEAGE: 3
+                      claims:
+                      - claim_id: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
+                        resolution: complete
+                        datasets:
+                        - dataset_id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                          input_roles:
+                          - data_input
+                          routes: &id032
+                          - factor_projection
+                          - proposition_reference
+                          via_ids: &id033
+                          - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                          curation_ids: &id034 []
+                          trace_count: 1
+                          organizations:
+                          - organization_id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                            roles:
+                            - publisher
+                          - organization_id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                            roles:
+                            - attribution
+                        - dataset_id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                          input_roles:
+                          - metadata_input
+                          routes: *id032
+                          via_ids: *id033
+                          curation_ids: *id034
+                          trace_count: 1
+                          organizations:
+                          - organization_id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                            roles:
+                            - publisher
+                        - dataset_id: gwas-bottom-line:bl-t2d-mixed
+                          input_roles:
+                          - unknown
+                          routes:
+                          - proposition_reference
+                          - trait_gwas
+                          via_ids:
+                          - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                          organizations: []
+                          curation_ids: []
+                          trace_count: 1
+                      - claim_id: dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV
+                        resolution: not_applicable
+                        datasets: []
+                      - claim_id: dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-
+                        resolution: not_applicable
+                        datasets: []
+                      datasets:
+                      - id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                        name: NCBI Gene Homo_sapiens.gene_info
+                        version: undated snapshot
+                        description: NCBI Gene per-species gene_info table for human,
+                          used for Ensembl-to-symbol mapping.
+                        location: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/
+                      - id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                        name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts,
+                          sample and subject annotations)
+                        version: v8
+                        description: Genotype-Tissue Expression project release V8,
+                          as distributed by the GTEx Portal.
+                        location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+                      - id: gwas-bottom-line:bl-t2d-mixed
+                        name: Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)
+                        location: https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed
+                        kind: gwas_bottom_line
+                        artifact_id: bl-t2d-mixed
+                        ancestry_code: Mixed
+                        ancestry_name: Mixed ancestry
+                        kpn_trait_id: KPN.TRAIT:0000398
+                        portal_trait_id: T2D
+                      organizations:
+                      - id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                        name: GTEx Consortium
+                      - id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                        name: National Center for Biotechnology Information
+                        ror: ror:02meqm098
+                      - id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                        name: Broad Institute
+                        ror: ror:05a0ya142
+                      via:
+                      - id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                        kind: mechanism
+                        name: CAD-in-T2D mechanism Factor1
                     publication:
                       visibility: private
                       version: 0
@@ -6144,7 +6388,7 @@ paths:
                       updated_at: null
                       can_manage: true
                       has_unpublished_changes: false
-                    archive: &id047
+                    archive: &id053
                       status: archived
                       reason: reference_generation_superseded
                       archived_at: '2026-10-01T09:00:00Z'
@@ -6316,8 +6560,8 @@ paths:
                   summary: Document
                   value:
                     root_id: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
-                    schema: *id029
-                    document: *id030
+                    schema: *id035
+                    document: *id036
                     payloads:
                     - object_id: dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ
                       payload_sha256: fc182a65e5cd4e4c81e625a12218ebcc3da443511c64635f2a0eda23fa91372a
@@ -6423,7 +6667,7 @@ paths:
                       payload_sha256: 3040d19892c3493e3a0d8af4a318c038cf7e3bbb61889442fb16649806760f18
                     - object_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       payload_sha256: 2afbaa5884ee40c8c1fdb2247ddcff9714ee4a027fd8133a1e9ad10b8fd26865
-                    citation_metadata: *id031
+                    citation_metadata: *id037
                     artifacts:
                     - file: *id021
                       download_url: null
@@ -6560,12 +6804,12 @@ paths:
                   summary: Document
                   value:
                     root_id: dapper:GeneSet.I1UZhVhKU-YDerPLIxtnZOGlTXNAlrgD
-                    schema: *id029
+                    schema: *id035
                     document:
                       gene_sets:
-                      - *id032
+                      - *id038
                       activities:
-                      - *id033
+                      - *id039
                     payloads:
                     - object_id: dapper:Activity.VM0nxPd0QVsZJ-7qw4WjAvXtEiFMehqx
                       payload_sha256: 312f6b1007c48a9463265eaa29752d0defa41ae268e5b8971becdebf71417e52
@@ -6688,7 +6932,7 @@ paths:
                   summary: Document
                   value:
                     root_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
-                    schema: *id029
+                    schema: *id035
                     document:
                       knowledge_gaps:
                       - text: Are the CAD PGS×context interactions driven by adverse
@@ -6742,7 +6986,7 @@ paths:
                         description: Offline authored paragraph preview, not an executed
                           agent.
                       files:
-                      - &id034
+                      - &id040
                         id: dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ
                         filename: pigean-gene-factor.response.json
                         mime_type: application/json
@@ -6750,7 +6994,7 @@ paths:
                         size_in_bytes: 2945
                         description: Original CFDE response bytes captured September
                           25, 2026; not a new retrieval.
-                      - &id035
+                      - &id041
                         id: dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83
                         filename: pigean-gene-set-factor.response.json
                         mime_type: application/json
@@ -6758,7 +7002,7 @@ paths:
                         size_in_bytes: 3785
                         description: Original CFDE response bytes captured September
                           25, 2026; not a new retrieval.
-                      - &id036
+                      - &id042
                         id: dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT
                         filename: dismech-gap.source.json
                         mime_type: application/json
@@ -6766,7 +7010,7 @@ paths:
                         size_in_bytes: 3382
                         description: Frozen DisMech source discussion; its exact question
                           frames this example.
-                      - &id037
+                      - &id043
                         id: dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag
                         filename: illustrative-kg-assertions.json
                         mime_type: application/json
@@ -7683,24 +7927,24 @@ paths:
                       payload_sha256: 3040d19892c3493e3a0d8af4a318c038cf7e3bbb61889442fb16649806760f18
                     - object_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                       payload_sha256: 2afbaa5884ee40c8c1fdb2247ddcff9714ee4a027fd8133a1e9ad10b8fd26865
-                    citation_metadata: *id031
+                    citation_metadata: *id037
                     artifacts:
-                    - file: *id034
+                    - file: *id040
                       download_url: null
                       expires_at: null
                       availability: not_available
                       verification: checksum_verified
-                    - file: *id035
+                    - file: *id041
                       download_url: null
                       expires_at: null
                       availability: not_available
                       verification: checksum_verified
-                    - file: *id036
+                    - file: *id042
                       download_url: null
                       expires_at: null
                       availability: not_available
                       verification: checksum_verified
-                    - file: *id037
+                    - file: *id043
                       download_url: null
                       expires_at: null
                       availability: not_available
@@ -7849,13 +8093,13 @@ paths:
                   summary: Question
                   value:
                     root_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                    schema: *id029
-                    document: *id038
+                    schema: *id035
+                    document: *id044
                     payloads:
                     - object_id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                       payload_sha256: ad93f0824f9e7305bbef273498ea6c704cbf8a7101f5a151b5a99682c8fc3f6a
                     citation_metadata:
-                    - *id039
+                    - *id045
                     artifacts: []
                     coverage:
                       direction: upstream
@@ -7995,7 +8239,7 @@ paths:
               examples:
                 native_metadata:
                   summary: Native metadata
-                  value: *id040
+                  value: *id046
             application/x-bibtex:
               schema:
                 type: string
@@ -8451,7 +8695,7 @@ paths:
                 example:
                   summary: Example
                   value:
-                    upload: &id041
+                    upload: &id047
                       id: 22222222-2222-4222-8222-222222222222
                       draft_id: 22222222-2222-4222-8222-222222222222
                       filename: notes.txt
@@ -8579,7 +8823,7 @@ paths:
                   summary: Example
                   value:
                     items:
-                    - *id041
+                    - *id047
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8667,7 +8911,7 @@ paths:
               examples:
                 example:
                   summary: Example
-                  value: *id041
+                  value: *id047
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8754,7 +8998,7 @@ paths:
               examples:
                 example:
                   summary: Example
-                  value: *id041
+                  value: *id047
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8842,7 +9086,7 @@ paths:
               examples:
                 example:
                   summary: Example
-                  value: *id041
+                  value: *id047
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -8930,7 +9174,7 @@ paths:
               examples:
                 example:
                   summary: Example
-                  value: *id041
+                  value: *id047
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -9240,9 +9484,9 @@ paths:
                     completed_at: null
                     result: null
                     failure: null
-                    warnings: *id042
+                    warnings: *id048
                     last_event_id: '2'
-                    links: *id043
+                    links: *id049
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -9477,28 +9721,28 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - account: *id044
+                    - account: *id050
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id045
-                      publication: *id046
+                      research_statement: *id051
+                      publication: *id052
                       votes: null
                     page: *id009
                 archived:
                   summary: Archived
                   value:
                     items:
-                    - account: *id044
+                    - account: *id050
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id045
-                      publication: *id046
+                      research_statement: *id051
+                      publication: *id052
                       votes: null
-                      archive: *id047
+                      archive: *id053
                     page: *id009
           headers:
             X-Request-ID:
@@ -9576,7 +9820,7 @@ paths:
       tags:
       - Scientific content
       summary: Rank public community contributions
-      description: All-time contribution rankings computed over the complete currently
+      description: 'All-time contribution rankings computed over the complete currently
         public frozen population before pagination. Original registered actor attribution
         uses opaque contributor keys; missing/anonymous/conflicting attribution is
         uncredited. Exclude fixtures before projection, deduplicate canonical accounts,
@@ -9588,7 +9832,11 @@ paths:
         ties share ranks before display rounding. Invalid supplied credentials are
         rejected. No private metadata, jobs, requests or voter identities are exposed.
         Cursors bind the whole current projection and query; publication or vote changes
-        expire them. Responses are private, no-store.
+        expire them. Responses are private, no-store. The datasets view also ranks
+        by traced_claims: distinct claims whose stored provenance trace reaches the
+        dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort
+        only) adds every saved account as anonymous totals; private accounts and claims
+        are never listed.'
       parameters:
       - name: view
         in: query
@@ -9615,6 +9863,7 @@ paths:
           - explored
           - claims
           - researchers
+          - traced_claims
         example: overall
         description: ''
       - name: evidence
@@ -9627,6 +9876,17 @@ paths:
           - supporting
           default: all
         example: all
+        description: ''
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - published
+          - all
+          default: published
+        example: published
         description: ''
       - name: limit
         in: query
@@ -9662,7 +9922,7 @@ paths:
                     score_version: public-contribution-v1
                     cohort_size: 0
                     voting_participants: 0
-                    exclusions: &id048
+                    exclusions: &id054
                       fixture_accounts: 0
                       uncredited_accounts: 0
                       conflicting_accounts: 0
@@ -9670,12 +9930,12 @@ paths:
                       excluded_evidence_paths: 0
                       fixture_explorations: 0
                       uncredited_explorations: 0
-                    definitions: &id049
+                    definitions: &id055
                     - id: accounts
                       label: Public scientific accounts
                       description: Distinct currently public canonical accounts, excluding
                         demo/test fixtures.
-                    methodology: &id050
+                    methodology: &id056
                       weights:
                         accounts: 0.3
                         votes: 0.4
@@ -9688,9 +9948,13 @@ paths:
                         scores retain canonical totals.
                       evidence: Only explicit evidence interpretations targeting the
                         claim proposition qualify; direction counts can overlap.
+                      traced: Claims and accounts traced read each account’s stored
+                        provenance trace; scope=all adds private accounts as anonymous
+                        totals.
                     view: researchers
                     sort: overall
                     evidence: all
+                    scope: published
                     items: []
                     page: *id009
           headers:
@@ -9761,7 +10025,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&scope=published&limit=20''
           -H ''Accept: application/json'''
   /v1/leaderboard/{view}/{entry_id}/records:
     get:
@@ -9817,6 +10081,8 @@ paths:
           - claims
           - researchers
           - files
+          - traced_claims
+          - traced_accounts
           default: accounts
         example: votes
         description: ''
@@ -9830,6 +10096,17 @@ paths:
           - supporting
           default: all
         example: all
+        description: ''
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - published
+          - all
+          default: published
+        example: published
         description: ''
       - name: limit
         in: query
@@ -9865,13 +10142,14 @@ paths:
                     score_version: public-contribution-v1
                     cohort_size: 0
                     voting_participants: 0
-                    exclusions: *id048
-                    definitions: *id049
-                    methodology: *id050
+                    exclusions: *id054
+                    definitions: *id055
+                    methodology: *id056
                     view: accounts
                     id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                     metric: votes
                     evidence: all
+                    scope: published
                     entry:
                       id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                       kind: account
@@ -9888,6 +10166,8 @@ paths:
                         account_gap_count: 1
                         explored_gap_count: 1
                         claim_count: 12
+                        traced_claim_count: 0
+                        traced_account_count: 0
                       components:
                         accounts: 0
                         votes: 0
@@ -9899,13 +10179,16 @@ paths:
                         id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                         label: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
                       attribution: null
-                      directions: &id052
+                      directions: &id058
                         SUPPORTS: 0
                         DISPUTES: 0
                         MIXED: 0
                         NEUTRAL: 0
                         UNKNOWN: 0
+                      organizations: []
+                      url: null
                     total: 1
+                    withheld: 0
                     items:
                     - id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                       kind: account
@@ -9913,9 +10196,9 @@ paths:
                       url: /accounts/dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                       account_ids:
                       - dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
-                      claim_ids: *id051
+                      claim_ids: *id057
                       evidence_ids: []
-                      directions: *id052
+                      directions: *id058
                       value: 0
                     page: *id009
           headers:
@@ -9996,7 +10279,7 @@ paths:
       x-codeSamples:
       - lang: Shell
         label: request
-        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20''
+        source: 'curl -X GET ''https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&scope=published&limit=20''
           -H ''Accept: application/json'''
   /v1/knowledge-gaps/{gap_id}/accounts:
     get:
@@ -10091,15 +10374,15 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - account: *id044
+                    - account: *id050
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
                       job_id: 44444444-4444-4444-8444-444444444444
-                      research_statement: *id045
-                      publication: *id046
+                      research_statement: *id051
+                      publication: *id052
                       votes: null
-                      attribution: *id053
+                      attribution: *id059
                     page: *id009
                 no_visible_accounts:
                   summary: No visible accounts
@@ -10110,7 +10393,7 @@ paths:
                   summary: Archived published
                   value:
                     items:
-                    - account: *id044
+                    - account: *id050
                       knowledge_gap: *id011
                       claim_count: 12
                       created_at: '2026-09-24T16:00:00Z'
@@ -10131,7 +10414,7 @@ paths:
                         downvotes: 0
                         score: 0
                         user_vote: null
-                      attribution: *id053
+                      attribution: *id059
                       archive:
                         status: archived
                         reason: reference_generation_superseded
@@ -10268,7 +10551,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id046
+                  value: *id052
                 public_reader:
                   summary: Public reader
                   value:
@@ -10377,7 +10660,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: &id067
+                  value: &id073
                     visibility: public
                     version: 1
                     published_at: '2026-09-24T16:00:00Z'
@@ -10428,7 +10711,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: &id054
+                  value: &id060
                     type: urn:reveal:problem:sign-in-required
                     title: Sign In Required
                     status: 403
@@ -10692,7 +10975,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
         '404':
           description: Not Found
           content:
@@ -10966,7 +11249,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
         '404':
           description: Not Found
           content:
@@ -11133,7 +11416,7 @@ paths:
                       outcome: insufficient_evidence
                       summary: The captured investigation did not support an accepted
                         scientific account.
-                      knowledge_gap: &id064
+                      knowledge_gap: &id070
                         text: Are the CAD PGS×context interactions driven by adverse
                           exposures causally amplifying genetic risk, or are some
                           "contexts" actually downstream readouts of incipient disease
@@ -11156,14 +11439,14 @@ paths:
                         about_entities:
                         - http://purl.obolibrary.org/obo/MONDO_0021661
                         id: dapper:KnowledgeGap.zNV20nhHamt-a4CeAktQQPoAivOJe6xk
-                      anchors: &id065
+                      anchors: &id071
                       - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                         mechanism_id: dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR
                         name: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                         trait: null
                         origin: manual
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: &id066
+                      attribution: &id072
                         user_id: 11111111-1111-4111-8111-111111111111
                         person_id: dapper:Person.WOE2xLQBfUB3k6J6OJh0OigMZNbJs6he
                         display_name: Example Researcher
@@ -11171,7 +11454,7 @@ paths:
                         orcid_authenticated: false
                         observed_at: '2026-09-24T16:00:00Z'
                         principal_kind: registered
-                      publication: *id046
+                      publication: *id052
                     page: *id009
                 empty:
                   summary: Empty
@@ -11358,40 +11641,40 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: &id063
+                  value: &id069
                     id: 66666666-6666-4666-8666-666666666666
                     outcome: insufficient_evidence
                     summary: The captured investigation did not support an accepted
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: &id056
+                    explored_topics: &id062
                     - The selected question and captured mechanism evidence.
-                    missing_evidence: &id057
+                    missing_evidence: &id063
                     - Evidence connecting the mechanism to this question.
-                    limitations: &id058
+                    limitations: &id064
                     - This scoped result does not establish that a relationship is
                       globally absent.
-                    next_steps: &id059
+                    next_steps: &id065
                     - Review additional directly relevant studies before repeating
                       this investigation.
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: &id060
+                    anchors: &id066
                     - source_id: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                       mechanism_id: dapper:Mechanism.MyhahXB55tDUS667sJzeJZ40BeeQBWOR
                       name: factor:portal:CADinT2D:cfde-inc-v2:Factor1
                       trait: null
                       origin: manual
-                    selected_kgs: *id055
+                    selected_kgs: *id061
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id053
+                    attribution: *id059
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: 44444444-4444-4444-8444-444444444444
-                    publication: *id046
-                    provenance: &id061
+                    publication: *id052
+                    provenance: &id067
                       evidence_package_sha256: 9a55d126679291a95fa3d35f544915610134075eaf110f62f77ec8ee870b6ae2
                       outcome_sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
                       runtime_sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
@@ -11415,28 +11698,28 @@ paths:
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: *id056
-                    missing_evidence: *id057
-                    limitations: *id058
-                    next_steps: *id059
+                    explored_topics: *id062
+                    missing_evidence: *id063
+                    limitations: *id064
+                    next_steps: *id065
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id060
-                    selected_kgs: *id055
+                    anchors: *id066
+                    selected_kgs: *id061
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id053
+                    attribution: *id059
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: null
-                    publication: &id062
+                    publication: &id068
                       visibility: public
                       version: 1
                       published_at: '2026-09-24T16:00:00Z'
                       updated_at: '2026-09-24T16:00:00Z'
                       can_manage: false
                       has_unpublished_changes: false
-                    provenance: *id061
+                    provenance: *id067
                 archived_public_reader:
                   summary: Archived public reader
                   value:
@@ -11446,22 +11729,22 @@ paths:
                       scientific account.
                     reason: This illustrative scoped investigation lacked evidence
                       connecting the selected mechanism to the selected question.
-                    explored_topics: *id056
-                    missing_evidence: *id057
-                    limitations: *id058
-                    next_steps: *id059
+                    explored_topics: *id062
+                    missing_evidence: *id063
+                    limitations: *id064
+                    next_steps: *id065
                     knowledge_gap: *id011
                     source_gap: *id016
-                    anchors: *id060
-                    selected_kgs: *id055
+                    anchors: *id066
+                    selected_kgs: *id061
                     created_at: '2026-09-24T16:00:00Z'
-                    attribution: *id053
+                    attribution: *id059
                     scope_note: A scoped exploration report, not a ScientificAccount
                       or globally established negative finding.
                     record_format: structured
                     job_id: null
-                    publication: *id062
-                    provenance: *id061
+                    publication: *id068
+                    provenance: *id067
                     archive:
                       status: archived
                       reason: reference_generation_superseded
@@ -11573,7 +11856,7 @@ paths:
               examples:
                 owner:
                   summary: Owner
-                  value: *id063
+                  value: *id069
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -11716,10 +11999,10 @@ paths:
                       outcome: insufficient_evidence
                       summary: The captured investigation did not support an accepted
                         scientific account.
-                      knowledge_gap: *id064
-                      anchors: *id065
+                      knowledge_gap: *id070
+                      anchors: *id071
                       created_at: '2026-09-24T16:00:00Z'
-                      attribution: *id066
+                      attribution: *id072
                       publication:
                         visibility: public
                         version: 1
@@ -11912,7 +12195,7 @@ paths:
               examples:
                 private_owner:
                   summary: Private owner
-                  value: *id046
+                  value: *id052
                 public_reader:
                   summary: Public reader
                   value:
@@ -12015,7 +12298,7 @@ paths:
               examples:
                 published:
                   summary: Published
-                  value: *id067
+                  value: *id073
                 unpublished:
                   summary: Unpublished
                   value:
@@ -12060,7 +12343,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
         '404':
           description: Not Found
           content:
@@ -12180,7 +12463,7 @@ paths:
                   summary: History
                   value:
                     items:
-                    - &id068
+                    - &id074
                       source_gap: *id016
                       knowledge_gap: *id011
                       last_explored_at: '2026-09-24T16:00:00Z'
@@ -12274,7 +12557,7 @@ paths:
               examples:
                 saved:
                   summary: Saved
-                  value: *id068
+                  value: *id074
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16194,7 +16477,7 @@ paths:
               examples:
                 legacy_factor:
                   summary: Legacy factor
-                  value: *id069
+                  value: *id075
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -16281,14 +16564,14 @@ paths:
                 factor:
                   summary: Factor
                   value:
-                    factor: *id070
+                    factor: *id076
                     generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                     provenance:
                       eaggl_import_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                       factor_id: T2D::Factor1
                       factor_key: KPN.TRAIT:0000398::Factor1
                       model: eaggl-capped-v1
-                    genes: &id071
+                    genes: &id077
                       total: 633
                       min: 0.0001
                       max: 0.98
@@ -16519,7 +16802,7 @@ paths:
                     offset: 0
                     limit: 200
                     next_offset: null
-                    summary: *id071
+                    summary: *id077
                     gnomad: null
           headers:
             X-Request-ID:
@@ -16723,7 +17006,7 @@ paths:
                   value:
                     id: 77777777-7777-4777-8777-777777777777
                     research_request_id: 33333333-3333-4333-8333-333333333333
-                    request: &id072
+                    request: &id078
                       id: 33333333-3333-4333-8333-333333333333
                       owner_user_id: 11111111-1111-4111-8111-111111111111
                       source_draft_id: 22222222-2222-4222-8222-222222222222
@@ -16797,13 +17080,13 @@ paths:
                     package_sha256: null
                     last_error: null
                     preparation_operation_id: 88888888-8888-4888-8888-888888888888
-                    submissions: &id073 []
-                    grants: &id074 []
+                    submissions: &id079 []
+                    grants: &id080 []
                     mcp_url: https://api.reveal.example.org/mcp
                     prompt: Use the downloaded frozen seed and anonymous public MCP
                       tools. Sign in and explicitly approve access before private
                       reads, uploads, validation or submission.
-                    instructions: &id075
+                    instructions: &id081
                       codex: Run python3 start.py codex in the downloaded folder.
                         Add --login only when ready to connect.
                       claude_code: Run python3 start.py claude in the downloaded folder.
@@ -16934,10 +17217,10 @@ paths:
                   summary: Owned
                   value:
                     items:
-                    - &id076
+                    - &id082
                       id: 77777777-7777-4777-8777-777777777777
                       research_request_id: 33333333-3333-4333-8333-333333333333
-                      request: *id072
+                      request: *id078
                       state: ready
                       created_at: '2026-09-24T16:00:00Z'
                       last_activity: '2026-09-24T16:00:00Z'
@@ -16948,13 +17231,13 @@ paths:
                       package_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
                       last_error: null
                       preparation_operation_id: 88888888-8888-4888-8888-888888888888
-                      submissions: *id073
-                      grants: *id074
+                      submissions: *id079
+                      grants: *id080
                       mcp_url: https://api.reveal.example.org/mcp
                       prompt: Use the downloaded frozen seed and anonymous public
                         MCP tools. Sign in and explicitly approve access before private
                         reads, uploads, validation or submission.
-                      instructions: *id075
+                      instructions: *id081
                       local_work_id: 77777777-7777-4777-8777-777777777777
                 empty:
                   summary: Empty
@@ -17029,13 +17312,13 @@ paths:
               examples:
                 ready:
                   summary: Ready
-                  value: *id076
+                  value: *id082
                 closed:
                   summary: Closed
                   value:
                     id: 77777777-7777-4777-8777-777777777777
                     research_request_id: 33333333-3333-4333-8333-333333333333
-                    request: *id072
+                    request: *id078
                     state: closed
                     created_at: '2026-09-24T16:00:00Z'
                     last_activity: '2026-09-24T16:00:00Z'
@@ -17046,13 +17329,13 @@ paths:
                     package_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
                     last_error: null
                     preparation_operation_id: 88888888-8888-4888-8888-888888888888
-                    submissions: *id073
-                    grants: *id074
+                    submissions: *id079
+                    grants: *id080
                     mcp_url: https://api.reveal.example.org/mcp
                     prompt: Use the downloaded frozen seed and anonymous public MCP
                       tools. Sign in and explicitly approve access before private
                       reads, uploads, validation or submission.
-                    instructions: *id075
+                    instructions: *id081
                     local_work_id: 77777777-7777-4777-8777-777777777777
                     closed_at: '2026-09-24T16:00:00Z'
           headers:
@@ -17260,7 +17543,7 @@ paths:
                   value:
                     id: 77777777-7777-4777-8777-777777777777
                     research_request_id: 33333333-3333-4333-8333-333333333333
-                    request: *id072
+                    request: *id078
                     state: closed
                     created_at: '2026-09-24T16:00:00Z'
                     last_activity: '2026-09-24T16:00:00Z'
@@ -17271,13 +17554,13 @@ paths:
                     package_sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
                     last_error: null
                     preparation_operation_id: 88888888-8888-4888-8888-888888888888
-                    submissions: *id073
-                    grants: *id074
+                    submissions: *id079
+                    grants: *id080
                     mcp_url: https://api.reveal.example.org/mcp
                     prompt: Use the downloaded frozen seed and anonymous public MCP
                       tools. Sign in and explicitly approve access before private
                       reads, uploads, validation or submission.
-                    instructions: *id075
+                    instructions: *id081
                     local_work_id: 77777777-7777-4777-8777-777777777777
                     closed_at: '2026-09-24T16:00:00Z'
           headers:
@@ -17420,7 +17703,7 @@ paths:
                     prompt: Use the downloaded frozen seed and anonymous public MCP
                       tools. Sign in and explicitly approve access before private
                       reads, uploads, validation or submission.
-                    instructions: *id075
+                    instructions: *id081
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -17542,7 +17825,7 @@ paths:
       - name: work_id
         in: path
         required: true
-        schema: &id077
+        schema: &id083
           type: string
           format: uuid
         example: 77777777-7777-4777-8777-777777777777
@@ -17550,7 +17833,7 @@ paths:
       - name: grant_id
         in: path
         required: true
-        schema: *id077
+        schema: *id083
         example: 99999999-9999-4999-8999-999999999999
         description: ''
       responses:
@@ -18106,7 +18389,7 @@ paths:
               examples:
                 metadata:
                   summary: Metadata
-                  value: &id078
+                  value: &id084
                     resource: https://api.reveal.example.org/mcp
                     authorization_servers:
                     - https://api.reveal.example.org
@@ -18148,7 +18431,7 @@ paths:
               examples:
                 metadata:
                   summary: Metadata
-                  value: *id078
+                  value: *id084
           headers:
             X-Request-ID:
               description: Correlation ID for this HTTP request.
@@ -18184,12 +18467,12 @@ paths:
                   summary: Registered
                   value:
                     client_name: Illustrative local client
-                    redirect_uris: &id079
+                    redirect_uris: &id085
                     - http://127.0.0.1:8765/callback
-                    grant_types: &id080
+                    grant_types: &id086
                     - authorization_code
                     - refresh_token
-                    response_types: &id081
+                    response_types: &id087
                     - code
                     token_endpoint_auth_method: none
                     scope: research:read research:write
@@ -18277,9 +18560,9 @@ paths:
                 summary: Public client
                 value:
                   client_name: Illustrative local client
-                  redirect_uris: *id079
-                  grant_types: *id080
-                  response_types: *id081
+                  redirect_uris: *id085
+                  grant_types: *id086
+                  response_types: *id087
                   token_endpoint_auth_method: none
                   scope: research:read research:write
       x-codeSamples:
@@ -18311,7 +18594,7 @@ paths:
       - name: redirect_uri
         in: query
         required: true
-        schema: &id082
+        schema: &id088
           type: string
           format: uri
         example: http://127.0.0.1:8765/callback
@@ -18345,7 +18628,7 @@ paths:
       - name: resource
         in: query
         required: true
-        schema: *id082
+        schema: *id088
         example: https://api.reveal.example.org/mcp
         description: ''
       - name: scope
@@ -18385,7 +18668,7 @@ paths:
                 type: string
                 const: no-referrer
             Location:
-              schema: &id133
+              schema: &id143
                 type: string
                 format: uri
               example: https://reveal.example.org/research/connect?request_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
@@ -19254,7 +19537,7 @@ paths:
       - name: capture_id
         in: path
         required: true
-        schema: &id083
+        schema: &id089
           type: string
           pattern: ^[a-f0-9]{64}$
         example: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -19262,7 +19545,7 @@ paths:
       - name: artifact_sha256
         in: path
         required: true
-        schema: *id083
+        schema: *id089
         example: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
         description: ''
       responses:
@@ -19437,7 +19720,7 @@ paths:
                     items:
                     - record_id: 4e47d886a1e763f834bbcee32b4899930bc9d5bab74b0b81246a82a19b1ee358
                       owner_user_id: 11111111-1111-4111-8111-111111111111
-                      summary: &id084
+                      summary: &id090
                         account:
                           id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                           name: Genes and gene programs in a shared CAD-in-T2D mechanism
@@ -19691,7 +19974,7 @@ paths:
                   value:
                     record_id: 4e47d886a1e763f834bbcee32b4899930bc9d5bab74b0b81246a82a19b1ee358
                     owner_user_id: 11111111-1111-4111-8111-111111111111
-                    summary: *id084
+                    summary: *id090
                     result:
                       root_id: dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
                       schema:
@@ -19748,7 +20031,7 @@ paths:
                           software_version: 0.2.0
                           command: python3 design/build_account_example.py
                         files:
-                        - &id085
+                        - &id091
                           id: dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ
                           filename: pigean-gene-factor.response.json
                           mime_type: application/json
@@ -19756,7 +20039,7 @@ paths:
                           size_in_bytes: 2945
                           description: Original CFDE response bytes captured September
                             25, 2026; not a new retrieval.
-                        - &id086
+                        - &id092
                           id: dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83
                           filename: pigean-gene-set-factor.response.json
                           mime_type: application/json
@@ -19764,7 +20047,7 @@ paths:
                           size_in_bytes: 3785
                           description: Original CFDE response bytes captured September
                             25, 2026; not a new retrieval.
-                        - &id087
+                        - &id093
                           id: dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT
                           filename: dismech-gap.source.json
                           mime_type: application/json
@@ -19772,7 +20055,7 @@ paths:
                           size_in_bytes: 3382
                           description: Frozen DisMech source discussion; its exact
                             question frames this example.
-                        - &id088
+                        - &id094
                           id: dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag
                           filename: illustrative-kg-assertions.json
                           mime_type: application/json
@@ -21029,22 +21312,22 @@ paths:
                         access_level: private
                         publication_state: unpublished
                       artifacts:
-                      - file: *id085
+                      - file: *id091
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id086
+                      - file: *id092
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id087
+                      - file: *id093
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id088
+                      - file: *id094
                         download_url: null
                         expires_at: null
                         availability: not_available
@@ -21060,6 +21343,128 @@ paths:
                         status: succeeded
                         job_id: 55555555-5555-4555-8555-555555555555
                         paragraph_id: dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD
+                      data_sources:
+                        status: incomplete
+                        traced_at: '2026-10-12T00:00:00Z'
+                        reference_generation_ids:
+                        - ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a
+                        coverage:
+                          trace_count: 3
+                          counts_are_lower_bounds: true
+                          issue_counts:
+                            MISSING_LINEAGE: 3
+                        claims:
+                        - claim_id: dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km
+                          resolution: complete
+                          datasets:
+                          - dataset_id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                            input_roles:
+                            - data_input
+                            routes: &id095
+                            - factor_projection
+                            - proposition_reference
+                            via_ids: &id096
+                            - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                            curation_ids: &id097 []
+                            trace_count: 1
+                            organizations:
+                            - organization_id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                              roles:
+                              - publisher
+                            - organization_id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                              roles:
+                              - attribution
+                          - dataset_id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                            input_roles:
+                            - metadata_input
+                            routes: *id095
+                            via_ids: *id096
+                            curation_ids: *id097
+                            trace_count: 1
+                            organizations:
+                            - organization_id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                              roles:
+                              - publisher
+                          - dataset_id: gwas-bottom-line:bl-t2d-mixed
+                            input_roles:
+                            - unknown
+                            routes:
+                            - proposition_reference
+                            - trait_gwas
+                            via_ids:
+                            - dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                            organizations: []
+                            curation_ids: []
+                            trace_count: 1
+                        - claim_id: dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV
+                          resolution: not_applicable
+                          datasets: []
+                        - claim_id: dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-
+                          resolution: not_applicable
+                          datasets: []
+                        datasets:
+                        - id: dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk
+                          name: NCBI Gene Homo_sapiens.gene_info
+                          version: undated snapshot
+                          description: NCBI Gene per-species gene_info table for human,
+                            used for Ensembl-to-symbol mapping.
+                          location: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/
+                        - id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+                          name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts,
+                            sample and subject annotations)
+                          version: v8
+                          description: Genotype-Tissue Expression project release
+                            V8, as distributed by the GTEx Portal.
+                          location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+                        - id: gwas-bottom-line:bl-t2d-mixed
+                          name: Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)
+                          location: https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed
+                          kind: gwas_bottom_line
+                          artifact_id: bl-t2d-mixed
+                          ancestry_code: Mixed
+                          ancestry_name: Mixed ancestry
+                          kpn_trait_id: KPN.TRAIT:0000398
+                          portal_trait_id: T2D
+                        organizations:
+                        - id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+                          name: GTEx Consortium
+                        - id: dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK
+                          name: National Center for Biotechnology Information
+                          ror: ror:02meqm098
+                        - id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+                          name: Broad Institute
+                          ror: ror:05a0ya142
+                        via:
+                        - id: dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX
+                          kind: mechanism
+                          name: CAD-in-T2D mechanism Factor1
                       publication:
                         visibility: private
                         version: 0
@@ -21127,7 +21532,7 @@ paths:
                           description: Offline authored paragraph preview, not an
                             executed agent.
                         files:
-                        - &id089
+                        - &id098
                           id: dapper:File.PvSoiIqLFFGMD3LdzGXvwugdzrtD3KxZ
                           filename: pigean-gene-factor.response.json
                           mime_type: application/json
@@ -21135,7 +21540,7 @@ paths:
                           size_in_bytes: 2945
                           description: Original CFDE response bytes captured September
                             25, 2026; not a new retrieval.
-                        - &id090
+                        - &id099
                           id: dapper:File.Dt0S38v_sLn5jiOAVXMrMWTrXBLnsn83
                           filename: pigean-gene-set-factor.response.json
                           mime_type: application/json
@@ -21143,7 +21548,7 @@ paths:
                           size_in_bytes: 3785
                           description: Original CFDE response bytes captured September
                             25, 2026; not a new retrieval.
-                        - &id091
+                        - &id100
                           id: dapper:File.eG0HM7wVGbDLt-99TA-OMnMeKqdIircT
                           filename: dismech-gap.source.json
                           mime_type: application/json
@@ -21151,7 +21556,7 @@ paths:
                           size_in_bytes: 3382
                           description: Frozen DisMech source discussion; its exact
                             question frames this example.
-                        - &id092
+                        - &id101
                           id: dapper:File._FB2fhvDopxDEHgoDgf2Hk4jE0wxilag
                           filename: illustrative-kg-assertions.json
                           mime_type: application/json
@@ -22589,22 +22994,22 @@ paths:
                         access_level: private
                         publication_state: unpublished
                       artifacts:
-                      - file: *id089
+                      - file: *id098
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id090
+                      - file: *id099
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id091
+                      - file: *id100
                         download_url: null
                         expires_at: null
                         availability: not_available
                         verification: checksum_verified
-                      - file: *id092
+                      - file: *id101
                         download_url: null
                         expires_at: null
                         availability: not_available
@@ -22803,7 +23208,7 @@ paths:
                     items:
                     - record_id: 66666666-6666-4666-8666-666666666666
                       owner_user_id: 11111111-1111-4111-8111-111111111111
-                      summary: &id093
+                      summary: &id102
                         id: 66666666-6666-4666-8666-666666666666
                         outcome: insufficient_evidence
                         summary: The captured investigation did not support an accepted
@@ -23026,7 +23431,7 @@ paths:
                   value:
                     record_id: 66666666-6666-4666-8666-666666666666
                     owner_user_id: 11111111-1111-4111-8111-111111111111
-                    summary: *id093
+                    summary: *id102
                     result:
                       id: 66666666-6666-4666-8666-666666666666
                       outcome: insufficient_evidence
@@ -23306,7 +23711,7 @@ paths:
               examples:
                 preparing:
                   summary: Preparing
-                  value: &id097
+                  value: &id106
                     id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
                     draft_id: 22222222-2222-4222-8222-222222222222
                     draft_version: 2
@@ -23324,7 +23729,7 @@ paths:
                     stale: false
                 reused_prediction:
                   summary: Reused prediction
-                  value: &id098
+                  value: &id107
                     id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
                     draft_id: 22222222-2222-4222-8222-222222222222
                     draft_version: 2
@@ -23336,7 +23741,7 @@ paths:
                     model: jev-1.13.0
                     rubric_version: cfde-support-v1
                     reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
-                    result: &id094
+                    result: &id103
                       verdict: 'yes'
                       probability_yes: 0.56
                       probability_no: 0.43
@@ -23347,7 +23752,7 @@ paths:
                         gene_mechanism: 0.54
                         gene_set_mechanism: 0.58
                       calibration: not_calibrated
-                    coverage: &id095
+                    coverage: &id104
                       factor_count: 1
                       gene_loading_count: 50
                       gene_set_loading_count: 50
@@ -23359,7 +23764,7 @@ paths:
                     stale: false
                 shared_cached_receipt:
                   summary: Shared cached receipt
-                  value: &id099
+                  value: &id108
                     id: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
                     draft_id: 22222222-2222-4222-8222-222222222222
                     draft_version: 2
@@ -23371,8 +23776,8 @@ paths:
                     model: jev-1.13.0
                     rubric_version: cfde-support-v1
                     reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
-                    result: *id094
-                    coverage: *id095
+                    result: *id103
+                    coverage: *id104
                     error: null
                     stale: false
           headers:
@@ -23685,7 +24090,7 @@ paths:
       - name: draft_id
         in: path
         required: true
-        schema: &id096
+        schema: &id105
           type: string
           format: uuid
         example: 22222222-2222-4222-8222-222222222222
@@ -23693,7 +24098,7 @@ paths:
       - name: assessment_id
         in: path
         required: true
-        schema: *id096
+        schema: *id105
         example: bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb
         description: ''
       - name: wait
@@ -23716,7 +24121,7 @@ paths:
               examples:
                 preparing:
                   summary: Preparing
-                  value: *id097
+                  value: *id106
                 assessing:
                   summary: Assessing
                   value:
@@ -23732,15 +24137,15 @@ paths:
                     rubric_version: cfde-support-v1
                     reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
                     result: null
-                    coverage: *id095
+                    coverage: *id104
                     error: null
                     stale: false
                 synthetic_low_confidence_yes:
                   summary: Synthetic low confidence yes
-                  value: *id098
+                  value: *id107
                 synthetic_shared_cached_receipt:
                   summary: Synthetic shared cached receipt
-                  value: *id099
+                  value: *id108
                 failed_oversized_input:
                   summary: Failed oversized input
                   value:
@@ -23810,8 +24215,8 @@ paths:
                     model: jev-1.13.0
                     rubric_version: cfde-support-v1
                     reference_generation_id: d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c
-                    result: *id094
-                    coverage: *id095
+                    result: *id103
+                    coverage: *id104
                     error: null
                     stale: true
           headers:
@@ -24006,7 +24411,7 @@ paths:
               examples:
                 preparing:
                   summary: Preparing
-                  value: &id101
+                  value: &id110
                     id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
                     kind: lightning_audit
                     status: preparing
@@ -24106,7 +24511,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
           headers:
             Cache-Control:
               schema:
@@ -24279,7 +24684,7 @@ paths:
                   summary: History
                   value:
                     items:
-                    - &id100
+                    - &id109
                       id: cccccccc-cccc-4ccc-8ccc-cccccccccccc
                       kind: lightning_audit
                       status: succeeded
@@ -24410,7 +24815,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
           headers:
             Cache-Control:
               schema:
@@ -24539,10 +24944,10 @@ paths:
               examples:
                 completed:
                   summary: Completed
-                  value: *id100
+                  value: *id109
                 preparing:
                   summary: Preparing
-                  value: *id101
+                  value: *id110
                 writing:
                   summary: Writing
                   value:
@@ -24655,7 +25060,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
           headers:
             Cache-Control:
               schema:
@@ -24865,7 +25270,7 @@ paths:
               examples:
                 sign_in_required:
                   summary: Sign in required
-                  value: *id054
+                  value: *id060
           headers:
             Cache-Control:
               schema:
@@ -27476,7 +27881,7 @@ paths:
                       release no longer serves.
                     request_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
                     retryable: false
-                    archived_reference_factor: *id069
+                    archived_reference_factor: *id075
         '503':
           description: Dependency Unavailable
           content:
@@ -34401,7 +34806,7 @@ components:
         source_id:
           type: string
           minLength: 1
-        source_revision: &id102
+        source_revision: &id111
           type: string
           pattern: ^[a-f0-9]{64}$
         dapper_id:
@@ -34430,7 +34835,7 @@ components:
           - gap_attachment
         suggestion_id:
           anyOf:
-          - &id105
+          - &id114
             type: string
             format: uuid
           - type: 'null'
@@ -34466,7 +34871,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id102
+        source_revision: *id111
         object_class:
           const: Mechanism
           type: string
@@ -34495,7 +34900,7 @@ components:
           type: string
         source_id:
           type: string
-        source_revision: *id102
+        source_revision: *id111
         object_class:
           type: string
           const: Mechanism
@@ -34512,7 +34917,7 @@ components:
             or eaggl-capped-v1 (KPN reference generations).'
         catalog_file:
           $ref: '#/components/schemas/DapperFile'
-        reference_generation_id: &id120
+        reference_generation_id: &id129
           type: string
           description: 'Reference generation id: 64 lowercase hex characters.'
           pattern: ^[a-f0-9]{64}$
@@ -34599,7 +35004,7 @@ components:
           maxLength: 12000
         upload_ids:
           type: array
-          items: &id103
+          items: &id112
             type: string
             format: uuid
           uniqueItems: true
@@ -34621,7 +35026,7 @@ components:
       properties:
         composer:
           $ref: '#/components/schemas/Composer'
-        name: &id104
+        name: &id113
           type: string
           minLength: 1
           maxLength: 120
@@ -34631,7 +35036,7 @@ components:
           enum:
           - temporary
           - saved
-        source_draft_id: *id103
+        source_draft_id: *id112
         source_draft_version:
           type: integer
           minimum: 1
@@ -34651,7 +35056,7 @@ components:
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        name: *id104
+        name: *id113
         lifecycle:
           type: string
           enum:
@@ -34665,31 +35070,31 @@ components:
     Draft:
       type: object
       properties:
-        id: *id105
-        owner_user_id: *id105
+        id: *id114
+        owner_user_id: *id114
         version:
           type: integer
           minimum: 1
         composer:
           $ref: '#/components/schemas/Composer'
-        created_at: &id106
+        created_at: &id115
           type: string
           format: date-time
-        updated_at: *id106
-        name: *id104
+        updated_at: *id115
+        name: *id113
         lifecycle:
           type: string
           enum:
           - temporary
           - saved
-        source_draft_id: *id103
+        source_draft_id: *id112
         expires_at:
           anyOf:
-          - &id107
+          - &id116
             type: string
             format: date-time
           - type: 'null'
-        saved_at: *id107
+        saved_at: *id116
         source_draft_version:
           type: integer
           minimum: 1
@@ -34713,7 +35118,7 @@ components:
     DraftDeletion:
       type: object
       properties:
-        id: *id105
+        id: *id114
         deleted:
           type: boolean
           const: true
@@ -34743,7 +35148,7 @@ components:
     Me:
       type: object
       properties:
-        user_id: *id105
+        user_id: *id114
         display_name:
           anyOf:
           - type: string
@@ -34775,7 +35180,7 @@ components:
           - registered
         workspace_expires_at:
           anyOf:
-          - *id107
+          - *id116
           - type: 'null'
       required:
       - user_id
@@ -34793,7 +35198,7 @@ components:
     AttributionSnapshot:
       type: object
       properties:
-        user_id: *id105
+        user_id: *id114
         person_id:
           anyOf:
           - type: string
@@ -34812,7 +35217,7 @@ components:
           - type: 'null'
         orcid_authenticated:
           type: boolean
-        observed_at: *id106
+        observed_at: *id115
         principal_kind:
           type: string
           enum:
@@ -34830,9 +35235,9 @@ components:
     ResearchRequest:
       type: object
       properties:
-        id: *id105
-        owner_user_id: *id105
-        source_draft_id: *id105
+        id: *id114
+        owner_user_id: *id114
+        source_draft_id: *id114
         source_draft_version:
           type: integer
           minimum: 1
@@ -34847,10 +35252,10 @@ components:
           $ref: '#/components/schemas/DapperDocument'
         attribution:
           $ref: '#/components/schemas/AttributionSnapshot'
-        submitted_at: *id106
+        submitted_at: *id115
         user_inputs:
           $ref: '#/components/schemas/UserInputs'
-        originating_saved_draft_id: *id103
+        originating_saved_draft_id: *id112
         originating_saved_draft_version:
           type: integer
           minimum: 1
@@ -34860,7 +35265,7 @@ components:
             $ref: '#/components/schemas/SourceRef'
         archive:
           $ref: '#/components/schemas/ReferenceArchive'
-        lightning_audit_id: &id149
+        lightning_audit_id: &id159
           type: string
           format: uuid
         lightning_context:
@@ -34892,7 +35297,7 @@ components:
           - dismech
         source_id:
           type: string
-        source_revision: *id102
+        source_revision: *id111
         status:
           anyOf:
           - type: string
@@ -35154,7 +35559,7 @@ components:
     Suggestions:
       type: object
       properties:
-        suggestion_id: *id105
+        suggestion_id: *id114
         automatic_anchors:
           type: array
           items:
@@ -35261,7 +35666,7 @@ components:
         kind:
           const: analysis
           type: string
-        draft_id: *id105
+        draft_id: *id114
         draft_version:
           type: integer
           minimum: 1
@@ -35380,7 +35785,7 @@ components:
         kind:
           const: analysis
           type: string
-        request_id: *id105
+        request_id: *id114
         account_ids:
           type: array
           items:
@@ -35396,9 +35801,9 @@ components:
             $ref: '#/components/schemas/Enrichment'
         paragraph_job_ids:
           type: array
-          items: *id103
+          items: *id112
           maxItems: 3
-        evidence_package_sha256: &id115
+        evidence_package_sha256: &id124
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -35449,14 +35854,14 @@ components:
     Job:
       type: object
       properties:
-        id: *id105
+        id: *id114
         kind:
           type: string
           enum:
           - analysis
           - paragraph
-        owner_user_id: *id105
-        status: &id108
+        owner_user_id: *id114
+        status: &id117
           type: string
           enum:
           - queued
@@ -35466,7 +35871,7 @@ components:
           - succeeded
           - insufficient_evidence
           - failed
-        stage: &id109
+        stage: &id118
           type: string
           enum:
           - queued
@@ -35483,7 +35888,7 @@ components:
           - collecting_output
         research_request_id:
           anyOf:
-          - *id105
+          - *id114
           - type: 'null'
         input_account_id:
           anyOf:
@@ -35492,11 +35897,11 @@ components:
               path values.
             pattern: ^dapper:ScientificAccount\.[A-Za-z0-9_-]{32}$
           - type: 'null'
-        created_at: *id106
-        updated_at: *id106
+        created_at: *id115
+        updated_at: *id115
         completed_at:
           anyOf:
-          - *id106
+          - *id115
           - type: 'null'
         result:
           anyOf:
@@ -35560,7 +35965,7 @@ components:
               const: analysis
         then:
           properties:
-            research_request_id: *id105
+            research_request_id: *id114
             input_account_id:
               type: 'null'
             result:
@@ -35635,7 +36040,7 @@ components:
               - cancelled
         then:
           properties:
-            completed_at: *id106
+            completed_at: *id115
         else:
           properties:
             completed_at:
@@ -35667,8 +36072,8 @@ components:
         id:
           type: string
           pattern: ^[0-9]+$
-        job_id: *id105
-        occurred_at: *id106
+        job_id: *id114
+        occurred_at: *id115
         event_type:
           type: string
           enum:
@@ -35678,8 +36083,8 @@ components:
           - result
           - failure
           - activity
-        status: *id108
-        stage: *id109
+        status: *id117
+        stage: *id118
         message:
           type: string
         result:
@@ -35724,8 +36129,8 @@ components:
     SchemaPin:
       type: object
       properties:
-        schema_sha256: *id102
-        dependency_snapshot_sha256: *id102
+        schema_sha256: *id111
+        dependency_snapshot_sha256: *id111
         identity_profile:
           const: DAPPER-ID-1
           type: string
@@ -35742,7 +36147,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}$
-        payload_sha256: *id102
+        payload_sha256: *id111
       required:
       - object_id
       - payload_sha256
@@ -35759,7 +36164,7 @@ components:
           - type: 'null'
         expires_at:
           anyOf:
-          - *id106
+          - *id115
           - type: 'null'
         availability:
           type: string
@@ -35863,6 +36268,8 @@ components:
           $ref: '#/components/schemas/TraversalCoverage'
         archive:
           $ref: '#/components/schemas/ReferenceArchive'
+        data_sources:
+          $ref: '#/components/schemas/AccountDataSources'
       required:
       - root_id
       - schema
@@ -35956,7 +36363,7 @@ components:
               node_id:
                 type: string
                 pattern: '^gene_set:'
-              import_id: *id102
+              import_id: *id111
             required:
             - model
             - node_id
@@ -36052,7 +36459,7 @@ components:
           type: string
         detail:
           type: string
-        request_id: *id105
+        request_id: *id114
         retryable:
           type: boolean
         current_version:
@@ -36167,14 +36574,14 @@ components:
               type: string
             processor_version:
               type: string
-            style_sha256: *id102
-            locale_sha256: *id102
+            style_sha256: *id111
+            locale_sha256: *id111
             citation_profile:
               const: reveal-citation-v1
               type: string
             metadata_checksums:
               type: array
-              items: *id102
+              items: *id111
           required:
           - processor
           - processor_version
@@ -36377,7 +36784,7 @@ components:
           - type: 'null'
         mis_z:
           anyOf:
-          - &id110
+          - &id119
             type: number
           - type: 'null'
         lof_oe:
@@ -36411,16 +36818,16 @@ components:
     LoadingSummary:
       type: object
       properties:
-        total: &id111
+        total: &id120
           type: integer
           minimum: 0
         min:
           anyOf:
-          - *id110
+          - *id119
           - type: 'null'
         max:
           anyOf:
-          - *id110
+          - *id119
           - type: 'null'
         coverage:
           type: string
@@ -36445,7 +36852,7 @@ components:
           type: string
         loading:
           anyOf:
-          - *id110
+          - *id119
           - type: 'null'
         rank:
           type: integer
@@ -36459,9 +36866,9 @@ components:
           - type: 'null'
         library:
           type: string
-        gene_count: *id111
-        joint_loading: *id110
-        marginal_loading: *id110
+        gene_count: *id120
+        joint_loading: *id119
+        marginal_loading: *id119
         joint_rank:
           type: integer
           minimum: 1
@@ -36488,7 +36895,7 @@ components:
       properties:
         factor:
           $ref: '#/components/schemas/EagglFactor'
-        generation_id: &id113
+        generation_id: &id122
           anyOf:
           - type: string
             pattern: ^[a-f0-9]{64}$
@@ -36525,13 +36932,13 @@ components:
         trait_links:
           type: object
           properties:
-            n_phenotypes: *id111
-            n_linked: *id111
-            n_linked_kpn_traits: *id111
-            n_linked_atlas_traits: *id111
+            n_phenotypes: *id120
+            n_linked: *id120
+            n_linked_kpn_traits: *id120
+            n_linked_atlas_traits: *id120
             own_trait_q:
               anyOf:
-              - &id112
+              - &id121
                 type: number
                 minimum: 0
                 maximum: 1
@@ -36549,7 +36956,7 @@ components:
                     - type: 'null'
                   name:
                     type: string
-                  phewas_q: *id112
+                  phewas_q: *id121
                 required:
                 - phenotype
                 - kpn_trait_id
@@ -36582,7 +36989,7 @@ components:
       properties:
         source_id:
           type: string
-        generation_id: *id113
+        generation_id: *id122
         kind:
           type: string
           enum:
@@ -36605,15 +37012,15 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactorLoading'
-        total: *id111
-        offset: *id111
+        total: *id120
+        offset: *id120
         limit:
           type: integer
           minimum: 1
           maximum: 500
         next_offset:
           anyOf:
-          - *id111
+          - *id120
           - type: 'null'
         summary:
           $ref: '#/components/schemas/LoadingSummary'
@@ -36648,7 +37055,7 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:GeneSet\.[A-Za-z0-9_-]{32}$
-        generation_id: *id113
+        generation_id: *id122
         name:
           type: string
         library:
@@ -36657,20 +37064,20 @@ components:
           - type: 'null'
         gene_count:
           anyOf:
-          - *id111
+          - *id120
           - type: 'null'
         genes_in_universe:
           anyOf:
-          - *id111
+          - *id120
           - type: 'null'
         object:
           anyOf:
-          - &id114
+          - &id123
             type: object
             additionalProperties: true
           - type: 'null'
-        metadata: *id114
-        provenance: *id114
+        metadata: *id123
+        provenance: *id123
         collection:
           anyOf:
           - type: object
@@ -36684,10 +37091,10 @@ components:
                 type: string
               library:
                 type: string
-              gene_set_count: *id111
+              gene_set_count: *id120
               object:
                 anyOf:
-                - *id114
+                - *id123
                 - type: 'null'
               payload_sha256:
                 anyOf:
@@ -36766,7 +37173,7 @@ components:
           enum:
           - workspace
           - public
-        committed_at: *id107
+        committed_at: *id116
         event_type:
           type: string
         entity_id:
@@ -36821,7 +37228,7 @@ components:
         source_id:
           type: string
           pattern: '^dismech:'
-        source_revision: *id115
+        source_revision: *id124
       required:
       - id
       - source_id
@@ -36843,7 +37250,7 @@ components:
           type: string
         version_id:
           type: string
-        sha256: *id115
+        sha256: *id124
         size_bytes:
           type: integer
           minimum: 0
@@ -36868,7 +37275,7 @@ components:
         segment_count:
           type: integer
           minimum: 1
-        original_sha256: *id115
+        original_sha256: *id124
       required:
       - storage
       - format
@@ -36878,8 +37285,8 @@ components:
     Upload:
       type: object
       properties:
-        id: *id103
-        draft_id: *id103
+        id: *id112
+        draft_id: *id112
         filename:
           type: string
         media_type:
@@ -36888,7 +37295,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id115
+        sha256: *id124
         status:
           type: string
           enum:
@@ -36896,8 +37303,8 @@ components:
           - ready
           - failed
           - removed
-        created_at: *id107
-        expires_at: *id107
+        created_at: *id116
+        expires_at: *id116
         storage:
           anyOf:
           - $ref: '#/components/schemas/UploadStorage'
@@ -36927,7 +37334,7 @@ components:
     UploadCreate:
       type: object
       properties:
-        draft_id: *id103
+        draft_id: *id112
         filename:
           type: string
           minLength: 1
@@ -36939,7 +37346,7 @@ components:
           type: integer
           minimum: 1
           maximum: 8000000
-        sha256: *id115
+        sha256: *id124
       required:
       - draft_id
       - filename
@@ -37033,7 +37440,7 @@ components:
           - canonical_fixture
         fixture_version:
           type: string
-        content_sha256: *id115
+        content_sha256: *id124
         scientific_acceptance:
           type: string
           enum:
@@ -37051,7 +37458,7 @@ components:
           type: string
         source_pointer:
           type: string
-        payload_sha256: *id115
+        payload_sha256: *id124
         raw:
           type: object
           additionalProperties: true
@@ -37075,7 +37482,7 @@ components:
           enum:
           - public_exact_gap
           - owner_exact_gap
-        as_of: *id107
+        as_of: *id116
         ranking:
           type: string
           enum:
@@ -37200,7 +37607,7 @@ components:
           - type: 'null'
         artifact_sha256:
           anyOf:
-          - *id115
+          - *id124
           - type: 'null'
         duration_ms:
           anyOf:
@@ -37224,7 +37631,7 @@ components:
                 minimum: 0
               truncated:
                 type: boolean
-              snapshot_sha256: *id115
+              snapshot_sha256: *id124
             required:
             - scope
             - nodes
@@ -37268,7 +37675,7 @@ components:
           - not_requested
         job_id:
           anyOf:
-          - *id103
+          - *id112
           - type: 'null'
         paragraph_id:
           anyOf:
@@ -37298,11 +37705,11 @@ components:
           minimum: 0
         published_at:
           anyOf:
-          - *id107
+          - *id116
           - type: 'null'
         updated_at:
           anyOf:
-          - *id107
+          - *id116
           - type: 'null'
         can_manage:
           type: boolean
@@ -37347,8 +37754,8 @@ components:
         kind:
           type: string
           const: analysis_outcome
-        outcome_id: *id103
-        evidence_package_sha256: *id115
+        outcome_id: *id112
+        evidence_package_sha256: *id124
       required:
       - kind
       - outcome_id
@@ -37394,7 +37801,7 @@ components:
           - type: integer
             minimum: 1
           - type: 'null'
-        artifact_sha256: *id115
+        artifact_sha256: *id124
         download_url:
           anyOf:
           - type: string
@@ -37410,15 +37817,15 @@ components:
     OutcomeProvenance:
       type: object
       properties:
-        evidence_package_sha256: *id115
-        outcome_sha256: *id115
+        evidence_package_sha256: *id124
+        outcome_sha256: *id124
         runtime_sha256:
           anyOf:
-          - *id115
+          - *id124
           - type: 'null'
         ledger_sha256:
           anyOf:
-          - *id115
+          - *id124
           - type: 'null'
         execution_mode:
           type: string
@@ -37480,8 +37887,8 @@ components:
                 - failed
                 - denied
                 - interrupted
-              request_sha256: *id115
-              response_sha256: *id115
+              request_sha256: *id124
+              response_sha256: *id124
             required:
             - sequence
             - graph
@@ -37504,7 +37911,7 @@ components:
     AnalysisOutcome:
       type: object
       properties:
-        id: *id103
+        id: *id112
         outcome:
           type: string
           enum:
@@ -37544,7 +37951,7 @@ components:
             enum:
             - biomarkerkg
             - prokn
-        created_at: *id107
+        created_at: *id116
         attribution:
           anyOf:
           - $ref: '#/components/schemas/AttributionSnapshot'
@@ -37560,7 +37967,7 @@ components:
           $ref: '#/components/schemas/OutcomeProvenance'
         job_id:
           anyOf:
-          - *id103
+          - *id112
           - type: 'null'
         publication:
           $ref: '#/components/schemas/PublicationState'
@@ -37654,10 +38061,10 @@ components:
         claim_count:
           type: integer
           minimum: 1
-        created_at: *id107
+        created_at: *id116
         job_id:
           anyOf:
-          - *id103
+          - *id112
           - type: 'null'
         research_statement:
           $ref: '#/components/schemas/ParagraphState'
@@ -37719,6 +38126,7 @@ components:
       - explored
       - claims
       - researchers
+      - traced_claims
     LeaderboardMetric:
       type: string
       enum:
@@ -37729,11 +38137,22 @@ components:
       - claims
       - researchers
       - files
+      - traced_claims
+      - traced_accounts
     LeaderboardEvidence:
       type: string
       enum:
       - all
       - supporting
+    LeaderboardScope:
+      type: string
+      enum:
+      - published
+      - all
+      description: 'Accounts counted by the datasets view. published (default): currently
+        public frozen accounts. all: also every other saved account, as anonymous
+        totals of its stored trace (traced_claims/traced_accounts only); private units
+        are never listed.'
     LeaderboardAttribution:
       type: object
       properties:
@@ -37754,13 +38173,13 @@ components:
     LeaderboardDirections:
       type: object
       properties:
-        SUPPORTS: &id116
+        SUPPORTS: &id125
           type: integer
           minimum: 0
-        DISPUTES: *id116
-        MIXED: *id116
-        NEUTRAL: *id116
-        UNKNOWN: *id116
+        DISPUTES: *id125
+        MIXED: *id125
+        NEUTRAL: *id125
+        UNKNOWN: *id125
       required:
       - SUPPORTS
       - DISPUTES
@@ -37768,17 +38187,43 @@ components:
       - NEUTRAL
       - UNKNOWN
       additionalProperties: false
+    LeaderboardOrganization:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ror:
+          anyOf:
+          - type: string
+          - type: 'null'
+        roles:
+          type: array
+          items:
+            type: string
+      required:
+      - id
+      - name
+      - ror
+      - roles
+      additionalProperties: false
+      description: An organization credited for a dataset in its traced reference
+        lineage. Roles are recorded credit (publisher, attribution, ...), not data
+        production.
     LeaderboardMetrics:
       type: object
       properties:
-        account_count: *id116
-        upvotes: *id116
-        downvotes: *id116
-        voter_count: *id116
-        account_gap_count: *id116
-        explored_gap_count: *id116
-        claim_count: *id116
-        researcher_count: *id116
+        account_count: *id125
+        upvotes: *id125
+        downvotes: *id125
+        voter_count: *id125
+        account_gap_count: *id125
+        explored_gap_count: *id125
+        claim_count: *id125
+        researcher_count: *id125
+        traced_claim_count: *id125
+        traced_account_count: *id125
         net_votes:
           type: integer
         overall_score:
@@ -37794,6 +38239,8 @@ components:
       - explored_gap_count
       - claim_count
       - researcher_count
+      - traced_claim_count
+      - traced_account_count
       - net_votes
       - overall_score
       additionalProperties: false
@@ -37866,6 +38313,27 @@ components:
           - type: 'null'
         directions:
           $ref: '#/components/schemas/LeaderboardDirections'
+        organizations:
+          type: array
+          items:
+            $ref: '#/components/schemas/LeaderboardOrganization'
+          description: 'Datasets: the organizations credited for the dataset in its
+            traced reference lineage (publisher, attribution, ...). Empty for other
+            views.'
+        url:
+          anyOf:
+          - type: string
+            description: 'Datasets: the public source page of the dataset, when its
+              lineage records one.'
+            format: uri
+          - type: 'null'
+        source_kind:
+          type: string
+          enum:
+          - gwas_bottom_line
+          description: 'Datasets: present for a KPN trait''s GWAS bottom-line artifact
+            that traced claims reach (stored data sources kind gwas_bottom_line);
+            url is then its portal artifact page. Absent for a DAPPER Dataset.'
       required:
       - id
       - kind
@@ -37879,27 +38347,29 @@ components:
       - gap
       - attribution
       - directions
+      - organizations
+      - url
       additionalProperties: false
     LeaderboardMetadata:
       type: object
       properties:
-        as_of: *id107
+        as_of: *id116
         score_version:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: *id116
-        voting_participants: *id116
+        cohort_size: *id125
+        voting_participants: *id125
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id116
-            uncredited_accounts: *id116
-            conflicting_accounts: *id116
-            invalid_public_accounts: *id116
-            excluded_evidence_paths: *id116
-            fixture_explorations: *id116
-            uncredited_explorations: *id116
+            fixture_accounts: *id125
+            uncredited_accounts: *id125
+            conflicting_accounts: *id125
+            invalid_public_accounts: *id125
+            excluded_evidence_paths: *id125
+            fixture_explorations: *id125
+            uncredited_explorations: *id125
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -37950,12 +38420,15 @@ components:
               type: string
             evidence:
               type: string
+            traced:
+              type: string
           required:
           - weights
           - scope
           - score
           - own_votes
           - evidence
+          - traced
           additionalProperties: false
       required:
       - as_of
@@ -37966,10 +38439,11 @@ components:
       - definitions
       - methodology
       additionalProperties: false
-      description: Only public eligibility/exclusion totals. No counts of private
-        work. Observation time is not a cursor revision. Original actors are represented
-        by opaque public keys; no job, request, private email or voter identity is
-        exposed.
+      description: Only public eligibility/exclusion totals. Private work is counted
+        only by the datasets view with scope=all, as anonymous traced totals, and
+        is never listed. Observation time is not a cursor revision. Original actors
+        are represented by opaque public keys; no job, request, private email or voter
+        identity is exposed.
     LeaderboardList:
       type: object
       properties:
@@ -37980,20 +38454,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id117
+        cohort_size: &id126
           type: integer
           minimum: 0
-        voting_participants: *id117
+        voting_participants: *id126
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id117
-            uncredited_accounts: *id117
-            conflicting_accounts: *id117
-            invalid_public_accounts: *id117
-            excluded_evidence_paths: *id117
-            fixture_explorations: *id117
-            uncredited_explorations: *id117
+            fixture_accounts: *id126
+            uncredited_accounts: *id126
+            conflicting_accounts: *id126
+            invalid_public_accounts: *id126
+            excluded_evidence_paths: *id126
+            fixture_explorations: *id126
+            uncredited_explorations: *id126
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -38044,12 +38518,15 @@ components:
               type: string
             evidence:
               type: string
+            traced:
+              type: string
           required:
           - weights
           - scope
           - score
           - own_votes
           - evidence
+          - traced
           additionalProperties: false
         view:
           $ref: '#/components/schemas/LeaderboardView'
@@ -38057,6 +38534,8 @@ components:
           $ref: '#/components/schemas/LeaderboardSort'
         evidence:
           $ref: '#/components/schemas/LeaderboardEvidence'
+        scope:
+          $ref: '#/components/schemas/LeaderboardScope'
         items:
           type: array
           items:
@@ -38074,6 +38553,7 @@ components:
       - view
       - sort
       - evidence
+      - scope
       - items
       - page
       additionalProperties: false
@@ -38136,20 +38616,20 @@ components:
           type: string
           enum:
           - public-contribution-v1
-        cohort_size: &id118
+        cohort_size: &id127
           type: integer
           minimum: 0
-        voting_participants: *id118
+        voting_participants: *id127
         exclusions:
           type: object
           properties:
-            fixture_accounts: *id118
-            uncredited_accounts: *id118
-            conflicting_accounts: *id118
-            invalid_public_accounts: *id118
-            excluded_evidence_paths: *id118
-            fixture_explorations: *id118
-            uncredited_explorations: *id118
+            fixture_accounts: *id127
+            uncredited_accounts: *id127
+            conflicting_accounts: *id127
+            invalid_public_accounts: *id127
+            excluded_evidence_paths: *id127
+            fixture_explorations: *id127
+            uncredited_explorations: *id127
           required:
           - fixture_accounts
           - uncredited_accounts
@@ -38200,12 +38680,15 @@ components:
               type: string
             evidence:
               type: string
+            traced:
+              type: string
           required:
           - weights
           - scope
           - score
           - own_votes
           - evidence
+          - traced
           additionalProperties: false
         view:
           $ref: '#/components/schemas/LeaderboardView'
@@ -38215,9 +38698,12 @@ components:
           $ref: '#/components/schemas/LeaderboardMetric'
         evidence:
           $ref: '#/components/schemas/LeaderboardEvidence'
+        scope:
+          $ref: '#/components/schemas/LeaderboardScope'
         entry:
           $ref: '#/components/schemas/LeaderboardEntry'
-        total: *id116
+        total: *id125
+        withheld: *id125
         items:
           type: array
           items:
@@ -38236,11 +38722,15 @@ components:
       - id
       - metric
       - evidence
+      - scope
       - entry
       - total
+      - withheld
       - items
       - page
       additionalProperties: false
+      description: total counts the listed public records; withheld counts the private
+        units a scope=all traced metric also counts, which are never listed.
     ExplorationInput:
       type: object
       properties:
@@ -38248,7 +38738,7 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         draft_id:
           anyOf:
-          - *id103
+          - *id112
           - type: 'null'
       required:
       - source_gap
@@ -38263,10 +38753,10 @@ components:
           $ref: '#/components/schemas/SelectedGap'
         knowledge_gap:
           $ref: '#/components/schemas/DapperKnowledgeGap'
-        last_explored_at: *id107
+        last_explored_at: *id116
         draft_id:
           anyOf:
-          - *id103
+          - *id112
           - type: 'null'
         scientific_accounts:
           $ref: '#/components/schemas/AccountCount'
@@ -46492,8 +46982,8 @@ components:
     EvidencePackageResult:
       type: object
       properties:
-        job_id: *id103
-        package_sha256: *id115
+        job_id: *id112
+        package_sha256: *id124
         package:
           $ref: '#/components/schemas/EvidencePackage'
       required:
@@ -46559,7 +47049,7 @@ components:
     KpnTrait:
       type: object
       properties:
-        id: &id119
+        id: &id128
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         name:
@@ -46618,7 +47108,7 @@ components:
           - type: 'null'
         kpn_trait_id:
           anyOf:
-          - *id119
+          - *id128
           - type: 'null'
         label:
           anyOf:
@@ -46632,7 +47122,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        archived_reference_factor_id: &id122
+        archived_reference_factor_id: &id131
           type: string
           pattern: ^[a-f0-9]{64}$
       required:
@@ -46659,19 +47149,19 @@ components:
         reason:
           type: string
           const: reference_generation_superseded
-        archived_at: &id121
+        archived_at: &id130
           type: string
           format: date-time
-        from_reference_generation: *id120
-        to_reference_generation: *id120
+        from_reference_generation: *id129
+        to_reference_generation: *id129
         history:
           type: array
           items:
             type: object
             properties:
-              from_reference_generation: *id120
-              to_reference_generation: *id120
-              archived_at: *id121
+              from_reference_generation: *id129
+              to_reference_generation: *id129
+              archived_at: *id130
             required:
             - from_reference_generation
             - to_reference_generation
@@ -46711,7 +47201,7 @@ components:
                 - type: 'null'
               source_revision:
                 anyOf:
-                - *id122
+                - *id131
                 - type: 'null'
             required:
             - id
@@ -46724,17 +47214,17 @@ components:
           properties:
             job_id:
               anyOf:
-              - &id123
+              - &id132
                 type: string
                 format: uuid
               - type: 'null'
             request_id:
               anyOf:
-              - *id123
+              - *id132
               - type: 'null'
             evidence_package_sha256:
               anyOf:
-              - *id122
+              - *id131
               - type: 'null'
             account_id:
               anyOf:
@@ -46745,7 +47235,7 @@ components:
               - type: 'null'
             outcome_id:
               anyOf:
-              - *id123
+              - *id132
               - type: 'null'
           required:
           - job_id
@@ -46773,14 +47263,221 @@ components:
         analysis.request_id. A later reload advances to_reference_generation and appends
         to history. Absent on current work and in deployments that never reloaded
         reference data.
+    AccountDataSourceConnection:
+      type: object
+      properties:
+        dataset_id:
+          type: string
+        input_roles:
+          type: array
+          items:
+            type: string
+        routes:
+          type: array
+          items:
+            type: string
+            enum:
+            - proposition_reference
+            - evidence_derivation
+            - inherited_source_claim
+            - factor_projection
+            - trait_gwas
+        via_ids:
+          type: array
+          items:
+            type: string
+        organizations:
+          type: array
+          items:
+            type: object
+            properties:
+              organization_id:
+                type: string
+              roles:
+                type: array
+                items:
+                  type: string
+            required:
+            - organization_id
+            - roles
+            additionalProperties: false
+        curation_ids:
+          type: array
+          items:
+            type: string
+        trace_count: &id133
+          type: integer
+          minimum: 0
+      required:
+      - dataset_id
+      - input_roles
+      - routes
+      - via_ids
+      - organizations
+      - curation_ids
+      - trace_count
+      additionalProperties: false
+      description: 'One claim reaching one Dataset. input_roles: data_input (primary
+        data), metadata_input (identifier mapping) or unknown. routes: how the claim
+        reaches it (its proposition names the object, its evidence derives from it,
+        a source claim does, a mechanism projects onto gene sets built from it, or
+        a KPN trait the claim reaches, cited or a mechanism''s fitted trait, has a
+        GWAS bottom line: trait_gwas). via_ids: the cited gene set, mechanism, trait,
+        file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage:
+        the release''s lap/config/source_datasets.yaml, or a reload-era collection-lineage
+        curation). Organization roles are recorded credit (publisher, attribution,
+        ...), not data production.'
+    AccountDataSources:
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - complete
+          - incomplete
+          - unavailable
+          - not_traced
+        traced_at: *id130
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+          required:
+          - code
+          additionalProperties: false
+        reference_generation_ids:
+          type: array
+          items: *id131
+        coverage:
+          type: object
+          properties:
+            trace_count: *id133
+            counts_are_lower_bounds:
+              type: boolean
+            issue_counts:
+              type: object
+              additionalProperties: *id133
+          required:
+          - trace_count
+          - counts_are_lower_bounds
+          - issue_counts
+          additionalProperties: false
+        claims:
+          type: array
+          items:
+            type: object
+            properties:
+              claim_id:
+                type: string
+              resolution:
+                type: string
+                enum:
+                - complete
+                - incomplete
+                - not_applicable
+              datasets:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountDataSourceConnection'
+            required:
+            - claim_id
+            - resolution
+            - datasets
+            additionalProperties: false
+        datasets:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              version:
+                type: string
+              description:
+                type: string
+              location:
+                type: string
+                format: uri
+              kind:
+                type: string
+                enum:
+                - gwas_bottom_line
+                description: 'Absent for a DAPPER Dataset. gwas_bottom_line: a KPN
+                  trait''s GWAS bottom-line artifact on the Translator provenance
+                  portal, named by the published release (its metadata.bottom_line.gwas_artifact);
+                  the id is gwas-bottom-line:<artifact_id> and location the portal''s
+                  artifact page, built from ids and never fetched.'
+              artifact_id:
+                type: string
+                description: 'gwas_bottom_line: the portal artifact id.'
+              ancestry_code:
+                type: string
+              ancestry_name:
+                type: string
+              kpn_trait_id:
+                type: string
+                description: 'gwas_bottom_line: the KPN trait whose GWAS this is.'
+              portal_trait_id:
+                type: string
+            required:
+            - id
+            additionalProperties: false
+        organizations:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              ror:
+                type: string
+            required:
+            - id
+            additionalProperties: false
+        via:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              kind:
+                type: string
+              name:
+                type: string
+              filename:
+                type: string
+            required:
+            - id
+            - kind
+            additionalProperties: false
+      required:
+      - status
+      additionalProperties: false
+      description: 'The Datasets each claim reaches through the account provenance
+        trace, and the Organizations credited for them, traced once when the account
+        was saved and stored with it, from the published reference release without
+        the portal (no remote fetch): a reached KPN trait''s GWAS route ends at its
+        bottom-line artifact (datasets kind gwas_bottom_line). A point-in-time observation
+        of the reference lineage (re-traced by an operator after a release or lineage
+        change); GET /v1/accounts/{account_id}/provenance returns the full witness
+        paths, with the portal''s GWAS lineage. not_traced: no stored trace matches
+        this exact account source and tracing policy; unavailable: tracing failed
+        (error.code) and the account is unaffected; incomplete: some sources lack
+        recorded lineage, so the datasets are a lower bound.'
     ArchivedReferenceFactor:
       type: object
       properties:
         format:
           type: string
           const: reveal.archived-reference-factor/1
-        archive_id: *id122
-        generation_id: *id120
+        archive_id: *id131
+        generation_id: *id129
         model:
           type: string
           enum:
@@ -46797,7 +47494,7 @@ components:
           type: string
         kpn_trait_id:
           anyOf:
-          - *id119
+          - *id128
           - type: 'null'
         label:
           type: string
@@ -46830,7 +47527,7 @@ components:
             properties:
               symbol:
                 type: string
-              loading: &id124
+              loading: &id134
                 type: number
             required:
             - symbol
@@ -46866,15 +47563,15 @@ components:
                 - type: 'null'
               joint_loading:
                 anyOf:
-                - *id124
+                - *id134
                 - type: 'null'
               marginal_loading:
                 anyOf:
-                - *id124
+                - *id134
                 - type: 'null'
               score:
                 anyOf:
-                - *id124
+                - *id134
                 - type: 'null'
             required:
             - rank
@@ -46887,8 +47584,8 @@ components:
             - marginal_loading
             - score
             additionalProperties: false
-        generation_manifest_sha256: *id122
-        captured_at: *id121
+        generation_manifest_sha256: *id131
+        captured_at: *id130
       required:
       - format
       - archive_id
@@ -46951,7 +47648,7 @@ components:
     LocalWorkCreate:
       type: object
       properties:
-        draft_id: &id125
+        draft_id: &id135
           type: string
           format: uuid
         draft_version:
@@ -46964,15 +47661,15 @@ components:
     LocalWorkGrant:
       type: object
       properties:
-        grant_id: *id125
-        expires_at: &id126
+        grant_id: *id135
+        expires_at: &id136
           type: string
           format: date-time
         revoked_at:
           anyOf:
-          - *id126
+          - *id136
           - type: 'null'
-        created_at: *id126
+        created_at: *id136
       required:
       - grant_id
       - expires_at
@@ -46980,7 +47677,7 @@ components:
     LocalResearchOperation:
       type: object
       properties:
-        id: *id125
+        id: *id135
         kind:
           type: string
           enum:
@@ -47000,13 +47697,13 @@ components:
           - rejected
           - failed
           - cancelled
-        local_work_id: *id125
-        created_at: *id126
-        completed_at: *id126
-        result: &id127
+        local_work_id: *id135
+        created_at: *id136
+        completed_at: *id136
+        result: &id137
           type: object
           additionalProperties: true
-        error: &id129
+        error: &id139
           anyOf:
           - type: object
             properties:
@@ -47019,7 +47716,7 @@ components:
             - detail
             additionalProperties: false
           - type: 'null'
-        report: *id127
+        report: *id137
         account_ids:
           type: array
           items:
@@ -47045,8 +47742,8 @@ components:
     LocalWork:
       type: object
       properties:
-        id: *id125
-        research_request_id: *id125
+        id: *id135
+        research_request_id: *id135
         request:
           $ref: '#/components/schemas/ResearchRequest'
         state:
@@ -47056,12 +47753,12 @@ components:
           - ready
           - preparation_failed
           - closed
-        created_at: *id126
-        last_activity: *id126
+        created_at: *id136
+        last_activity: *id136
         last_action:
           type: string
-        expires_at: *id126
-        reference_generation_id: &id128
+        expires_at: *id136
+        reference_generation_id: &id138
           type: string
           pattern: ^[a-f0-9]{64}$
         package_id:
@@ -47070,11 +47767,11 @@ components:
           - type: 'null'
         package_sha256:
           anyOf:
-          - *id128
+          - *id138
           - type: 'null'
-        last_error: *id129
-        closed_at: *id126
-        preparation_operation_id: *id125
+        last_error: *id139
+        closed_at: *id136
+        preparation_operation_id: *id135
         submissions:
           type: array
           items:
@@ -47088,7 +47785,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: &id130
+        instructions: &id140
           type: object
           properties:
             codex:
@@ -47099,7 +47796,7 @@ components:
           - codex
           - claude_code
           additionalProperties: false
-        local_work_id: *id125
+        local_work_id: *id135
       required:
       - id
       - research_request_id
@@ -47132,9 +47829,9 @@ components:
     LocalWorkGrantIssued:
       type: object
       properties:
-        grant_id: *id125
-        expires_at: *id126
-        local_work_id: *id125
+        grant_id: *id135
+        expires_at: *id136
+        local_work_id: *id135
         token:
           type: string
           pattern: ^rvlm_
@@ -47144,7 +47841,7 @@ components:
           format: uri
         prompt:
           type: string
-        instructions: *id130
+        instructions: *id140
       required:
       - grant_id
       - expires_at
@@ -47165,7 +47862,7 @@ components:
           type: string
         filename:
           type: string
-        sha256: *id128
+        sha256: *id138
         size_bytes:
           type: integer
           minimum: 0
@@ -47189,7 +47886,7 @@ components:
           type: string
         path:
           type: string
-        sha256: *id128
+        sha256: *id138
         size_bytes:
           type: integer
           minimum: 0
@@ -47216,9 +47913,9 @@ components:
           type: string
           enum:
           - reveal.context-manifest/2
-        seed_sha256: *id128
-        package_sha256: *id128
-        context_sha256: *id128
+        seed_sha256: *id138
+        package_sha256: *id138
+        context_sha256: *id138
         files:
           type: array
           items:
@@ -47240,9 +47937,9 @@ components:
           type: string
           enum:
           - reveal.validation-context-export/2
-        seed_sha256: *id128
-        package_sha256: *id128
-        context_sha256: *id128
+        seed_sha256: *id138
+        package_sha256: *id138
+        context_sha256: *id138
         receipt_ids:
           type: array
           items:
@@ -47302,8 +47999,8 @@ components:
           type: string
           enum:
           - progressive
-        research_request_id: *id125
-        reference_generation_id: *id128
+        research_request_id: *id135
+        reference_generation_id: *id138
       required:
       - package_version
       - seed_version
@@ -47322,10 +48019,10 @@ components:
         properties:
           package_id:
             type: string
-          package_sha256: *id128
+          package_sha256: *id138
           package:
             $ref: '#/components/schemas/ResearchSeed'
-          manifest: *id127
+          manifest: *id137
           artifacts:
             type: array
             items:
@@ -47346,7 +48043,7 @@ components:
             type: string
             enum:
             - preparing
-          operation_id: *id125
+          operation_id: *id135
         required:
         - state
         - operation_id
@@ -47369,7 +48066,7 @@ components:
           type: string
           pattern: ^rvls_[A-Za-z0-9_-]{43}$
           writeOnly: true
-        token_sha256: *id128
+        token_sha256: *id138
       required:
       - ticket
       - token_sha256
@@ -47381,10 +48078,10 @@ components:
     ResearchSetupConnection:
       type: object
       properties:
-        grant_id: *id125
-        expires_at: *id126
-        local_work_id: *id125
-        package_sha256: *id128
+        grant_id: *id135
+        expires_at: *id136
+        local_work_id: *id135
+        package_sha256: *id138
         mcp_url:
           type: string
           format: uri
@@ -47411,19 +48108,19 @@ components:
           enum:
           - codex
           - claude_code
-        local_work_id: &id131
+        local_work_id: &id141
           type: string
           format: uuid
-        research_request_id: *id131
-        reference_generation_id: &id132
+        research_request_id: *id141
+        reference_generation_id: &id142
           type: string
           pattern: ^[a-f0-9]{64}$
-        package_sha256: *id132
-        mcp_url: *id133
-        device_authorization_url: *id133
-        token_url: *id133
-        revocation_url: *id133
-        return_url: *id133
+        package_sha256: *id142
+        mcp_url: *id143
+        device_authorization_url: *id143
+        token_url: *id143
+        revocation_url: *id143
+        return_url: *id143
         files:
           type: array
           items:
@@ -47431,7 +48128,7 @@ components:
             properties:
               path:
                 type: string
-              sha256: *id132
+              sha256: *id142
               size_bytes:
                 type: integer
                 minimum: 0
@@ -47486,15 +48183,15 @@ components:
     ResearchOAuthRegistration:
       type: object
       properties:
-        client_name: &id134
+        client_name: &id144
           type: string
           maxLength: 120
-        redirect_uris: &id135
+        redirect_uris: &id145
           type: array
-          items: *id133
+          items: *id143
           maxItems: 10
           uniqueItems: true
-        grant_types: &id136
+        grant_types: &id146
           type: array
           items:
             type: string
@@ -47504,17 +48201,17 @@ components:
             - urn:ietf:params:oauth:grant-type:device_code
           minItems: 1
           uniqueItems: true
-        response_types: &id137
+        response_types: &id147
           type: array
           items:
             type: string
             enum:
             - code
-        token_endpoint_auth_method: &id138
+        token_endpoint_auth_method: &id148
           type: string
           enum:
           - none
-        scope: &id139
+        scope: &id149
           type: string
       required: []
       additionalProperties: false
@@ -47527,12 +48224,12 @@ components:
     ResearchOAuthClient:
       type: object
       properties:
-        client_name: *id134
-        redirect_uris: *id135
-        grant_types: *id136
-        response_types: *id137
-        token_endpoint_auth_method: *id138
-        scope: *id139
+        client_name: *id144
+        redirect_uris: *id145
+        grant_types: *id146
+        response_types: *id147
+        token_endpoint_auth_method: *id148
+        scope: *id149
         client_id:
           type: string
         client_id_issued_at:
@@ -47553,10 +48250,10 @@ components:
       properties:
         client_id:
           type: string
-        resource: *id133
+        resource: *id143
         scope:
           type: string
-        local_work_id: *id131
+        local_work_id: *id141
       required:
       - client_id
       - resource
@@ -47569,8 +48266,8 @@ components:
           writeOnly: false
         user_code:
           type: string
-        verification_uri: *id133
-        verification_uri_complete: *id133
+        verification_uri: *id143
+        verification_uri_complete: *id143
         expires_in:
           type: integer
           const: 600
@@ -47589,9 +48286,9 @@ components:
       oneOf:
       - type: object
         properties:
-          client_id: &id140
+          client_id: &id150
             type: string
-          resource: *id133
+          resource: *id143
           grant_type:
             type: string
             enum:
@@ -47599,7 +48296,7 @@ components:
           code:
             type: string
             writeOnly: true
-          redirect_uri: *id133
+          redirect_uri: *id143
           code_verifier:
             type: string
             minLength: 43
@@ -47615,8 +48312,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id140
-          resource: *id133
+          client_id: *id150
+          resource: *id143
           grant_type:
             type: string
             enum:
@@ -47632,8 +48329,8 @@ components:
         additionalProperties: false
       - type: object
         properties:
-          client_id: *id140
-          resource: *id133
+          client_id: *id150
+          resource: *id143
           grant_type:
             type: string
             enum:
@@ -47666,11 +48363,11 @@ components:
           maximum: 900
         scope:
           type: string
-        resource: *id133
-        local_work_id: *id131
-        package_sha256: *id132
-        mcp_url: *id133
-        grant_id: *id131
+        resource: *id143
+        local_work_id: *id141
+        package_sha256: *id142
+        mcp_url: *id143
+        grant_id: *id141
       required:
       - access_token
       - token_type
@@ -47706,7 +48403,7 @@ components:
     ResearchOAuthConsent:
       type: object
       properties:
-        request_id: *id131
+        request_id: *id141
         kind:
           type: string
           enum:
@@ -47716,7 +48413,7 @@ components:
           type: string
         client_name:
           type: string
-        scopes: &id141
+        scopes: &id151
           type: array
           items:
             type: string
@@ -47725,16 +48422,16 @@ components:
             - research:write
           minItems: 1
           uniqueItems: true
-        resource: *id133
+        resource: *id143
         requested_local_work_id:
           anyOf:
-          - *id131
+          - *id141
           - type: 'null'
         redirect_uri:
           anyOf:
-          - *id133
+          - *id143
           - type: 'null'
-        expires_at: &id142
+        expires_at: &id152
           type: string
           format: date-time
         status:
@@ -47761,10 +48458,10 @@ components:
     ResearchOAuthDecision:
       type: object
       properties:
-        request_id: *id131
+        request_id: *id141
         user_code:
           type: string
-        local_work_id: *id131
+        local_work_id: *id141
         approve:
           type: boolean
       required:
@@ -47792,7 +48489,7 @@ components:
       oneOf:
       - type: object
         properties:
-          redirect_url: *id133
+          redirect_url: *id143
         required:
         - redirect_url
         additionalProperties: false
@@ -47800,19 +48497,19 @@ components:
         properties:
           approved:
             type: boolean
-          local_work_id: *id131
+          local_work_id: *id141
         required:
         - approved
         additionalProperties: false
     ResearchAuthorizationMetadata:
       type: object
       properties:
-        issuer: *id133
-        authorization_endpoint: *id133
-        token_endpoint: *id133
-        registration_endpoint: *id133
-        device_authorization_endpoint: *id133
-        revocation_endpoint: *id133
+        issuer: *id143
+        authorization_endpoint: *id143
+        token_endpoint: *id143
+        registration_endpoint: *id143
+        device_authorization_endpoint: *id143
+        revocation_endpoint: *id143
         response_types_supported:
           type: array
           items:
@@ -47854,11 +48551,11 @@ components:
     ResearchProtectedResourceMetadata:
       type: object
       properties:
-        resource: *id133
+        resource: *id143
         authorization_servers:
           type: array
-          items: *id133
-        scopes_supported: *id141
+          items: *id143
+        scopes_supported: *id151
         bearer_methods_supported:
           type: array
           items:
@@ -47879,7 +48576,7 @@ components:
       properties:
         path:
           type: string
-        sha256: *id132
+        sha256: *id142
         size_bytes:
           type: integer
           minimum: 0
@@ -47887,12 +48584,12 @@ components:
           type: string
           enum:
           - application/json
-        download_url: *id133
+        download_url: *id143
         authentication:
           type: string
           enum:
           - none
-        expires_at: *id142
+        expires_at: *id152
       required:
       - path
       - sha256
@@ -47909,15 +48606,15 @@ components:
           type: string
           enum:
           - reveal.public-reference-capture/1
-        capture_id: *id132
-        expires_at: *id142
+        capture_id: *id142
+        expires_at: *id152
         reference_generation_id:
           anyOf:
-          - *id132
+          - *id142
           - type: 'null'
         operation:
           type: string
-        arguments: &id143
+        arguments: &id153
           type: object
           additionalProperties: true
         reader_version:
@@ -47930,15 +48627,15 @@ components:
           - imported_reference
           - bioindex_small_phenotype
           - external_kg
-        source: *id143
-        result: *id143
-        raw_sha256: *id132
-        metric_definitions: *id143
-        dapper_context: *id143
-        source_artifacts: *id143
+        source: *id153
+        result: *id153
+        raw_sha256: *id142
+        metric_definitions: *id153
+        dapper_context: *id153
+        source_artifacts: *id153
         source_ref:
           anyOf:
-          - *id143
+          - *id153
           - type: 'null'
         dapper_file_id:
           anyOf:
@@ -47946,7 +48643,7 @@ components:
           - type: 'null'
         object_resolution:
           type: array
-          items: *id143
+          items: *id153
         artifacts:
           type: array
           items:
@@ -47985,7 +48682,7 @@ components:
               type: 'null'
         else:
           properties:
-            reference_generation_id: *id132
+            reference_generation_id: *id142
       description: MCP get_public_capture/data/connected-KG response. Exact server-retained
         public bytes and context; no researcher prompts, work IDs or private scientific
         closures. Default retention 7 days; use the explicit expires_at, never assume
@@ -47999,13 +48696,13 @@ components:
     AdminAccountSummary:
       type: object
       properties:
-        record_id: &id144
+        record_id: &id154
           type: string
           pattern: ^[a-f0-9]{64}$
-        owner_user_id: &id145
+        owner_user_id: &id155
           type: string
           format: uuid
-        summary: &id146
+        summary: &id156
           $ref: '#/components/schemas/AccountSummary'
       required:
       - record_id
@@ -48019,9 +48716,9 @@ components:
     AdminAccountDetail:
       type: object
       properties:
-        record_id: *id144
-        owner_user_id: *id145
-        summary: *id146
+        record_id: *id154
+        owner_user_id: *id155
+        summary: *id156
         result:
           $ref: '#/components/schemas/AccountResult'
         paragraph:
@@ -48045,9 +48742,9 @@ components:
     AdminExplorationSummary:
       type: object
       properties:
-        record_id: *id145
-        owner_user_id: *id145
-        summary: &id147
+        record_id: *id155
+        owner_user_id: *id155
+        summary: &id157
           $ref: '#/components/schemas/AnalysisOutcomeSummary'
       required:
       - record_id
@@ -48060,9 +48757,9 @@ components:
     AdminExplorationDetail:
       type: object
       properties:
-        record_id: *id145
-        owner_user_id: *id145
-        summary: *id147
+        record_id: *id155
+        owner_user_id: *id155
+        summary: *id157
         result:
           $ref: '#/components/schemas/AnalysisOutcome'
       required:
@@ -48266,10 +48963,10 @@ components:
     CfdeAssessment:
       type: object
       properties:
-        id: &id148
+        id: &id158
           type: string
           format: uuid
-        draft_id: *id148
+        draft_id: *id158
         draft_version:
           type: integer
           minimum: 1
@@ -48384,7 +49081,7 @@ components:
     LightningAuditInput:
       type: object
       properties:
-        draft_id: *id149
+        draft_id: *id159
         draft_version:
           type: integer
           minimum: 1
@@ -48434,7 +49131,7 @@ components:
                   its relevance; distinguish stored evidence from a proposed interpretation.'
               evidence_refs:
                 type: array
-                items: &id150
+                items: &id160
                   type: string
                 minItems: 1
                 description: Exact evidence_ref IDs in this package that support this
@@ -48452,20 +49149,20 @@ components:
             experimental program.'
         missing_evidence:
           type: array
-          items: *id150
+          items: *id160
           description: 'At most 2 items of 25 words each: specific missing observations
             or assumptions needed to test the proposed explanation, not claims that
             missing entities do not exist.'
         next_steps:
           type: array
-          items: *id150
+          items: *id160
           minItems: 1
           description: 'At most 2 items of 25 words each: prioritized concrete checks
             an agent could perform next to test the direction. State these as future
             work; at least one actionable check is required.'
         limitations:
           type: array
-          items: *id150
+          items: *id160
           minItems: 1
           description: 'At most 2 items of 25 words each: required scope caveats for
             this bounded package, including relevant coverage omissions, source/species
@@ -48546,9 +49243,9 @@ components:
           enum:
           - online
           - local
-        id: *id149
-        research_request_id: *id149
-        created_at: &id151
+        id: *id159
+        research_request_id: *id159
+        created_at: &id161
           type: string
           format: date-time
       required:
@@ -48585,7 +49282,7 @@ components:
     LightningAudit:
       type: object
       properties:
-        id: *id149
+        id: *id159
         kind:
           type: string
           const: lightning_audit
@@ -48597,8 +49294,8 @@ components:
           - succeeded
           - failed
           - interrupted
-        research_request_id: *id149
-        source_draft_id: *id149
+        research_request_id: *id159
+        source_draft_id: *id159
         source_draft_version:
           type: integer
           minimum: 1
@@ -48616,14 +49313,14 @@ components:
           - id
           - text
           additionalProperties: false
-        created_at: *id151
-        updated_at: *id151
+        created_at: *id161
+        updated_at: *id161
         completed_at:
           anyOf:
-          - *id151
+          - *id161
           - type: 'null'
-        continuation_expires_at: *id151
-        reference_generation_id: &id152
+        continuation_expires_at: *id161
+        reference_generation_id: &id162
           type: string
           pattern: ^[a-f0-9]{64}$
         result:
@@ -48645,9 +49342,9 @@ components:
               type: string
             prompt_version:
               type: string
-            source_state_sha256: *id152
-            request_sha256: *id152
-            response_sha256: *id152
+            source_state_sha256: *id162
+            request_sha256: *id162
+            response_sha256: *id162
           required:
           - model
           - prompt_version
@@ -48731,16 +49428,16 @@ components:
     ProvenanceAnnotation:
       type: object
       properties:
-        trace_count: &id153
+        trace_count: &id163
           type: integer
           minimum: 0
-        page_trace_count: *id153
-        trace_ids: &id154
+        page_trace_count: *id163
+        trace_ids: &id164
           type: array
           items:
             type: string
-        dataset_ids: *id154
-        organization_ids: *id154
+        dataset_ids: *id164
+        organization_ids: *id164
         resolution:
           type: string
           enum:
@@ -48836,8 +49533,8 @@ components:
             - inherited_source_claim
             - factor_projection
             - trait_gwas
-        input_roles: *id154
-        organization_ids: *id154
+        input_roles: *id164
+        organization_ids: *id164
         organization_attributions:
           type: array
           items:
@@ -48849,7 +49546,7 @@ components:
                 type: string
               path_steps:
                 type: array
-                items: &id155
+                items: &id165
                   type: object
                   properties:
                     edge_id:
@@ -48870,8 +49567,8 @@ components:
             additionalProperties: false
         path_steps:
           type: array
-          items: *id155
-        path_edge_ids: *id154
+          items: *id165
+        path_edge_ids: *id164
         direction:
           type: string
           enum:
@@ -48958,12 +49655,12 @@ components:
           type: string
         observations:
           type: array
-          items: &id156
+          items: &id166
             type: object
             additionalProperties: true
         provenance_source:
           type: array
-          items: *id156
+          items: *id166
       required:
       - id
       - subject
@@ -48976,17 +49673,17 @@ components:
       properties:
         dataset_id:
           type: string
-        claim_count: *id153
-        claim_ids: *id154
-        trace_count: *id153
+        claim_count: *id163
+        claim_ids: *id164
+        trace_count: *id163
         classification_claim_counts:
           type: object
           properties:
-            proposition_reference: *id153
-            evidence_derivation: *id153
-            inherited_source_claim: *id153
-            factor_projection: *id153
-            trait_gwas: *id153
+            proposition_reference: *id163
+            evidence_derivation: *id163
+            inherited_source_claim: *id163
+            factor_projection: *id163
+            trait_gwas: *id163
           required:
           - proposition_reference
           - evidence_derivation
@@ -48997,11 +49694,11 @@ components:
         classification_claim_ids:
           type: object
           properties:
-            proposition_reference: *id154
-            evidence_derivation: *id154
-            inherited_source_claim: *id154
-            factor_projection: *id154
-            trait_gwas: *id154
+            proposition_reference: *id164
+            evidence_derivation: *id164
+            inherited_source_claim: *id164
+            factor_projection: *id164
+            trait_gwas: *id164
           required:
           - proposition_reference
           - evidence_derivation
@@ -49009,7 +49706,7 @@ components:
           - factor_projection
           - trait_gwas
           additionalProperties: false
-        input_roles: *id154
+        input_roles: *id164
       required:
       - dataset_id
       - claim_count
@@ -49027,21 +49724,21 @@ components:
       properties:
         organization_id:
           type: string
-        claim_count: *id153
-        claim_ids: *id154
-        dataset_count: *id153
-        dataset_ids: *id154
-        claim_dataset_count: *id153
+        claim_count: *id163
+        claim_ids: *id164
+        dataset_count: *id163
+        dataset_ids: *id164
+        claim_dataset_count: *id163
         roles:
           type: object
           additionalProperties:
             type: object
             properties:
-              claim_count: *id153
-              claim_ids: *id154
-              dataset_count: *id153
-              dataset_ids: *id154
-              claim_dataset_count: *id153
+              claim_count: *id163
+              claim_ids: *id164
+              dataset_count: *id163
+              dataset_ids: *id164
+              claim_dataset_count: *id163
             required:
             - claim_count
             - claim_ids
@@ -49063,34 +49760,34 @@ components:
     ProvenanceCoverage:
       type: object
       properties:
-        status: &id157
+        status: &id167
           type: string
           enum:
           - complete
           - incomplete
         counts_are_lower_bounds:
           type: boolean
-        claim_count: *id153
-        resolved_claim_count: *id153
-        trace_count: *id153
+        claim_count: *id163
+        resolved_claim_count: *id163
+        trace_count: *id163
         lineage_resolution:
           type: object
           properties:
-            status: *id157
-            issue_count: *id153
+            status: *id167
+            issue_count: *id163
           required:
           - status
           - issue_count
           additionalProperties: false
         retained_projection_coverage:
           type: array
-          items: *id156
+          items: *id166
         recovery_status:
           type: array
-          items: *id156
+          items: *id166
         issues:
           type: array
-          items: *id156
+          items: *id166
         upstream_gaps:
           type: array
           items:
@@ -49110,7 +49807,7 @@ components:
                   (no bottom-line GWAS listed), no_gwas_ancestry_artifact (artifacts,
                   but none of the release's GWAS ancestry), or no_upstream_organizations
                   (the reached Dataset names no organization).
-              object_ids: *id154
+              object_ids: *id164
             required:
             - route
             - code
@@ -49154,9 +49851,9 @@ components:
           type: string
         document_sha256:
           type: string
-        publication_version: *id153
-        reference_generation_ids: *id154
-        supplement_ids: *id154
+        publication_version: *id163
+        reference_generation_ids: *id164
+        supplement_ids: *id164
         source_observations:
           type: array
           items:
@@ -49235,8 +49932,8 @@ components:
               type: integer
               minimum: 1
               maximum: 250
-            offset: *id153
-            total: *id153
+            offset: *id163
+            total: *id163
             next_cursor:
               anyOf:
               - type: string
@@ -49264,7 +49961,7 @@ components:
     TraitDetail:
       type: object
       properties:
-        kpn_trait_id: &id159
+        kpn_trait_id: &id169
           type: string
           pattern: ^KPN\.TRAIT:[0-9]{7}$
         phenotype:
@@ -49275,7 +49972,7 @@ components:
           anyOf:
           - type: string
           - type: 'null'
-        is_atlas: &id163
+        is_atlas: &id173
           type: boolean
         legacy_phenotype_id:
           anyOf:
@@ -49361,7 +50058,7 @@ components:
                 type: string
               label:
                 type: string
-              factor_number: &id161
+              factor_number: &id171
                 type: integer
                 minimum: 1
             required:
@@ -49376,10 +50073,10 @@ components:
             properties:
               library:
                 type: string
-              n_gene_sets: &id158
+              n_gene_sets: &id168
                 type: integer
                 minimum: 0
-              n_nonzero: *id158
+              n_nonzero: *id168
               top_gene_sets:
                 type: array
                 items:
@@ -49394,11 +50091,11 @@ components:
         linked_factors:
           type: object
           properties:
-            n_factors: *id158
+            n_factors: *id168
           required:
           - n_factors
           additionalProperties: false
-        release_id: &id162
+        release_id: &id172
           type: string
           description: The published reference release these rows were read from.
           pattern: ^[a-f0-9]{64}$
@@ -49431,7 +50128,7 @@ components:
     TraitGeneSet:
       type: object
       properties:
-        kpn_trait_id: *id159
+        kpn_trait_id: *id169
         trait_name:
           type: string
         gene_set_id:
@@ -49448,15 +50145,15 @@ components:
           description: Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode
             path values.
           pattern: ^dapper:GeneSetCollection\.[A-Za-z0-9_-]{32}$
-        n_genes: *id158
-        beta_uncorrected: &id160
+        n_genes: *id168
+        beta_uncorrected: &id170
           type: number
-        beta: *id160
-        avg_postp: &id164
+        beta: *id170
+        avg_postp: &id174
           type: number
           minimum: 0
           maximum: 1
-        library_rank: *id161
+        library_rank: *id171
       required:
       - kpn_trait_id
       - trait_name
@@ -49481,7 +50178,7 @@ components:
       properties:
         trait_id:
           anyOf:
-          - *id159
+          - *id169
           - type: 'null'
         gene_set_id:
           anyOf:
@@ -49505,14 +50202,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TraitGeneSet'
-        total: *id158
-        next_offset: &id165
+        total: *id168
+        next_offset: &id175
           anyOf:
-          - *id158
+          - *id168
           - type: 'null'
-        coverage: &id166
+        coverage: &id176
           type: string
-        release_id: *id162
+        release_id: *id172
       required:
       - trait_id
       - gene_set_id
@@ -49536,23 +50233,23 @@ components:
           type: string
         factor_label:
           type: string
-        fitted_kpn_trait_id: *id159
+        fitted_kpn_trait_id: *id169
         fitted_trait_name:
           type: string
         phenotype:
           type: string
         phenotype_kpn_trait_id:
           anyOf:
-          - *id159
+          - *id169
           - type: 'null'
         phenotype_name:
           type: string
-        is_own_trait: *id163
-        is_atlas_trait: *id163
-        nnls_loading: *id160
-        phewas_beta: *id160
-        phewas_p_onesided: *id164
-        phewas_q: *id164
+        is_own_trait: *id173
+        is_atlas_trait: *id173
+        nnls_loading: *id170
+        phewas_beta: *id170
+        phewas_p_onesided: *id174
+        phewas_q: *id174
       required:
       - source_id
       - factor_label
@@ -49584,7 +50281,7 @@ components:
           - type: 'null'
         trait_id:
           anyOf:
-          - *id159
+          - *id169
           - type: 'null'
         scope:
           type: string
@@ -49601,13 +50298,13 @@ components:
           anyOf:
           - type: object
             properties:
-              n_phenotypes: *id158
-              n_linked: *id158
-              n_linked_kpn_traits: *id158
-              n_linked_atlas_traits: *id158
+              n_phenotypes: *id168
+              n_linked: *id168
+              n_linked_kpn_traits: *id168
+              n_linked_atlas_traits: *id168
               own_trait_q:
                 anyOf:
-                - *id164
+                - *id174
                 - type: 'null'
             required:
             - n_phenotypes
@@ -49621,10 +50318,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/FactorTraitLink'
-        total: *id158
-        next_offset: *id165
-        coverage: *id166
-        release_id: *id162
+        total: *id168
+        next_offset: *id175
+        coverage: *id176
+        release_id: *id172
       required:
       - source_id
       - trait_id
@@ -49657,7 +50354,7 @@ components:
           const: current
         source_id:
           type: string
-        release_id: *id162
+        release_id: *id172
       required:
       - dapper_id
       - status

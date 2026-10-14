@@ -196,11 +196,15 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         self.assertEqual(len(doc['factor_projection_edges']), 3)
         self.assertEqual(metadata['reference_generation_ids'], [RELEASE])
         self.assertEqual({row['kind'] for row in metadata['source_observations']} & {'box_capture'}, {'box_capture'})
-        # Without the captured release manifest the factors cannot be re-minted, so nothing binds.
+        self.assertNotIn('binding_origin', metadata['retained_projection_coverage'][0])  # the capture bound it
+        # Without the captured release manifest the factors cannot be re-minted: the capture binds nothing and is reported, and
+        # the Mechanism binds by identity to the published release instead.
         self.records = {key: value for key, value in self.records.items() if value['file']['filename'] != 'reference-release.json'}
         _, unbound = self.expand()
-        self.assertEqual(unbound['retained_projection_coverage'][0]['status'], 'unresolved')
+        self.assertEqual({key: unbound['retained_projection_coverage'][0][key] for key in ('status', 'binding_origin')},
+                         {'status': 'retained_rows_loaded', 'binding_origin': 'document_identity'})
         self.assertIn('invalid_capture_binding', {row['code'] for row in unbound['issues']})
+        self.assertNotIn('box_capture', {row['kind'] for row in unbound['source_observations']})
 
     def test_a_superseded_release_reads_only_capture_bytes_and_archived_snapshots(self):
         self.capture()
@@ -294,6 +298,126 @@ CREATE TABLE reveal_ref_collections(collection_id TEXT,cfde_label TEXT,portal_co
         doc, metadata = self.expand(connection=lambda: Missing(self.path, self.queries, 'reference_generations'))
         self.assertEqual({row['code'] for row in metadata['issues']}, {'reference_tables_unavailable', 'reference_generation_unavailable'})
         self.assertNotIn('factor_projection_edges', doc)
+
+    # Content-addressed identity binding: Box-built accounts cite KPN Mechanisms and GeneSets without captures.
+
+    def test_identity_binds_a_mechanism_without_captures_to_the_published_release(self):
+        doc, metadata = self.expand()
+        self.assertEqual(self.queries[0][0], 'SELECT release_id,published_at,manifest FROM reveal_ref_release')
+        self.assertFalse(any('reference_generations' in sql or 'reference_active' in sql for sql, _ in self.queries))
+        self.assertEqual(metadata['reference_generation_ids'], [RELEASE])
+        coverage = metadata['retained_projection_coverage'][0]
+        self.assertEqual((coverage['status'], coverage['binding_origin'], coverage['retained_rows']),
+                         ('retained_rows_loaded', 'document_identity', 3))
+        edges = {edge['object']: edge for edge in doc['factor_projection_edges']}
+        self.assertEqual(set(edges), {CITED, PROJECTED, GLYGEN_SET})
+        self.assertEqual(edges[CITED]['provenance_source']['binding_origin'], 'document_identity')
+        identity = [row for row in metadata['source_observations'] if row['kind'] == 'document_identity']
+        self.assertEqual([row['key'] for row in identity], [RELEASE])
+        self.assertEqual(doc['mechanisms'], [self.mechanism])  # the document's own node, unchanged
+        self.assertEqual(doc['fitted_on_trait_edges'][0]['object'], TRAIT)
+        self.assertEqual(metadata['traits'][TRAIT]['gwas_artifact']['artifact_id'], ARTIFACT)
+        result = self.collect(doc, metadata)
+        self.assertEqual({row['dataset_id'] for row in result['dataset_reuse']}, {GTEX, GLYGEN})
+        self.assertEqual(result['organization_reuse'][0]['organization_id'] in (BROAD, GWU), True)
+        routes = set().union(*(row['route_classifications'] for row in result['traces']))
+        self.assertTrue({'factor_projection', 'proposition_reference'} <= routes)
+
+    def test_identity_binds_a_directly_cited_gene_set(self):
+        self.document['propositions'][0].pop('subject_entity')
+        doc, metadata = self.expand()
+        self.assertEqual(metadata['reference_generation_ids'], [RELEASE])
+        self.assertEqual({node['id']: node for node in doc['gene_sets']}[CITED], self.cited)  # metadata.dapper_gene_set
+        self.assertNotIn('factor_projection_edges', doc)
+        self.assertIn(('document_identity', RELEASE), {(row['kind'], row['key']) for row in metadata['source_observations']})
+        self.assertEqual([row['dataset_id'] for row in self.collect(doc, metadata)['dataset_reuse']], [GTEX])
+        # A cited id the release does not hold stays unbound, and is never matched by name.
+        self.document['propositions'][0]['object_entity'] = ref('GeneSet', 'absent')
+        doc, metadata = self.expand()
+        self.assertNotIn('gene_sets', doc)
+        self.assertEqual(self.collect(doc, metadata)['dataset_reuse'], [])
+
+    def test_identity_requires_the_exact_minted_mechanism(self):
+        self.document['propositions'][0].pop('object_entity')
+        for table, column, value in [('reveal_ref_factors', 'label', 'tampered'), ('reveal_ref_traits', 'phenotype_name', 'tampered'),
+                                     ('reveal_ref_release', 'manifest', json.dumps({**MANIFEST, 'mechanism_identity_version': 2}))]:
+            with self.subTest(column=column):
+                self.setUp(); self.document['propositions'][0].pop('object_entity')
+                with sqlite3.connect(self.path) as c: c.execute(f'UPDATE {table} SET {column}=?', (value,))
+                doc, metadata = self.expand()
+                self.assertNotIn('factor_projection_edges', doc)
+                self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'no_match')
+                self.assertEqual(self.collect(doc, metadata)['dataset_reuse'], [])
+
+    def test_identity_names_its_lookup_when_nothing_binds(self):
+        with sqlite3.connect(self.path) as c: c.execute('DELETE FROM reveal_ref_release')
+        doc, metadata = self.expand()
+        self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'no_published_release')
+        self.assertNotIn('factor_projection_edges', doc)
+        # A Mechanism without a KPN description is never looked up; nor is one whose own lineage the document records.
+        self.setUp()
+        legacy = {'name': 'T2D mechanism Factor1', 'description': 'EAGGL mechanism factor:portal:T2D:cfde-inc-v2:Factor1. Source label: x.'}
+        legacy['id'] = self.runtime.compute_id(legacy, 'Mechanism', self.runtime.schema)
+        self.document['mechanisms'] = [legacy]
+        self.document['propositions'] = [{'id': PROP, 'subject_entity': legacy['id']}, {'id': PROP2}]
+        doc, metadata = self.expand()
+        self.assertEqual(self.queries, [])
+        self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'not_applicable')
+        self.document['mechanisms'] = [{**self.mechanism, 'was_derived_from': [GTEX]}]
+        self.document['propositions'][0]['subject_entity'] = self.mechanism['id']
+        doc, metadata = self.expand()
+        self.assertEqual(self.queries, [])
+
+    def test_a_capture_and_an_identity_binding_that_disagree_are_ambiguous(self):
+        # A reload-era capture binds the cited set to its generation; the Mechanism binds the release by identity and projects
+        # the same set, so the set is ambiguous and blocked rather than traced through either.
+        legacy = {'origin': 'mysql:cfde_gene_sets?generation_id=' + LEGACY, 'kind': 'mysql', 'tables': ['cfde_gene_sets'],
+                  'generation_id': LEGACY, 'model': KPN_MODEL, 'eaggl_import_id': 'c' * 64, 'generation_manifest_sha256': '0' * 64}
+        envelope = {'format': 'reveal.reference-query.capture/1', 'reader_version': 'reveal.reference-query/2', 'source_mode': 'imported_reference',
+                    'source': legacy, 'operation': 'get_gene_set', 'arguments': {'gene_set_id': CITED},
+                    'result': {'status': 'complete', 'items': [{'gene_set_id': CITED, 'metadata': {'dapper_gene_set': self.cited}, 'payload': {}}]}}
+        raw = canonical_json(envelope); checksum = sha256(raw)
+        file = self.runtime.file('capture-' + checksum + '.json', raw, 'application/json')
+        self.records[checksum] = {'sha256': checksum, 'file': file, 'research_source': {'sha256': checksum, 'dapper_file_id': file['id'],
+            'source_mode': 'imported_reference', 'research_capture': deepcopy(legacy)}}
+        self.raw[checksum] = raw
+        doc, metadata = self.expand(connection=lambda: Missing(self.path, self.queries, 'reference_generations'))
+        self.assertIn(CITED, metadata['blocked_reference_ids'])
+        self.assertIn('ambiguous_reference_binding', {row['code'] for row in metadata['issues']})
+        self.assertEqual(metadata['retained_projection_coverage'][0]['binding_origin'], 'document_identity')
+        self.assertNotIn(CITED, {edge['object'] for edge in doc['factor_projection_edges']})
+        result = self.collect(doc, metadata)
+        through = {edge['id'] for edge in result['edges'] if CITED in (edge['subject'], edge['object'])}
+        self.assertFalse(any(set(row['path_edge_ids']) & through for row in result['traces']))
+        self.assertIn('CONFLICTING_OBSERVATION', {row['code'] for row in result['coverage']['issues']})
+
+    def test_curated_release_edges_are_labelled_curated_lineage(self):
+        doc, metadata = self.expand()
+        curated = [edge for edge in doc['was_derived_from_edges'] if edge['object'] == GLYGEN]
+        self.assertEqual(len(curated), 1)  # the collapsed GlyGen inputs' representative
+        self.assertEqual(curated[0]['provenance_source'], {'kind': 'curated_lineage', 'curation_id': 'lap/config/source_datasets.yaml',
+            'curation_sha256': None, 'reference_generation_id': RELEASE, 'collection_id': 'glygen'})
+        producer = [edge for edge in doc['was_derived_from_edges'] if edge['object'] == GTEX]
+        self.assertEqual(producer[0]['provenance_source']['kind'], 'reference_release')
+        result = self.collect(doc, metadata)
+        derived = next(edge for edge in result['edges'] if edge['relation'] == 'was_derived_from' and edge['object'] == GLYGEN)
+        self.assertEqual(derived['provenance_source'][0]['kind'], 'curated_lineage')
+
+    def test_identity_observations_are_independent_of_sql_row_order(self):
+        first, metadata = self.expand()
+        rows = reference._rows
+        reference._LINEAGE.items.clear()
+        with patch.object(reference, '_rows', side_effect=lambda *args: list(reversed(rows(*args)))):
+            second, reordered = self.expand()
+        self.assertEqual(metadata['source_observations'], reordered['source_observations'])
+        content = lambda document: {group: sorted(map(canonical_json, rows)) for group, rows in document.items()}
+        self.assertEqual(content(first), content(second))
+        self.assertEqual(self.collect(first, metadata), self.collect(second, reordered))
+
+    def test_identity_lookup_storage_failure_propagates(self):
+        with self.assertRaises(sqlite3.OperationalError):
+            reference.expand(self.document, {}, tx=EmptyTx(),
+                connection_factory=lambda: (_ for _ in ()).throw(sqlite3.OperationalError('offline')))
 
 
 if __name__ == '__main__':

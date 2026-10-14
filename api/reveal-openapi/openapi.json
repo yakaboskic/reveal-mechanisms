@@ -7281,6 +7281,201 @@
                         "job_id": "55555555-5555-4555-8555-555555555555",
                         "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
                       },
+                      "data_sources": {
+                        "status": "incomplete",
+                        "traced_at": "2026-10-12T00:00:00Z",
+                        "reference_generation_ids": [
+                          "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a"
+                        ],
+                        "coverage": {
+                          "trace_count": 3,
+                          "counts_are_lower_bounds": true,
+                          "issue_counts": {
+                            "MISSING_LINEAGE": 3
+                          }
+                        },
+                        "claims": [
+                          {
+                            "claim_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                            "resolution": "complete",
+                            "datasets": [
+                              {
+                                "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                                "input_roles": [
+                                  "data_input"
+                                ],
+                                "routes": [
+                                  "factor_projection",
+                                  "proposition_reference"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "curation_ids": [],
+                                "trace_count": 1,
+                                "organizations": [
+                                  {
+                                    "organization_id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                                    "roles": [
+                                      "publisher"
+                                    ]
+                                  },
+                                  {
+                                    "organization_id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                                    "roles": [
+                                      "attribution"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                                "input_roles": [
+                                  "metadata_input"
+                                ],
+                                "routes": [
+                                  "factor_projection",
+                                  "proposition_reference"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "curation_ids": [],
+                                "trace_count": 1,
+                                "organizations": [
+                                  {
+                                    "organization_id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                                    "roles": [
+                                      "publisher"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "dataset_id": "gwas-bottom-line:bl-t2d-mixed",
+                                "input_roles": [
+                                  "unknown"
+                                ],
+                                "routes": [
+                                  "proposition_reference",
+                                  "trait_gwas"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "organizations": [],
+                                "curation_ids": [],
+                                "trace_count": 1
+                              }
+                            ]
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          }
+                        ],
+                        "datasets": [
+                          {
+                            "id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                            "name": "NCBI Gene Homo_sapiens.gene_info",
+                            "version": "undated snapshot",
+                            "description": "NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.",
+                            "location": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/"
+                          },
+                          {
+                            "id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                            "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+                            "version": "v8",
+                            "description": "Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.",
+                            "location": "https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression"
+                          },
+                          {
+                            "id": "gwas-bottom-line:bl-t2d-mixed",
+                            "name": "Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)",
+                            "location": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed",
+                            "kind": "gwas_bottom_line",
+                            "artifact_id": "bl-t2d-mixed",
+                            "ancestry_code": "Mixed",
+                            "ancestry_name": "Mixed ancestry",
+                            "kpn_trait_id": "KPN.TRAIT:0000398",
+                            "portal_trait_id": "T2D"
+                          }
+                        ],
+                        "organizations": [
+                          {
+                            "id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                            "name": "GTEx Consortium"
+                          },
+                          {
+                            "id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                            "name": "National Center for Biotechnology Information",
+                            "ror": "ror:02meqm098"
+                          },
+                          {
+                            "id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                            "name": "Broad Institute",
+                            "ror": "ror:05a0ya142"
+                          }
+                        ],
+                        "via": [
+                          {
+                            "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                            "kind": "mechanism",
+                            "name": "CAD-in-T2D mechanism Factor1"
+                          }
+                        ]
+                      },
                       "publication": {
                         "visibility": "private",
                         "version": 0,
@@ -8913,6 +9108,201 @@
                         "status": "succeeded",
                         "job_id": "55555555-5555-4555-8555-555555555555",
                         "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                      },
+                      "data_sources": {
+                        "status": "incomplete",
+                        "traced_at": "2026-10-12T00:00:00Z",
+                        "reference_generation_ids": [
+                          "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a"
+                        ],
+                        "coverage": {
+                          "trace_count": 3,
+                          "counts_are_lower_bounds": true,
+                          "issue_counts": {
+                            "MISSING_LINEAGE": 3
+                          }
+                        },
+                        "claims": [
+                          {
+                            "claim_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                            "resolution": "complete",
+                            "datasets": [
+                              {
+                                "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                                "input_roles": [
+                                  "data_input"
+                                ],
+                                "routes": [
+                                  "factor_projection",
+                                  "proposition_reference"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "curation_ids": [],
+                                "trace_count": 1,
+                                "organizations": [
+                                  {
+                                    "organization_id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                                    "roles": [
+                                      "publisher"
+                                    ]
+                                  },
+                                  {
+                                    "organization_id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                                    "roles": [
+                                      "attribution"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                                "input_roles": [
+                                  "metadata_input"
+                                ],
+                                "routes": [
+                                  "factor_projection",
+                                  "proposition_reference"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "curation_ids": [],
+                                "trace_count": 1,
+                                "organizations": [
+                                  {
+                                    "organization_id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                                    "roles": [
+                                      "publisher"
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "dataset_id": "gwas-bottom-line:bl-t2d-mixed",
+                                "input_roles": [
+                                  "unknown"
+                                ],
+                                "routes": [
+                                  "proposition_reference",
+                                  "trait_gwas"
+                                ],
+                                "via_ids": [
+                                  "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                ],
+                                "organizations": [],
+                                "curation_ids": [],
+                                "trace_count": 1
+                              }
+                            ]
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          },
+                          {
+                            "claim_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                            "resolution": "not_applicable",
+                            "datasets": []
+                          }
+                        ],
+                        "datasets": [
+                          {
+                            "id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                            "name": "NCBI Gene Homo_sapiens.gene_info",
+                            "version": "undated snapshot",
+                            "description": "NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.",
+                            "location": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/"
+                          },
+                          {
+                            "id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                            "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+                            "version": "v8",
+                            "description": "Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.",
+                            "location": "https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression"
+                          },
+                          {
+                            "id": "gwas-bottom-line:bl-t2d-mixed",
+                            "name": "Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)",
+                            "location": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed",
+                            "kind": "gwas_bottom_line",
+                            "artifact_id": "bl-t2d-mixed",
+                            "ancestry_code": "Mixed",
+                            "ancestry_name": "Mixed ancestry",
+                            "kpn_trait_id": "KPN.TRAIT:0000398",
+                            "portal_trait_id": "T2D"
+                          }
+                        ],
+                        "organizations": [
+                          {
+                            "id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                            "name": "GTEx Consortium"
+                          },
+                          {
+                            "id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                            "name": "National Center for Biotechnology Information",
+                            "ror": "ror:02meqm098"
+                          },
+                          {
+                            "id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                            "name": "Broad Institute",
+                            "ror": "ror:05a0ya142"
+                          }
+                        ],
+                        "via": [
+                          {
+                            "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                            "kind": "mechanism",
+                            "name": "CAD-in-T2D mechanism Factor1"
+                          }
+                        ]
                       },
                       "publication": {
                         "visibility": "private",
@@ -16414,7 +16804,7 @@
           "Scientific content"
         ],
         "summary": "Rank public community contributions",
-        "description": "All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.",
+        "description": "All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.",
         "parameters": [
           {
             "name": "view",
@@ -16445,7 +16835,8 @@
                 "gaps",
                 "explored",
                 "claims",
-                "researchers"
+                "researchers",
+                "traced_claims"
               ]
             },
             "example": "overall",
@@ -16464,6 +16855,21 @@
               "default": "all"
             },
             "example": "all",
+            "description": ""
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "published",
+                "all"
+              ],
+              "default": "published"
+            },
+            "example": "published",
             "description": ""
           },
           {
@@ -16532,11 +16938,13 @@
                         "scope": "Currently public frozen snapshots only; all time.",
                         "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
                         "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+                        "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
                       },
                       "view": "researchers",
                       "sort": "overall",
                       "evidence": "all",
+                      "scope": "published",
                       "items": [],
                       "page": {
                         "next_cursor": null,
@@ -16705,7 +17113,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -16752,7 +17160,9 @@
                 "explored",
                 "claims",
                 "researchers",
-                "files"
+                "files",
+                "traced_claims",
+                "traced_accounts"
               ],
               "default": "accounts"
             },
@@ -16772,6 +17182,21 @@
               "default": "all"
             },
             "example": "all",
+            "description": ""
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "published",
+                "all"
+              ],
+              "default": "published"
+            },
+            "example": "published",
             "description": ""
           },
           {
@@ -16840,12 +17265,14 @@
                         "scope": "Currently public frozen snapshots only; all time.",
                         "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
                         "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+                        "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+                        "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
                       },
                       "view": "accounts",
                       "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
                       "metric": "votes",
                       "evidence": "all",
+                      "scope": "published",
                       "entry": {
                         "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
                         "kind": "account",
@@ -16861,7 +17288,9 @@
                           "account_count": 1,
                           "account_gap_count": 1,
                           "explored_gap_count": 1,
-                          "claim_count": 12
+                          "claim_count": 12,
+                          "traced_claim_count": 0,
+                          "traced_account_count": 0
                         },
                         "components": {
                           "accounts": 0,
@@ -16882,9 +17311,12 @@
                           "MIXED": 0,
                           "NEUTRAL": 0,
                           "UNKNOWN": 0
-                        }
+                        },
+                        "organizations": [],
+                        "url": null
                       },
                       "total": 1,
+                      "withheld": 0,
                       "items": [
                         {
                           "id": "dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd",
@@ -17110,7 +17542,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&limit=20' -H 'Accept: application/json'"
+            "source": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard/accounts/dapper%3AScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd/records?metric=votes&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
           }
         ]
       }
@@ -33191,6 +33623,201 @@
                           "status": "succeeded",
                           "job_id": "55555555-5555-4555-8555-555555555555",
                           "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+                        },
+                        "data_sources": {
+                          "status": "incomplete",
+                          "traced_at": "2026-10-12T00:00:00Z",
+                          "reference_generation_ids": [
+                            "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a"
+                          ],
+                          "coverage": {
+                            "trace_count": 3,
+                            "counts_are_lower_bounds": true,
+                            "issue_counts": {
+                              "MISSING_LINEAGE": 3
+                            }
+                          },
+                          "claims": [
+                            {
+                              "claim_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                              "resolution": "complete",
+                              "datasets": [
+                                {
+                                  "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                                  "input_roles": [
+                                    "data_input"
+                                  ],
+                                  "routes": [
+                                    "factor_projection",
+                                    "proposition_reference"
+                                  ],
+                                  "via_ids": [
+                                    "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                  ],
+                                  "curation_ids": [],
+                                  "trace_count": 1,
+                                  "organizations": [
+                                    {
+                                      "organization_id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                                      "roles": [
+                                        "publisher"
+                                      ]
+                                    },
+                                    {
+                                      "organization_id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                                      "roles": [
+                                        "attribution"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                                  "input_roles": [
+                                    "metadata_input"
+                                  ],
+                                  "routes": [
+                                    "factor_projection",
+                                    "proposition_reference"
+                                  ],
+                                  "via_ids": [
+                                    "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                  ],
+                                  "curation_ids": [],
+                                  "trace_count": 1,
+                                  "organizations": [
+                                    {
+                                      "organization_id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                                      "roles": [
+                                        "publisher"
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "dataset_id": "gwas-bottom-line:bl-t2d-mixed",
+                                  "input_roles": [
+                                    "unknown"
+                                  ],
+                                  "routes": [
+                                    "proposition_reference",
+                                    "trait_gwas"
+                                  ],
+                                  "via_ids": [
+                                    "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                                  ],
+                                  "organizations": [],
+                                  "curation_ids": [],
+                                  "trace_count": 1
+                                }
+                              ]
+                            },
+                            {
+                              "claim_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            },
+                            {
+                              "claim_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                              "resolution": "not_applicable",
+                              "datasets": []
+                            }
+                          ],
+                          "datasets": [
+                            {
+                              "id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                              "name": "NCBI Gene Homo_sapiens.gene_info",
+                              "version": "undated snapshot",
+                              "description": "NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.",
+                              "location": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/"
+                            },
+                            {
+                              "id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                              "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+                              "version": "v8",
+                              "description": "Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.",
+                              "location": "https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression"
+                            },
+                            {
+                              "id": "gwas-bottom-line:bl-t2d-mixed",
+                              "name": "Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)",
+                              "location": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed",
+                              "kind": "gwas_bottom_line",
+                              "artifact_id": "bl-t2d-mixed",
+                              "ancestry_code": "Mixed",
+                              "ancestry_name": "Mixed ancestry",
+                              "kpn_trait_id": "KPN.TRAIT:0000398",
+                              "portal_trait_id": "T2D"
+                            }
+                          ],
+                          "organizations": [
+                            {
+                              "id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                              "name": "GTEx Consortium"
+                            },
+                            {
+                              "id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                              "name": "National Center for Biotechnology Information",
+                              "ror": "ror:02meqm098"
+                            },
+                            {
+                              "id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                              "name": "Broad Institute",
+                              "ror": "ror:05a0ya142"
+                            }
+                          ],
+                          "via": [
+                            {
+                              "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                              "kind": "mechanism",
+                              "name": "CAD-in-T2D mechanism Factor1"
+                            }
+                          ]
                         },
                         "publication": {
                           "visibility": "private",
@@ -53226,6 +53853,9 @@
           },
           "archive": {
             "$ref": "#/components/schemas/ReferenceArchive"
+          },
+          "data_sources": {
+            "$ref": "#/components/schemas/AccountDataSources"
           }
         },
         "required": [
@@ -56035,7 +56665,8 @@
           "gaps",
           "explored",
           "claims",
-          "researchers"
+          "researchers",
+          "traced_claims"
         ]
       },
       "LeaderboardMetric": {
@@ -56047,7 +56678,9 @@
           "explored",
           "claims",
           "researchers",
-          "files"
+          "files",
+          "traced_claims",
+          "traced_accounts"
         ]
       },
       "LeaderboardEvidence": {
@@ -56056,6 +56689,14 @@
           "all",
           "supporting"
         ]
+      },
+      "LeaderboardScope": {
+        "type": "string",
+        "enum": [
+          "published",
+          "all"
+        ],
+        "description": "Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed."
       },
       "LeaderboardAttribution": {
         "type": "object",
@@ -56118,6 +56759,41 @@
         ],
         "additionalProperties": false
       },
+      "LeaderboardOrganization": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ror": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "ror",
+          "roles"
+        ],
+        "additionalProperties": false,
+        "description": "An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production."
+      },
       "LeaderboardMetrics": {
         "type": "object",
         "properties": {
@@ -56153,6 +56829,14 @@
             "type": "integer",
             "minimum": 0
           },
+          "traced_claim_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "traced_account_count": {
+            "type": "integer",
+            "minimum": 0
+          },
           "net_votes": {
             "type": "integer"
           },
@@ -56171,6 +56855,8 @@
           "explored_gap_count",
           "claim_count",
           "researcher_count",
+          "traced_claim_count",
+          "traced_account_count",
           "net_votes",
           "overall_score"
         ],
@@ -56291,6 +56977,32 @@
           },
           "directions": {
             "$ref": "#/components/schemas/LeaderboardDirections"
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LeaderboardOrganization"
+            },
+            "description": "Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views."
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "Datasets: the public source page of the dataset, when its lineage records one.",
+                "format": "uri"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source_kind": {
+            "type": "string",
+            "enum": [
+              "gwas_bottom_line"
+            ],
+            "description": "Datasets: present for a KPN trait's GWAS bottom-line artifact that traced claims reach (stored data sources kind gwas_bottom_line); url is then its portal artifact page. Absent for a DAPPER Dataset."
           }
         },
         "required": [
@@ -56305,7 +57017,9 @@
           "gap_id",
           "gap",
           "attribution",
-          "directions"
+          "directions",
+          "organizations",
+          "url"
         ],
         "additionalProperties": false
       },
@@ -56430,6 +57144,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -56437,7 +57154,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           }
@@ -56452,7 +57170,7 @@
           "methodology"
         ],
         "additionalProperties": false,
-        "description": "Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed."
+        "description": "Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed."
       },
       "LeaderboardList": {
         "type": "object",
@@ -56575,6 +57293,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -56582,7 +57303,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           },
@@ -56594,6 +57316,9 @@
           },
           "evidence": {
             "$ref": "#/components/schemas/LeaderboardEvidence"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/LeaderboardScope"
           },
           "items": {
             "type": "array",
@@ -56616,6 +57341,7 @@
           "view",
           "sort",
           "evidence",
+          "scope",
           "items",
           "page"
         ],
@@ -56804,6 +57530,9 @@
               },
               "evidence": {
                 "type": "string"
+              },
+              "traced": {
+                "type": "string"
               }
             },
             "required": [
@@ -56811,7 +57540,8 @@
               "scope",
               "score",
               "own_votes",
-              "evidence"
+              "evidence",
+              "traced"
             ],
             "additionalProperties": false
           },
@@ -56827,10 +57557,17 @@
           "evidence": {
             "$ref": "#/components/schemas/LeaderboardEvidence"
           },
+          "scope": {
+            "$ref": "#/components/schemas/LeaderboardScope"
+          },
           "entry": {
             "$ref": "#/components/schemas/LeaderboardEntry"
           },
           "total": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "withheld": {
             "type": "integer",
             "minimum": 0
           },
@@ -56856,12 +57593,15 @@
           "id",
           "metric",
           "evidence",
+          "scope",
           "entry",
           "total",
+          "withheld",
           "items",
           "page"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed."
       },
       "ExplorationInput": {
         "type": "object",
@@ -67711,6 +68451,278 @@
         ],
         "additionalProperties": false,
         "description": "Outdated-reference stamp on work built on a superseded reference generation. The work keeps every record and stays readable, downloadable and publishable, and paragraph jobs still run; re-analysis and review retry are blocked; start a new analysis on the same gap with current factors instead. reference holds the original anchors. Public copies null analysis.job_id and analysis.request_id. A later reload advances to_reference_generation and appends to history. Absent on current work and in deployments that never reloaded reference data."
+      },
+      "AccountDataSourceConnection": {
+        "type": "object",
+        "properties": {
+          "dataset_id": {
+            "type": "string"
+          },
+          "input_roles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "routes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "proposition_reference",
+                "evidence_derivation",
+                "inherited_source_claim",
+                "factor_projection",
+                "trait_gwas"
+              ]
+            }
+          },
+          "via_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "organization_id": {
+                  "type": "string"
+                },
+                "roles": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "organization_id",
+                "roles"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "curation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "trace_count": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "dataset_id",
+          "input_roles",
+          "routes",
+          "via_ids",
+          "organizations",
+          "curation_ids",
+          "trace_count"
+        ],
+        "additionalProperties": false,
+        "description": "One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, a mechanism projects onto gene sets built from it, or a KPN trait the claim reaches, cited or a mechanism's fitted trait, has a GWAS bottom line: trait_gwas). via_ids: the cited gene set, mechanism, trait, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage: the release's lap/config/source_datasets.yaml, or a reload-era collection-lineage curation). Organization roles are recorded credit (publisher, attribution, ...), not data production."
+      },
+      "AccountDataSources": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "complete",
+              "incomplete",
+              "unavailable",
+              "not_traced"
+            ]
+          },
+          "traced_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "additionalProperties": false
+          },
+          "reference_generation_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "properties": {
+              "trace_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "counts_are_lower_bounds": {
+                "type": "boolean"
+              },
+              "issue_counts": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "required": [
+              "trace_count",
+              "counts_are_lower_bounds",
+              "issue_counts"
+            ],
+            "additionalProperties": false
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "claim_id": {
+                  "type": "string"
+                },
+                "resolution": {
+                  "type": "string",
+                  "enum": [
+                    "complete",
+                    "incomplete",
+                    "not_applicable"
+                  ]
+                },
+                "datasets": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountDataSourceConnection"
+                  }
+                }
+              },
+              "required": [
+                "claim_id",
+                "resolution",
+                "datasets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "datasets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                },
+                "location": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "gwas_bottom_line"
+                  ],
+                  "description": "Absent for a DAPPER Dataset. gwas_bottom_line: a KPN trait's GWAS bottom-line artifact on the Translator provenance portal, named by the published release (its metadata.bottom_line.gwas_artifact); the id is gwas-bottom-line:<artifact_id> and location the portal's artifact page, built from ids and never fetched."
+                },
+                "artifact_id": {
+                  "type": "string",
+                  "description": "gwas_bottom_line: the portal artifact id."
+                },
+                "ancestry_code": {
+                  "type": "string"
+                },
+                "ancestry_name": {
+                  "type": "string"
+                },
+                "kpn_trait_id": {
+                  "type": "string",
+                  "description": "gwas_bottom_line: the KPN trait whose GWAS this is."
+                },
+                "portal_trait_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "ror": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "via": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "filename": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false,
+        "description": "The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it, from the published reference release without the portal (no remote fetch): a reached KPN trait's GWAS route ends at its bottom-line artifact (datasets kind gwas_bottom_line). A point-in-time observation of the reference lineage (re-traced by an operator after a release or lineage change); GET /v1/accounts/{account_id}/provenance returns the full witness paths, with the portal's GWAS lineage. not_traced: no stored trace matches this exact account source and tracing policy; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound."
       },
       "ArchivedReferenceFactor": {
         "type": "object",

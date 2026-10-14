@@ -62,7 +62,7 @@ Older records are read and frozen as stored and never rewritten, so existing req
 
 Accepted requests freeze the saved suggestion record, so a later release can't rewrite the chosen anchors or the retrieval evidence.
 
-**Jev ordering.** With `REVEAL_SUGGEST_RERANK=jev`, automatic suggestions retrieve a wider pool: the top 100 cosine factors plus every eligible disease identity. Jev then orders that pool against the gap ([suggest-rerank.md](suggest-rerank.md)). Selected hits keep the retrieval record and per-context cosines described above. The scored pool is saved in the suggestion row as `rerank_pool` and is not frozen into drafts.
+**Jev ordering.** With `REVEAL_SUGGEST_RERANK=jev`, automatic suggestions use a wider pool instead: the top 100 factors plus every eligible disease identity, which Jev orders against the gap ([suggest-rerank.md](suggest-rerank.md)). That pool is ranked by the provider's own search scores (`retrieve_by_search_scores`): it fetches no vectors and builds no retrieval record, and its hits keep only search-score `context_similarities` (a context whose window did not return the factor has none). The scored pool is saved in the suggestion row as `rerank_pool` and is not frozen into drafts.
 
 **Search.** `GET /v1/mechanisms/search` returns `MechanismHit` items, `{record, ranking}` only. The search builds no per-hit retrieval record, and its search-level `search` provenance is unchanged. Retrieval provenance is kept where it is evidence: in saved suggestions, and in the draft and request bindings that freeze them.
 

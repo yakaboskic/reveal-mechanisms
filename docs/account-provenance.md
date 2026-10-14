@@ -24,12 +24,30 @@ At most two traces per process are in their database phases at once.
 
 ## Reference hydration
 
-Only trusted captures bind an account's opaque ids to reference data, each checksum-verified against its retained bytes:
+Trusted captures bind an account's opaque ids to reference data, each checksum-verified against its retained bytes:
 
 - research captures (`get_factor` binds Mechanisms, re-minted from the captured row; gene-set reads bind gene sets);
 - Box evidence-package captures `reveal.reference-evidence.mysql-capture/2` (`reference-release`, `reference-factors`, `candidate-factors`), whose Mechanisms are re-minted with the captured release manifest exactly as the package builder minted them.
 
 A capture pinned to the published reference release is read from its `ref_*` tables, after `ref_release` on the same connection (see [reference releases](reference-release.md)): `ref_factors` (checked against the captured row), every per-library `ref_projections` row, `ref_gene_sets` and `ref_collections`. Gene sets the account reaches get their full node; gene sets reached only by a projection get their name, collection and generating activity, never their members. Collection lineage merges the producer's provenance with the curated source datasets (`reference_lineage.collection_lineage`) and keeps only one gene set's closure (`lineage_closure`). Parsed lineage is cached per release, collection and document checksum (128 MB) and dropped when the release changes.
+
+### Identity binding
+
+A GeneSet or Mechanism the account references that no capture binds, and whose own lineage the document does not carry, binds by its content-addressed id to the **published release** alone (`binding_origin: document_identity`). Hosted (Box) accounts whose packages hold no reference capture trace this way.
+
+- **GeneSet:** its id is a `ref_gene_sets` row; its node comes from `metadata.dapper_gene_set` and its lineage from the collection's `collection_lineage` / `lineage_closure`, as for a captured set. Only sets that no capture and no projection binds are looked up.
+- **Mechanism:** its node's description names a public factor id, and the node minted from that factor's `ref_factors` + `ref_traits` row with the release manifest's identity version (`reference_generation.mechanism_node`, as the catalog and Box packages mint it) has exactly its id. Its projections, fitted trait and the trait's GWAS route then follow as for a captured factor.
+- **Never names or prose:** a Mechanism whose description names no KPN factor (`identity_lookup: not_applicable`), a tampered or re-minted factor (`no_match`) and an environment with nothing published (`no_published_release`) stay unresolved; `identity_lookup` is reported in `coverage.retained_projection_coverage`.
+- **Captures keep precedence**, and a capture and an identity binding that place one gene set in different releases or generations make it ambiguous and blocked (`ambiguous_reference_binding`).
+- **Superseded work stays as it was:** an account whose captured work is pinned to a release that is no longer published binds nothing by identity (`identity_lookup: superseded_release`), so none of it is read from the current tables. Reload-era generations are never searched by identity.
+
+Identity bindings are reported as `binding_origin: document_identity` in `coverage.retained_projection_coverage` and on the projection edges' `provenance_source`, with one `document_identity` source observation of the rows that bound.
+
+### Curated lineage
+
+Edges that the release build curated rather than read from the producer's document (`payload.curated_provenance`, from `lap/config/source_datasets.yaml`: the LINCS HZ3/HZ4 Level-5 signatures, IDG HZ2's Enrichr library, the GlyGen HZ2 patch) carry `provenance_source.kind: curated_lineage` with `curation_id` (the map's path) and `curation_sha256`. The stored data sources list them per connection as `curation_ids`.
+
+The reload-era collection-lineage curation ([`data/cfde-provenance/`](../data/cfde-provenance/README.md): `scripts/apply_collection_lineage.py` patches the shared reload-era `cfde_gene_set_collections` with `used_edges` and a `payload.lineage_curation` marker, `scripts/verify_account_provenance.py` previews the endpoint) is reload-era tooling. Its edges are labelled the same way, with `recovery_status[].curated_lineage`, when a capture pinned to that generation reaches them. A published release does not read those tables: the 2026-10-05 producer documents it is built from already link most of the same inputs, and the differences are listed in [the curation README](../data/cfde-provenance/README.md#release-era).
 
 A capture pinned to a release that is no longer published records `reference_release_superseded`. That work is hydrated only from capture bytes and the environment's archived factor snapshot (its top gene sets per library), never from the current tables. Traits are still named from the published release when other work of the account is bound to it; when all of it is superseded, cited traits are `trait_unavailable`. Missing reload-era tables (dropped by `cleanup`) record `reference_tables_unavailable` instead of failing.
 
@@ -67,11 +85,27 @@ Organization summaries count distinct datasets, claims and claim–dataset pairs
 
 Traversal uses derivation, generation and activity-input relationships in fields and edge records. A reached File may be associated with its recorded Dataset, but this inverse membership does not expand sibling files or inherit unrelated lineage of the containing dataset. Free-text names, retrieval candidates, KnowledgeGap selection links, embeddings and account-authoring activity inputs do not establish claim reuse.
 
-Factor expansion is pinned to trusted captured generation or release bindings. Release projections are the retained top 50 of each library, joint **or** marginal; reload-era KPN projections are the per-trait top-50 union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
+Factor expansion is pinned to a trusted capture binding or an identity binding to the published release (see [Reference hydration](#reference-hydration)). Release projections are the retained top 50 of each library, joint **or** marginal; reload-era KPN projections are the per-trait top-50 union; legacy links are ranked summaries. Neither establishes the complete model construction history. An unavailable or ambiguous binding stays unresolved rather than using the active catalog.
 
 An activity's used inputs that share one onward lineage (the same generating activities, derivations and Datasets) are followed through one representative once more than 25 of them do, and `collapsed_inputs` is observed on its edge. GlyGen HZ2's 6,620 cached API responses are one path to the GlyGen release. Datasets are always followed one by one. More than 25 inputs with no lineage at all are one `unlinked_inputs` coverage entry (`{activity, count}`).
 
 The processing bounds are 10,000 nodes, 50,000 edges and depth 128; a 100,000-state processing limit also bounds repeated work. Serialized responses are limited to 8 MiB. Exceeding a bound returns `422 PROVENANCE_LIMIT_EXCEEDED` without rankings. Retained storage outages return a service error. A missing full account source returns `409 PROVENANCE_SOURCE_UNAVAILABLE`; conflicting root payload observations return `409 SCIENTIFIC_SOURCE_CONFLICT` (or 404 when an exact payload was requested).
+
+## Stored data sources
+
+Every new account is traced once when it is saved: by the agent run's final save (`Worker.accept_accounts`, both job engines, in its persistence worker thread) and by a local submission (`research_execution.validate_submission` traces, `commit_accounts` stores). The trace runs before the acceptance write fence, over the exact capture records the commit writes, and is stored in the same commit as one `account_data_sources` record per owner and account (`account_data_sources.py`). `GET /v1/accounts/{id}` serves it as `data_sources`: per claim, each Dataset it reaches with its input roles, routes, the cited gene set, mechanism, trait, file or source claim it was reached through (`via_ids`), the credited Organizations and roles, and any curated lineage step (`curation_ids`), plus names for the bubble chart. The account view draws these datasets inside each claim circle.
+
+- **Release-era trace, no portal:** the record comes from `provenance_api.trace_local`, the endpoint's hydration and walk (identity binding included) without phase 3's portal fetch. It reads the reference tables and retained capture bytes, makes no remote request and writes no file. A reached trait's GWAS route ends at its bottom-line artifact as the published release names it (`metadata.bottom_line.gwas_artifact`): a data source of kind `gwas_bottom_line` with id `gwas-bottom-line:<artifact_id>`, its ancestry, the KPN trait and the portal's artifact page (built from ids) as `location`. The endpoint itself still shows the portal's GWAS lineage.
+- **Never blocking:** a trace failure (storage, reference database, processing bound, or a 90 s deadline) is stored as `status: unavailable` with an error code; the account is accepted regardless.
+- **Exact source:** a record is served only for the document and account payload it traced, under the current format and `TRACING_POLICY_VERSION`; otherwise `data_sources` is `{status: not_traced}`. Records traced under `account-provenance-v1` (before the reference release) are therefore `not_traced` until re-traced. Re-accepting an account keeps its first trace, matching the first-document-wins object index. A private read that withholds revoked borrowed objects drops the connections reached only through them and reports `incomplete`.
+- **Publication:** publishing copies the owner's matching record beside the new snapshot (`digest(['publication', snapshot_id])`); a later re-trace never changes what a published snapshot serves.
+- **Leaderboard:** the Datasets view ranks by "Most claims traced" (`sort=traced_claims`): the distinct claims, and accounts, whose stored trace reaches each dataset. This is lineage reach, not evidence, so the evidence-based rankings are unchanged. A GWAS bottom-line source is ranked like a dataset, with `source_kind: gwas_bottom_line` and its portal page as `url`. `scope=published` (default) reads the records frozen with publications. `scope=all` also adds every other saved account's own record, as anonymous totals: private accounts and claims are never listed, and their records report only a `withheld` count.
+- **Point in time:** the record observes the reference tables when the account was saved (`reference_generation_ids`, `source_observations_sha256`). After a release, lineage or policy change, re-trace with the backfill, which uses the endpoint's exact sources (dry run first):
+
+```sh
+REVEAL_ARTIFACT_STORE=s3 REVEAL_S3_BUCKET=cyaka-reveal-data REVEAL_S3_PREFIX=qa/ AWS_PROFILE=broad \
+  .venv/bin/python scripts/backfill_account_data_sources.py --prefix reveal_workflow_qa [--force] [--apply]
+```
 
 ## Import preservation and historical recovery
 

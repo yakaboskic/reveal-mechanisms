@@ -32,8 +32,8 @@ from .fuzzy import FuzzyWords
 from .embedding_client import get_embeddings
 from .dismech_embeddings import TEMPLATES, context_input
 from .mapping_identity import POLICY_VERSION, interpreted_mappings, normalize_disease_id
-from .vector_retrieval import (UpstashFactorIndex, VectorUnavailable, embedding_config, embedding_space, retrieve_native,
-    query_vector_provenance)
+from .vector_retrieval import (UpstashFactorIndex, VectorUnavailable, embedding_config, embedding_space, retrieve_by_search_scores,
+    retrieve_native, query_vector_provenance)
 from .reference_generation import (GENERATION_RE, KPN_MODEL, ReferenceError as ReferenceInvariant,
     mechanism_node, parse_factor_key, public_id)
 import numpy as np
@@ -675,8 +675,10 @@ class Catalog:
                     'mapping_index': matched['mapping_index'], 'normalized_target_id': matched['normalized_target_id']}})
         return candidates[:remaining]
 
-    def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False,index=None):
-        """index: the one a request already resolved (app.pinned_index), shared with its context and search provenance."""
+    def suggest_factors(self,contexts,mode,remaining,exclude,*,precomputed=False,index=None,search_scores=False):
+        """index: the one a request already resolved (app.pinned_index), shared with its context and search provenance.
+        search_scores=True (semantic only; the reranked suggestion pool) ranks by the vector search's own similarities,
+        downloads no vectors and builds no retrieval record; a context whose search results lack the factor has no similarity."""
         self.load()
         if not remaining: return []
         index = (index if index is not None else self.retrieval_index()) if mode in ('semantic', 'hybrid') else None
@@ -693,10 +695,11 @@ class Catalog:
                 else:
                     vectors = self.runtime_query_vectors([text for _, text in contexts], index=index)
             if mode == 'semantic':
-                rows = retrieve_native(index, self.factor_legacy, vectors, remaining, exclude)
+                rows = (retrieve_by_search_scores(index, self.factor_legacy, vectors, remaining, exclude, provenance=False) if search_scores
+                        else retrieve_native(index, self.factor_legacy, vectors, remaining, exclude))
                 items = [{'record': row['record'], 'ranking': {'value': row['value'], 'metric': 'cosine_similarity', 'rank': rank},
                     'contexts': [contexts[i][0] for i, score in enumerate(row['scores']) if np.isclose(score, row['value'])],
-                    'context_similarities': {identity: float(score) for (identity, _), score in zip(contexts, row['scores'])},
+                    'context_similarities': {identity: float(score) for (identity, _), score in zip(contexts, row['scores']) if not np.isnan(score)},
                     **({'retrieval': {**row['retrieval'], 'query_inputs': query_inputs}} if 'retrieval' in row else {})} for rank, row in enumerate(rows, 1)]
                 return items
             candidates = {}

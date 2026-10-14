@@ -225,37 +225,44 @@ def schemas(b):
     b.add('AccountList',obj({'items':array(ref('AccountSummary')),'page':ref('Page')}))
     count={'type':'integer','minimum':0}
     b.add('LeaderboardView',enum('researchers','accounts','datasets'))
-    b.add('LeaderboardSort',enum('overall','accounts','votes','gaps','explored','claims','researchers'))
-    b.add('LeaderboardMetric',enum('accounts','votes','gaps','explored','claims','researchers','files'))
+    b.add('LeaderboardSort',enum('overall','accounts','votes','gaps','explored','claims','researchers','traced_claims'))
+    b.add('LeaderboardMetric',enum('accounts','votes','gaps','explored','claims','researchers','files','traced_claims','traced_accounts'))
     b.add('LeaderboardEvidence',enum('all','supporting'))
+    b.add('LeaderboardScope',enum('published','all',description='Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.'))
     b.add('LeaderboardAttribution',obj({'id':string(pattern='^researcher_[a-f0-9]{64}$'),'label':string(),'orcid':null(string())}))
     b.add('LeaderboardDirections',obj({key:count for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}))
+    b.add('LeaderboardOrganization',obj({'id':string(),'name':string(),'ror':null(string()),'roles':array(string())},
+        description='An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production.'))
     b.add('LeaderboardMetrics',obj({**{key:count for key in ('account_count','upvotes','downvotes','voter_count',
-        'account_gap_count','explored_gap_count','claim_count','researcher_count')},'net_votes':{'type':'integer'},
+        'account_gap_count','explored_gap_count','claim_count','researcher_count','traced_claim_count','traced_account_count')},'net_votes':{'type':'integer'},
         'overall_score':{'type':'number','minimum':0,'maximum':100}}))
     b.add('LeaderboardEntry',obj({'id':string(),'kind':enum('researcher','account','dataset'),'label':string(),
         'rank':{'type':'integer','minimum':1},'metrics':ref('LeaderboardMetrics'),
         'components':obj({key:{'type':'number','minimum':0,'maximum':100} for key in ('accounts','votes','gaps')}),
         'orcid':null(string()),'account_id':null(string()),'gap_id':null(string()),
         'gap':null(obj({'id':string(),'label':string()})),'attribution':null(ref('LeaderboardAttribution')),
-        'directions':ref('LeaderboardDirections')}))
+        'directions':ref('LeaderboardDirections'),
+        'organizations':array(ref('LeaderboardOrganization'),description='Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views.'),
+        'url':null(string(format='uri',description='Datasets: the public source page of the dataset, when its lineage records one.'))}))
+    S['LeaderboardEntry']['properties']['source_kind']=enum('gwas_bottom_line',description='Datasets: present for a KPN trait\'s GWAS bottom-line artifact that traced claims reach (stored data sources kind gwas_bottom_line); url is then its portal artifact page. Absent for a DAPPER Dataset.')
     b.add('LeaderboardMetadata',obj({'as_of':time,'score_version':enum('public-contribution-v1'),
         'cohort_size':count,'voting_participants':count,'exclusions':obj({key:count for key in
             ('fixture_accounts','uncredited_accounts','conflicting_accounts','invalid_public_accounts','excluded_evidence_paths','fixture_explorations','uncredited_explorations')}),
         'definitions':array(obj({'id':string(),'label':string(),'description':string()})),
         'methodology':obj({'weights':obj({key:{'type':'number'} for key in ('accounts','votes','gaps')}),
-            'scope':string(),'score':string(),'own_votes':string(),'evidence':string()})},
-        description='Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed.'))
+            'scope':string(),'score':string(),'own_votes':string(),'evidence':string(),'traced':string()})},
+        description='Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed.'))
     b.add('LeaderboardList',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
-        'view':ref('LeaderboardView'),'sort':ref('LeaderboardSort'),'evidence':ref('LeaderboardEvidence'),
+        'view':ref('LeaderboardView'),'sort':ref('LeaderboardSort'),'evidence':ref('LeaderboardEvidence'),'scope':ref('LeaderboardScope'),
         'items':array(ref('LeaderboardEntry')),'page':ref('Page')}))
     b.add('LeaderboardRecord',obj({'id':string(),'kind':enum('account','gap','claim','researcher','file','exploration'),
         'label':string(),'url':string(),'account_ids':array(string()),'claim_ids':array(string()),'evidence_ids':array(string()),
         'directions':ref('LeaderboardDirections'),'value':{'type':'integer'}},
         description='One distinct counted public unit. For votes, one account record carries its signed net value; summing values reproduces the headline. Other metrics count records. Evidence IDs preserve explicit interpretations, never inferred scientific endorsement.'))
     b.add('LeaderboardRecords',obj({**deepcopy(S['LeaderboardMetadata']['properties']),
-        'view':ref('LeaderboardView'),'id':string(),'metric':ref('LeaderboardMetric'),'evidence':ref('LeaderboardEvidence'),
-        'entry':ref('LeaderboardEntry'),'total':count,'items':array(ref('LeaderboardRecord')),'page':ref('Page')}))
+        'view':ref('LeaderboardView'),'id':string(),'metric':ref('LeaderboardMetric'),'evidence':ref('LeaderboardEvidence'),'scope':ref('LeaderboardScope'),
+        'entry':ref('LeaderboardEntry'),'total':count,'withheld':count,'items':array(ref('LeaderboardRecord')),'page':ref('Page')},
+        description='total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed.'))
     b.add('ExplorationInput',obj({'source_gap':ref('SelectedGap'),'draft_id':null(uuid)},['source_gap'],
         description='Records a visit under the authenticated principal. Exact source revision is required; optional draft must belong to that principal and selected gap.'))
     b.add('Exploration',obj({'source_gap':ref('SelectedGap'),'knowledge_gap':ref('DapperKnowledgeGap'),
@@ -315,6 +322,24 @@ def reference_schemas(b):
         description='Outdated-reference stamp on work built on a superseded reference generation. The work keeps every record and stays readable, downloadable and publishable, and paragraph jobs still run; re-analysis and review retry are blocked; start a new analysis on the same gap with current factors instead. reference holds the original anchors. Public copies null analysis.job_id and analysis.request_id. A later reload advances to_reference_generation and appends to history. Absent on current work and in deployments that never reloaded reference data.'))
     for name in ('AccountSummary','AccountResult','AnalysisOutcome','ResearchRequest'):
         S[name]['properties']['archive']=ref('ReferenceArchive')
+    count={'type':'integer','minimum':0}
+    routes=enum('proposition_reference','evidence_derivation','inherited_source_claim','factor_projection','trait_gwas')
+    b.add('AccountDataSourceConnection',obj({'dataset_id':string(),'input_roles':array(string()),'routes':array(routes),
+        'via_ids':array(string()),'organizations':array(obj({'organization_id':string(),'roles':array(string())})),
+        'curation_ids':array(string()),'trace_count':count},
+        description='One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, a mechanism projects onto gene sets built from it, or a KPN trait the claim reaches, cited or a mechanism\'s fitted trait, has a GWAS bottom line: trait_gwas). via_ids: the cited gene set, mechanism, trait, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage: the release\'s lap/config/source_datasets.yaml, or a reload-era collection-lineage curation). Organization roles are recorded credit (publisher, attribution, ...), not data production.'))
+    b.add('AccountDataSources',obj({'status':enum('complete','incomplete','unavailable','not_traced'),'traced_at':time,
+        'error':obj({'code':string()}),'reference_generation_ids':array(digest),
+        'coverage':obj({'trace_count':count,'counts_are_lower_bounds':{'type':'boolean'},'issue_counts':{'type':'object','additionalProperties':count}}),
+        'claims':array(obj({'claim_id':string(),'resolution':enum('complete','incomplete','not_applicable'),'datasets':array(ref('AccountDataSourceConnection'))})),
+        'datasets':array(obj({'id':string(),'name':string(),'version':string(),'description':string(),'location':string(format='uri'),
+            'kind':enum('gwas_bottom_line',description='Absent for a DAPPER Dataset. gwas_bottom_line: a KPN trait\'s GWAS bottom-line artifact on the Translator provenance portal, named by the published release (its metadata.bottom_line.gwas_artifact); the id is gwas-bottom-line:<artifact_id> and location the portal\'s artifact page, built from ids and never fetched.'),
+            'artifact_id':string(description='gwas_bottom_line: the portal artifact id.'),'ancestry_code':string(),'ancestry_name':string(),
+            'kpn_trait_id':string(description='gwas_bottom_line: the KPN trait whose GWAS this is.'),'portal_trait_id':string()},required=['id'])),
+        'organizations':array(obj({'id':string(),'name':string(),'ror':string()},required=['id'])),
+        'via':array(obj({'id':string(),'kind':string(),'name':string(),'filename':string()},required=['id','kind']))},required=['status'],
+        description='The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it, from the published reference release without the portal (no remote fetch): a reached KPN trait\'s GWAS route ends at its bottom-line artifact (datasets kind gwas_bottom_line). A point-in-time observation of the reference lineage (re-traced by an operator after a release or lineage change); GET /v1/accounts/{account_id}/provenance returns the full witness paths, with the portal\'s GWAS lineage. not_traced: no stored trace matches this exact account source and tracing policy; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound.'))
+    S['AccountResult']['properties']['data_sources']=ref('AccountDataSources')
     # The outcome summary is derived from the outcome: optional keys propagate with it.
     S['AnalysisOutcomeSummary']['properties']['archive']=deepcopy(S['AnalysisOutcome']['properties']['archive'])
     b.add('ArchivedReferenceFactor',obj({'format':{'type':'string','const':'reveal.archived-reference-factor/1'},'archive_id':digest,
@@ -354,6 +379,38 @@ def examples(b, f, e):
     for key in ['account','claim','paragraph','question_result','gene_set']:
         for artifact in e[key]['artifacts']:artifact.update(availability='not_available',verification='checksum_verified')
     e['account']['research_statement']={'status':'succeeded','job_id':b.PARAGRAPH_JOB_ID,'paragraph_id':f['paragraph']['id']}
+    # Illustrative stored data sources (provenance_api.trace_local over the published release): the first claim's mechanism
+    # projects onto GTEx gene sets, whose collection lineage reaches GTEx V8 and NCBI gene_info, and its fitted trait's GWAS
+    # route ends at the trait's bottom-line artifact (kind gwas_bottom_line, a portal link built from ids, never fetched).
+    from reveal_backend.trait_details import PORTAL_URL
+    doc=f['account_document']; mechanism=doc['mechanisms'][0]; trait=KPN_EXAMPLE['trait']
+    gtex,gene_info='dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5','dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk'
+    gwas='gwas-bottom-line:bl-t2d-mixed'
+    broad,gtex_consortium,ncbi=('dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8','dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ',
+        'dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK')
+    via={'routes':['factor_projection','proposition_reference'],'via_ids':[mechanism['id']],'curation_ids':[],'trace_count':1}
+    first=[{'dataset_id':gtex,'input_roles':['data_input'],**via,'organizations':[{'organization_id':broad,'roles':['publisher']},
+                {'organization_id':gtex_consortium,'roles':['attribution']}]},
+           {'dataset_id':gene_info,'input_roles':['metadata_input'],**via,'organizations':[{'organization_id':ncbi,'roles':['publisher']}]},
+           {'dataset_id':gwas,'input_roles':['unknown'],'routes':['proposition_reference','trait_gwas'],'via_ids':[mechanism['id']],
+            'organizations':[],'curation_ids':[],'trace_count':1}]
+    e['account']['data_sources']={'status':'incomplete','traced_at':'2026-10-12T00:00:00Z',
+        'reference_generation_ids':['ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a'],
+        'coverage':{'trace_count':3,'counts_are_lower_bounds':True,'issue_counts':{'MISSING_LINEAGE':3}},
+        'claims':[{'claim_id':claim,'resolution':'complete' if index==0 else 'not_applicable','datasets':first if index==0 else []}
+                  for index,claim in enumerate(doc['scientific_accounts'][0]['component_claims'])],
+        'datasets':[{'id':gene_info,'name':'NCBI Gene Homo_sapiens.gene_info','version':'undated snapshot',
+                     'description':'NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.',
+                     'location':'https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/'},
+                    {'id':gtex,'name':'GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)','version':'v8',
+                     'description':'Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.',
+                     'location':'https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression'},
+                    {'id':gwas,'name':trait['name']+' GWAS bottom line (Mixed ancestry)','location':PORTAL_URL+'/artifact/bl-t2d-mixed',
+                     'kind':'gwas_bottom_line','artifact_id':'bl-t2d-mixed','ancestry_code':'Mixed','ancestry_name':'Mixed ancestry',
+                     'kpn_trait_id':trait['id'],'portal_trait_id':trait['legacy_phenotype_id']}],
+        'organizations':[{'id':gtex_consortium,'name':'GTEx Consortium'},{'id':ncbi,'name':'National Center for Biotechnology Information','ror':'ror:02meqm098'},
+                         {'id':broad,'name':'Broad Institute','ror':'ror:05a0ya142'}],
+        'via':[{'id':mechanism['id'],'kind':'mechanism','name':mechanism['name']}]}
     package_dir=b.OUT/'examples/evidence-package'
     shutil.copytree(b.ROOT/'data/evidence-packages/cad-builder-v1',package_dir,dirs_exist_ok=True)
     package=json.loads((package_dir/'evidence-package.json').read_text())
@@ -542,29 +599,34 @@ def endpoints(b,f,e):
         'methodology':{'weights':{'accounts':.3,'votes':.4,'gaps':.3},'scope':'Currently public frozen snapshots only; all time.',
             'score':'Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.',
             'own_votes':'Researcher scores exclude their own ballots. Account scores retain canonical totals.',
-            'evidence':'Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.'}}
+            'evidence':'Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.',
+            'traced':'Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals.'}}
     leaderboard_entry={'id':f['account']['id'],'kind':'account','label':f['account'].get('name') or 'Example scientific account','rank':1,
         'metrics':{**{key:0 for key in ('overall_score','net_votes','upvotes','downvotes','voter_count','researcher_count')},
-            'account_count':1,'account_gap_count':1,'explored_gap_count':1,'claim_count':len(f['account']['component_claims'])},
+            'account_count':1,'account_gap_count':1,'explored_gap_count':1,'claim_count':len(f['account']['component_claims']),
+            'traced_claim_count':0,'traced_account_count':0},
         'components':{'accounts':0,'votes':0,'gaps':0},'orcid':None,'account_id':f['account']['id'],'gap_id':f['gap']['id'],
         'gap':{'id':f['gap']['id'],'label':f['gap'].get('name') or f['gap']['id']},'attribution':None,
-        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')}}
+        'directions':{key:0 for key in ('SUPPORTS','DISPUTES','MIXED','NEUTRAL','UNKNOWN')},'organizations':[],'url':None}
     leaderboard_description='All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.'
     b.operation('/v1/leaderboard','get','getLeaderboard','Scientific content','Rank public community contributions',
-        leaderboard_description,'LeaderboardList',{'empty_community':{**leaderboard_metadata,'view':'researchers','sort':'overall','evidence':'all','items':[],'page':e['page']}},
+        leaderboard_description+' The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.',
+        'LeaderboardList',{'empty_community':{**leaderboard_metadata,'view':'researchers','sort':'overall','evidence':'all','scope':'published','items':[],'page':e['page']}},
         parameters=[b.parameter('view','query',enum('researchers','accounts','datasets',default='researchers'),'researchers'),
             b.parameter('sort','query',deepcopy(S['LeaderboardSort']),'overall'),
-            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all'),
+            b.parameter('scope','query',enum('published','all',default='published'),'published')]+b.page_parameters(),
         public=True,errors=('401','409','422','429','503'))
     b.operation('/v1/leaderboard/{view}/{entry_id}/records','get','getLeaderboardRecords','Scientific content','Inspect records contributing to a public ranking',
         'The exact public eligibility and evidence scope used by leaderboard totals. One record per distinct counted unit; votes return one account record with its signed net contribution. Sum vote values to reproduce the headline; other totals equal record count. entry includes context for direct links. Researchers allow accounts/votes/gaps/explored; accounts allow accounts/votes/claims/gaps/researchers; datasets allow accounts/claims/gaps/researchers/files. Revoked and ineligible entries return the same 404. Public keys and canonical scientific IDs only. '+leaderboard_description,
-        'LeaderboardRecords',{'example_account':{**leaderboard_metadata,'view':'accounts','id':f['account']['id'],'metric':'votes','evidence':'all',
-            'entry':leaderboard_entry,'total':1,'items':[{'id':f['account']['id'],'kind':'account','label':leaderboard_entry['label'],
+        'LeaderboardRecords',{'example_account':{**leaderboard_metadata,'view':'accounts','id':f['account']['id'],'metric':'votes','evidence':'all','scope':'published',
+            'entry':leaderboard_entry,'total':1,'withheld':0,'items':[{'id':f['account']['id'],'kind':'account','label':leaderboard_entry['label'],
                 'url':'/accounts/'+f['account']['id'],'account_ids':[f['account']['id']],'claim_ids':f['account']['component_claims'],
                 'evidence_ids':[],'directions':leaderboard_entry['directions'],'value':0}],'page':e['page']}},
         parameters=[b.parameter('view','path',ref('LeaderboardView'),'accounts',True),b.parameter('entry_id','path',string(),f['account']['id'],True),
-            b.parameter('metric','query',enum('accounts','votes','gaps','explored','claims','researchers','files',default='accounts'),'votes'),
-            b.parameter('evidence','query',enum('all','supporting',default='all'),'all')]+b.page_parameters(),
+            b.parameter('metric','query',enum('accounts','votes','gaps','explored','claims','researchers','files','traced_claims','traced_accounts',default='accounts'),'votes'),
+            b.parameter('evidence','query',enum('all','supporting',default='all'),'all'),
+            b.parameter('scope','query',enum('published','all',default='published'),'published')]+b.page_parameters(),
         public=True,errors=('401','404','409','422','429','503'))
     b.operation('/v1/knowledge-gaps/{gap_id}/accounts','get','listKnowledgeGapAccounts','Knowledge gaps','List visible scientific accounts for a knowledge gap',
         'Accepted accounts for the exact DAPPER KnowledgeGap identity, newest first then account ID, deduplicated by scientific-account digest. Public scope (default) lists explicitly published snapshots across owners and omits private job IDs. Workspace scope requires a valid session and lists only its saved accounts. Invalid supplied sessions are rejected for either scope. Source-revision checks validate the selected observation; changed gap digests never merge. Attribution remains the original request actor. Each account ID links to its existing scientific endpoint, whose public reads are restricted to its published snapshot.'+state_note,

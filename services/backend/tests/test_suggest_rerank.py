@@ -84,8 +84,8 @@ class Catalog:
                  'contexts': [gap['object']['id']], 'reason': 'Pinned trait mapping matches the selected disease.',
                  'retrieval': {'strategy': 'disease_identity'}} for rank, source_id in enumerate(rows, 1)]
 
-    def suggest_factors(self, contexts, mode, remaining, exclude, *, precomputed=False, index=None):
-        self.suggest_calls.append(remaining)
+    def suggest_factors(self, contexts, mode, remaining, exclude, *, precomputed=False, index=None, search_scores=False):
+        self.suggest_calls.append((remaining, search_scores))
         rows = [(native(number), value) for number, _, value in self.cosine if native(number) not in exclude][:remaining]
         identity = contexts[0][0]
         return [{'record': self.records[source_id], 'ranking': {'value': value, 'metric': 'cosine_similarity', 'rank': rank},
@@ -265,12 +265,13 @@ class BuildSuggestionsTests(unittest.TestCase):
         self.assertNotIn('rerank', result); self.assertNotIn('rerank', audit); self.assertNotIn('rerank_pool', audit)
         self.assertEqual([item['factor']['source_id'] for item in result['automatic_anchors']],
                          [native(20), native(9), native(1), native(2), native(3)])
-        self.assertEqual((catalog.disease_calls, catalog.suggest_calls, jev.bodies), ([5], [3], []))
+        self.assertEqual((catalog.disease_calls, catalog.suggest_calls, jev.bodies), ([5], [(3, False)], []))
 
     def test_applied_rerank_orders_by_jev_and_records_the_scored_pool(self):
         catalog = Catalog(COSINE, DISEASE); jev = Jev(RATINGS)
         result, audit = self.build(catalog, ON, jev=jev)
-        self.assertEqual((catalog.disease_calls, catalog.suggest_calls), ([gap_rerank.DISEASE_POOL_SIZE], [gap_rerank.POOL_SIZE]))
+        # The wide pool ranks by the vector search's own scores; only the flag-off path re-scores exactly.
+        self.assertEqual((catalog.disease_calls, catalog.suggest_calls), ([gap_rerank.DISEASE_POOL_SIZE], [(gap_rerank.POOL_SIZE, True)]))
         self.assertEqual([item['factor']['source_id'] for item in result['automatic_anchors']],
                          [native(4), native(9), native(6), native(5), native(8)])
         self.assertEqual([item['ranking']['rank'] for item in result['automatic_anchors']], [1, 2, 3, 4, 5])
@@ -329,7 +330,7 @@ class BuildSuggestionsTests(unittest.TestCase):
         result, audit = self.build(catalog, ON | {'TYPESAFE_API_KEY': ''}, jev=jev)
         self.assertEqual(result['automatic_anchors'], expected['automatic_anchors'])
         self.assertEqual((result['rerank']['status'], result['rerank']['reason']), ('fallback', 'not_configured'))
-        self.assertEqual((catalog.suggest_calls, jev.bodies), ([3], []))
+        self.assertEqual((catalog.suggest_calls, jev.bodies), ([(3, False)], []))
         self.assertNotIn('rerank_pool', audit)
 
     def test_subquery_hybrid_and_full_manual_selection_are_not_reranked(self):

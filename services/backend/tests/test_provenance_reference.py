@@ -160,9 +160,13 @@ class ProvenanceReferenceTests(unittest.TestCase):
         record = next(iter(self.records.values()))
         record['research_source']['research_capture']['generation_id'] = OTHER
         doc, metadata = self.expand()
-        self.assertEqual(self.queries, [])
+        # The tampered capture binds nothing and is reported. Identity binding looks only at the published release (none
+        # here: test_provenance_release covers it), never at reload-era generations.
+        self.assertEqual([sql for sql, _ in self.queries], ['SELECT release_id,published_at,manifest FROM reveal_ref_release'])
         self.assertNotIn('factor_projection_edges', doc)
         self.assertTrue(any(row['code'] == 'invalid_capture_binding' for row in metadata['issues']))
+        self.assertFalse(any(row['kind'] == 'research_capture' for row in metadata['source_observations']))
+        self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'no_published_release')
 
     def test_manifest_or_factor_mutation_is_unresolved(self):
         with sqlite3.connect(self.path) as c:
@@ -313,6 +317,62 @@ class ProvenanceReferenceTests(unittest.TestCase):
         with patch.object(reference, '_rows', side_effect=lambda *args: list(reversed(rows(*args)))):
             second, reordered = self.expand()
         self.assertEqual(metadata['source_observations'], reordered['source_observations'])
+
+    # Identity binding (Box-built accounts cite KPN Mechanisms and GeneSets without captures) binds only to the published
+    # release: test_provenance_release covers it. Reload-era generations are never searched by identity.
+
+    def test_identity_binding_never_searches_reload_era_generations(self):
+        self.records = {}
+        doc, metadata = self.expand()
+        self.assertEqual([sql for sql, _ in self.queries], ['SELECT release_id,published_at,manifest FROM reveal_ref_release'])
+        self.assertNotIn('factor_projection_edges', doc)
+        self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'no_published_release')
+        self.assertEqual(metadata['reference_generation_ids'], [])
+        self.assertEqual(self.collect(doc, metadata)['dataset_reuse'], [])
+
+    def test_native_lineage_and_legacy_mechanism_text_issue_no_queries(self):
+        self.records = {}
+        self.document['propositions'][0].pop('subject_entity')
+        legacy = {'name': 'T2D mechanism Factor1', 'description': 'EAGGL mechanism factor:portal:T2D:cfde-inc-v2:Factor1. Source label: x.'}
+        legacy['id'] = self.runtime.compute_id(legacy, 'Mechanism', self.runtime.schema)
+        self.document['mechanisms'] = [legacy]; self.document['propositions'][0]['object_entity'] = legacy['id']
+        doc, metadata = self.expand()
+        self.assertEqual(self.queries, [])
+        self.assertEqual(metadata['retained_projection_coverage'][0]['identity_lookup'], 'not_applicable')
+        self.document['mechanisms'] = [{**self.mechanism, 'was_derived_from': [DATASET]}]
+        self.document['propositions'][0]['object_entity'] = self.mechanism['id']
+        doc, metadata = self.expand()
+        self.assertEqual(self.queries, [])
+
+    def test_curated_lineage_edges_are_labelled(self):
+        # A reload-era collection that apply_collection_lineage.py patched, reached through the captured factor's projection.
+        marker = {'format': 'reveal.lineage-curation/1', 'curation_id': 'curation-1', 'curation_sha256': 'c' * 64,
+                  'used_edges': deepcopy(self.graph['used_edges'])}
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE cfde_gene_set_collections SET payload=? WHERE generation_id=?',
+                (json.dumps({'provenance': self.graph, 'document_sha256': 'd' * 64, 'lineage_curation': marker}), GEN))
+        doc, metadata = self.expand()
+        source = doc['used_edges'][0]['provenance_source']
+        self.assertEqual((source['kind'], source['curation_id'], source['collection_id']), ('curated_lineage', 'curation-1', 'collection'))
+        self.assertEqual(metadata['recovery_status'][0]['curated_lineage'], 'curation-1')
+        result = self.collect(doc, metadata)
+        used = next(edge for edge in result['edges'] if edge['relation'] == 'used')
+        self.assertEqual(used['provenance_source'][0]['kind'], 'curated_lineage')
+
+    def test_uncurated_collection_without_upstream_stays_unresolved(self):
+        self.graph = {'activities': [{'id': ACTIVITY, 'name': 'extraction'}],
+                      'datasets': [{'id': 'dapper:Dataset.library', 'name': 'dig-gene-set-filtered/LIGER'}]}
+        self.store_graph()
+        doc, metadata = self.expand()
+        result = self.collect(doc, metadata)
+        self.assertEqual(result['dataset_reuse'], [])
+        self.assertTrue(any(row['code'] == 'MISSING_LINEAGE' for row in result['coverage']['issues']))
+
+    def test_identity_lookup_storage_failure_propagates(self):
+        self.records = {}
+        with self.assertRaises(sqlite3.OperationalError):
+            reference.expand(self.document, {}, tx=EmptyTx(),
+                connection_factory=lambda: (_ for _ in ()).throw(sqlite3.OperationalError('offline')))
 
     def test_file_membership_does_not_walk_siblings(self):
         file = 'dapper:File.input'; sibling = 'dapper:File.sibling'
