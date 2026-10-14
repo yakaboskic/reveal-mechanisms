@@ -1,5 +1,6 @@
 /** Advisory draft assessment. This client never starts a research job. */
 import type { operations } from "./api.generated";
+import { workspaceHeaders } from "./api";
 export type AssessmentDraft = { id: string; version: number };
 export type AssessmentComposer = { source_gap: unknown; eaggl_anchors: readonly unknown[]; [field: string]: unknown };
 export type CfdeAssessment = {
@@ -109,7 +110,7 @@ async function request(path: string, signal: AbortSignal, body?: { draft_version
   const response = await fetch("/api/backend/v1/drafts/" + path, {
     method: body ? "POST" : "GET", credentials: "same-origin", cache: "no-store",
     signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-    headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json", "Idempotency-Key": key! } : {}) },
+    headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json", "Idempotency-Key": key!, ...workspaceHeaders() } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
   if (!response.ok) {

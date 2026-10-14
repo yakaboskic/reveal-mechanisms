@@ -1,4 +1,5 @@
 /** Browser contracts for local research. Workspace archives contain no credentials. */
+import { workspaceHeaders } from "./api";
 export type LocalWorkState = "preparing" | "ready" | "preparation_failed" | "closed";
 export type LocalAgentClient = "codex" | "claude_code";
 export type LocalSetupProgress = { phase: "preparing" | "downloading"; receivedBytes: number; totalBytes?: number };
@@ -69,9 +70,11 @@ export function localConnectionConfig(client: "codex" | "claude_code", url: stri
     : JSON.stringify({ mcpServers: { [name]: { type: "http", url } } }, null, 2);
 }
 
-export function createLocalWorkClient(fetcher: typeof fetch = fetch) {
+/** fence: the expected-workspace header the gateway requires on a guest's writes (api.ts workspaceHeaders); a local
+ * research page reads its session before it shows any write (LocalWorkView). */
+export function createLocalWorkClient(fetcher: typeof fetch = fetch, fence: () => Record<string, string> = workspaceHeaders) {
   async function request<T>(path: string, options: { method?: string; body?: unknown; key?: string; signal?: AbortSignal } = {}): Promise<T> {
-    const headers = new Headers({ Accept: "application/json" });
+    const headers = new Headers({ Accept: "application/json", ...(options.method && options.method !== "GET" ? fence() : {}) });
     if (options.body !== undefined) headers.set("Content-Type", "application/json");
     if (options.key) headers.set("Idempotency-Key", options.key);
     const timeout = AbortSignal.timeout(30_000);
@@ -91,7 +94,7 @@ export function createLocalWorkClient(fetcher: typeof fetch = fetch) {
       signal.throwIfAborted();
       onProgress?.({ phase: "preparing", receivedBytes: 0 });
       const response = await fetcher(`${workPath(id)}/setup-kit`, { method: "POST", credentials: "same-origin", cache: "no-store", redirect: "error",
-        headers: { Accept: "application/zip", "Content-Type": "application/json" }, body: JSON.stringify({ client }), signal });
+        headers: { Accept: "application/zip", "Content-Type": "application/json", ...fence() }, body: JSON.stringify({ client }), signal });
       if (!response.ok) {
         const problem = await response.json().catch(() => ({}));
         throw new LocalWorkError(response.status, problem.code || "API_ERROR", problem.detail || problem.message || `Workspace download failed (${response.status}).`);

@@ -101,9 +101,10 @@ const untilAborted = (signal: AbortSignal) => new Promise<void>(resolve => {
   if (signal.aborted) resolve(); else signal.addEventListener("abort", () => resolve(), { once: true });
 });
 
-/** The job a view shows once `event` is applied. */
+/** The job a view shows once `event` is applied; a terminal event also marks when the job completed. */
 export const withJobEvent = (job: Job, event: JobEvent): Job => ({ ...job, status: event.status, stage: event.stage,
-  result: event.result || job.result, updated_at: event.occurred_at, last_event_id: event.id });
+  result: event.result || job.result, updated_at: event.occurred_at, completed_at: terminal(event.status) ? event.occurred_at : job.completed_at,
+  last_event_id: event.id });
 /**
  * A job opened after it finished already holds the outcome its replay ends with: only the terminal event that is its
  * saved last event needs no job read. followJob stops at the first terminal event, and a review retry leaves earlier
