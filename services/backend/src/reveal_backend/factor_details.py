@@ -5,7 +5,9 @@ repository.application_sql): no research jobs, account graphs, embeddings or rem
 never inferred from rank. A factor's loading summaries are facts of a published, immutable release, so each process
 reads them once (keyed by the release id); the active gnomAD pin is re-read at most every few seconds. A request leases a
 pooled reference session only for what it does not already know, and that session's first read is the published release
-(reference_pin): a release the catalog has not loaded yet is refused, never read as the catalog's.
+(reference_pin): a release the catalog has not loaded yet is refused, never read as the catalog's. A collection's parsed
+lineage is kept the same way (collection_facts, keyed by release, collection and document hash), for this module and
+research_data: GlyGen HZ2's payload alone is 4.9 MB of JSON.
 """
 from collections import OrderedDict
 from copy import deepcopy
@@ -16,7 +18,9 @@ from time import monotonic
 from urllib.parse import quote
 
 from .auth import Problem
-from .reference_lineage import EDGE_KEY, collection_lineage, lineage_closure
+from .evidence_package import decode
+from .reference_generation import GENERATION_RE
+from .reference_lineage import EDGE_KEY, collection_lineage, lineage_closure, lineage_index
 from .reference_pin import ReleaseUnavailable, pin_release
 from .repository import application_prefix, application_sql
 from .runtime_config import reference_mysql_connection, setting
@@ -34,7 +38,10 @@ PORTAL_URL = 'https://translator.broadinstitute.org/artifact_provenance'
 TRAIT_LINK_KEYS = ('n_phenotypes', 'n_linked', 'n_linked_kpn_traits', 'n_linked_atlas_traits', 'own_trait_q')
 TOP_LINK_KEYS = ('phenotype', 'kpn_trait_id', 'name', 'phewas_q')
 CACHE_ENTRIES, PIN_TTL_SECONDS = 16384, 5.0  # small tuples keyed by the immutable release id
-_facts, _pins, _cache_lock = OrderedDict(), {}, threading.Lock()
+# Parsed collection lineages (collection_facts): at most this many, holding at most this much payload JSON (all 532 of a
+# release are 12.5 MB, GlyGen HZ2 4.9 MB of it; parsed with its index it is ~15 MB of memory).
+LINEAGE_ENTRIES, LINEAGE_BYTES = 64, 8 << 20
+_facts, _pins, _lineages, _cache_lock = OrderedDict(), {}, OrderedDict(), threading.Lock()
 
 
 def _immutable(key, compute):
@@ -50,7 +57,45 @@ def _immutable(key, compute):
 
 
 def clear_caches():
-    with _cache_lock: _facts.clear(); _pins.clear()
+    with _cache_lock: _facts.clear(); _pins.clear(); _lineages.clear()
+
+
+def collection_facts(release_id, collection_id, document_sha256, read):
+    """A collection's parsed lineage, read and parsed once per process: {'lineage' (collection_lineage), 'index' (its
+    lineage_index), 'collection' (the collection object), 'document_sha256', 'curated' ({source, notes} of its curated
+    provenance), 'curated_edges' (the curated was_derived_from edge keys)}, shared read-only: callers copy what they return.
+
+    read() returns the collection's stored payload JSON (text), on the caller's lease pinned to release_id. The entry is
+    kept under (release_id, collection_id, document_sha256), never without the release id, least recently used out first
+    within LINEAGE_ENTRIES and LINEAGE_BYTES; a payload whose document_sha256 is not the one asked for is served, not kept."""
+    key = (release_id, collection_id, document_sha256)
+    cacheable = isinstance(release_id, str) and GENERATION_RE.fullmatch(release_id) and isinstance(document_sha256, str) and document_sha256
+    if cacheable:
+        with _cache_lock:
+            if key in _lineages:
+                _lineages.move_to_end(key); return _lineages[key][0]
+    raw = read()
+    if isinstance(raw, str): raw = raw.encode()
+    payload = (decode(raw) if raw is not None else None) or {}
+    lineage = collection_lineage(payload)
+    curated = payload.get('curated_provenance') if isinstance(payload.get('curated_provenance'), dict) else {}
+    facts = {'lineage': lineage, 'index': lineage_index(lineage), 'collection': payload.get('collection'),
+             'document_sha256': payload.get('document_sha256'),
+             'curated': {'source': curated.get('source'), 'notes': [item for item in curated.get('notes') or [] if isinstance(item, dict)]},
+             'curated_edges': frozenset(tuple(edge.get(key) for key in EDGE_KEY)
+                                        for edge in (curated.get('groups') or {}).get('was_derived_from_edges') or [] if isinstance(edge, dict))}
+    if cacheable and facts['document_sha256'] == document_sha256 and len(raw or b'') <= LINEAGE_BYTES:
+        with _cache_lock:
+            _lineages[key] = (facts, len(raw)); _lineages.move_to_end(key)
+            while len(_lineages) > LINEAGE_ENTRIES or sum(size for _, size in _lineages.values()) > LINEAGE_BYTES:
+                _lineages.popitem(last=False)
+    return facts
+
+
+def extracted(value):
+    """A JSON_EXTRACT string: JSON text in MySQL ('"..."'), the bare string in SQLite."""
+    if isinstance(value, bytes): value = value.decode()
+    return json.loads(value) if isinstance(value, str) and value.startswith('"') else value
 
 
 class _Reads:
@@ -142,16 +187,17 @@ def _query(binding, kind, metric):
                 ' FROM reveal_ref_factor_genes WHERE factor_key=%s) ranked WHERE 1=1',
                 (binding['factor_key'],), 'ranked.symbol', 'ranked.loading', 'ranked.loading_rank',
                 'ranked.symbol,ranked.loading,ranked.loading_rank', GENE_COVERAGE, GENE_SUMMARY)
-    # Every projected gene set is in reveal_ref_gene_sets (the release keeps the gene sets its projections reference).
+    # Every projected gene set is in reveal_ref_gene_sets (the release keeps the gene sets its projections reference), so the
+    # summary reads the factor's projections alone, and ties order by the projection key (factor_key, gene_set_id).
     score = 'p.marginal_loading' if metric == 'marginal' else 'p.joint_loading'
     return (' FROM reveal_ref_projections p JOIN reveal_ref_gene_sets s ON s.gene_set_id=p.gene_set_id WHERE p.factor_key=%s',
-            (binding['factor_key'],), "CONCAT(s.gene_set_name,' ',p.library,' ',s.gene_set_id)", score, score + ' DESC,s.gene_set_id',
-            's.gene_set_id,s.gene_set_name,p.library,s.n_genes,p.joint_loading,p.marginal_loading,p.joint_rank,p.marginal_rank', SET_COVERAGE, None)
+            (binding['factor_key'],), "CONCAT(s.gene_set_name,' ',p.library,' ',s.gene_set_id)", score, score + ' DESC,p.gene_set_id',
+            's.gene_set_id,s.gene_set_name,p.library,s.n_genes,p.joint_loading,p.marginal_loading,p.joint_rank,p.marginal_rank', SET_COVERAGE,
+            'SELECT COUNT(*),MIN(' + score + '),MAX(' + score + ') FROM reveal_ref_projections p WHERE p.factor_key=%s')
 
 
 def _summary(reads, release, query):
-    base, args, _, score, _, _, coverage, sql = query
-    sql = sql or 'SELECT COUNT(*),MIN(' + score + '),MAX(' + score + ')' + base
+    _, args, _, _, _, _, coverage, sql = query
     total, minimum, maximum = _immutable(('summary', release, sql, args), lambda: tuple(_rows(reads, sql, args)[0]))
     return {'total': int(total), 'min': float(minimum) if minimum is not None else None,
             'max': float(maximum) if maximum is not None else None, 'coverage': coverage, 'available': True}
@@ -209,7 +255,7 @@ def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='lo
             column, direction = GNOMAD_SORTS[sort]
             ordering = column + ' IS NULL,' + column + ' ' + direction + ',LOWER(ranked.symbol),ranked.symbol'
         if sort == 'alphabetical':
-            ordering = 'LOWER(ranked.symbol),ranked.symbol' if kind == 'gene' else 'LOWER(s.gene_set_name),s.gene_set_id'
+            ordering = 'LOWER(ranked.symbol),ranked.symbol' if kind == 'gene' else 'LOWER(s.gene_set_name),p.gene_set_id'
         filtered = kind == 'gene_set' and library is not None
         if filtered:
             base += ' AND p.library=%s'; args += (library,)
@@ -255,9 +301,11 @@ def factor_loadings(catalog, source_id, *, kind='gene', metric='joint', sort='lo
         reads.close()
 
 
+# The collection's payload is read only when its parsed lineage is not cached (collection_facts): first its document hash.
 GENE_SET_SQL = ('SELECT s.gene_set_name,s.library,s.n_genes,s.n_genes_in_eaggl_universe,s.metadata,c.collection_id,c.cfde_label,c.library,c.n_sets,'
-                'c.portal_collection_id,c.payload FROM reveal_ref_gene_sets s JOIN reveal_ref_collections c ON c.collection_id=s.collection_id'
-                ' WHERE s.gene_set_id=%s')
+                "c.portal_collection_id,JSON_EXTRACT(c.payload,'$.document_sha256') FROM reveal_ref_gene_sets s"
+                ' JOIN reveal_ref_collections c ON c.collection_id=s.collection_id WHERE s.gene_set_id=%s')
+PAYLOAD_SQL = 'SELECT payload FROM reveal_ref_collections WHERE collection_id=%s'
 
 
 def portal_links(gene_set_id, portal_collection_id=None):
@@ -271,18 +319,17 @@ def portal_links(gene_set_id, portal_collection_id=None):
     return links
 
 
-def _lineage_notes(closure, payload):
+def _lineage_notes(closure, facts):
     """Limitations of a served lineage closure: inputs it represents by one, and Datasets only the curated map links."""
     notes = [f"{item['collapsed_inputs']:,} inputs of {item['activity']} share one upstream lineage; {item['representative']} represents them."
              for item in closure['collapsed']]
-    curated = payload.get('curated_provenance') if isinstance(payload.get('curated_provenance'), dict) else {}
-    edges = {tuple(edge.get(key) for key in EDGE_KEY) for edge in (curated.get('groups') or {}).get('was_derived_from_edges') or [] if isinstance(edge, dict)}
+    curated, edges = facts['curated'], facts['curated_edges']
     reached = {edge['object'] for edge in closure['provenance'].get('was_derived_from_edges') or [] if tuple(edge.get(key) for key in EDGE_KEY) in edges}
     names = [node.get('name') or node['id'] for node in closure['provenance'].get('datasets') or [] if node['id'] in reached]
     if names:
         notes.append(f"{'; '.join(names)}: linked to this gene set's raw files by REVEAL's curated source-dataset map "
-                     f"({curated.get('source')}), not by the producer's collection document.")
-        notes += [item['note'] for item in curated.get('notes') or [] if isinstance(item, dict) and item.get('dataset') in reached and item.get('note')]
+                     f"({curated['source']}), not by the producer's collection document.")
+        notes += [item['note'] for item in curated['notes'] if item.get('dataset') in reached and item.get('note')]
     return notes
 
 
@@ -294,23 +341,25 @@ def gene_set_detail(catalog, identity, *, generation_id=None):
     if generation_id and generation_id != release:
         raise Problem(409, 'SOURCE_REVISION_CHANGED', 'The requested reference release is no longer active. Reload the factor page.')
     reads = _Reads(release)
-    try: rows = _rows(reads, GENE_SET_SQL, (identity,))
+    try:
+        rows = _rows(reads, GENE_SET_SQL, (identity,))
+        # The release keeps only the gene sets its projections or betas reference; others are 404 (GeneSetView falls back to /v1/gene-sets).
+        if not rows: raise Problem(404, 'NOT_FOUND', 'The imported gene set is unavailable.')
+        name, library, size, universe, metadata, collection_id, label, collection_library, count, portal_collection, document = rows[0]
+        facts = collection_facts(release, collection_id, extracted(document), lambda: _rows(reads, PAYLOAD_SQL, (collection_id,))[0][0])
     finally: reads.close()
-    # The release keeps only the gene sets its projections or betas reference; others are 404 (GeneSetView falls back to /v1/gene-sets).
-    if not rows: raise Problem(404, 'NOT_FOUND', 'The imported gene set is unavailable.')
-    name, library, size, universe, metadata, collection_id, label, collection_library, count, portal_collection, payload = rows[0]
-    metadata, payload = _json(metadata), _json(payload)
+    metadata = _json(metadata)
     node = metadata.pop('dapper_gene_set', None)
     # The identifier and exact imported object must agree; a similarly named
     # set, including a derived account alias, is never substituted.
     if node is not None and node.get('id') != identity:
         raise Problem(503, 'SOURCE_NOT_READY', 'The imported gene-set identity does not match its stored object.')
     # The gene set's own lineage (producer and curated provenance), not the whole collection's: GlyGen HZ2's 6,620 cached
-    # API responses become one path to the GlyGen release.
-    closure = lineage_closure(node or {'id': identity}, collection_lineage(payload))
+    # API responses become one path to the GlyGen release. Copied: the cached lineage is shared.
+    closure = deepcopy(lineage_closure(node or {'id': identity}, facts['lineage'], index=facts['index']))
     return {'id': identity, 'generation_id': release, 'name': name, 'library': library, 'gene_count': size,
             'genes_in_universe': universe, 'collection': {'id': collection_id, 'label': label, 'library': collection_library,
-            'gene_set_count': count, 'object': payload.get('collection'), 'payload_sha256': payload.get('document_sha256')},
+            'gene_set_count': count, 'object': deepcopy(facts['collection']), 'payload_sha256': facts['document_sha256']},
             'object': node, 'metadata': metadata, 'provenance': closure['provenance'],
-            'limitations': ([] if node else ['The exact gene-set object is not stored in this reference release.']) + _lineage_notes(closure, payload),
+            'limitations': ([] if node else ['The exact gene-set object is not stored in this reference release.']) + _lineage_notes(closure, facts),
             'external_links': portal_links(identity, portal_collection)}

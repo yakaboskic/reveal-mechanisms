@@ -178,6 +178,23 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         self.assertEqual(over_http.status_code, 200, over_http.text)
         self.assertEqual([item['id'] for item in over_http.json()['items']], [SET1, SET2])  # the route passes library through
 
+    def test_gene_set_summary_reads_the_projections_alone_and_ties_order_by_the_projection_key(self):
+        with sqlite3.connect(self.path) as c:  # SET1's joint loading (0.4): the tie orders by gene set id
+            c.execute('INSERT INTO reveal_ref_gene_sets VALUES(?,?,?,?,?,?,?,?)', (SET3, COLLECTION, 'Brain function', 'GO', 40, 30, None, '{}'))
+            c.execute('INSERT INTO reveal_ref_projections VALUES(?,?,?,?,?,?,?,?,?,?)', (KEY, SET3, 'GO', .4, .3, '0.4', '0.3', 2, 3, 0))
+        detail = details.factor_detail(self.catalog, FACTOR['source_id'])
+        self.assertEqual((detail['gene_sets']['total'], detail['gene_sets']['min'], detail['gene_sets']['max']), (3, .2, .4))
+        summary = next(sql for sql in self.statements if 'MIN(p.joint_loading)' in sql)
+        self.assertEqual(summary, 'SELECT COUNT(*),MIN(p.joint_loading),MAX(p.joint_loading) FROM reveal_ref_projections p WHERE p.factor_key=%s')
+        page = self.loadings(kind='gene_set')
+        self.assertEqual([item['id'] for item in page['items']], [SET1, SET3, SET2])
+        self.assertTrue(self.statements[-1].endswith(' ORDER BY p.joint_loading DESC,p.gene_set_id LIMIT %s OFFSET %s'))
+        self.assertEqual(self.loadings(kind='gene_set', metric='marginal')['summary']['max'], .7)
+        self.assertIn('MAX(p.marginal_loading) FROM reveal_ref_projections p WHERE', self.statements[-2])
+        alphabetical = self.loadings(kind='gene_set', sort='alphabetical')  # equal names: by gene set id
+        self.assertEqual([item['id'] for item in alphabetical['items']], [SET2, SET3, SET1])
+        self.assertTrue(self.statements[-1].endswith(' ORDER BY LOWER(s.gene_set_name),p.gene_set_id LIMIT %s OFFSET %s'))
+
     def test_alphabetical_gene_order_is_global_case_insensitive_and_preserves_loading_rank(self):
         with sqlite3.connect(self.path) as c:
             for symbol, loading in [('aMixed', .005), ('AMixed', .001)]:
@@ -305,6 +322,59 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         self.assertIn('GlyGen data release v1.12.1', result['limitations'][1]); self.assertIn('curated source-dataset map', result['limitations'][1])
         self.assertEqual(result['limitations'][2:], [note])
 
+    def test_gene_set_lineage_is_parsed_once_per_release_collection_and_document(self):
+        payloads = lambda: [sql for sql in self.statements if sql == details.PAYLOAD_SQL]
+        first = details.gene_set_detail(self.catalog, SET1)
+        self.assertEqual((len(payloads()), first['collection']['payload_sha256']), (1, 'f' * 64))
+        self.assertIn("JSON_EXTRACT(c.payload,'$.document_sha256')", next(sql for sql in self.statements if 'JOIN reveal_ref_collections' in sql))
+        first['provenance']['activities'][0]['description'] = 'changed'; first['collection']['object']['name'] = 'changed'
+        second = details.gene_set_detail(self.catalog, SET2)  # another gene set of the same collection document
+        self.assertEqual(len(payloads()), 1)
+        self.assertEqual(second['collection']['object'], {'id': COLLECTION, 'name': 'GO BP'})  # callers get copies
+        self.assertEqual(details.gene_set_detail(self.catalog, SET1)['provenance']['activities'][0]['description'], 'Imported source processing')
+        self.assertEqual(len(payloads()), 1)
+        self.publish(NEXT_RELEASE); self.catalog.reference_generation_id = NEXT_RELEASE  # never served from another release's entry
+        details.gene_set_detail(self.catalog, SET1)
+        self.assertEqual(len(payloads()), 2)
+        with sqlite3.connect(self.path) as c:  # another document of the collection
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?', (json.dumps(
+                {'collection': {'id': COLLECTION, 'name': 'GO BP v2'}, 'document_sha256': 'e' * 64, 'provenance': {}}), COLLECTION))
+        changed = details.gene_set_detail(self.catalog, SET1)
+        self.assertEqual((changed['collection']['payload_sha256'], changed['collection']['object']['name'], changed['provenance']), ('e' * 64, 'GO BP v2', {}))
+        self.assertEqual(len(payloads()), 3)
+
+    def test_collection_facts_are_keyed_by_release_and_bounded(self):
+        reads = []
+        def read(sha='a' * 64, size=0):
+            def payload():
+                reads.append(sha)
+                return json.dumps({'collection': {'id': COLLECTION}, 'document_sha256': sha, 'provenance': {'files': [{'id': ref('File', 'x'), 'pad': 'x' * size}]}})
+            return payload
+        facts = details.collection_facts(RELEASE, COLLECTION, 'a' * 64, read())
+        self.assertIs(details.collection_facts(RELEASE, COLLECTION, 'a' * 64, read()), facts)
+        self.assertEqual((reads, [item['id'] for item in facts['lineage']['files']]), (['a' * 64], [ref('File', 'x')]))
+        details.collection_facts(NEXT_RELEASE, COLLECTION, 'a' * 64, read())  # the key always holds the release id
+        details.collection_facts(None, COLLECTION, 'a' * 64, read()); details.collection_facts(None, COLLECTION, 'a' * 64, read())  # never kept
+        details.collection_facts(RELEASE, COLLECTION, 'b' * 64, read()); details.collection_facts(RELEASE, COLLECTION, 'b' * 64, read())  # sha differs
+        self.assertEqual(len(reads), 6)
+        self.assertEqual(set(details._lineages), {(RELEASE, COLLECTION, 'a' * 64), (NEXT_RELEASE, COLLECTION, 'a' * 64)})
+        details.collection_facts(RELEASE, COLLECTION, 'a' * 64, read())  # a hit: now the most recently used
+        with patch.object(details, 'LINEAGE_ENTRIES', 2):
+            details.collection_facts(RELEASE, GLYGEN_COLLECTION, 'c' * 64, read('c' * 64))  # the least recently used goes first
+        self.assertEqual(set(details._lineages), {(RELEASE, COLLECTION, 'a' * 64), (RELEASE, GLYGEN_COLLECTION, 'c' * 64)})
+        with patch.object(details, 'LINEAGE_BYTES', 4096):
+            details.collection_facts(RELEASE, PORTAL_COLLECTION, 'd' * 64, read('d' * 64, 2500))
+            self.assertEqual(len(details._lineages), 3)
+            details.collection_facts(NEXT_RELEASE, PORTAL_COLLECTION, 'd' * 64, read('d' * 64, 2500))  # past the bytes: older entries go
+            self.assertEqual(set(details._lineages), {(NEXT_RELEASE, PORTAL_COLLECTION, 'd' * 64)})
+            details.collection_facts(RELEASE, GLYGEN_COLLECTION, 'e' * 64, read('e' * 64, 5000))  # larger than the bound: served, not kept
+            self.assertEqual(set(details._lineages), {(NEXT_RELEASE, PORTAL_COLLECTION, 'd' * 64)})
+        self.assertEqual(len(reads), 10)
+        details.clear_caches()
+        self.assertEqual(details._lineages, {})
+        self.assertEqual(details.extracted('"' + 'f' * 64 + '"'), 'f' * 64)  # MySQL's JSON text
+        self.assertEqual((details.extracted('1' * 64), details.extracted(None)), ('1' * 64, None))  # SQLite's bare string
+
     def test_unavailable_exact_object_never_fabricates_members_or_provenance(self):
         with sqlite3.connect(self.path) as c:
             c.execute('UPDATE reveal_ref_gene_sets SET metadata=? WHERE gene_set_id=?', ('{}', SET1))
@@ -313,6 +383,10 @@ CREATE TABLE gnomad_gene_constraints(import_id TEXT,gene_symbol TEXT,gene_id TEX
         self.assertTrue(result['limitations'])
         self.assertEqual(result['provenance'], {'prefixes': self.provenance['prefixes']})  # no generating activity is guessed
         self.assertEqual(self.client.get('/v1/catalog/gene-sets/not-a-gene-set').status_code, 404)
+        del self.opened[:]
+        for identity in ('dapper:GeneSet.TNFα' + 'a' * 28, 'dapper:GeneSet.' + '٠' * 32):  # non-ASCII: no lease, never compared (MySQL 1267)
+            self.assertEqual(self.client.get('/v1/catalog/gene-sets/' + identity).status_code, 404)
+        self.assertEqual(self.opened, [])
         self.assertEqual(self.client.get('/v1/catalog/gene-sets/' + SET3).status_code, 404)  # not referenced by this release
         self.assertEqual(self.client.get('/v1/catalog/gene-sets/' + SET1, params={'generation_id': '0' * 64}).status_code, 409)
 

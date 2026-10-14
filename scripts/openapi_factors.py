@@ -32,7 +32,7 @@ def schemas(b):
         'genes': ref('LoadingSummary'), 'gene_sets': ref('LoadingSummary'), 'gnomad': null(ref('GnomadImport')),
         'trait_links': obj({'n_phenotypes': count, 'n_linked': count, 'n_linked_kpn_traits': count, 'n_linked_atlas_traits': count,
             'own_trait_q': null(unit), 'top_linked': array(linked)},
-            description='Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes tested and linked, the q of the factor\'s own trait (null when none was reported) and its best links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative.')},
+            description='Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): n_phenotypes tested and n_linked linked, the factor\'s own trait included; n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the linked phenotypes other than the factor\'s own trait. own_trait_q is the q of its own trait (null when none was reported) and top_linked its best other links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative.')},
         required=['factor', 'generation_id', 'provenance', 'genes', 'gene_sets']))
     b.add('FactorLoadings', obj({'source_id': string(), 'generation_id': generation, 'kind': b.enum('gene', 'gene_set'),
         'metric': b.enum('joint', 'marginal'), 'sort': b.enum('alphabetical', 'loading', 'gnomad_pli', 'gnomad_loeuf', 'gnomad_mis_z'), 'items': array(ref('FactorLoading')), 'total': count, 'offset': count,
@@ -62,8 +62,9 @@ def endpoints(b, factor):
     detail = {'factor': factor, 'generation_id': generation,
         'provenance': {'eaggl_import_id': generation, 'factor_id': 'T2D::Factor1', 'factor_key': 'KPN.TRAIT:0000398::Factor1', 'model': factor['model']},
         'genes': gene_summary, 'gene_sets': set_summary, 'gnomad': None,
-        'trait_links': {'n_phenotypes': 6698, 'n_linked': 412, 'n_linked_kpn_traits': 398, 'n_linked_atlas_traits': 97, 'own_trait_q': 2.1e-14,
-            'top_linked': [{'phenotype': 'T2D', 'kpn_trait_id': 'KPN.TRAIT:0000398', 'name': 'Type 2 diabetes', 'phewas_q': 2.1e-14},
+        'trait_links': {'n_phenotypes': 6697, 'n_linked': 412, 'n_linked_kpn_traits': 398, 'n_linked_atlas_traits': 97, 'own_trait_q': 2.1e-14,
+            'top_linked': [{'phenotype': 'Rare_insulinresistance_syndrome_Orphanet_181368', 'kpn_trait_id': 'KPN.TRAIT:0005995',
+                            'name': 'Rare insulin-resistance syndrome', 'phewas_q': 6.4e-112},
                            {'phenotype': 'HbA1c_example', 'kpn_trait_id': None, 'name': 'HbA1c (illustrative phenotype without a KPN id)', 'phewas_q': 3.4e-9}]}}
     b.operation('/v1/factors/{source_id}', 'get', 'getFactorDetail', 'Mechanisms', 'Inspect a factor and its loading coverage',
         'Read the active imported factor and score ranges. Requests never run research or model inference. Pass source_revision from the anchor to prevent a same-id factor silently changing across reference reloads.',

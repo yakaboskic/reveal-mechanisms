@@ -7,6 +7,7 @@ callers refuse it (research reads) or record it as a coverage gap (the account t
 """
 from __future__ import annotations
 
+from datetime import timezone
 import json
 
 from .auth import Problem
@@ -16,6 +17,14 @@ from .repository import application_prefix, application_sql
 RELEASE_SQL = 'SELECT release_id,published_at,manifest FROM reveal_ref_release'
 NO_TABLE = 1146  # ER_NO_SUCH_TABLE: nothing was ever published to this environment
 SUPERSEDED = 'reference_release_superseded'
+
+
+def _utc_text(value):
+    """A MySQL datetime as ISO-8601 UTC with a trailing Z, as catalog.utc_text writes it (MySQL sessions run in UTC); other
+    values unchanged. Local: importing catalog here would be a cycle (catalog -> factor_details -> reference_pin)."""
+    if hasattr(value, 'isoformat'):
+        return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+    return value
 
 
 class ReleaseUnavailable(Exception):
@@ -39,8 +48,7 @@ def current_release(connection, prefix=None):
     if isinstance(release_id, bytes): release_id = release_id.decode()
     if not isinstance(release_id, str) or not GENERATION_RE.fullmatch(release_id): raise ValueError('The published reference release id is malformed')
     manifest = json.loads(manifest) if isinstance(manifest, (str, bytes)) else manifest or {}
-    return {'release_id': release_id, 'published_at': published_at.isoformat() if hasattr(published_at, 'isoformat') else published_at,
-            'manifest': manifest}
+    return {'release_id': release_id, 'published_at': _utc_text(published_at), 'manifest': manifest}
 
 
 def is_release(connection, identity, prefix=None):

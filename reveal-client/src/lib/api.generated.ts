@@ -4720,7 +4720,7 @@ export interface components {
             genes: components["schemas"]["LoadingSummary"];
             gene_sets: components["schemas"]["LoadingSummary"];
             gnomad?: components["schemas"]["GnomadImport"] | null;
-            /** @description Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes tested and linked, the q of the factor's own trait (null when none was reported) and its best links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative. */
+            /** @description Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): n_phenotypes tested and n_linked linked, the factor's own trait included; n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the linked phenotypes other than the factor's own trait. own_trait_q is the q of its own trait (null when none was reported) and top_linked its best other links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative. */
             trait_links?: {
                 n_phenotypes: number;
                 n_linked: number;
@@ -9611,7 +9611,7 @@ export interface components {
             phewas_p_onesided: number;
             phewas_q: number;
         };
-        /** @description Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait's own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor's linkage over every phenotype tested: own_trait_q is null when its own trait was not tested. */
+        /** @description Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait's own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor's linkage over every phenotype tested: n_linked includes its own trait, n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the other linked phenotypes, and own_trait_q is null when its own trait was not tested. */
         FactorTraitLinks: {
             source_id: string | null;
             trait_id: string | null;

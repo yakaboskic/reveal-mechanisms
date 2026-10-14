@@ -194,6 +194,8 @@ def factor_trait_links(*, source_id=None, trait_id=None, scope='all', sort='phew
     if (source_id is None) == (trait_id is None) or scope not in ('atlas', 'all') or sort not in LINK_SORTS or not 1 <= limit <= 500 \
             or offset < 0 or (source_id is not None and not 1 <= len(source_id) <= 255) or (trait_id is not None and not KPN_TRAIT_RE.fullmatch(trait_id)):
         raise Problem(422, 'INVALID_QUERY', 'Give exactly one of source_id or trait_id, with a valid scope, sort and page.')
+    if source_id is not None and not source_id.isascii():  # no ascii_bin public_id holds it; MySQL refuses the comparison (1267)
+        raise Problem(404, 'NOT_FOUND', 'The factor is not in the published reference release.')
     def read(rows, release):
         _included(release, 'factor_trait_links.tsv.gz')
         summary = None

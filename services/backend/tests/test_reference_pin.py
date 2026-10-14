@@ -1,3 +1,4 @@
+from datetime import datetime, timedelta, timezone
 import sqlite3
 
 import pytest
@@ -39,3 +40,14 @@ def test_a_replaced_or_unpublished_release_is_refused():
     assert rp.current_release(Connection(error=missing), 'reveal') is None
     with pytest.raises(rp.ReleaseUnavailable): rp.pin_release(Connection(error=missing), RELEASE, 'reveal')
     with pytest.raises(sqlite3.OperationalError): rp.current_release(Connection(error=sqlite3.OperationalError('locked')), 'reveal')
+
+
+def test_published_at_is_utc_text_with_a_trailing_z_for_mysql_datetimes():
+    naive = datetime(2026, 10, 14, 16, 2, 44, 709345)  # a TIMESTAMP(6) of a UTC session, as pymysql returns it
+    release = rp.current_release(Connection([(RELEASE, naive, '{}')]), 'reveal')
+    assert release['published_at'] == '2026-10-14T16:02:44.709345Z'
+    aware = datetime(2026, 10, 14, 12, 2, 44, tzinfo=timezone(timedelta(hours=-4)))
+    assert rp.current_release(Connection([(RELEASE, aware, '{}')]), 'reveal')['published_at'] == '2026-10-14T16:02:44Z'
+    assert rp.current_release(Connection([(RELEASE, '2026-10-10T12:00:00Z', '{}')]), 'reveal')['published_at'] == '2026-10-10T12:00:00Z'
+    from reveal_backend.catalog import utc_text
+    assert release['published_at'] == utc_text(naive)  # the catalog's spelling

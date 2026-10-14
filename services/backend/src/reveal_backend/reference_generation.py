@@ -36,10 +36,11 @@ CATALOG_OWNER = 'catalog'
 ARCHIVE_STATUS = 'archived'
 ARCHIVE_REASON = 'reference_generation_superseded'
 
-KPN_TRAIT_RE = re.compile(r'KPN\.TRAIT:(\d{7})')
+# [0-9], not \d: \d also matches non-ASCII digits, which no ascii_bin id column can hold (MySQL refuses the comparison, 1267).
+KPN_TRAIT_RE = re.compile(r'KPN\.TRAIT:([0-9]{7})')
 FACTOR_RE = re.compile(r'Factor[1-9][0-9]*')
-PUBLIC_ID_RE = re.compile(r'factor:kpn:(\d{7}):' + re.escape(KPN_MODEL) + r':(Factor[1-9][0-9]*)')
-FACTOR_KEY_RE = re.compile(r'(KPN\.TRAIT:\d{7})::(Factor[1-9][0-9]*)')
+PUBLIC_ID_RE = re.compile(r'factor:kpn:([0-9]{7}):' + re.escape(KPN_MODEL) + r':(Factor[1-9][0-9]*)')
+FACTOR_KEY_RE = re.compile(r'(KPN\.TRAIT:[0-9]{7})::(Factor[1-9][0-9]*)')
 GENERATION_RE = re.compile(r'[a-f0-9]{64}')
 
 

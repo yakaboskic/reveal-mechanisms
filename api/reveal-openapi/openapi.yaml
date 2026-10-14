@@ -16589,16 +16589,16 @@ paths:
                       available: true
                     gnomad: null
                     trait_links:
-                      n_phenotypes: 6698
+                      n_phenotypes: 6697
                       n_linked: 412
                       n_linked_kpn_traits: 398
                       n_linked_atlas_traits: 97
                       own_trait_q: 2.1e-14
                       top_linked:
-                      - phenotype: T2D
-                        kpn_trait_id: KPN.TRAIT:0000398
-                        name: Type 2 diabetes
-                        phewas_q: 2.1e-14
+                      - phenotype: Rare_insulinresistance_syndrome_Orphanet_181368
+                        kpn_trait_id: KPN.TRAIT:0005995
+                        name: Rare insulin-resistance syndrome
+                        phewas_q: 6.4e-112
                       - phenotype: HbA1c_example
                         kpn_trait_id: null
                         name: HbA1c (illustrative phenotype without a KPN id)
@@ -27693,10 +27693,10 @@ paths:
                     scope: all
                     sort: phewas_q
                     summary:
-                      n_phenotypes: 6698
+                      n_phenotypes: 6697
                       n_linked: 2
-                      n_linked_kpn_traits: 2
-                      n_linked_atlas_traits: 1
+                      n_linked_kpn_traits: 1
+                      n_linked_atlas_traits: 0
                       own_trait_q: 4.6e-10
                     total: 2
                     next_offset: null
@@ -36972,11 +36972,13 @@ components:
           - top_linked
           additionalProperties: false
           description: 'Present when the release carries factor-trait links (eaggl
-            trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): the phenotypes
-            tested and linked, the q of the factor''s own trait (null when none was
-            reported) and its best links by phewas_q. A phenotype without a KPN trait
-            id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold,
-            not a negative.'
+            trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): n_phenotypes
+            tested and n_linked linked, the factor''s own trait included; n_linked_kpn_traits
+            (distinct KPN trait ids) and n_linked_atlas_traits count the linked phenotypes
+            other than the factor''s own trait. own_trait_q is the q of its own trait
+            (null when none was reported) and top_linked its best other links by phewas_q.
+            A phenotype without a KPN trait id has a null kpn_trait_id. An absent
+            phenotype is unlinked at this threshold, not a negative.'
       required:
       - factor
       - generation_id
@@ -50339,8 +50341,10 @@ components:
         are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas
         trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending,
         ties by phenotype then factor, before pagination. summary (source_id only)
-        is the factor''s linkage over every phenotype tested: own_trait_q is null
-        when its own trait was not tested.'
+        is the factor''s linkage over every phenotype tested: n_linked includes its
+        own trait, n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits
+        count the other linked phenotypes, and own_trait_q is null when its own trait
+        was not tested.'
     MechanismObject:
       type: object
       properties:
