@@ -91,7 +91,7 @@ env:
 qa:
   min_tasks: 1
   max_tasks: 1
-  on_demand_base: 1
+  on_demand_base: 0
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
     REVEAL_PUBLIC_API_URL: https://api-qa.hugeampkpnbi.org/api/reveal
@@ -161,7 +161,7 @@ qa:
 prod:
   min_tasks: 1
   max_tasks: 1
-  on_demand_base: 1
+  on_demand_base: 0
   secrets:
     REVEAL_MYSQL_PASSWORD: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:REVEAL_MYSQL_PASSWORD::'
     EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-prod-n0rcbA:EMBEDDING_SERVICE_API_KEY::'
