@@ -4153,7 +4153,8 @@
               "type": "string",
               "enum": [
                 "analysis",
-                "paragraph"
+                "paragraph",
+                "agent"
               ]
             },
             "example": "analysis",
@@ -4393,8 +4394,8 @@
         "tags": [
           "Jobs"
         ],
-        "summary": "Start an analysis or paragraph job",
-        "description": "Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.",
+        "summary": "Start an analysis, paragraph or general agent job",
+        "description": "Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected. kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.",
         "parameters": [
           {
             "name": "Idempotency-Key",
@@ -4463,6 +4464,30 @@
                         "self": "/v1/jobs/55555555-5555-4555-8555-555555555555",
                         "events": "/v1/jobs/55555555-5555-4555-8555-555555555555/events",
                         "cancel": "/v1/jobs/55555555-5555-4555-8555-555555555555/cancel"
+                      }
+                    }
+                  },
+                  "agent_accepted": {
+                    "summary": "Agent accepted",
+                    "value": {
+                      "id": "77777777-7777-4777-8777-777777777777",
+                      "kind": "agent",
+                      "owner_user_id": "11111111-1111-4111-8111-111111111111",
+                      "status": "queued",
+                      "stage": "queued",
+                      "research_request_id": null,
+                      "input_account_id": null,
+                      "created_at": "2026-11-09T15:00:00Z",
+                      "updated_at": "2026-11-09T15:00:00Z",
+                      "completed_at": null,
+                      "result": null,
+                      "failure": null,
+                      "warnings": [],
+                      "last_event_id": "1",
+                      "links": {
+                        "self": "/v1/jobs/77777777-7777-4777-8777-777777777777",
+                        "events": "/v1/jobs/77777777-7777-4777-8777-777777777777/events",
+                        "cancel": "/v1/jobs/77777777-7777-4777-8777-777777777777/cancel"
                       }
                     }
                   }
@@ -4786,6 +4811,28 @@
                     "target_words": 180,
                     "additional_citations": []
                   }
+                },
+                "agent": {
+                  "summary": "General agent",
+                  "value": {
+                    "kind": "agent",
+                    "prompt": "Find three recent PubMed papers on LEPR variants and insulin resistance with NCBI E-utilities, look up LEPR's known drugs in the Open Targets GraphQL API, and save a short summary as output/summary.md.",
+                    "system_prompt": "Be concise. Cite PMIDs.",
+                    "tools": [
+                      "Read",
+                      "Write",
+                      "Bash"
+                    ],
+                    "allowed_domains": [
+                      "api.platform.opentargets.org",
+                      "eutils.ncbi.nlm.nih.gov"
+                    ],
+                    "limits": {
+                      "timeout_seconds": 600,
+                      "max_turns": 30,
+                      "max_budget_usd": 1
+                    }
+                  }
                 }
               }
             }
@@ -4880,6 +4927,45 @@
                         "self": "/v1/jobs/44444444-4444-4444-8444-444444444444",
                         "events": "/v1/jobs/44444444-4444-4444-8444-444444444444/events",
                         "cancel": "/v1/jobs/44444444-4444-4444-8444-444444444444/cancel"
+                      }
+                    }
+                  },
+                  "agent_complete": {
+                    "summary": "Agent complete (synthetic)",
+                    "value": {
+                      "id": "77777777-7777-4777-8777-777777777777",
+                      "kind": "agent",
+                      "owner_user_id": "11111111-1111-4111-8111-111111111111",
+                      "status": "succeeded",
+                      "stage": "complete",
+                      "research_request_id": null,
+                      "input_account_id": null,
+                      "created_at": "2026-11-09T15:00:00Z",
+                      "updated_at": "2026-11-09T15:03:12Z",
+                      "completed_at": "2026-11-09T15:03:12Z",
+                      "result": {
+                        "kind": "agent",
+                        "response": "1. Does LEPR signalling loss act through hypothalamic or peripheral insulin resistance? (PMID 00000000)\n2. ...\n\nSaved to output/questions.md.",
+                        "response_truncated": false,
+                        "response_sha256": "f9fd60c9357668537a6a3eec81baeeef4c0ed7e06eea85ea88b61900b53f6ab6",
+                        "turns": 9,
+                        "cost_usd": 0.41,
+                        "duration_seconds": 182.4,
+                        "files": [
+                          {
+                            "path": "questions.md",
+                            "size_bytes": 1874,
+                            "sha256": "0000000000000000000000000000000000000000000000000000000000000001"
+                          }
+                        ]
+                      },
+                      "failure": null,
+                      "warnings": [],
+                      "last_event_id": "42",
+                      "links": {
+                        "self": "/v1/jobs/77777777-7777-4777-8777-777777777777",
+                        "events": "/v1/jobs/77777777-7777-4777-8777-777777777777/events",
+                        "cancel": "/v1/jobs/77777777-7777-4777-8777-777777777777/cancel"
                       }
                     }
                   }
@@ -51838,13 +51924,17 @@
           },
           {
             "$ref": "#/components/schemas/ParagraphJobInput"
+          },
+          {
+            "$ref": "#/components/schemas/AgentJobInput"
           }
         ],
         "discriminator": {
           "propertyName": "kind",
           "mapping": {
             "analysis": "#/components/schemas/AnalysisJobInput",
-            "paragraph": "#/components/schemas/ParagraphJobInput"
+            "paragraph": "#/components/schemas/ParagraphJobInput",
+            "agent": "#/components/schemas/AgentJobInput"
           }
         }
       },
@@ -52022,7 +52112,8 @@
             "type": "string",
             "enum": [
               "analysis",
-              "paragraph"
+              "paragraph",
+              "agent"
             ]
           },
           "owner_user_id": {
@@ -52055,7 +52146,8 @@
               "complete",
               "preparing_evidence",
               "starting_agent",
-              "collecting_output"
+              "collecting_output",
+              "running_agent"
             ]
           },
           "research_request_id": {
@@ -52112,6 +52204,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AnalysisOutcomeResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AgentResult"
                   }
                 ]
               },
@@ -52395,6 +52490,35 @@
                 }
               }
             }
+          },
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "agent"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "research_request_id": {
+                  "type": "null"
+                },
+                "input_account_id": {
+                  "type": "null"
+                },
+                "result": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AgentResult"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
           }
         ]
       },
@@ -52450,7 +52574,8 @@
               "complete",
               "preparing_evidence",
               "starting_agent",
-              "collecting_output"
+              "collecting_output",
+              "running_agent"
             ]
           },
           "message": {
@@ -52468,6 +52593,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/AnalysisOutcomeResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AgentResult"
                   }
                 ]
               },
@@ -71345,6 +71473,236 @@
           "page"
         ],
         "additionalProperties": false
+      },
+      "AgentJobLimits": {
+        "type": "object",
+        "properties": {
+          "timeout_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600,
+            "default": 900
+          },
+          "max_turns": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 50
+          },
+          "max_budget_usd": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "default": 2.0,
+            "description": "Lowers, never raises, the server cap (REVEAL_AGENT_JOB_MAX_BUDGET_USD). The default is the smaller of the two."
+          }
+        },
+        "required": [],
+        "additionalProperties": false,
+        "description": "Per-run limits. The run stops at whichever comes first."
+      },
+      "AgentJobInput": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "agent",
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string",
+            "description": "The task. Sent to the agent as its first message.",
+            "minLength": 1,
+            "maxLength": 100000
+          },
+          "system_prompt": {
+            "type": "string",
+            "description": "Appended to Claude Code's own system prompt, after a short note on the sandbox.",
+            "minLength": 1,
+            "maxLength": 50000
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "Read",
+                "Write",
+                "Edit",
+                "Glob",
+                "Grep",
+                "Bash",
+                "WebSearch",
+                "WebFetch"
+              ]
+            },
+            "uniqueItems": true,
+            "default": [
+              "Read",
+              "Write",
+              "Edit",
+              "Glob",
+              "Grep",
+              "Bash",
+              "WebSearch"
+            ],
+            "description": "Claude Code built-in tools the agent may use. WebFetch needs network open."
+          },
+          "graphs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "biomarkerkg",
+                "prokn"
+              ]
+            },
+            "uniqueItems": true,
+            "default": [],
+            "description": "OKN knowledge graphs the agent may query through the scoped graph tools."
+          },
+          "literature": {
+            "type": "boolean",
+            "default": false,
+            "description": "Europe PMC search_papers and read_paper tools."
+          },
+          "network": {
+            "type": "string",
+            "enum": [
+              "restricted",
+              "open"
+            ],
+            "default": "restricted",
+            "description": "restricted reaches only the Anthropic API and the services of the selected graph and literature tools; open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key."
+          },
+          "allowed_domains": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9.-]{1,253}$"
+            },
+            "uniqueItems": true,
+            "maxItems": 20,
+            "default": [],
+            "description": "Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open."
+          },
+          "effort": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "default": "medium"
+          },
+          "model": {
+            "type": "string",
+            "description": "Claude model id. Default claude-opus-5-5 (or REVEAL_AGENT_JOB_MODEL).",
+            "pattern": "^claude-[a-z0-9-]{1,60}$"
+          },
+          "limits": {
+            "$ref": "#/components/schemas/AgentJobLimits"
+          }
+        },
+        "required": [
+          "kind",
+          "prompt"
+        ],
+        "additionalProperties": false,
+        "description": "Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream."
+      },
+      "AgentFile": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "path",
+          "size_bytes",
+          "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "AgentResult": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "const": "agent",
+            "type": "string"
+          },
+          "response": {
+            "type": "string",
+            "description": "The agent's final message.",
+            "maxLength": 50000
+          },
+          "response_truncated": {
+            "type": "boolean",
+            "description": "True when the final message exceeded 50,000 characters."
+          },
+          "response_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "turns": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentFile"
+            },
+            "description": "Files the agent wrote to output/, retained with the job capture."
+          }
+        },
+        "required": [
+          "kind",
+          "response",
+          "response_truncated",
+          "response_sha256",
+          "turns",
+          "cost_usd",
+          "duration_seconds",
+          "files"
+        ],
+        "additionalProperties": false
       }
     }
   },
@@ -71358,7 +71716,7 @@
   "x-contract-rules": {
     "idempotency_retention_days": 7,
     "schema_validation": "Closed DAPPER schemas plus runtime digest, graph-reference, evidence-lineage and citation-span checks.",
-    "naming": "jobs is the only job resource. kind=analysis and kind=paragraph share creation, listing, status, events and cancellation.",
+    "naming": "jobs is the only job resource. kind=analysis, kind=paragraph and kind=agent share creation, listing, status, events and cancellation.",
     "design_revision": "v12.1",
     "initial_anchor_retrieval": "Existing EAGGL label embeddings joined to a completed exact_trait_factor_number CFDE mapping run; pin routing provenance with each saved request. No label/gene agreement or full-catalog re-embedding prerequisite.",
     "evidence_package": "reveal.evidence-package/0.2-draft; bundled from schema/evidence-package.schema.json",

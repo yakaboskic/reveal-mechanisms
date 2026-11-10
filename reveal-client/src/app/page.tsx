@@ -329,7 +329,8 @@ function ResultView({ job, openJob }: { job: Job; openJob: (id: string) => Promi
     let active = true;
     const paths = result.kind === "analysis" ? analysisAccountResults(result).map(({ id, reused }) => ({ path: "accounts/" + encodeURIComponent(id), title: reused ? "Reused accepted scientific account · original authorship retained" : "Newly accepted scientific account" }))
       : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Research paragraph" }]
-      : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
+      : result.kind === "analysis_outcome" ? [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }]
+      : []; // A general agent job's answer is on the job itself; it has no scientific record to load.
     setRecords(paths);
     void Promise.all(paths.map(async record => {
       try { return { ...record, data: await request<Record<string, unknown>>(backend(record.path)) }; }
