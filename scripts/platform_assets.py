@@ -13,10 +13,11 @@ from local_sources import ROOT, DISMECH, RDS_CA, clone_release
 from local_deployment import prepare_dismech
 
 
-# AWS global bundle reviewed 2026-09-30: all 108 prior certificates retained;
-# three me-west-1 roots added. Verified with hostname-checked Aurora TLS 1.3.
+# AWS global bundle reviewed 2026-11-10: all 111 prior certificates retained, unchanged and in order;
+# three self-signed sa-west-1 roots (RSA2048, RSA4096, ECC384 G1) appended, no other content.
+# Verified with hostname-checked Aurora TLS 1.3. (Previous review 2026-09-30 added three me-west-1 roots.)
 # Future trust store rotations must be reviewed before this pin is updated.
-RDS_CA_SHA256 = 'fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c'
+RDS_CA_SHA256 = '90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b'
 
 
 def run(*command):
