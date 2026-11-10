@@ -9697,6 +9697,11 @@ export interface components {
              */
             network: "restricted" | "open";
             /**
+             * @description Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.
+             * @default []
+             */
+            allowed_domains: string[];
+            /**
              * @default medium
              * @enum {string}
              */

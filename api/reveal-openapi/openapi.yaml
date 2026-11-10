@@ -2962,15 +2962,17 @@ paths:
                 summary: General agent
                 value:
                   kind: agent
-                  prompt: List three open questions about how LEPR variants affect
-                    insulin resistance, with one recent paper for each. Save them
-                    as output/questions.md.
+                  prompt: Find three recent PubMed papers on LEPR variants and insulin
+                    resistance with NCBI E-utilities, look up LEPR's known drugs in
+                    the Open Targets GraphQL API, and save a short summary as output/summary.md.
                   system_prompt: Be concise. Cite PMIDs.
                   tools:
                   - Read
                   - Write
-                  - WebSearch
-                  literature: true
+                  - Bash
+                  allowed_domains:
+                  - api.platform.opentargets.org
+                  - eutils.ncbi.nlm.nih.gov
                   limits:
                     timeout_seconds: 600
                     max_turns: 30
@@ -50562,6 +50564,17 @@ components:
             of the selected graph and literature tools; open reaches the internet
             (package installs, downloads, WebFetch). Either way the agent never holds
             the API key.
+        allowed_domains:
+          type: array
+          items:
+            type: string
+            pattern: ^[a-z0-9.-]{1,253}$
+          uniqueItems: true
+          maxItems: 20
+          default: []
+          description: Extra exact hostnames the restricted network may reach over
+            HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org.
+            No wildcards or IP addresses. Not used with network open.
         effort:
           type: string
           enum:

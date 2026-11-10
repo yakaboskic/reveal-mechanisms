@@ -548,4 +548,4 @@ Explicitly request one preliminary completion, review the saved direction, then 
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 96 operations and all 121 exchanges. OpenAPI SHA-256: `0a266041a94090b7d12cceffd478c8d6faaad723d5843da1997dda7aef1f1676`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 96 operations and all 121 exchanges. OpenAPI SHA-256: `07ffa8488584ff6d2016fa9058e2e088c2bc604a7866f7b67ae080b121762b92`. No endpoints or payloads were changed to build this diagram.

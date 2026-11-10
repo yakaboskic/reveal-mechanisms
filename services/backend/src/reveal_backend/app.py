@@ -269,7 +269,7 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
-    from .api_keys import configuration as api_key_configuration
+    from .api_keys import keys as api_key_configuration
     from .admin_read_keys import configuration as admin_key_configuration
     api_key_configuration()
     admin_key_configuration()
