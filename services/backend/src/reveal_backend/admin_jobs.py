@@ -37,7 +37,8 @@ def saved_diagnostics(job_id, attempts):
     candidates.append(root / 'token-budget.json')  # Workflow preparation writes its measurement at the workspace root.
     for attempt in reversed(attempts):
         directory = root / f"attempt-{attempt['attempt']}"
-        candidates.extend(directory / name for name in ('failure.json', 'token-budget.json', 'paragraph-grounding.json', 'output/runtime.json'))
+        candidates.extend(directory / name for name in ('failure.json', 'token-budget.json', 'paragraph-grounding.json', 'output/runtime.json',
+                                                        'output/ledger/agent-response.json'))
         if directory.is_dir() and not directory.is_symlink():
             candidates.extend(sorted(p for p in directory.iterdir() if re.fullmatch(r'(?:validation|grounding)-\d+\.json', p.name)))
     result = []
@@ -70,7 +71,7 @@ def s3_diagnostics(workspace, attempts):
         candidates = []
         for item in manifest['files']:
             name = item['path']
-            match = re.fullmatch(r'attempt-([1-9][0-9]*)/(?:failure|token-budget|paragraph-grounding|(?:validation|grounding)-[0-9]+|output/runtime)\.json', name)
+            match = re.fullmatch(r'attempt-([1-9][0-9]*)/(?:failure|token-budget|paragraph-grounding|(?:validation|grounding)-[0-9]+|output/runtime|output/ledger/agent-response)\.json', name)
             if name in ('evidence/dispatch-budget-failure.json', 'evidence/collection-error.json', 'token-budget.json') or match and int(match[1]) in allowed:
                 candidates.append(item)
         result = []

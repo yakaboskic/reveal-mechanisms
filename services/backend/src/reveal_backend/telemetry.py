@@ -121,7 +121,8 @@ def cost_summary(tx, current=None):
     def bucket(): return {'spend_usd': 0.0, 'jobs': 0, 'estimated': 0, 'unreported': 0, 'failed': 0}
     totals = {name: bucket() for name in ('day', 'week', 'month', 'window')}
     daily, owners, failures = {}, {}, {}
-    research, exceeded, near = [], 0, 0
+    # Successful runs' provider-reported costs, per kind with a summary: research analyses and general agent jobs.
+    succeeded, exceeded, near = {'analysis': [], 'agent': []}, 0, 0
     for identity, row in metrics.items():
         data = row['data']; job = jobs.get(identity, {}).get('data', {})
         created = job.get('created_at') or data.get('created_at'); days = age(created)
@@ -136,9 +137,10 @@ def cost_summary(tx, current=None):
                 target = totals[name]; target['jobs'] += 1; target['spend_usd'] += cost or 0
                 target['estimated'] += estimated; target['unreported'] += unreported; target['failed'] += status == 'failed'
         if days is not None and days <= 30 and isinstance(created, str):
-            day = daily.setdefault(created[:10], {'date': created[:10], 'analysis_usd': 0.0, 'paragraph_usd': 0.0, 'jobs': 0, 'failed': 0})
+            day = daily.setdefault(created[:10], {'date': created[:10], 'analysis_usd': 0.0, 'paragraph_usd': 0.0, 'agent_usd': 0.0,
+                                                  'jobs': 0, 'failed': 0})
             day['jobs'] += 1; day['failed'] += status == 'failed'
-            day['paragraph_usd' if data.get('kind') == 'paragraph' else 'analysis_usd'] += cost or 0
+            day[{'paragraph': 'paragraph_usd', 'agent': 'agent_usd'}.get(data.get('kind'), 'analysis_usd')] += cost or 0
         owner = owners.setdefault(row['owner'], {'owner': row['owner'], 'label': labels.get(row['owner']), **bucket()})
         owner['jobs'] += 1; owner['spend_usd'] += cost or 0; owner['estimated'] += estimated
         owner['unreported'] += unreported; owner['failed'] += status == 'failed'
@@ -151,16 +153,18 @@ def cost_summary(tx, current=None):
             if cause: entry['causes'][cause] = entry['causes'].get(cause, 0) + 1
         if data.get('agent.subtype') == 'error_max_budget_usd' or code == 'AUTHORING_BUDGET_EXCEEDED': exceeded += 1
         elif isinstance(data.get('agent.budget_used'), (int, float)) and data['agent.budget_used'] >= .8: near += 1
-        if data.get('kind') == 'analysis' and status == 'succeeded' and reported is not None: research.append(reported)
-    research.sort()
-    def quantile(q): return round(research[min(len(research) - 1, int(q * len(research)))], 4) if research else None
+        if data.get('kind') in succeeded and status == 'succeeded' and reported is not None: succeeded[data['kind']].append(reported)
+    def distribution(values):
+        values = sorted(values)
+        def quantile(q): return round(values[min(len(values) - 1, int(q * len(values)))], 4) if values else None
+        return {'succeeded': len(values), 'p50_usd': quantile(.5), 'p90_usd': quantile(.9), 'max_usd': values[-1] if values else None,
+                'mean_usd': round(sum(values) / len(values), 4) if values else None}
     rounded = lambda items: [{**item, 'spend_usd': round(item['spend_usd'], 4)} for item in items]
     return {'window_jobs': len(metrics), 'window_limit': COST_WINDOW,
             'totals': {name: {**value, 'spend_usd': round(value['spend_usd'], 4)} for name, value in totals.items()},
-            'daily': [{**d, 'analysis_usd': round(d['analysis_usd'], 4), 'paragraph_usd': round(d['paragraph_usd'], 4)} for d in sorted(daily.values(), key=lambda d: d['date'])],
-            'research': {'succeeded': len(research), 'p50_usd': quantile(.5), 'p90_usd': quantile(.9),
-                         'max_usd': research[-1] if research else None,
-                         'mean_usd': round(sum(research) / len(research), 4) if research else None},
+            'daily': [{**d, **{key: round(d[key], 4) for key in ('analysis_usd', 'paragraph_usd', 'agent_usd')}}
+                      for d in sorted(daily.values(), key=lambda d: d['date'])],
+            'research': distribution(succeeded['analysis']), 'agents': distribution(succeeded['agent']),
             'owners': rounded(sorted(owners.values(), key=lambda o: -o['spend_usd'])[:20]),
             'failures': rounded(sorted(failures.values(), key=lambda f: -f['jobs'])),
             'budget': {'exceeded': exceeded, 'near_limit': near}}

@@ -69,6 +69,14 @@ A succeeded job's `result` is an `AgentResult`:
 to `output/` are kept with the job's captured workspace in S3. There is not yet an endpoint that downloads
 those files.
 
+## Telemetry
+
+Agent jobs appear in the admin console like any other job (kind `agent`). The **Execution** table shows
+their state, Box phase timings, agent time and cost; the job detail shows the event log and the run's saved
+diagnostics, including `runtime.json` and the response record, so a failed run's Claude Code error text is
+readable without opening S3. The **Costs** tab counts their spend in its own daily series and shows the typical
+cost of a successful agent job, separately from research runs.
+
 ## How it runs
 
 The phases are the research workflow's: freeze the input, create a Box, bootstrap it from an immutable S3
@@ -103,6 +111,10 @@ and runs it through a real Box with the adapter's own create/bootstrap/launch/po
 ```
 
 It needs `UPSTASH_BOX_API_KEY` and a working `ANTHROPIC_API_KEY`. `--budget` plays the server cap.
+
+Measured on 2026-11-09 with a smoke prompt (Bash, one WebSearch, one Write to `output/`, `claude-opus-5-5`
+at low effort): 4 turns, $0.11–0.13. Through the full workflow phases on the local namespace the job took
+75 s: 33 s Box setup, 19 s agent, 4 s capture, 4 s cleanup. The agent saw only the placeholder key.
 
 Code: [`box_agent.py`](../services/backend/src/reveal_backend/box_agent.py) (input, egress, relay, result),
 the agent branches of [`box_remote.py`](../services/backend/src/reveal_backend/box_remote.py) and
