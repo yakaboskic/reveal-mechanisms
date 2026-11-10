@@ -19,6 +19,10 @@ ARGUMENTS = {
     'Glob': ('pattern', 'path'),
     'Write': ('file_path', 'path'),
     'Edit': ('file_path', 'path', 'replace_all'),
+    # General agent jobs: the command, query or URL is what a watcher needs; credentials are redacted below.
+    'Bash': ('command', 'description', 'timeout', 'run_in_background'),
+    'WebSearch': ('query', 'allowed_domains', 'blocked_domains'),
+    'WebFetch': ('url', 'prompt'),
     'get_schema': ('graph',),
     'describe_kg': ('graph',),
     'query_graph': ('graph', 'subject', 'predicate', 'object', 'literal', 'contains', 'limit'),

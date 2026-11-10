@@ -61,6 +61,16 @@ those two hosts:
 The request is frozen into the job when it is queued (`reveal.agent-input/1`), with every default filled
 in, so the stored input says exactly what ran.
 
+[`scripts/agent_job.py`](../scripts/agent_job.py) does all of this in one command with only the Python
+standard library: it submits the prompt, prints stages, the agent's text and each tool call as they happen,
+then the final answer. It reads an API-key handoff file (`--handoff`) or `REVEAL_API_URL`/`REVEAL_API_KEY`:
+
+```bash
+python3 scripts/agent_job.py --handoff key.json --tool Read --tool Write --tool Bash \
+  --allow-host eutils.ncbi.nlm.nih.gov --allow-host api.platform.opentargets.org \
+  --prompt "Find three recent PubMed papers on LEPR variants and insulin resistance with NCBI E-utilities ..."
+```
+
 ## Watch it and read the result
 
 Progress arrives on `GET /v1/jobs/{id}/events` like any other job: the agent's text (`agent_message`
