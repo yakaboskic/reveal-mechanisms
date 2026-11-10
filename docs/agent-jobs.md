@@ -90,6 +90,34 @@ A succeeded job's `result` is an `AgentResult`:
 to `output/` are kept with the job's captured workspace in S3. There is not yet an endpoint that downloads
 those files.
 
+## Call it from another web app
+
+A web app calls agent jobs from its **server**, with an API key held in that server's environment
+(`Authorization: Bearer rvl_…`). Browsers can't call the API directly: it sends no CORS headers and
+answers a cross-site preflight with `405`. That is deliberate, because a key in browser code would be
+public. Server-to-server calls work from any host: QA ingress is open to `0.0.0.0/0` with no IP allowlist,
+and key authentication compares only the header's hash.
+
+- **Submit and return.** `POST /v1/jobs` answers with the queued job's id at once. Save it against the app's
+  own user and let the page check back; don't hold a request open for the run, which takes a minute or more.
+- **Progress.** Poll `GET /v1/jobs/{id}/events?after=N` (JSON `items`, `next_after`, `terminal`), or proxy
+  it with `Accept: text/event-stream`. Streams send a heartbeat at least every 15 s (inside the 60 s ALB and
+  nginx idle timeout) and end within four minutes, so reconnect with `Last-Event-ID`.
+- **Retries.** Keep one `Idempotency-Key` per user action and resend it after a timeout; the API returns the
+  same job.
+- **One workspace.** Every call through one key shares one workspace: its outstanding-job quota (five on QA,
+  `429 …QUOTA_EXCEEDED`), and every job in it is readable with that key. The app keeps the mapping from its
+  users to job ids, and fixes `tools`, `allowed_domains`, `network` and `limits` itself, passing only the
+  prompt from its users.
+- **Lifetime.** A key issued with a new anonymous workspace stops working when that workspace expires
+  (30 days). For a long-lived integration, upgrade the workspace to a registered one in place
+  (`/internal/v1/principals/claim` keeps the same user id, so the key and `REVEAL_AGENT_JOB_USERS` entry stay
+  valid), or issue the key with `--owner-user-id` for an existing registered workspace.
+
+The gateway integration in [application-gateway.md](application-gateway.md) gives each of an app's users
+their own workspace, but its shared signing secret can act as any workspace. Keep it for applications we
+operate; give a colleague's app an API key.
+
 ## Telemetry
 
 Agent jobs appear in the admin console like any other job (kind `agent`). The **Execution** table shows
