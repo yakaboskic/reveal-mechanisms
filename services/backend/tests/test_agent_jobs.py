@@ -41,11 +41,27 @@ def frozen(**body):
 def test_freeze_fills_every_default_so_the_frozen_bytes_say_what_runs():
     value = frozen()
     assert value == {'format': 'reveal.agent-input/1', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
-                     'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'literature': False, 'network': 'restricted', 'allowed_domains': [],
+                     'tools': list(box_agent.BUILTIN_TOOLS), 'graphs': [], 'literature': False, 'network': 'open', 'allowed_domains': [],
                      'effort': 'medium', 'model': box_agent.DEFAULT_MODEL,
                      'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0}}
     # The default budget never exceeds a lower server cap.
     assert box_agent.freeze_input({'kind': 'agent', 'prompt': 'x'}, budget_cap=0.5)['limits']['max_budget_usd'] == 0.5
+
+
+def test_allowed_domains_alone_select_the_restricted_network_and_its_tools():
+    value = frozen(allowed_domains=['eutils.ncbi.nlm.nih.gov'])
+    assert value['network'] == 'restricted' and value['tools'] == list(box_agent.RESTRICTED_DEFAULT_TOOLS)
+    assert 'WebFetch' not in value['tools'] and 'WebSearch' in value['tools']
+    assert frozen(network='restricted')['tools'] == list(box_agent.RESTRICTED_DEFAULT_TOOLS)
+    # Explicit choices are kept as given.
+    assert frozen(network='open', tools=['Bash'])['tools'] == ['Bash']
+    assert frozen(allowed_domains=['eutils.ncbi.nlm.nih.gov'], tools=['Bash'])['tools'] == ['Bash']
+
+
+def test_the_sandbox_note_states_the_network_the_agent_has():
+    assert 'The network is open' in box_remote.agent_system_prompt(frozen())
+    restricted = box_remote.agent_system_prompt(frozen(network='restricted'))
+    assert 'restricted to the Anthropic API' in restricted and 'The network is open' not in restricted
 
 
 def test_freeze_orders_tools_and_graphs_canonically():
@@ -55,7 +71,8 @@ def test_freeze_orders_tools_and_graphs_canonically():
 
 
 @pytest.mark.parametrize('body, message', [
-    ({'tools': ['WebFetch']}, 'needs network "open"'),
+    ({'tools': ['WebFetch'], 'network': 'restricted'}, 'needs network "open"'),
+    ({'tools': ['WebFetch'], 'allowed_domains': ['api.example.org']}, 'needs network "open"'),
     ({'tools': ['Read', 'Read']}, 'tools must be distinct'),
     ({'tools': ['Task']}, 'tools must be distinct'),
     ({'graphs': ['not-a-graph']}, 'graphs must be distinct'),
@@ -220,7 +237,7 @@ def test_bundle_carries_the_frozen_input_and_the_shared_module(tmp_path):
 
 
 def test_bootstrap_config_freezes_model_and_egress_from_the_input(tmp_path):
-    request = agent_request(tmp_path, frozen(graphs=['prokn'], model='claude-sonnet-5-5'))
+    request = agent_request(tmp_path, frozen(graphs=['prokn'], model='claude-sonnet-5-5', network='restricted'))
     config = BoxExecutionAdapter(ROOT, environ={'REVEAL_CLAUDE_MODEL': 'claude-sonnet-4-6'}).request_config(request)
     assert config['model'] == 'claude-sonnet-5-5' and config['agent'] == {'network': 'restricted', 'literature': False, 'allowed_domains': []}
     validate_config(config)
@@ -265,11 +282,11 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
         work, runtime, prompt = runner_setup(tmp_path, value)
     assert prompt == 'Summarize the sandbox.'
     assert runtime['runtime_version'] == 'reveal.agent-runtime/1' and 'dapper' not in runtime
-    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'literature': False, 'network': 'restricted',
+    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'literature': False, 'network': 'open',
                                 'allowed_domains': [], 'effort': 'medium'}
     assert (work / 'agent-input.json').read_bytes() == canonical_json(value)
     system = box_remote.agent_system_prompt(value)
-    assert system.endswith('\n\nAnswer in French.') and 'output/' in system and 'restricted' in system
+    assert system.endswith('\n\nAnswer in French.') and 'output/' in system and 'The network is open' in system
     assert 'WebSearch still works' not in system
 
 
@@ -499,7 +516,7 @@ def test_agent_jobs_need_the_workflow_runtime(service, monkeypatch):
 
 def test_invalid_agent_requests_are_rejected_before_queueing(service, monkeypatch):
     monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
-    for body, status in (({'tools': ['WebFetch']}, 422), ({'limits': {'max_budget_usd': 99}}, 422),
+    for body, status in (({'tools': ['WebFetch'], 'network': 'restricted'}, 422), ({'limits': {'max_budget_usd': 99}}, 422),
                          ({'surprise': True}, 422), ({'prompt': ''}, 422)):
         response = post_agent(service, **body)
         assert response.status_code == status, (body, response.text)

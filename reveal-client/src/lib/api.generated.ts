@@ -9668,7 +9668,7 @@ export interface components {
             /** @description Appended to Claude Code's own system prompt, after a short note on the sandbox. */
             system_prompt?: string;
             /**
-             * @description Claude Code built-in tools the agent may use. WebFetch needs network open.
+             * @description Claude Code built-in tools the agent may use. Default: all of them on the open network, all but WebFetch on the restricted network. WebFetch needs network open.
              * @default [
              *       "Read",
              *       "Write",
@@ -9676,7 +9676,8 @@ export interface components {
              *       "Glob",
              *       "Grep",
              *       "Bash",
-             *       "WebSearch"
+             *       "WebSearch",
+             *       "WebFetch"
              *     ]
              */
             tools: ("Read" | "Write" | "Edit" | "Glob" | "Grep" | "Bash" | "WebSearch" | "WebFetch")[];
@@ -9691,13 +9692,13 @@ export interface components {
              */
             literature: boolean;
             /**
-             * @description restricted reaches only the Anthropic API and the services of the selected graph and literature tools; open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.
-             * @default restricted
+             * @description open reaches the internet: web APIs, downloads, package installs and WebFetch. restricted reaches only the Anthropic API, the services of the selected graph and literature tools, and allowed_domains; it is the default when allowed_domains is given. Either way the agent never holds the API key.
+             * @default open
              * @enum {string}
              */
             network: "restricted" | "open";
             /**
-             * @description Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.
+             * @description Exact hostnames the restricted network may also reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Given without network, they select the restricted network. Not used with network open.
              * @default []
              */
             allowed_domains: string[];

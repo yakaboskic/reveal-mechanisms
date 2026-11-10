@@ -361,6 +361,9 @@ def agent_system_prompt(agent_input):
         note += (' The network is restricted to the Anthropic API' + ''.join(' and ' + item for item in reachable) +
                  '; other hosts, package installs and arbitrary downloads will fail.' +
                  (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
+    else:
+        note += (' The network is open: you can call web APIs, download files and install packages as needed '
+                 '(you are not root, so use pip install --user, a virtual environment or npm in your home directory).')
     return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
 
 

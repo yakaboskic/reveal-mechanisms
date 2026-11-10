@@ -24,9 +24,11 @@ RESPONSE_FILENAME = 'agent-response.json'
 RESPONSE_CAPTURE_PATH = 'ledger/' + RESPONSE_FILENAME
 
 BUILTIN_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch')
-DEFAULT_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch')
 # WebFetch downloads pages from inside the Box, so it needs the open network.
 OPEN_NETWORK_TOOLS = frozenset({'WebFetch'})
+# A request that names no tools gets every tool its network allows.
+DEFAULT_TOOLS = BUILTIN_TOOLS
+RESTRICTED_DEFAULT_TOOLS = tuple(tool for tool in BUILTIN_TOOLS if tool not in OPEN_NETWORK_TOOLS)
 NETWORKS = ('restricted', 'open')
 EFFORTS = ('low', 'medium', 'high')
 DEFAULT_MODEL = 'claude-opus-5-5'
@@ -70,17 +72,19 @@ def freeze_input(body, *, budget_cap, default_model=DEFAULT_MODEL):
     """The frozen input for one agent job, from a validated API body. Defaults are filled in so the frozen
     bytes say exactly what runs; the caller's budget can lower the server cap but never raise it."""
     require(isinstance(body, dict) and body.get('kind') == 'agent', 'Not an agent job')
-    tools = body.get('tools', list(DEFAULT_TOOLS))
+    domains = body.get('allowed_domains', [])
+    require(isinstance(domains, list) and all(isinstance(domain, str) for domain in domains), 'allowed_domains must be a list of hostnames')
+    domains = sorted({domain.strip().lower().rstrip('.') for domain in domains})
+    # General purpose by default: the open network. Naming allowed_domains asks for the restricted network plus
+    # those hosts, so that request needs no separate network field.
+    network = body.get('network', 'restricted' if domains else 'open')
+    require(network in NETWORKS, 'network must be restricted or open')
+    tools = body.get('tools', list(DEFAULT_TOOLS if network == 'open' else RESTRICTED_DEFAULT_TOOLS))
     require(isinstance(tools, list) and all(tool in BUILTIN_TOOLS for tool in tools) and len(set(tools)) == len(tools),
             'tools must be distinct names from ' + ', '.join(BUILTIN_TOOLS))
     graphs = body.get('graphs', [])
     require(isinstance(graphs, list) and all(graph in GRAPHS for graph in graphs) and len(set(graphs)) == len(graphs),
             'graphs must be distinct names from ' + ', '.join(sorted(GRAPHS)))
-    network = body.get('network', 'restricted')
-    require(network in NETWORKS, 'network must be restricted or open')
-    domains = body.get('allowed_domains', [])
-    require(isinstance(domains, list) and all(isinstance(domain, str) for domain in domains), 'allowed_domains must be a list of hostnames')
-    domains = sorted({domain.strip().lower().rstrip('.') for domain in domains})
     require(network == 'restricted' or not domains, 'allowed_domains narrows the restricted network; network "open" already reaches every host')
     require(network == 'open' or not OPEN_NETWORK_TOOLS & set(tools),
             'WebFetch downloads pages from inside the sandbox and needs network "open"; WebSearch works on the restricted network')

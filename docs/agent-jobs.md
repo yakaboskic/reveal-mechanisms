@@ -39,11 +39,11 @@ EOF
 |---|---|---|
 | `prompt` | required | Up to 100,000 characters; the agent's first message. |
 | `system_prompt` | none | Appended to Claude Code's own system prompt, after a short note describing the sandbox. |
-| `tools` | Read, Write, Edit, Glob, Grep, Bash, WebSearch | Claude Code built-ins. `WebFetch` needs `network: "open"`. |
+| `tools` | all of them (no `WebFetch` on `restricted`) | Claude Code built-ins: Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch. `WebFetch` needs `network: "open"`. |
 | `graphs` | `[]` | OKN knowledge graphs for the scoped graph tools (`get_schema`, `describe_kg`, `query_graph`). |
 | `literature` | `false` | Europe PMC `search_papers` / `read_paper`. |
-| `network` | `restricted` | `restricted`: only the Anthropic API plus the services of the chosen graph/literature tools and `allowed_domains`. `open`: the internet (package installs, downloads, `WebFetch`). |
-| `allowed_domains` | `[]` | Up to 20 exact hostnames the restricted network may also reach, for example `eutils.ncbi.nlm.nih.gov` (PubMed E-utilities) or `api.platform.opentargets.org` (Open Targets GraphQL). No wildcards or IP addresses; not used with `open`. The agent calls them with Bash (`curl`, `python3`). |
+| `network` | `open`, or `restricted` when `allowed_domains` is given | `open`: the internet (web APIs, downloads, package installs, `WebFetch`). `restricted`: only the Anthropic API plus the services of the chosen graph/literature tools and `allowed_domains`. |
+| `allowed_domains` | `[]` | Up to 20 exact hostnames the restricted network may also reach, for example `eutils.ncbi.nlm.nih.gov` (PubMed E-utilities) or `api.platform.opentargets.org` (Open Targets GraphQL). No wildcards or IP addresses. Giving them selects `restricted`; not used with `open`. The agent calls them with Bash (`curl`, `python3`). |
 | `effort` | `medium` | `low`, `medium` or `high`. |
 | `model` | `REVEAL_AGENT_JOB_MODEL` | A Claude model id. |
 | `limits` | 900 s, 50 turns, min(2, cap) USD | The run stops at whichever comes first. |

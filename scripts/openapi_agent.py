@@ -28,16 +28,19 @@ def extend(b, f, e):
         'system_prompt': string(minLength=1, maxLength=MAX_SYSTEM_PROMPT_CHARS,
             description="Appended to Claude Code's own system prompt, after a short note on the sandbox."),
         'tools': array(enum(*BUILTIN_TOOLS), uniqueItems=True, default=list(DEFAULT_TOOLS),
-            description='Claude Code built-in tools the agent may use. WebFetch needs network open.'),
+            description='Claude Code built-in tools the agent may use. Default: all of them on the open network, all but '
+                        'WebFetch on the restricted network. WebFetch needs network open.'),
         'graphs': array(enum(*sorted(GRAPHS)), uniqueItems=True, default=[],
             description='OKN knowledge graphs the agent may query through the scoped graph tools.'),
         'literature': {'type': 'boolean', 'default': False, 'description': 'Europe PMC search_papers and read_paper tools.'},
-        'network': enum(*NETWORKS, default='restricted', description=
-            'restricted reaches only the Anthropic API and the services of the selected graph and literature tools; '
-            'open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.'),
+        'network': enum(*NETWORKS, default='open', description=
+            'open reaches the internet: web APIs, downloads, package installs and WebFetch. restricted reaches only the '
+            'Anthropic API, the services of the selected graph and literature tools, and allowed_domains; it is the default '
+            'when allowed_domains is given. Either way the agent never holds the API key.'),
         'allowed_domains': array(string(pattern='^[a-z0-9.-]{1,253}$'), uniqueItems=True, maxItems=MAX_ALLOWED_DOMAINS, default=[],
-            description='Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov '
-                        'or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.'),
+            description='Exact hostnames the restricted network may also reach over HTTPS, for example eutils.ncbi.nlm.nih.gov '
+                        'or api.platform.opentargets.org. No wildcards or IP addresses. Given without network, they select '
+                        'the restricted network. Not used with network open.'),
         'effort': enum(*EFFORTS, default='medium'),
         'model': string(pattern='^claude-[a-z0-9-]{1,60}$', description=f'Claude model id. Default {DEFAULT_MODEL} (or REVEAL_AGENT_JOB_MODEL).'),
         'limits': ref('AgentJobLimits')}, ['kind', 'prompt'],
