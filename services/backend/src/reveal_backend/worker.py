@@ -9,7 +9,7 @@ import signal
 import shutil
 import socket
 import time
-from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, agent_budget_usd, emit_batch_size
+from .agent_execution import ExecutionRequest, MAX_EMIT_BATCH_EVENTS, MAX_EMIT_BATCH_BYTES, agent_budget_usd, authoring_stage, emit_batch_size
 from .auth import Problem, owned
 from .acceptance import assemble_account, claim_structure_record, object_envelope, object_projection, with_citations, release_root, LOCK, mint, prewarm, validate_paragraph_document
 from .evidence_package import DapperRuntime, canonical_json, decode, require, sha256
@@ -42,13 +42,12 @@ def public_activity(job,kind,payload):
             duration_ms=payload['duration_ms'] if type(payload.get('duration_ms')) in (int,float) and payload['duration_ms']>=0 else None)
     elif kind in ('agent_started','agent_completed'):
         if kind=='agent_started':
-            job['stage']=payload.get('stage') or ('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
+            job['stage']=payload.get('stage') or authoring_stage(job.get('kind'))
             detail=activity('preparation','completed','harness')
         else:
             # A provider result ends authoring, not the job. Output still needs
             # durable capture and deterministic validation before acceptance.
-            job['stage']=(('authoring_paragraph' if job.get('kind')=='paragraph' else 'authoring_account')
-                          if payload.get('status')=='failed' else 'collecting_output')
+            job['stage']=authoring_stage(job.get('kind')) if payload.get('status')=='failed' else 'collecting_output'
             # This is a completion notice, not the start of a timed capture
             # operation. The job remains running in its collection stage.
             detail=activity('preparation','failed' if payload.get('status')=='failed' else 'completed','harness')
@@ -172,8 +171,9 @@ def validate_execution_ledger(result,request,expected_model=None):
     require(runtime.get('job_id')==request.job_id,'Runtime belongs to another job')
     require(runtime.get('attempt')==request.attempt,'Runtime belongs to another attempt')
     require(runtime.get('input_sha256')==sha256(request.input_path.read_bytes()),'Execution used different input bytes')
-    lock=decode(LOCK.read_bytes())
-    require(runtime.get('dapper',{}).get('commit')==lock['commit'],'Execution used a different DAPPER release')
+    if request.kind!='agent':   # a general agent job runs without the DAPPER release
+        lock=decode(LOCK.read_bytes())
+        require(runtime.get('dapper',{}).get('commit')==lock['commit'],'Execution used a different DAPPER release')
     require(runtime.get('model')==(expected_model or setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6')),'Execution model differs from frozen input model')
     ledger_path=assert_artifact(result.ledger_manifest_path,request.output_dir); ledger=decode(ledger_path.read_bytes())
     require(ledger.get('format')=='reveal.tool-ledger/1' and ledger.get('job_id')==request.job_id and ledger.get('attempt')==request.attempt and ledger.get('complete') is True,'Tool ledger is incomplete or belongs to another execution')

@@ -82,7 +82,7 @@ def new(owner, kind, request_id=None, account_id=None, inputs=None):
         rows += build(job, queue, {})
     if queue['transport'] == 'redis': rows.append(redis_dispatch(job, queue))
     rows.append(('queue', identity, owner, queue))
-    item = event_record(job, 'status', 'Queued for evidence preparation.' if kind == 'analysis' else 'Research statement queued.')
+    item = event_record(job, 'status', {'analysis': 'Queued for evidence preparation.', 'agent': 'Agent run queued.'}.get(kind, 'Research statement queued.'))
     rows += [('event', identity+':'+item['id'].zfill(12), owner, item), ('job', identity, owner, job)]
     return job, rows
 
@@ -182,5 +182,8 @@ def finish(repository, job_id, token, status, result=None, failure=None):
         job.update(status=status, result=result, failure=failure, completed_at=now())
         if status == 'succeeded': job['stage'] = 'complete'
         update_paragraph_state(tx,job)
-        event(tx, job, 'failure' if failure else 'result' if result else 'status', failure['message'] if failure else 'Gap analysis complete.' if result else 'No account was accepted.')
+        agent = job['kind'] == 'agent'
+        event(tx, job, 'failure' if failure else 'result' if result else 'status', failure['message'] if failure else
+              ('Agent run complete.' if agent else 'Gap analysis complete.') if result else
+              ('The agent run ended without a result.' if agent else 'No account was accepted.'))
         return True

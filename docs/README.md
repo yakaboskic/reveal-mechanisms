@@ -28,6 +28,7 @@ Updated October 1, 2026. Start with the [Workflow runtime](durable-workflow-runt
 - [Explicit draft saving, private uploads, and agent inputs](research-inputs.md)
 - [Automatic CFDE support assessment and shared default-input cache](cfde-assessment.md)
 - [Lightning initial audits and agent continuation](lightning-audit.md)
+- [General agent jobs: run a prompt in the Box runtime](agent-jobs.md)
 - [Lightning merge handoff for the combined backend release](lightning-merge-handoff.md)
 - [Canonical scientific account fixture and local seeding](../data/fixtures/bubble-account-v1/README.md)
 - [Admin telemetry](admin-telemetry.md)

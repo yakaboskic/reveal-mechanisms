@@ -28,8 +28,8 @@ For local development, `DISABLE_ADMIN_LOGIN=true` allows direct access. It works
 - The recorded cause of a failed workflow phase: exception type, phase and a redacted message of up to 500 characters. The public failure message stays generic, for example "The workflow phase could not be completed." This shows why, without opening the artifact store.
 - **Costs** tab, computed over the latest 1,000 jobs with metrics:
   - spend in the last 24 hours, 7 days and 30 days;
-  - the typical (p50), p90 and maximum cost of a successful research run;
-  - daily spend split between research and statement (paragraph) runs;
+  - the typical (p50), p90 and maximum cost of a successful research run, and of a successful [general agent job](agent-jobs.md) once one has run;
+  - daily spend split between research, statement (paragraph) and general agent runs;
   - budget stops;
   - failures by code, with their recorded causes;
   - spend by workspace owner;
@@ -49,11 +49,11 @@ No new tables or required migrations are introduced. Optional migration `007_adm
 
 ## Inspect a job's logs
 
-Click an analysis or paragraph job in **Execution** to open its logs and diagnostics. The selection is also addressable as `/admin?job=<job-id>`, including older jobs outside the latest 100 dashboard rows. The detail shows the persisted failure message, the worker's saved diagnostic when available, local timestamps, attempt history, and phase timings.
+Click any job in **Execution** (analysis, paragraph or general agent) to open its logs and diagnostics. The selection is also addressable as `/admin?job=<job-id>`, including older jobs outside the latest 100 dashboard rows. The detail shows the persisted failure message, the worker's saved diagnostic when available, local timestamps, attempt history, and phase timings.
 
 The event log starts with the latest 100 persisted events, displayed chronologically so terminal failures are immediately available. **Load earlier events** retrieves previous pages by their indexed sequence without scanning other jobs. Messages, preparation stages, warnings, tool arguments and output excerpts can be searched within the loaded history. Adjacent agent text fragments are combined for readability; **Copy loaded logs** retains each original event and its stored timestamp. Active logs refresh every 15 seconds when dashboard refresh is enabled; loading earlier history pauses this until **Refresh logs** returns to the latest events.
 
-Saved diagnostics come from the job's S3 workspace checkpoint when the artifact store is S3 (QA, prod and the durable local stack), otherwise from the API's configured `REVEAL_ARTIFACTS_DIR`: allowlisted worker failure, token-budget, runtime and validation/grounding JSON files. Workflow jobs list the files of their current authoring attempt. The local Compose API and worker share that artifact volume; the database event history remains available when files are absent. Previews are limited to 20 files and 128 KiB per file, with missing, oversized or unreadable diagnostics labelled explicitly. Arbitrary filesystem paths, symlinks, queue credentials and private raw agent traces are not exposed. Known environment credentials and credential fields are redacted. These detail reads require the same server-side admin gate and signed assertion as the rest of the console.
+Saved diagnostics come from the job's S3 workspace checkpoint when the artifact store is S3 (QA, prod and the durable local stack), otherwise from the API's configured `REVEAL_ARTIFACTS_DIR`: allowlisted worker failure, token-budget, runtime and validation/grounding JSON files, and a general agent job's response record (`output/ledger/agent-response.json`: its final answer, or Claude Code's error text when the run stopped). Workflow jobs list the files of their current authoring attempt. The local Compose API and worker share that artifact volume; the database event history remains available when files are absent. Previews are limited to 20 files and 128 KiB per file, with missing, oversized or unreadable diagnostics labelled explicitly. Arbitrary filesystem paths, symlinks, queue credentials and private raw agent traces are not exposed. Known environment credentials and credential fields are redacted. These detail reads require the same server-side admin gate and signed assertion as the rest of the console.
 
 ## Inspect table contents
 

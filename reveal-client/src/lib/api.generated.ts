@@ -250,8 +250,8 @@ export interface paths {
         get: operations["listJobs"];
         put?: never;
         /**
-         * Start an analysis or paragraph job
-         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.
+         * Start an analysis, paragraph or general agent job
+         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected. kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.
          */
         post: operations["createJob"];
         delete?: never;
@@ -4381,7 +4381,7 @@ export interface components {
             target_words: number;
             additional_citations?: components["schemas"]["CitationTarget"][];
         };
-        JobCreate: components["schemas"]["AnalysisJobInput"] | components["schemas"]["ParagraphJobInput"];
+        JobCreate: components["schemas"]["AnalysisJobInput"] | components["schemas"]["ParagraphJobInput"] | components["schemas"]["AgentJobInput"];
         CitationTarget: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             target_id: string;
@@ -4424,13 +4424,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "analysis" | "paragraph";
+            kind: "analysis" | "paragraph" | "agent";
             /** Format: uuid */
             owner_user_id: string;
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output" | "running_agent";
             research_request_id: string | null;
             input_account_id: string | null;
             /** Format: date-time */
@@ -4438,7 +4438,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             completed_at: string | null;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"] | components["schemas"]["AgentResult"]) | null;
             failure: components["schemas"]["JobFailure"] | null;
             warnings: string[];
             last_event_id: string;
@@ -4450,7 +4450,7 @@ export interface components {
                 /** Format: uri-reference */
                 cancel: string;
             };
-        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown);
+        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown);
         JobEvent: {
             id: string;
             /** Format: uuid */
@@ -4462,9 +4462,9 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output" | "running_agent";
             message: string;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"] | components["schemas"]["AgentResult"]) | null;
             detail: components["schemas"]["ActivityDetail"] | null;
         };
         JobEvents: {
@@ -9644,6 +9644,91 @@ export interface components {
             /** @description The published reference release these rows were read from. */
             release_id: string;
         };
+        /** @description Per-run limits. The run stops at whichever comes first. */
+        AgentJobLimits: {
+            /** @default 900 */
+            timeout_seconds: number;
+            /** @default 50 */
+            max_turns: number;
+            /**
+             * @description Lowers, never raises, the server cap (REVEAL_AGENT_JOB_MAX_BUDGET_USD). The default is the smaller of the two.
+             * @default 2
+             */
+            max_budget_usd: number;
+        };
+        /** @description Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream. */
+        AgentJobInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            /** @description The task. Sent to the agent as its first message. */
+            prompt: string;
+            /** @description Appended to Claude Code's own system prompt, after a short note on the sandbox. */
+            system_prompt?: string;
+            /**
+             * @description Claude Code built-in tools the agent may use. WebFetch needs network open.
+             * @default [
+             *       "Read",
+             *       "Write",
+             *       "Edit",
+             *       "Glob",
+             *       "Grep",
+             *       "Bash",
+             *       "WebSearch"
+             *     ]
+             */
+            tools: ("Read" | "Write" | "Edit" | "Glob" | "Grep" | "Bash" | "WebSearch" | "WebFetch")[];
+            /**
+             * @description OKN knowledge graphs the agent may query through the scoped graph tools.
+             * @default []
+             */
+            graphs: ("biomarkerkg" | "prokn")[];
+            /**
+             * @description Europe PMC search_papers and read_paper tools.
+             * @default false
+             */
+            literature: boolean;
+            /**
+             * @description restricted reaches only the Anthropic API and the services of the selected graph and literature tools; open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.
+             * @default restricted
+             * @enum {string}
+             */
+            network: "restricted" | "open";
+            /**
+             * @description Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.
+             * @default []
+             */
+            allowed_domains: string[];
+            /**
+             * @default medium
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "high";
+            /** @description Claude model id. Default claude-opus-5-5 (or REVEAL_AGENT_JOB_MODEL). */
+            model?: string;
+            limits?: components["schemas"]["AgentJobLimits"];
+        };
+        AgentFile: {
+            path: string;
+            size_bytes: number;
+            sha256: string;
+        };
+        AgentResult: {
+            /** @constant */
+            kind: "agent";
+            /** @description The agent's final message. */
+            response: string;
+            /** @description True when the final message exceeded 50,000 characters. */
+            response_truncated: boolean;
+            response_sha256: string;
+            turns: number | null;
+            cost_usd: number | null;
+            duration_seconds: number | null;
+            /** @description Files the agent wrote to output/, retained with the job capture. */
+            files: components["schemas"]["AgentFile"][];
+        };
     };
     responses: never;
     parameters: never;
@@ -10672,7 +10757,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example analysis */
-                kind?: "analysis" | "paragraph";
+                kind?: "analysis" | "paragraph" | "agent";
                 /** @example succeeded */
                 status?: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
                 /** @example 33333333-3333-4333-8333-333333333333 */

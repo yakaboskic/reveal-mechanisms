@@ -40,9 +40,11 @@ def authoring_failure(result, request):
             limit = amount(completion.get('max_budget_usd')) or request.max_budget_usd
             spent = amount(completion.get('cost_usd'))
             cost = f'Recorded authoring spend: ${spent:.4f}.' if spent is not None else 'Final authoring spend was not reported.'
-            message = (f'The statement writer stopped at its ${limit:.2f} budget. {cost} '
+            kind = getattr(request, 'kind', 'research')
+            message = (f'The agent stopped at its ${limit:.2f} budget before finishing. {cost}' if kind == 'agent' else
+                       f'The statement writer stopped at its ${limit:.2f} budget. {cost} '
                        'No research statement was saved; your scientific account is unchanged.'
-                       if getattr(request, 'kind', 'research') == 'paragraph' else
+                       if kind == 'paragraph' else
                        f'The research agent stopped at its ${limit:.2f} authoring budget. {cost} '
                        'No scientific result was accepted. Your draft and activity are saved.')
             return {'code': 'AUTHORING_BUDGET_EXCEEDED', 'retryable': True, 'message': message,
