@@ -6,7 +6,8 @@ import re
 import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from .box_adapter import BoxConfigurationError, make_bundle
+from .box_adapter import BoxConfigurationError, egress_policy, make_bundle
+from .box_agent import validate_bootstrap_settings
 from .box_mcp import GRAPHS
 from .box_research import validate_context, network_policy
 from .direct_capture import canonical, remote_session, require, storage_hosts
@@ -14,21 +15,27 @@ from .direct_capture import canonical, remote_session, require, storage_hosts
 FORMAT = 'reveal.box-bootstrap/1'
 MAX_BUNDLE = 25_000_000
 POLICY = {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com']}
+OPTIONAL_KEYS = {'research_context', 'agent'}
 CONFIG_KEYS = {'job_id','attempt','kind','selected_graphs','timeout_seconds','max_budget_usd',
     'max_turns','model','claude_version','input_sha256','validation_feedback'}
 
 
 def validate_config(config):
-    require(isinstance(config, dict) and (set(config) == CONFIG_KEYS or set(config) == CONFIG_KEYS | {'research_context'}), 'Invalid frozen bootstrap configuration')
+    require(isinstance(config, dict) and CONFIG_KEYS <= set(config) <= CONFIG_KEYS | OPTIONAL_KEYS
+        and len(set(config) & OPTIONAL_KEYS) <= 1, 'Invalid frozen bootstrap configuration')
     require(isinstance(config['job_id'], str) and 0 < len(config['job_id']) <= 256
         and type(config['attempt']) is int and config['attempt'] > 0, 'Invalid bootstrap execution identity')
     if 'research_context' in config:
         require(config['kind'] == 'research', 'Only research may use a shared data context')
         validate_context(config['research_context'])
+    require((config['kind'] == 'agent') == ('agent' in config), 'Only an agent job carries agent settings')
+    if 'agent' in config:
+        try: validate_bootstrap_settings(config['agent'])
+        except ValueError: require(False, 'Invalid agent bootstrap settings')
     graphs = config['selected_graphs']
     require(isinstance(graphs, list) and all(isinstance(graph, str) for graph in graphs)
         and len(graphs) == len(set(graphs)) and not set(graphs) - set(GRAPHS)
-        and config['kind'] in ('research','paragraph') and (config['kind'] != 'paragraph' or not graphs),
+        and config['kind'] in ('research','paragraph','agent') and (config['kind'] != 'paragraph' or not graphs),
         'Invalid bootstrap graph or execution kind')
     require(type(config['timeout_seconds']) is int and 10 <= config['timeout_seconds'] <= 3600
         and type(config['max_turns']) is int and 1 <= config['max_turns'] <= 100
@@ -100,7 +107,7 @@ async def prepare_from_store(adapter, descriptor, handle, storage, *, research_a
             if context:
                 await adapter.finish_prepare(box, fingerprint, research_context=context, research_access=research_access)
             else:
-                await box.update_network_policy(POLICY)
+                await box.update_network_policy(egress_policy(descriptor['config']) if descriptor['config']['kind'] == 'agent' else POLICY)
         else:
             from .workflow_execution import run_sync
             ticket = await run_sync(download_ticket, storage, descriptor['bundle'])
@@ -117,7 +124,7 @@ async def prepare_from_store(adapter, descriptor, handle, storage, *, research_a
             if context:
                 await adapter.finish_prepare(box, fingerprint, research_context=context, research_access=research_access)
             else:
-                await adapter.finish_prepare(box, fingerprint)
+                await adapter.finish_prepare(box, fingerprint, policy=egress_policy(descriptor['config']))
         return dict(handle, phase='prepared', capture_protocol='s3-v1', **observed,
             timings={**handle.get('timings', {}), 'prepared_at':time.time()})
     finally:

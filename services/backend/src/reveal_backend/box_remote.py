@@ -20,6 +20,8 @@ import sys
 import threading
 import time
 
+from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
+                        KeyProxy, agent_environment, response_record, validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
 from .box_timing import RuntimeTiming, provider_metrics
@@ -191,6 +193,22 @@ def setup(request):
             'reader_version': READER_VERSION,
             'schema_sha256': views[str(excerpt_path.relative_to(work))],
             'examples_sha256': views[str(example_path.relative_to(work))]}
+    elif request['kind'] == 'agent':
+        # A general agent job: no DAPPER release, evidence package or skill. The caller's prompt is the task.
+        work = BASE / 'trusted'
+        work.mkdir()
+        shutil.copyfile(BASE / 'input' / AGENT_INPUT_FILENAME, work / AGENT_INPUT_FILENAME)
+        agent_input = validate_agent_input(json.loads((work / AGENT_INPUT_FILENAME).read_bytes()))
+        if agent_input['graphs'] != request['selected_graphs'] or agent_input['model'] != request['model']:
+            raise ValueError('Agent graphs or model differ from the frozen input')
+        if {k: request[k] for k in ('timeout_seconds', 'max_turns')} != {k: agent_input['limits'][k] for k in ('timeout_seconds', 'max_turns')} \
+                or request['max_budget_usd'] > agent_input['limits']['max_budget_usd']:
+            raise ValueError('Agent limits differ from the frozen input')
+        runtime = {'runtime_version': 'reveal.agent-runtime/1', 'working_directory': str(work),
+                   'evidence_package_sha256': hashlib.sha256((work / AGENT_INPUT_FILENAME).read_bytes()).hexdigest(),
+                   'derived_input_views': {},
+                   'agent': {key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'effort')}}
+        prompt = agent_input['prompt']
     else:
         root = BASE / 'workspace'
         root.mkdir()
@@ -224,13 +242,14 @@ def setup(request):
                                                       'software_name': 'Claude Code', 'software_version': request['claude_version'],
                                                       'generated_at_time': runtime['started_at']}]}
         (work / 'runtime-context.json').write_bytes(canonical(runtime['draft_attribution']))
-    if request['kind'] != 'research' and request.get('validation_feedback'):
+    if request['kind'] == 'paragraph' and request.get('validation_feedback'):
         prompt += '\nTrusted independent review feedback from a rejected earlier draft. Address these constraints afresh; they are not new evidence:\n' + '\n'.join(request['validation_feedback'])
     prepare_writable_output(work)
     runtime['output_directory'] = str(OUTPUT)
     runtime['output_alias'] = str(work / 'output')
     write_json(STATE / 'runtime.json', runtime)
-    for target in [project, BASE / 'input', BASE / 'workspace']:
+    # An agent run has no DAPPER workspace; every other kind creates one above.
+    for target in [project, BASE / 'input', *([] if request['kind'] == 'agent' else [BASE / 'workspace'])]:
         protect(target)
     if (BASE / 'trusted').exists():
         protect(BASE / 'trusted')
@@ -328,9 +347,24 @@ def lint_tool(filename, ledger):
             capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
 
 
+def agent_system_prompt(agent_input):
+    """Harness facts the agent needs, then the caller's system prompt; appended to Claude Code's own."""
+    note = ('You are running unattended in an isolated, disposable sandbox. Nobody can answer questions mid-run, so '
+            'make reasonable assumptions and finish the task. Your working directory is read-only. Write any files '
+            'you want returned to the output/ directory (/reveal/output): regular files only, no symlinks, each under '
+            '8 MB and 40 MB in all. Use /tmp or your home directory for scratch work. Everything else is discarded '
+            'when the run ends. Your final message is returned to the requester as the result, so make it complete '
+            'on its own.')
+    if agent_input['network'] == 'restricted':
+        note += (' The network is restricted to the Anthropic API' + (' and the selected knowledge-graph and literature '
+                 'services' if agent_input['graphs'] or agent_input['literature'] else '') + '; package installs and '
+                 'arbitrary downloads will fail.' + (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
+    return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
+
+
 def deadline_reason(request, last_activity=None):
     last_activity = last_activity or {}
-    stage = 'during research' if request['kind'] == 'research' else 'while writing the research statement'
+    stage = {'research': 'during research', 'agent': 'while working on the prompt'}.get(request['kind'], 'while writing the research statement')
     last_tool = last_activity.get('tool_name')
     operation = last_activity.get('operation') or {}
     if (operation.get('state') in ('received', 'running') or
@@ -366,6 +400,12 @@ def observable_activity(kind, payload, call, previous=None):
 
 
 def provider_failure_reason(request, result):
+    if request['kind'] == 'agent':
+        if result.get('subtype') == 'error_max_turns':
+            return f"The agent reached its {request['max_turns']}-turn limit before finishing."
+        if result.get('subtype') == 'error_max_budget_usd':
+            return f"The agent reached its ${request['max_budget_usd']:g} budget before finishing."
+        return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
     if result.get('subtype') == 'error_max_turns':
         return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
                 'No scientific result was accepted. Retry the analysis to start a new attempt with the current execution limits.')
@@ -505,7 +545,8 @@ def main():
         return 0
     request = json.loads((BASE / 'request.json').read_text())
     ledger = Ledger(STATE / 'ledger', request['job_id'], request['attempt'])
-    process = server = parser = runtime = None
+    process = server = parser = runtime = proxy = None
+    agent = request['kind'] == 'agent'
     last_activity = None
     builtin_calls = {}
     status, reason = 'failed', None
@@ -527,7 +568,7 @@ def main():
     write_json(STATE / 'status.json', {'status': 'preparing', 'started_at': stamp(), 'pid': os.getpid()})
     try:
         emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
-                       'message': 'Verifying the research runtime and preparing evidence files.'})
+                       'message': 'Preparing the agent sandbox.' if agent else 'Verifying the research runtime and preparing evidence files.'})
         credentials = json.loads((BASE / 'credentials.json').read_text())
         (BASE / 'credentials.json').unlink()
         SECRETS = tuple(value for value in credentials.values() if isinstance(value, str) and value)
@@ -547,34 +588,44 @@ def main():
         OUTPUT.mkdir(exist_ok=True)
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
+        literature = request['kind'] == 'research' or agent and runtime['agent']['literature']
         tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
                             write_draft=write_draft_tool if request['kind'] == 'research' else None,
-                            literature=LiteratureClient() if request['kind'] == 'research' else None,
+                            literature=LiteratureClient() if literature else None,
                             write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
                             read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'
         config_path.write_bytes(canonical(config)); os.chmod(config_path, 0o444)
-        env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
-               'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
-               'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
-               'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
+        if agent:
+            # The agent may run shell commands and reach the open network, so it never holds the API key.
+            proxy = KeyProxy(credentials['ANTHROPIC_API_KEY']).start()
+            env = agent_environment(user.pw_dir, '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', proxy)
+        else:
+            env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
+                   'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
+                   'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
+                   'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
         command = ['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid), '--clear-groups', '--no-new-privs',
                    '/usr/bin/timeout', '--signal=TERM', '--kill-after=10s', str(max(1, int(request['timeout_seconds'] - (time.monotonic() - started)))),
                    '/reveal/claude/node_modules/.bin/claude', '-p', '--verbose', '--output-format', 'stream-json',
                    '--include-partial-messages', '--model', request['model'], '--max-turns', str(request['max_turns']),
                    # Low effort: about 60% of a run's output was reasoning, and slow runs hit the time limit.
-                   '--effort', 'low',
+                   '--effort', runtime['agent']['effort'] if agent else 'low',
                    '--max-budget-usd', str(request['max_budget_usd']), '--permission-mode', 'bypassPermissions',
-                   '--tools', 'Read,Glob,Grep,Write,Edit', '--strict-mcp-config', '--mcp-config', str(config_path),
+                   '--tools', ','.join(runtime['agent']['tools']) if agent else 'Read,Glob,Grep,Write,Edit',
+                   '--strict-mcp-config', '--mcp-config', str(config_path),
                    '--setting-sources', '', '--disable-slash-commands']
+        if agent:
+            command += ['--append-system-prompt', agent_system_prompt(json.loads((work / AGENT_INPUT_FILENAME).read_bytes()))]
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    cwd=work, env=env, start_new_session=True)
         process.stdin.write(prompt.encode()); process.stdin.close()
         write_json(STATE / 'status.json', {'status': 'running', 'started_at': stamp(), 'pid': os.getpid(), 'agent_pid': process.pid})
-        emit('agent_started', {'message': 'Claude is reading the frozen evidence and authoring a result.', 'model': request['model'],
-                               'stage': 'authoring_account' if request['kind'] == 'research' else 'authoring_paragraph'})
+        emit('agent_started', {'message': 'Claude is working on the prompt.' if agent else 'Claude is reading the frozen evidence and authoring a result.',
+                               'model': request['model'],
+                               'stage': {'research': 'authoring_account', 'agent': 'running_agent'}.get(request['kind'], 'authoring_paragraph')})
         parser = ClaudeStream(secrets=SECRETS, timing=timing)
         checkpoint(force=True)
         trace_filter, error_filter = SecretFilter(SECRETS), SecretFilter(SECRETS)
@@ -634,12 +685,15 @@ def main():
                 reason = provider_failure_reason(request, parser.result)
             else:
                 status = 'succeeded'
-                if (OUTPUT / 'outcome.json').exists():
-                    outcome = json.loads((OUTPUT / 'outcome.json').read_text())
+                # A general agent's output/ is its own; only research writes a structured outcome there.
+                outcome_path = None if agent else OUTPUT / 'outcome.json'
+                if outcome_path and outcome_path.exists():
+                    outcome = json.loads(outcome_path.read_text())
                     if outcome.get('status') in ('insufficient_evidence', 'failed'):
                         status, reason = outcome['status'], str(outcome.get('reason', ''))[:2000]
-                expected = list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else list(OUTPUT.glob('paragraph.json'))
-                reused = outcome.get('existing_account_ids', []) if (OUTPUT / 'outcome.json').exists() else []
+                expected = (list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else
+                            [True] if agent else list(OUTPUT.glob('paragraph.json')))
+                reused = outcome.get('existing_account_ids', []) if outcome_path and outcome_path.exists() else []
                 reuse_output = RESEARCH is not None and bool(reused) and isinstance(reused, list) and all(isinstance(item, str) for item in reused) and set(reused) <= RESEARCH.existing_account_ids
                 if status == 'succeeded' and not expected and not reuse_output:
                     status, reason = 'failed', 'Claude completed without the required output documents'
@@ -654,6 +708,12 @@ def main():
             terminate(process)
         if server:
             server.shutdown()
+        if proxy:
+            proxy.shutdown()
+        if agent and parser is not None and parser.result is not None:
+            # Root-owned, beside the tool ledger: the agent cannot write or replace its own final answer.
+            write_json(STATE / 'ledger' / AGENT_RESPONSE_FILENAME,
+                       response_record(request['job_id'], request['attempt'], status, parser.result, SECRETS))
         if RESEARCH is not None:
             RESEARCH.freeze()
         ledger.freeze()

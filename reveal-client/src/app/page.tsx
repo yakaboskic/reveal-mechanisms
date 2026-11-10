@@ -1844,7 +1844,8 @@ function ResultView({ job, principalKind, onActions }: { job: Job; principalKind
     let active = true;
     const paths = result.kind === "analysis" ? analysisAccountResults(result).map(({ id, reused }) => ({ path: "accounts/" + encodeURIComponent(id), title: reused ? "Reused accepted scientific account · original authorship retained" : "Newly accepted scientific account" }))
       : result.kind === "paragraph" ? [{ path: "paragraphs/" + encodeURIComponent(result.paragraph_id), title: "Cited claim" }]
-      : [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }];
+      : result.kind === "analysis_outcome" ? [{ path: "analysis-outcomes/" + encodeURIComponent(result.outcome_id), title: "Insufficient evidence" }]
+      : []; // A general agent job's answer is on the job itself; it has no scientific record to load.
     setRecords(paths);
     void Promise.all(paths.map(async record => {
       try { return { ...record, data: await request<Record<string, unknown>>(backend(record.path)) }; }

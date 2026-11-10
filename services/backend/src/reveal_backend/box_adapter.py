@@ -17,6 +17,8 @@ import time
 
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
+from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE_PATH, bootstrap_settings,
+                        network_policy as agent_network_policy, validate_bootstrap_settings, validate_input as validate_agent_input)
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
 from .box_upload import MAX_TOTAL, capture_file_limit
@@ -113,7 +115,16 @@ def captured_result(request, handle, marker):
                            paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
                            ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
                            remote_handle=handle, outcome_path=found('output/outcome.json'),
-                           research_receipts_path=found('ledger/research-receipts.json'))
+                           research_receipts_path=found('ledger/research-receipts.json'),
+                           response_path=found(RESPONSE_CAPTURE_PATH) if request.kind == 'agent' else None)
+
+
+def egress_policy(config):
+    """Box egress once bootstrap is done: research's fixed services, or the services an agent job's tools call."""
+    if config['kind'] == 'agent':
+        settings = validate_bootstrap_settings(config.get('agent'))
+        return agent_network_policy(config['selected_graphs'], settings['network'], settings['literature'])
+    return network_policy(config.get('research_context'))
 
 
 def verified_box_not_found(exc):
@@ -183,7 +194,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
                  'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_research.py', 'box_literature.py', 'research_outcome.py',
                  'dispatch_view.py', 'evidence_files.py', 'evidence_reader.py', 'authoring_contract.py', 'authoring_structure.py',
-                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py'):
+                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py', 'box_agent.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-runtime/authoring-schema-dependencies.json',
@@ -288,6 +299,12 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if value.get('format') != 'reveal.paragraph-input/1' or request.selected_graphs:
             raise BoxConfigurationError('Invalid paragraph input format or external graph selection')
         files['input/paragraph-input.json'] = data
+    elif request.kind == 'agent':
+        try: validate_agent_input(value)
+        except ValueError as exc: raise BoxConfigurationError(str(exc)) from None
+        if tuple(value['graphs']) != tuple(request.selected_graphs):
+            raise BoxConfigurationError('Selected graphs do not match the frozen agent input')
+        files['input/' + AGENT_INPUT_FILENAME] = data
     else:
         raise BoxConfigurationError('Unsupported execution kind')
     result = io.BytesIO()
@@ -336,6 +353,10 @@ class BoxExecutionAdapter:
                   'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
                   'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
         config['validation_feedback'] = list(request.validation_feedback)
+        if request.kind == 'agent':
+            # The caller chose the model; the frozen input, not this worker's environment, says which.
+            agent_input = json.loads(request.input_path.read_bytes())
+            config['agent'], config['model'] = bootstrap_settings(agent_input), agent_input['model']
         if request.kind == 'research':
             package = json.loads(request.input_path.read_bytes())
             if package.get('retrieval_mode') == 'progressive':
@@ -352,7 +373,7 @@ class BoxExecutionAdapter:
         # harness bundle, input, model, limits and selected evidence services.
         fingerprint = hashlib.sha256(bundle + json.dumps(config, sort_keys=True).encode()).hexdigest()
         marker = await self.command(box, "sudo -n sh -c 'if [ -f /reveal/state/bootstrap-ready ]; then cat /reveal/state/bootstrap-ready; fi'")
-        policy = network_policy(config.get('research_context'))
+        policy = egress_policy(config)
         if marker.strip():
             if marker.strip() != fingerprint:
                 raise BoxConfigurationError('Existing Box bootstrap belongs to different frozen input or harness')
@@ -367,7 +388,8 @@ class BoxExecutionAdapter:
         bootstrap = self.bootstrap_script(config['claude_version'])
         await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
         await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
-        await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'), research_access=request.research_access)
+        await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'),
+                                  research_access=request.research_access, policy=policy)
 
     @staticmethod
     def toolchain_script(claude_version):
@@ -409,7 +431,7 @@ sudo chmod 755 /reveal/state
 sudo /reveal/claude/node_modules/.bin/claude --version
 '''
 
-    async def finish_prepare(self, box, fingerprint, *, research_context=None, research_access=None):
+    async def finish_prepare(self, box, fingerprint, *, research_context=None, research_access=None, policy=None):
         # Secret only uses structured SDK file input, then root-only protection before launch.
         credentials = {'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}
         if research_context:
@@ -419,8 +441,9 @@ sudo /reveal/claude/node_modules/.bin/claude --version
         await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps(credentials))
         await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
         await self.command(box, "sudo -n sh -c " + shlex.quote("printf '%s' " + fingerprint + " > /reveal/state/bootstrap-ready && chmod 600 /reveal/state/bootstrap-ready"))
-        # After installation only Anthropic and the fixed evidence service are reachable.
-        await box.update_network_policy(network_policy(research_context))
+        # After installation only Anthropic and the fixed evidence service are reachable
+        # (or, for an agent job, the services its chosen tools call).
+        await box.update_network_policy(policy or network_policy(research_context))
         # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
 
     async def execute(self, request, emit, cancelled, checkpoint):
