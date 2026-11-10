@@ -95,6 +95,8 @@ def require_current_reference(tx, job):
 
 def enqueue_review(tx, job, expected_event_id):
     from . import jobs
+    if job['kind'] == 'agent':
+        raise Problem(409, 'REVIEW_RETRY_UNAVAILABLE', 'A general agent run has no scientific review to retry; submit a new run.')
     if job['status'] != 'failed' or (job.get('failure') or {}).get('code') not in REVIEW_FAILURES:
         raise Problem(409, 'REVIEW_RETRY_UNAVAILABLE', 'Only output retained after an incomplete legacy review can be validated and saved through this action.')
     if job['last_event_id'] != expected_event_id:

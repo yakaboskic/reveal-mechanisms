@@ -198,7 +198,7 @@ def extract_bundle(archive_path, destination, config):
                         output.write(chunk)
                     if count != member.size: raise ValueError('Bootstrap file is incomplete')
                 target.chmod(0o644)
-    expected = 'input/evidence-package.json' if config['kind'] == 'research' else 'input/paragraph-input.json'
+    expected = {'research': 'input/evidence-package.json', 'agent': 'input/agent-input.json'}.get(config['kind'], 'input/paragraph-input.json')
     if (expected not in names or not any(name.startswith('bundle/') for name in names)
             or hashlib.sha256((destination / expected).read_bytes()).hexdigest() != config['input_sha256']):
         raise ValueError('Bootstrap input differs from frozen configuration')

@@ -742,6 +742,8 @@ def main():
     openapi_lightning.extend(module, fixture, examples)
     import openapi_provenance
     openapi_provenance.extend(module, fixture, examples)
+    import openapi_agent
+    openapi_agent.extend(module, fixture, examples)
     # Pair representation-specific inputs with the correct output, and include
     # paragraph polling under its own job ID in the portable exchange library.
     def extra_exchange(operation_id, case, *, query=None, path=None, media=None, response_name=None, value=None):
@@ -792,7 +794,7 @@ def main():
             'snapshot_sha256': PIN['snapshot_sha256'], 'identity_profile': 'DAPPER-ID-1',
             'source': '../' + str((DAPPER / 'dapper.yaml').relative_to(ROOT))},
         'x-contract-rules': {'idempotency_retention_days': 7, 'schema_validation': 'Closed DAPPER schemas plus runtime digest, graph-reference, evidence-lineage and citation-span checks.',
-            'naming': 'jobs is the only job resource. kind=analysis and kind=paragraph share creation, listing, status, events and cancellation.',
+            'naming': 'jobs is the only job resource. kind=analysis, kind=paragraph and kind=agent share creation, listing, status, events and cancellation.',
             'design_revision': 'v12.1',
             'initial_anchor_retrieval': 'Existing EAGGL label embeddings joined to a completed exact_trait_factor_number CFDE mapping run; pin routing provenance with each saved request. No label/gene agreement or full-catalog re-embedding prerequisite.',
             'evidence_package': 'reveal.evidence-package/0.2-draft; bundled from schema/evidence-package.schema.json',

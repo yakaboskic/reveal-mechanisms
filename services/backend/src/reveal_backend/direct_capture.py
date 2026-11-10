@@ -227,7 +227,7 @@ async def capture_to_store(adapter, binding, handle, storage, workspace_ref):
     require(binding.get('box_id') == handle['box_id'] and binding.get('job_id') == handle['job_id']
         and type(binding.get('attempt')) is int and binding['attempt'] == handle['attempt'] and binding['attempt'] > 0,
         'Direct capture handle binding differs')
-    require(binding.get('kind') in ('research', 'paragraph') and isinstance(binding.get('selected_graphs'), list)
+    require(binding.get('kind') in ('research', 'paragraph', 'agent') and isinstance(binding.get('selected_graphs'), list)
         and all(isinstance(graph, str) for graph in binding['selected_graphs'])
         and isinstance(binding.get('input_sha256'), str) and re.fullmatch('[a-f0-9]{64}', binding['input_sha256']),
         'Direct capture input binding is invalid')

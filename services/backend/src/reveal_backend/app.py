@@ -974,6 +974,28 @@ def check_job_quota(tx, identity, kind='analysis'):
         if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
 
 
+def admit_agent_job(identity):
+    """A general agent job runs any prompt with shell and web tools, so only operator-chosen workspaces may start one:
+    REVEAL_AGENT_JOB_USERS lists their user ids (any principal kind, e.g. an API-key workspace), and * admits every
+    registered user, never an anonymous guest. Unset, nobody can."""
+    allowed={value.strip() for value in os.getenv('REVEAL_AGENT_JOB_USERS','').split(',') if value.strip()}
+    if not (identity['user_id'] in allowed or '*' in allowed and identity['principal_kind']=='registered'):
+        raise Problem(403,'AGENT_JOBS_NOT_ENABLED','General agent jobs are not enabled for this workspace.')
+    if jobs.transport()!='workflow':
+        raise Problem(409,'AGENT_JOBS_UNAVAILABLE','General agent jobs need the durable workflow runtime.')
+
+
+def agent_job_rows(identity, body):
+    """Freeze the prompt, tools and limits into the queued job; the server's budget cap bounds the caller's."""
+    from .agent_execution import agent_budget_usd
+    from .box_agent import DEFAULT_MODEL, AgentInputError, freeze_input
+    try:
+        frozen=freeze_input(body,budget_cap=agent_budget_usd('agent'),default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL)
+    except AgentInputError as exc:
+        raise Problem(422,'INVALID_REQUEST',str(exc)[:400]) from None
+    return jobs.new(identity['user_id'],'agent',inputs=frozen)
+
+
 def analysis_job_rows(identity, frozen, binding, inputs):
     """Stage an analysis around an already authorized frozen request; no extra reads or writes."""
     from . import research_hosted
@@ -988,7 +1010,9 @@ def create_job_transaction(body,authorization,idempotency_key):
         reads=[(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID),('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
         identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
+            if body['kind']=='agent': admit_agent_job(identity)
             check_job_quota(tx,identity,body['kind'])
+            if body['kind']=='agent': return agent_job_rows(identity,body)
             if body['kind']=='paragraph':
                 # Research statements need no reference data: allowed on archived accounts and during reloads.
                 account=owned(tx,'account',body['account_id'],user)

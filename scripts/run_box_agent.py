@@ -24,10 +24,21 @@ async def run(args):
     args.output.mkdir(parents=True, exist_ok=True)
     checkpoint_path = args.output / 'remote-handle.json'
     previous = json.loads(checkpoint_path.read_text()) if args.resume else None
+    input_path, graphs, limits = args.input.resolve(), tuple(args.graph), {
+        'timeout_seconds': args.timeout, 'max_budget_usd': args.budget, 'max_turns': args.turns}
+    if args.kind == 'agent':
+        # Accept a POST /v1/jobs body and freeze it exactly as the API would; the frozen input sets the limits.
+        from reveal_backend.box_agent import DEFAULT_MODEL, freeze_input
+        body = json.loads(input_path.read_text())
+        frozen = body if body.get('format') else freeze_input(body, budget_cap=args.budget,
+            default_model=os.environ.get('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL)
+        input_path = args.output.resolve() / 'agent-input.json'
+        if not args.resume: input_path.write_text(json.dumps(frozen, sort_keys=True))
+        graphs, limits = tuple(frozen['graphs']), frozen['limits']
     request = ExecutionRequest(job_id=previous['job_id'] if previous else str(uuid.uuid4()), attempt=previous['attempt'] if previous else 1,
-                               kind=args.kind, input_path=args.input.resolve(), output_dir=args.output.resolve(),
-                               selected_graphs=tuple(args.graph), timeout_seconds=args.timeout,
-                               max_budget_usd=args.budget, max_turns=args.turns, remote_handle=previous,
+                               kind=args.kind, input_path=input_path, output_dir=args.output.resolve(),
+                               selected_graphs=graphs, timeout_seconds=limits['timeout_seconds'],
+                               max_budget_usd=limits['max_budget_usd'], max_turns=limits['max_turns'], remote_handle=previous,
                                validation_feedback=tuple(json.loads(args.feedback_file.read_text())) if args.feedback_file else ())
     async def checkpoint(handle): checkpoint_path.write_text(json.dumps(handle, indent=2))
     async def emit(kind, payload):
@@ -48,7 +59,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--input', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--kind', choices=['research', 'paragraph'], default='research')
+    parser.add_argument('--kind', choices=['research', 'paragraph', 'agent'], default='research',
+                        help='agent: --input is a POST /v1/jobs agent body; --budget is the server cap')
     parser.add_argument('--graph', action='append', default=[])
     parser.add_argument('--env-file', type=Path)
     parser.add_argument('--resume', action='store_true')
