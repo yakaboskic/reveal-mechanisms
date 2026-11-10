@@ -13,7 +13,7 @@ environment configuration; research records never contain the raw key.
 
 The initial QA handoff creates a separate anonymous workspace. It expires after
 30 days and retains the configured anonymous daily allowance (five analyses
-per day). QA permits ten outstanding jobs per workspace; the default for other
+per day). QA permits five outstanding jobs per workspace; the default for other
 environments remains two. Its exact expiry appears in the handoff file and
 `GET /v1/me`. Publishing results publicly still requires a registered owner.
 
@@ -134,7 +134,7 @@ with the existing UUID. To revoke, blank both settings and complete the rollout;
 old tasks must drain before revocation is complete. Existing event streams are
 bounded to at most four minutes and reauthorize before replaying further data.
 Retired or expired principals are rejected even if their key remains configured.
-The current deployment supports one configured colleague key per environment.
+To keep more than one key active, see the next section.
 
 ## Administrative scientific read key
 
