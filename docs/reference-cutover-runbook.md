@@ -51,7 +51,7 @@ export REVEAL_MYSQLDUMP="$(brew --prefix mysql-client)/bin/mysqldump"
 
 **Repo-root `.env` (0600).** Keys only; the values come from the existing laptop `.env` and Secrets Manager:
 - `REVEAL_MYSQL_HOST`, `REVEAL_MYSQL_PORT`, `REVEAL_MYSQL_USER`, `REVEAL_MYSQL_PASSWORD`;
-- `REVEAL_MYSQL_CA_FILE`: an **absolute** path to the RDS global bundle. `shasum -a 256` must print `fe45bbebf92ad3e27a583bbb2ddd1553c521ed4d49af5514dc0a40372ea5395c`, which is `RDS_CA_SHA256` in `scripts/platform_assets.py`;
+- `REVEAL_MYSQL_CA_FILE`: an **absolute** path to the RDS global bundle. `shasum -a 256` must print `90a6f1a7978a1b1b096dca6c57511ca48d3b8cf052f8e704baf358f34ea2f21b`, which is `RDS_CA_SHA256` in `scripts/platform_assets.py`;
 - `UPSTASH_VECTOR_REST_URL`: the host must be `relevant-mite-29002-us1-vector.upstash.io`, the allow-listed host. If the October credential rotation moved it, update the allow-list first;
 - `UPSTASH_VECTOR_REST_TOKEN` (read) and `UPSTASH_VECTOR_WRITE_TOKEN` (snapshot and purge);
 - `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`;
