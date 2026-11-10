@@ -41,7 +41,7 @@ def frozen(**body):
 def test_freeze_fills_every_default_so_the_frozen_bytes_say_what_runs():
     value = frozen()
     assert value == {'format': 'reveal.agent-input/1', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
-                     'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'literature': False, 'network': 'restricted',
+                     'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'literature': False, 'network': 'restricted', 'allowed_domains': [],
                      'effort': 'medium', 'model': box_agent.DEFAULT_MODEL,
                      'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0}}
     # The default budget never exceeds a lower server cap.
@@ -68,6 +68,12 @@ def test_freeze_orders_tools_and_graphs_canonically():
     ({'network': 'lan'}, 'network must be'),
     ({'model': 'gpt-5'}, 'Claude model id'),
     ({'effort': 'max'}, 'effort must be'),
+    ({'allowed_domains': ['10.0.0.1']}, 'exact hostnames'),
+    ({'allowed_domains': ['*.ncbi.nlm.nih.gov']}, 'exact hostnames'),
+    ({'allowed_domains': ['https://eutils.ncbi.nlm.nih.gov']}, 'exact hostnames'),
+    ({'allowed_domains': ['host%d.example.org' % n for n in range(21)]}, 'at most 20'),
+    ({'allowed_domains': ['api.example.org'], 'network': 'open'}, 'already reaches every host'),
+    ({'allowed_domains': 'api.example.org'}, 'list of hostnames'),
 ])
 def test_freeze_rejects_invalid_requests(body, message):
     with pytest.raises(box_agent.AgentInputError, match=message):
@@ -83,6 +89,15 @@ def test_validate_rejects_changed_frozen_bytes():
     for change in ({'extra': 1}, {'tools': ['Bash', 'Read']}, {'limits': {**value['limits'], 'timeout_seconds': 5}}):
         with pytest.raises(box_agent.AgentInputError):
             box_agent.validate_input({**value, **change})
+
+
+def test_allowed_domains_are_normalized_and_added_to_the_restricted_egress():
+    value = frozen(allowed_domains=['EUTILS.ncbi.nlm.nih.gov.', 'api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov'])
+    assert value['allowed_domains'] == ['api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov']
+    assert box_agent.network_policy([], 'restricted', True, value['allowed_domains']) == {'mode': 'custom', 'allowed_domains': [
+        'api.anthropic.com', 'www.ebi.ac.uk', 'api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov']}
+    note = box_remote.agent_system_prompt(value)
+    assert 'these hosts over HTTPS: api.platform.opentargets.org, eutils.ncbi.nlm.nih.gov' in note
 
 
 def test_network_policy_opens_only_what_the_chosen_tools_call():
@@ -207,11 +222,12 @@ def test_bundle_carries_the_frozen_input_and_the_shared_module(tmp_path):
 def test_bootstrap_config_freezes_model_and_egress_from_the_input(tmp_path):
     request = agent_request(tmp_path, frozen(graphs=['prokn'], model='claude-sonnet-5-5'))
     config = BoxExecutionAdapter(ROOT, environ={'REVEAL_CLAUDE_MODEL': 'claude-sonnet-4-6'}).request_config(request)
-    assert config['model'] == 'claude-sonnet-5-5' and config['agent'] == {'network': 'restricted', 'literature': False}
+    assert config['model'] == 'claude-sonnet-5-5' and config['agent'] == {'network': 'restricted', 'literature': False, 'allowed_domains': []}
     validate_config(config)
     assert egress_policy(config) == {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us']}
     for changed in ({**config, 'kind': 'paragraph', 'selected_graphs': []}, {k: v for k, v in config.items() if k != 'agent'},
-                    {**config, 'agent': {'network': 'everything', 'literature': False}}):
+                    {**config, 'agent': {'network': 'everything', 'literature': False, 'allowed_domains': []}},
+                    {**config, 'agent': {'network': 'restricted', 'literature': False, 'allowed_domains': ['1.2.3.4']}}):
         with pytest.raises(BoxTransportError):
             validate_config(changed)
 
@@ -249,7 +265,8 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
         work, runtime, prompt = runner_setup(tmp_path, value)
     assert prompt == 'Summarize the sandbox.'
     assert runtime['runtime_version'] == 'reveal.agent-runtime/1' and 'dapper' not in runtime
-    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'literature': False, 'network': 'restricted', 'effort': 'medium'}
+    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'literature': False, 'network': 'restricted',
+                                'allowed_domains': [], 'effort': 'medium'}
     assert (work / 'agent-input.json').read_bytes() == canonical_json(value)
     system = box_remote.agent_system_prompt(value)
     assert system.endswith('\n\nAnswer in French.') and 'output/' in system and 'restricted' in system

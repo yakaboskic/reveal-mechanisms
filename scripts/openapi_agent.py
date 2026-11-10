@@ -8,7 +8,7 @@ COMPLETED_AT = '2026-11-09T15:03:12Z'
 
 
 def extend(b, f, e):
-    from reveal_backend.box_agent import (BUILTIN_TOOLS, DEFAULT_MAX_BUDGET_USD, DEFAULT_MAX_TURNS, DEFAULT_MODEL,
+    from reveal_backend.box_agent import (BUILTIN_TOOLS, DEFAULT_MAX_BUDGET_USD, DEFAULT_MAX_TURNS, DEFAULT_MODEL, MAX_ALLOWED_DOMAINS,
         DEFAULT_TOOLS, DEFAULT_TIMEOUT_SECONDS, EFFORTS, MAX_PROMPT_CHARS, MAX_RESULT_RESPONSE_CHARS,
         MAX_SYSTEM_PROMPT_CHARS, NETWORKS, TIMEOUT_RANGE)
     from reveal_backend.box_mcp import GRAPHS
@@ -35,6 +35,9 @@ def extend(b, f, e):
         'network': enum(*NETWORKS, default='restricted', description=
             'restricted reaches only the Anthropic API and the services of the selected graph and literature tools; '
             'open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.'),
+        'allowed_domains': array(string(pattern='^[a-z0-9.-]{1,253}$'), uniqueItems=True, maxItems=MAX_ALLOWED_DOMAINS, default=[],
+            description='Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov '
+                        'or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.'),
         'effort': enum(*EFFORTS, default='medium'),
         'model': string(pattern='^claude-[a-z0-9-]{1,60}$', description=f'Claude model id. Default {DEFAULT_MODEL} (or REVEAL_AGENT_JOB_MODEL).'),
         'limits': ref('AgentJobLimits')}, ['kind', 'prompt'],
@@ -63,9 +66,10 @@ def extend(b, f, e):
     operation['summary'] = 'Start an analysis, paragraph or general agent job'
     operation['description'] += (' kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; '
         'it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.')
-    request = {'kind': 'agent', 'prompt': 'List three open questions about how LEPR variants affect insulin resistance, '
-        'with one recent paper for each. Save them as output/questions.md.',
-        'system_prompt': 'Be concise. Cite PMIDs.', 'tools': ['Read', 'Write', 'WebSearch'], 'literature': True,
+    request = {'kind': 'agent', 'prompt': 'Find three recent PubMed papers on LEPR variants and insulin resistance with NCBI '
+        'E-utilities, look up LEPR\'s known drugs in the Open Targets GraphQL API, and save a short summary as output/summary.md.',
+        'system_prompt': 'Be concise. Cite PMIDs.', 'tools': ['Read', 'Write', 'Bash'],
+        'allowed_domains': ['api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov'],
         'limits': {'timeout_seconds': 600, 'max_turns': 30, 'max_budget_usd': 1}}
     operation['requestBody']['content']['application/json']['examples']['agent'] = {'summary': 'General agent', 'value': request}
     links = {'self': '/v1/jobs/' + JOB_ID, 'events': '/v1/jobs/' + JOB_ID + '/events', 'cancel': '/v1/jobs/' + JOB_ID + '/cancel'}

@@ -123,7 +123,7 @@ def egress_policy(config):
     """Box egress once bootstrap is done: research's fixed services, or the services an agent job's tools call."""
     if config['kind'] == 'agent':
         settings = validate_bootstrap_settings(config.get('agent'))
-        return agent_network_policy(config['selected_graphs'], settings['network'], settings['literature'])
+        return agent_network_policy(config['selected_graphs'], settings['network'], settings['literature'], settings['allowed_domains'])
     return network_policy(config.get('research_context'))
 
 

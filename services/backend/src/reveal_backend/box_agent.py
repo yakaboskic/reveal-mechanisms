@@ -39,7 +39,10 @@ DEFAULT_MAX_TURNS = 50
 DEFAULT_MAX_BUDGET_USD = 2.0
 # Job rows are listed in full, so a long answer is cut there; the captured record keeps all of it.
 MAX_RESULT_RESPONSE_CHARS = 50_000
-INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'effort', 'model', 'limits'}
+INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort', 'model', 'limits'}
+MAX_ALLOWED_DOMAINS = 20
+# Exact lowercase DNS hostnames: no IP addresses, ports, paths or wildcards (Box matches the list exactly).
+HOSTNAME = re.compile(r'(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]')
 
 ANTHROPIC_HOST = 'api.anthropic.com'
 KEY_PROXY_PORT = 8766
@@ -75,6 +78,10 @@ def freeze_input(body, *, budget_cap, default_model=DEFAULT_MODEL):
             'graphs must be distinct names from ' + ', '.join(sorted(GRAPHS)))
     network = body.get('network', 'restricted')
     require(network in NETWORKS, 'network must be restricted or open')
+    domains = body.get('allowed_domains', [])
+    require(isinstance(domains, list) and all(isinstance(domain, str) for domain in domains), 'allowed_domains must be a list of hostnames')
+    domains = sorted({domain.strip().lower().rstrip('.') for domain in domains})
+    require(network == 'restricted' or not domains, 'allowed_domains narrows the restricted network; network "open" already reaches every host')
     require(network == 'open' or not OPEN_NETWORK_TOOLS & set(tools),
             'WebFetch downloads pages from inside the sandbox and needs network "open"; WebSearch works on the restricted network')
     limits = body.get('limits') or {}
@@ -90,7 +97,7 @@ def freeze_input(body, *, budget_cap, default_model=DEFAULT_MODEL):
               'prompt': text(body.get('prompt'), 'prompt', MAX_PROMPT_CHARS, required=True),
               'system_prompt': text(body.get('system_prompt'), 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False),
               'tools': [tool for tool in BUILTIN_TOOLS if tool in tools], 'graphs': sorted(graphs),
-              'literature': body.get('literature', False), 'network': network,
+              'literature': body.get('literature', False), 'network': network, 'allowed_domains': domains,
               'effort': body.get('effort', 'medium'), 'model': model,
               'limits': {'timeout_seconds': timeout, 'max_turns': turns, 'max_budget_usd': float(budget)}}
     return validate_input(frozen)
@@ -108,6 +115,7 @@ def validate_input(value):
     require(type(value['literature']) is bool, 'literature must be true or false')
     require(value['network'] in NETWORKS and (value['network'] == 'open' or not OPEN_NETWORK_TOOLS & set(tools)),
             'Invalid frozen agent network')
+    validate_domains(value['allowed_domains'], value['network'])
     require(value['effort'] in EFFORTS, 'effort must be low, medium or high')
     require(isinstance(value['model'], str) and MODEL_PATTERN.fullmatch(value['model']), 'model must be a Claude model id')
     limits = value['limits']
@@ -120,24 +128,35 @@ def validate_input(value):
     return value
 
 
-def network_policy(selected_graphs, network, literature):
-    """Box egress for one agent run: the Anthropic API plus the services its chosen tools call, or everything."""
+def validate_domains(domains, network):
+    require(isinstance(domains, list) and len(domains) <= MAX_ALLOWED_DOMAINS and domains == sorted(set(domains))
+            and all(isinstance(domain, str) and HOSTNAME.fullmatch(domain) for domain in domains),
+            f'allowed_domains must be at most {MAX_ALLOWED_DOMAINS} exact hostnames such as eutils.ncbi.nlm.nih.gov')
+    require(network == 'restricted' or not domains, 'allowed_domains applies only to the restricted network')
+    return domains
+
+
+def network_policy(selected_graphs, network, literature, allowed_domains=()):
+    """Box egress for one agent run: the Anthropic API, the services its chosen tools call and the hosts the
+    caller allowed; or everything."""
     if network == 'open': return {'mode': 'allow-all'}
     require(network == 'restricted', 'Invalid agent network')
     domains = [ANTHROPIC_HOST]
     if selected_graphs: domains.append('apps.okn.us')
     if literature: domains.append('www.ebi.ac.uk')
+    domains += [domain for domain in allowed_domains if domain not in domains]
     return {'mode': 'custom', 'allowed_domains': domains}
 
 
 def bootstrap_settings(value):
     """The part of the frozen input the Box bootstrap needs before the runner starts: its egress."""
-    return {'network': value['network'], 'literature': value['literature']}
+    return {'network': value['network'], 'literature': value['literature'], 'allowed_domains': list(value['allowed_domains'])}
 
 
 def validate_bootstrap_settings(settings):
-    require(isinstance(settings, dict) and set(settings) == {'network', 'literature'} and settings['network'] in NETWORKS
+    require(isinstance(settings, dict) and set(settings) == {'network', 'literature', 'allowed_domains'} and settings['network'] in NETWORKS
             and type(settings['literature']) is bool, 'Invalid agent bootstrap settings')
+    validate_domains(settings['allowed_domains'], settings['network'])
     return settings
 
 

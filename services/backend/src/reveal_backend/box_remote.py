@@ -206,7 +206,7 @@ def setup(request):
         runtime = {'runtime_version': 'reveal.agent-runtime/1', 'working_directory': str(work),
                    'evidence_package_sha256': hashlib.sha256((work / AGENT_INPUT_FILENAME).read_bytes()).hexdigest(),
                    'derived_input_views': {},
-                   'agent': {key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'effort')}}
+                   'agent': {key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort')}}
         prompt = agent_input['prompt']
     else:
         root = BASE / 'workspace'
@@ -355,9 +355,11 @@ def agent_system_prompt(agent_input):
             'when the run ends. Your final message is returned to the requester as the result, so make it complete '
             'on its own.')
     if agent_input['network'] == 'restricted':
-        note += (' The network is restricted to the Anthropic API' + (' and the selected knowledge-graph and literature '
-                 'services' if agent_input['graphs'] or agent_input['literature'] else '') + '; package installs and '
-                 'arbitrary downloads will fail.' + (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
+        reachable = (['the selected knowledge-graph and literature services'] if agent_input['graphs'] or agent_input['literature'] else []) \
+            + (['these hosts over HTTPS: ' + ', '.join(agent_input['allowed_domains'])] if agent_input['allowed_domains'] else [])
+        note += (' The network is restricted to the Anthropic API' + ''.join(' and ' + item for item in reachable) +
+                 '; other hosts, package installs and arbitrary downloads will fail.' +
+                 (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
     return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
 
 

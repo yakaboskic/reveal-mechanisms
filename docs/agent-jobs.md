@@ -42,10 +42,21 @@ EOF
 | `tools` | Read, Write, Edit, Glob, Grep, Bash, WebSearch | Claude Code built-ins. `WebFetch` needs `network: "open"`. |
 | `graphs` | `[]` | OKN knowledge graphs for the scoped graph tools (`get_schema`, `describe_kg`, `query_graph`). |
 | `literature` | `false` | Europe PMC `search_papers` / `read_paper`. |
-| `network` | `restricted` | `restricted`: only the Anthropic API plus the services of the chosen graph/literature tools. `open`: the internet (package installs, downloads, `WebFetch`). |
+| `network` | `restricted` | `restricted`: only the Anthropic API plus the services of the chosen graph/literature tools and `allowed_domains`. `open`: the internet (package installs, downloads, `WebFetch`). |
+| `allowed_domains` | `[]` | Up to 20 exact hostnames the restricted network may also reach, for example `eutils.ncbi.nlm.nih.gov` (PubMed E-utilities) or `api.platform.opentargets.org` (Open Targets GraphQL). No wildcards or IP addresses; not used with `open`. The agent calls them with Bash (`curl`, `python3`). |
 | `effort` | `medium` | `low`, `medium` or `high`. |
 | `model` | `REVEAL_AGENT_JOB_MODEL` | A Claude model id. |
 | `limits` | 900 s, 50 turns, min(2, cap) USD | The run stops at whichever comes first. |
+
+To let an agent search PubMed and query a GraphQL API without opening the whole network, give it Bash and
+those two hosts:
+
+```json
+{"kind": "agent",
+ "prompt": "Use NCBI E-utilities to find the 3 most recent PubMed articles on LEPR variants and insulin resistance, then query the Open Targets GraphQL API (https://api.platform.opentargets.org/api/v4/graphql) for LEPR's top associated diseases. Save output/summary.md citing PMIDs.",
+ "tools": ["Read", "Write", "Bash"],
+ "allowed_domains": ["eutils.ncbi.nlm.nih.gov", "api.platform.opentargets.org"]}
+```
 
 The request is frozen into the job when it is queued (`reveal.agent-input/1`), with every default filled
 in, so the stored input says exactly what ran.
