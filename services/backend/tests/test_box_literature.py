@@ -20,10 +20,15 @@ from reveal_backend.agent_execution import ExecutionRequest
 from reveal_backend.box_adapter import make_bundle
 from reveal_backend.box_literature import BASE, LiteratureClient, LiteratureInputError, NoRedirect, request_spec
 from reveal_backend.box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools
+from reveal_backend.worker import validate_execution_ledger
 from reveal_backend.evidence_package import EvidenceBuildError
 from reveal_backend.public_tool_activity import display_arguments
 from reveal_backend.research_outcome import FORMAT, validate_insufficient_outcome
 from reveal_backend.runtime_config import ROOT
+
+
+def canonical_text(ledger, index):
+    return (ledger.root / ledger.entries[index]['response']['path']).read_text()
 
 
 def encoded(value):
@@ -201,6 +206,161 @@ class CapturedPaperToolsTests(unittest.TestCase):
         self.assertEqual(self.ledger.entries[8]['status'], 'failed')
         self.assertEqual(self.ledger.entries[9]['status'], 'failed')
         self.assertTrue(self.ledger.freeze()['complete'])
+
+    def agent_tools(self, name='agent', **limits):
+        ledger = Ledger(self.root / name, 'agent-job', 1)
+        bounds = {'max_calls': 30, 'max_searches': 3, 'max_papers': 2, 'max_characters': 60, **limits}
+        return ledger, ScopedTools((), ledger, soft_budget=True, literature=LiteratureClient(opener=self.http, max_results=9, guidance=True), **bounds)
+
+    def test_research_tool_descriptions_and_allowances_are_unchanged(self):
+        described = {tool['name']: tool for tool in self.tools.definitions()}
+        self.assertIn('(maximum three searches per attempt)', described['search_papers']['description'])
+        self.assertIn('(maximum four reads)', described['read_paper']['description'])
+        self.assertEqual(described['search_papers']['inputSchema']['properties']['limit']['maximum'], 5)
+        read = self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertNotIn('full_text', read['structuredContent']['data'])
+        self.assertNotIn('run_budget', json.loads(read['content'][-1]['text']))
+        self.assertTrue(self.tools.call('search_papers', {'query': 'fixture', 'limit': 6})['isError'])
+        refused = self.tools.call('read_paper', {'source': 'MED', 'id': '12345', 'section': 'full_text'})
+        self.assertEqual(refused['content'][0]['text'], 'Open-access full text requires the exact PMC identifier from a paper record')
+        # Four reads, then the fixed refusal; the third call above was refused before it counted.
+        for _ in range(3): self.assertFalse(self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})['isError'])
+        fifth = self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertEqual(fifth['content'][0]['text'], 'Bounded literature read budget exhausted; report the remaining limitation')
+
+    def test_agent_job_tools_name_their_own_limits_and_how_to_reach_full_text(self):
+        _, tools = self.agent_tools(max_searches=25, max_papers=40, max_characters=500_000)
+        described = {tool['name']: tool for tool in tools.definitions()}
+        self.assertIn('up to 25 searches this run, up to 9 results each', described['search_papers']['description'])
+        self.assertEqual(described['search_papers']['inputSchema']['properties']['limit']['maximum'], 9)
+        read = described['read_paper']['description']
+        for phrase in ('section defaults to "abstract"', 'source "PMC"', 'section "full_text"', '40 distinct papers', '500,000 characters'):
+            self.assertIn(phrase, read)
+        self.assertNotIn('maximum four reads', read)
+        self.http.raw = paper_response(isOpenAccess='Y')
+        search = tools.call('search_papers', {'query': 'fixture', 'limit': 9})
+        self.assertFalse(search['isError'])
+        self.assertIn('section "full_text"', search['structuredContent']['data']['usage'])
+        self.assertEqual(tools.call('read_paper', {'source': 'MED', 'id': '12345'})['structuredContent']['data']['full_text'],
+                         {'available': True, 'read_paper': {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'}})
+        self.http.raw = paper_response(isOpenAccess='N')
+        closed = tools.call('read_paper', {'source': 'MED', 'id': '12345'})['structuredContent']['data']['full_text']
+        self.assertEqual((closed['available'], closed['pmcid']), (False, 'PMC12345'))
+        refused = tools.call('read_paper', {'source': 'MED', 'id': '12345', 'section': 'full_text'})
+        self.assertIn('the pmcid that record returns', refused['content'][0]['text'])
+        self.assertTrue(tools.call('search_papers', {'query': 'fixture', 'limit': 10})['isError'])
+
+    def test_agent_job_paging_one_paper_uses_characters_not_papers(self):
+        text = 'A' * 25 + 'B' * 25 + 'C' * 25
+        self.http.raw = paper_response(text)
+        ledger, tools = self.agent_tools()
+        pages = [tools.call('read_paper', {'source': 'MED', 'id': '12345', 'offset': offset, 'limit': 25}) for offset in (0, 25)]
+        self.assertEqual([page['structuredContent']['data']['text'] for page in pages], ['A' * 25, 'B' * 25])
+        budget = json.loads(pages[1]['content'][-1]['text'])['run_budget']
+        self.assertEqual(budget, {'tool_calls': {'used': 2, 'allowed': 30}, 'paper_searches': {'used': 0, 'allowed': 3},
+                                  'papers': {'used': 1, 'allowed': 2}, 'paper_characters': {'used': 50, 'allowed': 60}})
+        # Ten characters remain: the third page is cut to them, and the next read is refused without a request.
+        last = tools.call('read_paper', {'source': 'MED', 'id': '12345', 'offset': 50, 'limit': 25})
+        self.assertEqual((last['structuredContent']['data']['text'], last['structuredContent']['data']['next_offset']), ('C' * 10, 60))
+        requests = len(self.http.requests)
+        spent = tools.call('read_paper', {'source': 'MED', 'id': '12345', 'offset': 60})
+        self.assertTrue(spent['isError'])
+        self.assertIn('60 characters of paper text for this run are used', spent['content'][0]['text'])
+        self.assertEqual(len(self.http.requests), requests)
+        self.assertEqual([entry['status'] for entry in ledger.entries], ['completed', 'completed', 'completed', 'failed'])
+
+    def test_agent_job_paper_budget_counts_distinct_papers_and_returns_unused_allowance(self):
+        ledger, tools = self.agent_tools(max_characters=10_000)
+        self.http.raw = paper_response('Short abstract.')
+        first = tools.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertEqual(json.loads(first['content'][-1]['text'])['run_budget']['paper_characters']['used'], len('Short abstract.'))
+        # The abstract named PMC12345, so its full text is the same paper.
+        self.http.raw = b'''<article><front><article-meta><article-id pub-id-type="pmc">12345</article-id>
+          <article-id pub-id-type="pmid">12345</article-id></article-meta></front><body><p>Exact reported result.</p></body></article>'''
+        full = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})
+        self.assertFalse(full['isError'])
+        self.assertEqual(json.loads(full['content'][-1]['text'])['run_budget']['papers'], {'used': 1, 'allowed': 2})
+        # The other direction: full text first names the PMID, so its abstract is the same paper.
+        _, reverse = self.agent_tools('reverse', max_papers=1, max_characters=10_000)
+        self.assertFalse(reverse.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})['isError'])
+        self.http.raw = paper_response('Short abstract.')
+        self.assertFalse(reverse.call('read_paper', {'source': 'MED', 'id': '12345'})['isError'])
+        self.assertEqual(reverse.budget()['papers'], {'used': 1, 'allowed': 1})
+        # A failed read gives its slot back; a second real paper takes the last one; a third is refused.
+        self.http.status = 404
+        self.assertTrue(tools.call('read_paper', {'source': 'PMC', 'id': 'PMC777', 'section': 'full_text'})['isError'])
+        self.assertEqual(tools.budget()['papers']['used'], 1)
+        self.http.status = 200
+        self.http.raw = encoded({'hitCount': 1, 'resultList': {'result': [dict(id='222', source='MED', pmid='222', abstractText='Second.')]}})
+        self.assertFalse(tools.call('read_paper', {'source': 'MED', 'id': '222'})['isError'])
+        requests = len(self.http.requests)
+        third = tools.call('read_paper', {'source': 'MED', 'id': '333'})
+        self.assertIn('All 2 papers for this run have been opened', third['content'][0]['text'])
+        self.assertEqual(len(self.http.requests), requests)
+        self.assertFalse(tools.call('read_paper', {'source': 'MED', 'id': '222'})['isError'])
+        self.assertEqual(tools.budget()['paper_characters']['used'], len('Short abstract.') + len('Exact reported result.') + 2 * len('Second.'))
+        for _ in range(4): tools.call('search_papers', {'query': 'fixture'})
+        self.assertIn('All 3 paper searches for this run are used', json.loads(canonical_text(ledger, -1))['content'][0]['text'])
+
+    def test_agent_job_overlapping_reads_of_one_new_paper_share_a_slot_whichever_returns_text(self):
+        _, tools = self.agent_tools(max_papers=1, max_characters=10_000)
+        # Two pages of one unopened paper are in flight together; the first to finish returns nothing.
+        first = tools.reserve_paper({'source': 'MED', 'id': '12345', 'offset': 9000})
+        second = tools.reserve_paper({'source': 'MED', 'id': '12345'})
+        self.assertEqual(tools.budget()['papers']['used'], 1)
+        with self.assertRaises(LiteratureInputError): tools.reserve_paper({'source': 'MED', 'id': '222'})
+        tools.settle_paper(first, {'isError': True})
+        self.assertEqual(tools.budget()['papers']['used'], 1)
+        tools.settle_paper(second, {'structuredContent': {'data': {'text': 'Read.', 'paper': {'pmcid': 'PMC12345'}}}})
+        self.assertEqual((tools.budget()['papers']['used'], tools.budget()['paper_characters']['used']), (1, 5))
+        self.assertFalse(tools.reserve_paper({'source': 'PMC', 'id': 'PMC12345'})['opening'])
+        # The other order: the first read returns text while the second is still in flight. That is still one paper,
+        # so a different paper can take the second slot; and its PMC id, read at the same time, is the same paper.
+        _, pair = self.agent_tools('pair', max_papers=2, max_characters=100_000)  # each read in flight holds 8,000
+        early, late = [pair.reserve_paper({'source': 'MED', 'id': '12345'}) for _ in range(2)]
+        full = pair.reserve_paper({'source': 'PMC', 'id': 'PMC12345'})
+        self.assertEqual(pair.budget()['papers']['used'], 2)
+        pair.settle_paper(early, {'structuredContent': {'data': {'text': 'Read.', 'paper': {'pmcid': 'PMC12345'}}}})
+        self.assertEqual(pair.budget()['papers']['used'], 1)
+        other = pair.reserve_paper({'source': 'MED', 'id': '222'})
+        self.assertTrue(other['opening'])
+        with self.assertRaises(LiteratureInputError): pair.reserve_paper({'source': 'MED', 'id': '333'})
+        for reservation in (late, full): pair.settle_paper(reservation, {'structuredContent': {'data': {'text': 'More.', 'paper': {}}}})
+        pair.settle_paper(other, {'structuredContent': {'data': {'text': 'Second.', 'paper': {}}}})
+        self.assertEqual((pair.budget()['papers']['used'], pair.opening, pair.budget()['paper_characters']['used']), (2, {}, 5 + 5 + 5 + 7))
+        # Both fail: the slot is free again and nothing is charged.
+        _, empty = self.agent_tools('empty', max_papers=1, max_characters=10_000)
+        for reservation in [empty.reserve_paper({'source': 'MED', 'id': '12345'}) for _ in range(2)]: empty.settle_paper(reservation, None)
+        self.assertEqual((empty.budget()['papers']['used'], empty.budget()['paper_characters']['used'], empty.opening), (0, 0, {}))
+        self.assertTrue(empty.reserve_paper({'source': 'MED', 'id': '222'})['opening'])
+
+    def test_agent_job_spent_tool_calls_are_an_error_the_run_survives(self):
+        ledger, tools = self.agent_tools(max_calls=2, max_papers=5, max_characters=10_000)
+        for _ in range(2): self.assertFalse(tools.call('read_paper', {'source': 'MED', 'id': '12345'})['isError'])
+        requests = len(self.http.requests)
+        spent = tools.call('search_papers', {'query': 'fixture'})
+        self.assertTrue(spent['isError'])
+        self.assertIn('All 2 REVEAL tool calls for this run are used', spent['content'][0]['text'])
+        self.assertEqual(len(self.http.requests), requests)
+        self.assertEqual([entry['status'] for entry in ledger.entries], ['completed', 'completed', 'failed'])
+        # The ledger check that fails a job on a denied call accepts this run.
+        output = self.root / 'agent'
+        package = self.root / 'agent-input.json'; package.write_bytes(b'{}')
+        (output / 'manifest.json').write_bytes(json.dumps(ledger.freeze()).encode())
+        (output / 'runtime.json').write_bytes(encoded({'job_id': 'agent-job', 'attempt': 1, 'model': 'claude-test',
+                                                       'input_sha256': hashlib.sha256(b'{}').hexdigest()}))
+        request = ExecutionRequest(job_id='agent-job', attempt=1, kind='agent', input_path=package, output_dir=output)
+        result = SimpleNamespace(runtime_manifest_path=output / 'runtime.json', ledger_manifest_path=output / 'manifest.json')
+        validate_execution_ledger(result, request, 'claude-test')
+        # A research run keeps the fatal denial.
+        strict_ledger = Ledger(self.root / 'strict', 'job', 1)
+        strict = ScopedTools((), strict_ledger, max_calls=1, literature=LiteratureClient(opener=self.http))
+        strict.call('read_paper', {'source': 'MED', 'id': '12345'}); strict.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertEqual([entry['status'] for entry in strict_ledger.entries], ['completed', 'denied'])
+
+    def test_literature_limits_must_be_given_together_and_positive(self):
+        for bounds in ({'max_papers': 2}, {'max_characters': 100}, {'max_papers': 0, 'max_characters': 100}, {'max_searches': 0}):
+            with self.assertRaises(ValueError): ScopedTools((), self.ledger, **bounds)
 
     def test_credentials_not_sent_and_raw_body_redacted_before_durable_capture(self):
         secret = 'fixture-sensitive-key'

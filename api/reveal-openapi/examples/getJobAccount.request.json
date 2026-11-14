@@ -1,0 +1,78 @@
+{
+  "operation_id": "getJobAccount",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/jobs/{job_id}/account",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account",
+    "path": {
+      "job_id": "77777777-7777-4777-8777-777777777777"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "account": {
+          "job_id": "77777777-7777-4777-8777-777777777777",
+          "account": {
+            "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+            "dapper_version": "0.2.1-a1",
+            "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+            "document_bytes": 9120,
+            "objects": 11,
+            "edges": 4,
+            "claims": 1,
+            "value_locators": 1,
+            "lint_warnings": 1,
+            "requested_claims": [
+              {
+                "statement": "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.",
+                "assessed": true,
+                "claim_ids": [
+                  "dapper:Claim.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                ]
+              }
+            ],
+            "papers": [
+              {
+                "source": "PMC",
+                "id": "PMC0000000",
+                "section": "full_text",
+                "reference": "PMID:00000000",
+                "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                "text_bytes": 48211,
+                "media_type": "text/plain",
+                "filename": "PMC0000000.fulltext.txt",
+                "evidence_items": 1,
+                "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+              }
+            ],
+            "deposit": {
+              "status": "deposited",
+              "deposit_id": "dep_00000000000000000000000000000000",
+              "objects": 11,
+              "stored_differs": 0,
+              "unresolved_references": 0
+            }
+          },
+          "document": {
+            "scientific_accounts": [
+              {
+                "id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                "name": "LEPR and hepatic insulin signalling"
+              }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

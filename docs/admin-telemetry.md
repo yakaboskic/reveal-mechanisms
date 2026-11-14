@@ -47,6 +47,25 @@ Jobs that finished before cost telemetry existed can be backfilled from their S3
 
 No new tables or required migrations are introduced. Optional migration `007_admin_telemetry_indexes.sql` adds indexes for bounded recent-record scans on larger deployments; apply with your normal migration procedure before relying on frequent polling at scale.
 
+## Agent job limits
+
+The **Limits** tab sets the per-run limits of [general agent jobs](agent-jobs.md#limits): run time, turns,
+budget, tool calls, paper searches, results per search, papers read and paper text. Each has a default (what a
+request gets when it names none) and a ceiling (the most a request may ask for).
+
+- Each row shows the value in force and where it comes from: the console, a named environment variable, or the
+  built-in value. It also shows the range the service supports.
+- Leave a field empty to not set it in the console; the environment or built-in value then applies.
+- A saved change applies to jobs queued after it, on every API replica, with no deploy. Research runs are not
+  affected.
+- The server checks every value: it must be inside the supported range, and a default may not exceed its
+  ceiling. If someone else saved first, your save is refused and you reload.
+- The tab shows who last changed the limits and when, and the last 50 changes with the old and new values.
+
+This is the console's only write. It uses its own signed, purpose-bound assertion (`admin_settings`), separate
+from the read-only telemetry one, and carries the signed-in admin's verified email for the change record. The
+values are one `agent_limits` application record; no migration is needed.
+
 ## Inspect a job's logs
 
 Click any job in **Execution** (analysis, paragraph or general agent) to open its logs and diagnostics. The selection is also addressable as `/admin?job=<job-id>`, including older jobs outside the latest 100 dashboard rows. The detail shows the persisted failure message, the worker's saved diagnostic when available, local timestamps, attempt history, and phase timings.

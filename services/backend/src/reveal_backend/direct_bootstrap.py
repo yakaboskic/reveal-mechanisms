@@ -7,7 +7,7 @@ import time
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from .box_adapter import BoxConfigurationError, egress_policy, make_bundle
-from .box_agent import validate_bootstrap_settings
+from .box_agent import LIMITS as AGENT_LIMITS, validate_bootstrap_settings
 from .box_mcp import GRAPHS
 from .box_research import validate_context, network_policy
 from .direct_capture import canonical, remote_session, require, storage_hosts
@@ -38,7 +38,7 @@ def validate_config(config):
         and config['kind'] in ('research','paragraph','agent') and (config['kind'] != 'paragraph' or not graphs),
         'Invalid bootstrap graph or execution kind')
     require(type(config['timeout_seconds']) is int and 10 <= config['timeout_seconds'] <= 3600
-        and type(config['max_turns']) is int and 1 <= config['max_turns'] <= 100
+        and type(config['max_turns']) is int and 1 <= config['max_turns'] <= AGENT_LIMITS['max_turns']['maximum']
         and type(config['max_budget_usd']) in (int,float) and math.isfinite(config['max_budget_usd'])
         and config['max_budget_usd'] > 0, 'Invalid bootstrap execution limits')
     require(isinstance(config['input_sha256'], str) and re.fullmatch('[a-f0-9]{64}', config['input_sha256'])

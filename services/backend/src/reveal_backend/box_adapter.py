@@ -17,8 +17,10 @@ import time
 
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
+from .box_claims import host as claims_host_of
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE_PATH, bootstrap_settings,
-                        network_policy as agent_network_policy, validate_bootstrap_settings, validate_input as validate_agent_input)
+                        LIMITS as AGENT_LIMITS, network_policy as agent_network_policy, validate_bootstrap_settings,
+                        validate_input as validate_agent_input)
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
 from .box_upload import MAX_TOTAL, capture_file_limit
@@ -123,7 +125,9 @@ def egress_policy(config):
     """Box egress once bootstrap is done: research's fixed services, or the services an agent job's tools call."""
     if config['kind'] == 'agent':
         settings = validate_bootstrap_settings(config.get('agent'))
-        return agent_network_policy(config['selected_graphs'], settings['network'], settings['literature'], settings['allowed_domains'])
+        return agent_network_policy(config['selected_graphs'], settings['network'], settings['literature'], settings['allowed_domains'],
+                                    settings.get('deliverable', 'answer'),
+                                    claims_host_of(settings['claims_url']) if settings.get('claims_url') else None)
     return network_policy(config.get('research_context'))
 
 
@@ -194,7 +198,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
                  'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_research.py', 'box_literature.py', 'research_outcome.py',
                  'dispatch_view.py', 'evidence_files.py', 'evidence_reader.py', 'authoring_contract.py', 'authoring_structure.py',
-                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py', 'box_agent.py'):
+                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py', 'box_agent.py',
+                 'literature_locator.py', 'box_claims.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-runtime/authoring-schema-dependencies.json',
@@ -204,6 +209,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                 'services/backend/agent-skills/read-evidence-package/SKILL.md',
                 'services/backend/agent-skills/write-cited-paragraph/SKILL.md',
+                'services/backend/agent-skills/construct-literature-account/SKILL.md',
                 'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
                 'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md',
                 'docs/evidence-claim-structure.md']
@@ -356,7 +362,7 @@ class BoxExecutionAdapter:
         if request.kind == 'agent':
             # The caller chose the model; the frozen input, not this worker's environment, says which.
             agent_input = json.loads(request.input_path.read_bytes())
-            config['agent'], config['model'] = bootstrap_settings(agent_input), agent_input['model']
+            config['agent'], config['model'] = bootstrap_settings(agent_input, self.environ.get('REVEAL_CLAIMS_API_URL')), agent_input['model']
         if request.kind == 'research':
             package = json.loads(request.input_path.read_bytes())
             if package.get('retrieval_mode') == 'progressive':
@@ -452,7 +458,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
             raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
         if set(request.selected_graphs) - set(GRAPHS) or not 1 <= request.attempt or not 10 <= request.timeout_seconds <= 3600:
             raise BoxConfigurationError('Invalid execution graph, attempt or time limit')
-        if not math.isfinite(request.max_budget_usd) or request.max_budget_usd <= 0 or not 1 <= request.max_turns <= 100:
+        if not math.isfinite(request.max_budget_usd) or request.max_budget_usd <= 0 or not 1 <= request.max_turns <= AGENT_LIMITS['max_turns']['maximum']:
             raise BoxConfigurationError('Invalid execution budget')
         if len(request.validation_feedback) > 10 or any(not isinstance(x, str) or len(x) > 4000 for x in request.validation_feedback):
             raise BoxConfigurationError('Validation feedback exceeds limits')

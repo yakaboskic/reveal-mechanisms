@@ -317,6 +317,141 @@ p.write_text(json.dumps(doc))
                 if expected:
                     self.assertIn(expected, {item['check'] for item in draft['findings']})
 
+    def test_literature_account_job_drafts_lints_assembles_and_takes_its_deposit_form(self):
+        """A scientific_account agent job end to end, offline: the agent's tools (draft, lint, with the quote check),
+        the backend's gate on the pinned release, and the deposit form minted with DAPPER 0.2.1-a1."""
+        import io, os
+        from types import SimpleNamespace
+        from reveal_backend import acceptance, account_deposit, agent_account, box_remote
+        from reveal_backend.box_literature import LiteratureClient
+        from reveal_backend.box_mcp import Ledger
+        result = 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation by 42% in liver.'
+        article = ('<?xml version="1.0"?><article><front><article-meta><article-id pub-id-type="pmc">12345</article-id>'
+                   '<article-id pub-id-type="pmid">99999</article-id><title-group><article-title>Leptin receptor loss and hepatic insulin '
+                   'signalling</article-title></title-group></article-meta></front><body><sec><title>Results</title><p>' + result + '</p>'
+                   '<p>Glucose production rose. Later, glucose production rose again in knockout mice.</p></sec></body></article>').encode()
+        class Response(io.BytesIO):
+            status = 200
+        http = SimpleNamespace(open=lambda request, timeout: Response(article))
+        claim_text = 'Loss of hepatocyte LEPR reduces hepatic insulin signalling.'
+        account = agent_account.build('Does loss of LEPR signalling cause hepatic insulin resistance?', [claim_text])
+        gap_id, proposition_id = account['package']['selection']['knowledge_gap_id'], account['claims'][0]['proposition_id']
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); state = base / 'state'; output = base / 'output'
+            state.mkdir(); output.mkdir()
+            lock = base / 'bundle/services/backend/agent-runtime/dapper-release.json'
+            lock.parent.mkdir(parents=True); lock.write_bytes(self.lock.read_bytes())
+            package_path = base / 'evidence-package.json'; package_path.write_bytes(canonical_json(account['package']))
+            attribution = {'organizations': [{'id': 'urn:reveal:runtime:executor', 'name': 'REVEAL Mechanisms runtime executor'}],
+                           'activities': [{'id': 'urn:reveal:runtime:execution:job:1', 'name': 'Claude Code research execution',
+                                           'command': 'reveal Box scientific-account authoring', 'software_name': 'Claude Code'}]}
+            (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(self.release), 'evidence_package': str(package_path),
+                                                                  'deliverable': 'scientific_account', 'draft_attribution': attribution}))
+            ledger = Ledger(state / 'ledger', 'account-job', 1)
+            settings = {'tools': ['Read'], 'graphs': [], 'literature': True,
+                        'limits': {'tool_calls': 30, 'literature_searches': 3, 'literature_search_results': 5, 'literature_papers': 4, 'literature_characters': 48_000}}
+            def draft(snippet):
+                return {'files': [capture['file']],
+                        'evidence_items': [{'id': 'urn:draft:evidence-1', 'target_proposition': proposition_id, 'direction': 'SUPPORTS',
+                                            'snippet': snippet, 'explanation': 'The paper reports this directly in mouse liver.',
+                                            'context': 'Source locator: ' + capture['source_locator'] + '. Mouse liver.',
+                                            'evidence_source': 'Europe PMC open-access full text (PMC12345)', 'reference': 'PMID:99999',
+                                            'was_derived_from': [capture['file']['id']]}],
+                        'claims': [{'id': 'urn:draft:claim-1', 'proposition': proposition_id, 'direction': 'SUPPORTS', 'status': 'proposed',
+                                    'statement': 'One mouse study supports the requester\'s claim.', 'has_evidence': ['urn:draft:evidence-1']}],
+                        'scientific_accounts': [{'id': 'urn:draft:account-1', 'name': 'LEPR and hepatic insulin signalling', 'question': gap_id,
+                                                 'context': 'One open-access paper found through Europe PMC.', 'component_claims': ['urn:draft:claim-1'],
+                                                 'closing_remarks': 'A single mouse study; no human data were read.'}]}
+            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output), \
+                    patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
+                tools = box_remote.agent_tools([], ledger, settings, literature_client=lambda **options: LiteratureClient(opener=http, **options),
+                                               lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool)
+                read = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})
+                self.assertFalse(read.get('isError'), read)
+                capture = json.loads(read['content'][-1]['text'])
+                # A quote that is verbatim (so the pinned linter accepts it) but occurs twice in the paper: only the quote
+                # check can tell the agent, and it does so during the run.
+                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft('lucose production rose')})
+                self.assertFalse(saved.get('isError'), saved)
+                feedback = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                errors = [(item['check'], item['where']) for item in feedback['findings'] if item['severity'] == 'error']
+                self.assertEqual(errors, [('literature-quote', 'urn:draft:evidence-1')])
+                self.assertFalse(feedback['valid'])
+                self.assertIn('occurs 2 times', next(item['message'] for item in feedback['findings'] if item['check'] == 'literature-quote'))
+                # The trusted Proposition and KnowledgeGap were hydrated from the package; the agent wrote neither.
+                stored = json.loads((output / 'account-1.json').read_bytes())
+                self.assertEqual([node['id'] for node in stored['knowledge_gaps']], [gap_id])
+                self.assertEqual(stored['propositions'], [{'id': proposition_id, 'statement': claim_text}])
+                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
+                clean = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertTrue(clean['valid'], clean.get('findings'))
+                # Trying to reword the requester's claim is refused.
+                reworded = draft(result); reworded['propositions'] = [{'id': proposition_id, 'statement': 'A reworded claim.'}]
+                refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': reworded})
+                self.assertTrue(refused.get('isError')); self.assertIn('trusted source object was changed', refused['content'][0]['text'])
+                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['propositions'], [{'id': proposition_id, 'statement': claim_text}])
+            ledger.freeze()
+            manifest = state / 'ledger/manifest.json'
+            requester = {'user_id': '11111111-1111-4111-8111-111111111111', 'principal_kind': 'registered', 'display_name': 'Test Requester',
+                         'orcid': None, 'orcid_authenticated': False}
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                assembled, report = acceptance.assemble_account(output / 'account-1.json', package_path, base / 'assembled.json',
+                                                                requester, {'id': 'account-job'}, 1, 'box', manifest)
+            self.assertTrue(report['valid'], report.get('findings'))
+            self.assertEqual([node['name'] for node in assembled['persons']], [assembled['persons'][0]['name']])
+            self.assertIn('Test Requester', assembled['persons'][0]['name'])
+            calls = json.loads(manifest.read_bytes())['calls']
+            document, summary = account_deposit.deposit_document(assembled, state / 'ledger', calls)
+            self.assertNotIn('persons', document); self.assertNotIn('Test Requester', json.dumps(document))   # not named unless asked
+            located = document['value_locators'][0]
+            text = account_deposit.paper_text_bytes(state / 'ledger', calls, summary['papers'][0]['text_sha256'])
+            self.assertEqual(text[located['byte_start']:located['byte_start'] + located['byte_length']].decode(), result)
+            self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id
+            self.assertEqual(document['claims'][0]['proposition'], proposition_id)                   # and so does the requester's claim
+            self.assertEqual(summary['account_id'], document['scientific_accounts'][0]['id'])
+            self.assertNotEqual(summary['account_id'], assembled['scientific_accounts'][0]['id'])    # the deposit id is the only public one
+            self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('Later, glucose', json.dumps(document))
+            # The workflow's gate is those two steps taken once, leaving under the workspace all that commit reads back.
+            from reveal_backend.evidence_package import EvidenceBuildError
+            work = base / 'work'; work.mkdir()
+            captured = SimpleNamespace(account_paths=(output / 'account-1.json',), ledger_manifest_path=manifest)
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                record = agent_account.accept(work, {'id': 'account-job'}, 1, account, requester, captured, output)
+            data, texts = agent_account.stored(work, record)
+            kept = json.loads(data)
+            self.assertEqual(record['account_id'], kept['scientific_accounts'][0]['id'])
+            self.assertEqual(record['requested_claims'], [{'statement': claim_text, 'assessed': True, 'claim_ids': [kept['claims'][0]['id']]}])
+            self.assertEqual(list(texts), [kept['files'][[node['id'] for node in kept['files']].index(kept['value_locators'][0]['file'])]['sha256']])
+            self.assertTrue((work / 'attempt-1/validation-1.json').is_file())
+            shown = agent_account.public(record, {'status': 'not_configured'})
+            self.assertEqual((shown['claims'], shown['value_locators'], shown['deposit']), (1, 1, {'status': 'not_configured'}))
+            self.assertNotIn('path', shown['papers'][0]); self.assertNotIn('Test Requester', json.dumps(shown))
+            # The requester is in the stored account only when the job asked to be named.
+            self.assertNotIn('Test Requester', data.decode()); self.assertNotIn(requester['user_id'], data.decode())
+            named_work = base / 'named'; named_work.mkdir()
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                named = agent_account.accept(named_work, {'id': 'account-job'}, 1, {**account, 'attribute_requester': True}, requester, captured, output)
+            named_document = json.loads(agent_account.stored(named_work, named)[0])
+            self.assertIn('Test Requester', named_document['persons'][0]['name']); self.assertEqual(named['objects'], record['objects'])
+            self.assertEqual(kept['scientific_accounts'][0]['was_attributed_to'], [kept['organizations'][0]['id']])
+            self.assertEqual(named_document['scientific_accounts'][0]['was_attributed_to'], [named_document['persons'][0]['id']])
+            # A claim the requester asked about and the agent did not assess is reported, not invented.
+            other = agent_account.requested_claims([*account['claims'], {'statement': 'An unassessed claim.', 'proposition_id': 'dapper:Proposition.x'}], kept)
+            self.assertEqual(other[1], {'statement': 'An unassessed claim.', 'assessed': False, 'claim_ids': []})
+            # Bytes that changed after the check are refused at commit.
+            saved_bytes = (work / record['document']['path']).read_bytes()
+            (work / record['document']['path']).write_bytes(b'{}')
+            with self.assertRaisesRegex(EvidenceBuildError, 'changed after validation'): agent_account.stored(work, record)
+            (work / record['document']['path']).write_bytes(saved_bytes)
+            # An account the pinned linter accepts but whose quote has no single place in the paper fails the gate as a
+            # validation failure (it could only get here past the in-sandbox lint by defect or tampering).
+            tampered = json.loads((output / 'account-1.json').read_bytes())
+            tampered['evidence_items'][0]['snippet'] = 'lucose production rose'
+            (output / 'account-1.json').write_bytes(canonical_json(tampered))
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock), \
+                    self.assertRaisesRegex(EvidenceBuildError, 'could not be put in its deposit form.*occurs 2 times'):
+                agent_account.accept(base / 'work', {'id': 'account-job'}, 1, account, requester, captured, output)
+
     def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
         from reveal_backend import acceptance, box_remote
         from reveal_backend.authoring_structure import _normalized_finding

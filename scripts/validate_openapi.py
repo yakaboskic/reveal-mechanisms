@@ -67,7 +67,7 @@ def main():
                     if status == '303': assert response['headers']['Location']['schema']['type'] == 'string'
                     continue
                 if status == '307':
-                    assert op['operationId'] == 'downloadArtifact'
+                    assert op['operationId'] in ('downloadArtifact', 'downloadJobAccountText')
                     assert response['headers']['Location']['schema']['type'] == 'string'
                     assert not response.get('content'), 'Artifact redirects must not proxy the response body'
                     continue

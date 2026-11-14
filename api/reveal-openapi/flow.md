@@ -544,8 +544,23 @@ Explicitly request one preliminary completion, review the saved direction, then 
 - Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.
 - Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently.
 
+### Read an agent job's Scientific Account
+
+Fetch the account a deliverable scientific_account agent job returned, and the paper text it quotes.
+
+**Request:** An owned, succeeded agent job whose result carries an account block.
+
+**Response:** The DAPPER document as deposited, its summary and deposit outcome; exact paper text bytes by checksum.
+
+- `GET /v1/jobs/{job_id}/account` — [request request/response](examples/getJobAccount.request.json)
+- `GET /v1/jobs/{job_id}/account/texts/{sha256}` — [request request/response](examples/downloadJobAccountText.request.json)
+
+- Owner only; 404 until the job has succeeded and for every other job.
+- The document names each quoted paper text by checksum and never carries it; the text download is owner-only.
+- A failed or unconfigured deposit is reported in the account block and does not fail the job.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 96 operations and all 121 exchanges. OpenAPI SHA-256: `07ffa8488584ff6d2016fa9058e2e088c2bc604a7866f7b67ae080b121762b92`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 98 operations and all 123 exchanges. OpenAPI SHA-256: `588115fcd9decfb12353ca6c6af4b76a2a226492438bb74b4c2ef0318c302c41`. No endpoints or payloads were changed to build this diagram.

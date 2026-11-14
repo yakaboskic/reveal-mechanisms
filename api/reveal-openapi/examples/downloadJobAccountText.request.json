@@ -1,0 +1,28 @@
+{
+  "operation_id": "downloadJobAccountText",
+  "case": "request",
+  "method": "GET",
+  "path_template": "/v1/jobs/{job_id}/account/texts/{sha256}",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002",
+    "path": {
+      "job_id": "77777777-7777-4777-8777-777777777777",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000002"
+    },
+    "query": {},
+    "headers": {
+      "Authorization": "Bearer <api-key-or-gateway-assertion>",
+      "Accept": "*/*"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "*/*",
+      "examples": {
+        "paper_text": "Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation."
+      }
+    }
+  },
+  "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+}

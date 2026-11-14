@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "07ffa8488584ff6d2016fa9058e2e088c2bc604a7866f7b67ae080b121762b92",
+  "openapi_sha256": "588115fcd9decfb12353ca6c6af4b76a2a226492438bb74b4c2ef0318c302c41",
   "steps": [
     {
       "id": "gap",
@@ -547,8 +547,25 @@
         "Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.",
         "Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently."
       ]
+    },
+    {
+      "id": "agent-account",
+      "title": "Read an agent job's Scientific Account",
+      "route": "GET /v1/jobs/{id}/account",
+      "action": "Fetch the account a deliverable scientific_account agent job returned, and the paper text it quotes.",
+      "incoming": "An owned, succeeded agent job whose result carries an account block.",
+      "outgoing": "The DAPPER document as deposited, its summary and deposit outcome; exact paper text bytes by checksum.",
+      "cases": [
+        "getJobAccount.request",
+        "downloadJobAccountText.request"
+      ],
+      "rules": [
+        "Owner only; 404 until the job has succeeded and for every other job.",
+        "The document names each quoted paper text by checksum and never carries it; the text download is owner-only.",
+        "A failed or unconfigured deposit is reported in the account block and does not fail the job."
+      ]
     }
   ],
-  "operation_count": 96,
-  "exchange_count": 121
+  "operation_count": 98,
+  "exchange_count": 123
 }

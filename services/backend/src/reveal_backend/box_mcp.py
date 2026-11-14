@@ -15,6 +15,7 @@ import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from .box_claims import DESCRIPTION as CLAIMS_DESCRIPTION, SCHEMA as CLAIMS_SCHEMA, TOOL as CLAIMS_TOOL, ClaimsInputError
 from .box_literature import LiteratureInputError, request_spec
 from .box_research import ALLOWED_TOOLS, HostedResearchClient, ResearchAccessError
 
@@ -237,9 +238,25 @@ def response_payloads(result):
     return payloads
 
 
+# Saving and checking a draft is how a run turns its reads into a deliverable. For a job with its own limits these
+# calls never compete with paper and graph calls for budget; they have a fixed allowance of their own.
+AUTHORING_TOOLS = ('lint_account', 'write_account_draft')
+MAX_AUTHORING_CALLS = 300
+
+
+class ToolBudgetExhausted(ValueError):
+    """A general agent job spent its tool-call allowance. The agent is told and may still finish."""
+
+
 class ScopedTools:
     def __init__(self, selected_graphs, ledger, client=None, max_calls=30, lint=None, write_draft=None,
-                 read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None, research=None, max_research_calls=80, read_evidence=None):
+                 read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None, research=None, max_research_calls=80, read_evidence=None,
+                 max_searches=3, max_reads=4, max_papers=None, max_characters=None, soft_budget=False, claims=None, draft_files=None):
+        """Research runs keep the fixed allowances: three searches, four reads, and a spent call budget is a denied call.
+
+        A general agent job passes its own limits. max_papers and max_characters replace the per-call read count: a run may
+        open that many distinct papers and receive that much paper text, so paging through one paper costs characters only.
+        soft_budget makes a spent call budget an ordinary tool error the agent can finish after, not a policy denial."""
         if set(selected_graphs) - set(GRAPHS):
             raise PolicyError('Unsupported selected graph')
         self.selected_graphs, self.ledger = tuple(selected_graphs), ledger
@@ -251,13 +268,77 @@ class ScopedTools:
         self.max_calls, self.lint = max_calls, lint
         self.write_draft = write_draft
         self.literature, self.write_outcome = literature, write_outcome
+        self.claims = claims   # read access to the claims repository (box_claims.ClaimsClient), or None
+        # A run that returns one account names the only file it may draft and lint; a research run keeps its three.
+        self.draft_files = tuple(draft_files) if draft_files else None
         self.research, self.max_research_calls, self.research_calls = research, max_research_calls, 0
         self.literature_calls = {'search_papers': 0, 'read_paper': 0}
+        if (max_papers is None) != (max_characters is None) or any(
+                type(value) is not int or value < 1 for value in (max_searches, max_reads, max_papers, max_characters) if value is not None):
+            raise ValueError('Literature limits are out of bounds')
+        self.max_searches, self.max_reads, self.soft_budget = max_searches, max_reads, soft_budget
+        self.max_papers, self.max_characters = max_papers, max_characters
+        # papers: (source, id) -> slot of a paper that has returned text; the ids of one paper share a slot.
+        # opening: (source, id) -> reads in flight for a paper that has not returned text yet.
+        self.papers, self.opening, self.paper_slots, self.paper_characters = {}, {}, 0, 0
         self.tool_calls = 0
+        self.authoring_calls = 0
         self.call_lock = threading.Lock()
         self.author_lock = threading.Lock()
         self.read_timeout = read_timeout
         self.read_slots = threading.BoundedSemaphore(max_parallel_reads)
+
+    def papers_held(self):
+        """Papers that returned text, plus papers whose first reads are still in flight. A paper is in both while one of
+        its overlapping reads has returned and another has not; it is one paper. Called under call_lock."""
+        return len(set(self.papers.values())) + sum(1 for key in self.opening if key not in self.papers)
+
+    def reserve_paper(self, arguments):
+        """Hold a paper slot and the characters this read may return. Called under call_lock, before the request."""
+        key = (arguments['source'], arguments['id'])
+        opening = key not in self.papers
+        if opening and key not in self.opening and self.papers_held() >= self.max_papers:
+            raise LiteratureInputError(f'All {self.max_papers} papers for this run have been opened. Keep reading those with offset, '
+                                       'or finish and say which papers were left unread.')
+        remaining = self.max_characters - self.paper_characters
+        if remaining < 1:
+            raise LiteratureInputError(f'The {self.max_characters:,} characters of paper text for this run are used. '
+                                       'Finish from what you have read and say what was left unread.')
+        characters = min(arguments.get('limit', 8000), remaining)
+        # A paper counts once it returns text. Until then its reads in flight hold one slot between them.
+        if opening: self.opening[key] = self.opening.get(key, 0) + 1
+        self.paper_characters += characters
+        return {'key': key, 'opening': opening, 'characters': characters}
+
+    def settle_paper(self, reservation, result):
+        """Charge only the text returned. A read that returned none (an error, a missing record) gives its paper slot back."""
+        data = result.get('structuredContent', {}).get('data', {}) if isinstance(result, dict) and not result.get('isError') else {}
+        text = data.get('text') if isinstance(data, dict) else None
+        used = len(text) if isinstance(text, str) else 0
+        with self.call_lock:
+            self.paper_characters -= reservation['characters'] - used
+            key = reservation['key']
+            if reservation['opening']:
+                self.opening[key] -= 1
+                if not self.opening[key]: del self.opening[key]
+            if not used: return
+            if key not in self.papers:
+                self.papers[key] = self.paper_slots; self.paper_slots += 1
+            # The PMID and PMC id of one paper are one paper: reading its abstract, then its full text, opens it once.
+            paper = data.get('paper') if isinstance(data.get('paper'), dict) else {}
+            other = ('PMC', paper.get('pmcid')) if key[0] == 'MED' else ('MED', paper.get('pmid'))
+            if isinstance(other[1], str) and other[1]: self.papers.setdefault(other, self.papers[key])
+
+    def budget(self):
+        """What the run has used, shown to the agent beside each capture so it can pace itself."""
+        with self.call_lock:
+            value = {'tool_calls': {'used': min(self.tool_calls, self.max_calls), 'allowed': self.max_calls}}
+            if self.literature:
+                value['paper_searches'] = {'used': self.literature_calls['search_papers'], 'allowed': self.max_searches}
+                if self.max_papers is not None:
+                    value['papers'] = {'used': self.papers_held(), 'allowed': self.max_papers}
+                    value['paper_characters'] = {'used': self.paper_characters, 'allowed': self.max_characters}
+            return value
 
     def upstream_call(self, tool, arguments, client=None):
         # Never queue a graph read behind an unrelated slow graph. Each actual
@@ -311,7 +392,7 @@ class ScopedTools:
             tools.append({'name': 'query_graph', 'description': 'Fetch bounded triples in one selected named graph. Prefer exact subject/object IRIs. For exact source label or gene-symbol discovery use a schema-derived predicate IRI plus literal (case-sensitive). contains requires a bound predicate or subject; whole-graph text scans are unavailable. A hit needs entity/scope verification; empty or failed reads do not prove biological absence.',
                           'inputSchema': {'type': 'object', 'properties': {'graph': graph, 'subject': {'type': 'string'}, 'predicate': {'type': 'string'}, 'object': {'type': 'string'}, 'literal': {'type': 'string', 'minLength': 1, 'maxLength': 200}, 'contains': {'type': 'string'}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}, 'required': ['graph'], 'additionalProperties': False}})
         if self.lint:
-            tools.append({'name': 'lint_account', 'description': 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns compact field/rule findings, exact counts and a readable report path/hash containing every normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
+            tools.append({'name': 'lint_account', 'description': 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns compact field/rule findings, exact counts and a readable report path/hash containing every normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files)} if self.draft_files else {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
         if self.write_draft:
             # Property hints are intentionally open. The pinned preflight owns
             # validation; optional scores, narrative Propositions, source-Claim
@@ -333,16 +414,32 @@ class ScopedTools:
                 group: {'type': 'array', 'items': {'type': 'object', 'properties': properties}}
                 for group, properties in fields.items()}, 'required': ['scientific_accounts']}
             document_schema['properties']['scientific_accounts'].update(minItems=1, maxItems=1)
-            tools.append({'name': 'write_account_draft', 'description': 'Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. EvidenceItem.context/explanation retain source locators; source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the account. Exact referenced trusted dependencies and real runtime attribution are then supplied automatically. Run lint_account next. To repair findings, Edit only the reported fields in the saved draft file and lint again; resend the whole document only to add objects that reference trusted sources not yet in the draft. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': ['account-1.json', 'account-2.json', 'account-3.json']}, 'document': document_schema}, 'required': ['filename', 'document'], 'additionalProperties': False}})
+            tools.append({'name': 'write_account_draft', 'description': 'Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. EvidenceItem.context/explanation retain source locators; source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the account. Exact referenced trusted dependencies and real runtime attribution are then supplied automatically. Run lint_account next. To repair findings, Edit only the reported fields in the saved draft file and lint again; resend the whole document only to add objects that reference trusted sources not yet in the draft. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files or ('account-1.json', 'account-2.json', 'account-3.json'))}, 'document': document_schema}, 'required': ['filename', 'document'], 'additionalProperties': False}})
         if self.write_outcome:
             tools.append({'name': 'write_outcome', 'description': 'Save a structured insufficient-evidence outcome to the canonical writable output directory. Follow the skill format; this does not accept scientific claims.',
                           'inputSchema': {'type': 'object', 'properties': {'outcome': {'type': 'object'}}, 'required': ['outcome'], 'additionalProperties': False}})
         if self.literature:
+            results = getattr(self.literature, 'max_results', 5)
+            if self.max_papers is None:
+                search = 'Search Europe PMC scholarly literature (maximum three searches per attempt). Discovery metadata only; read the exact record before interpreting findings. No arbitrary web URLs.'
+                read = 'Read a bounded abstract or available open-access PMC full-text excerpt with exact captured provenance (maximum four reads). MED IDs are numeric PMIDs; PMC IDs start PMC. Exact captured literature can support eligible scientific evidence. Follow next_offset only when needed; abstracts do not imply full-paper review.'
+            else:
+                search = (f'Search Europe PMC scholarly literature (up to {self.max_searches} searches this run, up to {results} results each). '
+                          'Discovery metadata only; read the exact record before interpreting findings. Records list pmid, pmcid and isOpenAccess '
+                          'when Europe PMC has them. No arbitrary web URLs.')
+                read = ('Read a paper with exact captured provenance. section defaults to "abstract". For full text pass source "PMC", the paper\'s '
+                        'PMC id (pmcid in search results and abstract reads) and section "full_text"; that works only for open-access papers in '
+                        'Europe PMC, and a PMID alone cannot fetch full text. Each call returns up to 12,000 characters; continue with '
+                        f'offset=next_offset. This run may open up to {self.max_papers} distinct papers and receive up to {self.max_characters:,} '
+                        'characters of paper text; paging within a paper does not use another paper. MED IDs are numeric PMIDs; PMC IDs start PMC. '
+                        'An abstract does not imply full-paper review.')
             tools.extend([
-                {'name': 'search_papers', 'description': 'Search Europe PMC scholarly literature (maximum three searches per attempt). Discovery metadata only; read the exact record before interpreting findings. No arbitrary web URLs.',
-                 'inputSchema': {'type': 'object', 'properties': {'query': {'type': 'string', 'minLength': 2, 'maxLength': 300}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 5}}, 'required': ['query'], 'additionalProperties': False}},
-                {'name': 'read_paper', 'description': 'Read a bounded abstract or available open-access PMC full-text excerpt with exact captured provenance (maximum four reads). MED IDs are numeric PMIDs; PMC IDs start PMC. Exact captured literature can support eligible scientific evidence. Follow next_offset only when needed; abstracts do not imply full-paper review.',
+                {'name': 'search_papers', 'description': search,
+                 'inputSchema': {'type': 'object', 'properties': {'query': {'type': 'string', 'minLength': 2, 'maxLength': 300}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': results}}, 'required': ['query'], 'additionalProperties': False}},
+                {'name': 'read_paper', 'description': read,
                  'inputSchema': {'type': 'object', 'properties': {'source': {'type': 'string', 'enum': ['MED', 'PMC']}, 'id': {'type': 'string'}, 'section': {'type': 'string', 'enum': ['abstract', 'full_text']}, 'offset': {'type': 'integer', 'minimum': 0}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 12000}}, 'required': ['source', 'id'], 'additionalProperties': False}}])
+        if self.claims:
+            tools.append({'name': CLAIMS_TOOL, 'description': CLAIMS_DESCRIPTION, 'inputSchema': CLAIMS_SCHEMA})
         if self.research:
             tools.extend(self.research.definitions())
         if self.read_evidence:
@@ -374,6 +471,9 @@ class ScopedTools:
             elif is_research:
                 self.research_calls += 1
                 within_budget = self.research_calls <= self.max_research_calls
+            elif self.soft_budget and tool in AUTHORING_TOOLS:
+                self.authoring_calls += 1
+                within_budget = self.authoring_calls <= MAX_AUTHORING_CALLS
             else:
                 self.tool_calls += 1
                 within_budget = self.tool_calls <= self.max_calls
@@ -387,12 +487,19 @@ class ScopedTools:
             if any(secret in json.dumps(arguments, ensure_ascii=False) for secret in self.ledger.secrets):
                 raise PolicyError('Credentials cannot be sent as tool arguments')
             if not within_budget:
+                if self.soft_budget and tool in AUTHORING_TOOLS:
+                    raise ToolBudgetExhausted(f'All {MAX_AUTHORING_CALLS} draft and lint calls for this run are used. The last saved draft stands.')
+                if self.soft_budget and not is_research:
+                    raise ToolBudgetExhausted(f'All {self.max_calls} REVEAL tool calls for this run are used. No further paper search, paper read or '
+                                              'graph call will run; finish from what you already have and say what was left unread.')
                 raise PolicyError('Attempt tool-call budget exhausted')
             if is_research:
                 result, source_version = self.upstream_call(tool, arguments, client=self.research)
             elif tool == 'lint_account' and self.lint:
                 if set(arguments) != {'filename'} or not re.fullmatch(r'account-[1-3]\.(json|yaml|yml)', arguments['filename']):
                     raise PolicyError('Only one account output filename may be linted')
+                if self.draft_files and arguments['filename'] not in self.draft_files:
+                    raise DraftValidationError('This run returns one account: lint ' + self.draft_files[0])
                 if not self.author_lock.acquire(blocking=False):
                     raise DraftValidationError('Another draft operation is still running; retry this call when it finishes')
                 try: result = self.lint(arguments['filename'])
@@ -400,6 +507,8 @@ class ScopedTools:
             elif tool == 'write_account_draft' and self.write_draft:
                 if set(arguments) != {'filename', 'document'} or arguments['filename'] not in ('account-1.json', 'account-2.json', 'account-3.json'):
                     raise PolicyError('Invalid draft output arguments')
+                if self.draft_files and arguments['filename'] not in self.draft_files:
+                    raise DraftValidationError('This run returns one account: save it as ' + self.draft_files[0] + '. A draft under another name is not returned')
                 if not self.author_lock.acquire(blocking=False):
                     raise DraftValidationError('Another draft operation is still running; retry this call when it finishes')
                 try: result = self.write_draft(arguments['filename'], arguments['document'])
@@ -411,17 +520,31 @@ class ScopedTools:
                 try: result = self.write_outcome(arguments['outcome'])
                 finally: self.author_lock.release()
             elif tool in ('search_papers', 'read_paper') and self.literature:
-                spec = request_spec(tool, arguments)
+                spec = request_spec(tool, arguments, getattr(self.literature, 'max_results', 5), getattr(self.literature, 'guidance', False))
+                reservation = None
                 with self.call_lock:
-                    if self.literature_calls[tool] >= (3 if tool == 'search_papers' else 4):
-                        raise LiteratureInputError('Bounded literature read budget exhausted; report the remaining limitation')
+                    if tool == 'read_paper' and self.max_papers is not None:
+                        reservation = self.reserve_paper(arguments)
+                    elif self.literature_calls[tool] >= (self.max_searches if tool == 'search_papers' else self.max_reads):
+                        raise LiteratureInputError('Bounded literature read budget exhausted; report the remaining limitation' if self.max_papers is None else
+                                                   f'All {self.max_searches} paper searches for this run are used; work from the papers already found.')
                     self.literature_calls[tool] += 1
-                with self.ledger.lock:
-                    if self.ledger.frozen: raise EvidenceReadTimeout('Execution ended before the literature read started')
-                    entry['upstream_request'] = self.ledger.artifact({'provider': 'Europe PMC', 'method': 'GET', **spec})
-                result, source_version = self.upstream_call(tool, arguments, client=self.literature)
-                result = dict(result)
-                raw_response = result.pop('_raw_response', None); raw_format = result.pop('_raw_format', 'json')
+                returned = None
+                try:
+                    with self.ledger.lock:
+                        if self.ledger.frozen: raise EvidenceReadTimeout('Execution ended before the literature read started')
+                        entry['upstream_request'] = self.ledger.artifact({'provider': 'Europe PMC', 'method': 'GET', **spec})
+                    result, source_version = self.upstream_call(
+                        tool, {**arguments, 'limit': reservation['characters']} if reservation else arguments, client=self.literature)
+                    result = dict(result)
+                    raw_response = result.pop('_raw_response', None); raw_format = result.pop('_raw_format', 'json')
+                    returned = result
+                finally:
+                    if reservation: self.settle_paper(reservation, returned)
+            elif tool == CLAIMS_TOOL and self.claims:
+                # A lookup of earlier claims. It is captured like every call, and it is not an eligible source: the
+                # response gets no capture File, so an account cannot cite it.
+                result, source_version = self.upstream_call(tool, arguments, client=self.claims)
             elif tool in ('get_schema', 'describe_kg'):
                 if set(arguments) != {'graph'} or arguments['graph'] not in self.selected_graphs:
                     raise PolicyError('Graph was not selected for this request')
@@ -450,7 +573,7 @@ class ScopedTools:
         except Exception as exc:
             # Exceptions may contain sensitive request headers; retain a safe typed diagnostic.
             status = 'denied' if isinstance(exc, PolicyError) else 'failed'
-            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout, LiteratureInputError, ResearchAccessError)) else type(exc).__name__ + ': evidence service unavailable'}]}
+            result = {'isError': True, 'content': [{'type': 'text', 'text': str(exc) if isinstance(exc, (PolicyError, DraftValidationError, QueryValidationError, EvidenceReadTimeout, LiteratureInputError, ResearchAccessError, ToolBudgetExhausted, ClaimsInputError)) else type(exc).__name__ + ': evidence service unavailable'}]}
         with self.ledger.lock:
             if self.ledger.frozen or entry['status'] != 'pending':
                 result = json.loads((self.ledger.root / entry['response']['path']).read_bytes())
@@ -477,6 +600,7 @@ class ScopedTools:
                        'source_locator': 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/content',
                        'usage': 'Only completed query_graph assertions or completed read_paper excerpts can support auxiliary biological claims. Search metadata, schemas, errors and empty searches do not establish biological presence or absence. Paper evidence retains its abstract/full-text scope; its content must support the cited proposition.'}
             if tool == 'read_paper': capture['source_locator'] = 'ledger_sequence=' + str(entry['sequence']) + ';pointer=/structuredContent/data/text'
+            if self.soft_budget: capture['run_budget'] = self.budget()
             result = {**result, 'content': [*result.get('content', []),
                       {'type': 'text', 'text': json.dumps(capture, ensure_ascii=False)}]}
         return result

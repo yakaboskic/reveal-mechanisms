@@ -14,9 +14,12 @@ import re
 import ssl
 import threading
 
+from .box_claims import base_url as claims_base_url, host as claims_host_of
 from .box_mcp import GRAPHS
 
-INPUT_FORMAT = 'reveal.agent-input/1'
+INPUT_FORMAT = 'reveal.agent-input/2'
+# Jobs frozen before per-run tool and literature limits existed. They run with the allowances they were queued under.
+LEGACY_INPUT_FORMAT = 'reveal.agent-input/1'
 INPUT_FILENAME = 'agent-input.json'
 RESPONSE_FORMAT = 'reveal.agent-response/1'
 # The runner writes the response into the root-owned tool ledger, never into the agent-writable output.
@@ -33,13 +36,45 @@ DEFAULT_MODEL = 'claude-opus-5-5'
 MODEL_PATTERN = re.compile(r'claude-[a-z0-9-]{1,60}')
 MAX_PROMPT_CHARS = 100_000
 MAX_SYSTEM_PROMPT_CHARS = 50_000
-TIMEOUT_RANGE = (60, 3600)
-DEFAULT_TIMEOUT_SECONDS = 900
-DEFAULT_MAX_TURNS = 50
-DEFAULT_MAX_BUDGET_USD = 2.0
+# Every per-run limit of an agent job. A request may set any of them in `limits`.
+#   default  what a request gets when it names none
+#   ceiling  the most a request may ask for
+#   minimum, maximum  the range the service supports at all
+# Operators change default and ceiling (admin console or environment, see agent_limits.py). minimum and maximum
+# are fixed here because this module's validation, which also runs inside the Box, and the Box adapter enforce them.
+LIMITS = {
+    'timeout_seconds': {'type': int, 'minimum': 60, 'maximum': 3600, 'default': 900, 'ceiling': 3600},
+    'max_turns': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 50, 'ceiling': 100},
+    'max_budget_usd': {'type': float, 'minimum': 0, 'maximum': 1000, 'default': 2.0, 'ceiling': 5.0},
+    # Calls to the scoped REVEAL tools (paper search, paper read, graph schema and query), counted together.
+    'tool_calls': {'type': int, 'minimum': 1, 'maximum': 5000, 'default': 30, 'ceiling': 300},
+    'literature_searches': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 3, 'ceiling': 50},
+    'literature_search_results': {'type': int, 'minimum': 1, 'maximum': 50, 'default': 5, 'ceiling': 25},
+    # Distinct papers. Paging through one paper uses characters, never another paper.
+    'literature_papers': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 4, 'ceiling': 50},
+    'literature_characters': {'type': int, 'minimum': 1000, 'maximum': 20_000_000, 'default': 48_000, 'ceiling': 1_000_000},
+}
+LEGACY_LIMIT_KEYS = ('timeout_seconds', 'max_turns', 'max_budget_usd')
+TIMEOUT_RANGE = (LIMITS['timeout_seconds']['minimum'], LIMITS['timeout_seconds']['maximum'])
+DEFAULT_TIMEOUT_SECONDS = LIMITS['timeout_seconds']['default']
+DEFAULT_MAX_TURNS = LIMITS['max_turns']['default']
+DEFAULT_MAX_BUDGET_USD = LIMITS['max_budget_usd']['default']
 # Job rows are listed in full, so a long answer is cut there; the captured record keeps all of it.
 MAX_RESULT_RESPONSE_CHARS = 50_000
-INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort', 'model', 'limits'}
+LEGACY_INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort', 'model', 'limits'}
+INPUT_KEYS = LEGACY_INPUT_KEYS | {'deliverable', 'account', 'claims_repository'}
+# What a job returns. 'answer': the agent's final message. 'scientific_account': a DAPPER ScientificAccount the agent
+# authors from papers it reads through the captured literature tools, which the backend then attributes, mints and
+# deposits. An account job has no shell and no network beyond its tools, like a research run: everything the
+# account cites must be a captured read.
+DELIVERABLES = ('answer', 'scientific_account')
+ACCOUNT_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep')
+MAX_QUESTION_CHARS = 2000
+MAX_ACCOUNT_CLAIMS = 20
+MAX_CLAIM_CHARS = 1000
+ACCOUNT_PACKAGE_KEYS = {'package_version', 'dapper_pin', 'selection', 'dapper_context', 'source_artifacts'}
+DAPPER_ID = r'dapper:%s\.[A-Za-z0-9_-]{32}'
+GITHUB_HOST = 'github.com'  # the Box clones the pinned DAPPER release, which the account tools lint against
 MAX_ALLOWED_DOMAINS = 20
 # Exact lowercase DNS hostnames: no IP addresses, ports, paths or wildcards (Box matches the list exactly).
 HOSTNAME = re.compile(r'(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]')
@@ -66,11 +101,47 @@ def text(value, name, maximum, *, required):
     return value
 
 
-def freeze_input(body, *, budget_cap, default_model=DEFAULT_MODEL):
+def limit_value(key, value):
+    """Whether value has the limit's type and lies in the range the service supports."""
+    spec = LIMITS[key]
+    if spec['type'] is int:
+        return type(value) is int and spec['minimum'] <= value <= spec['maximum']
+    return type(value) in (int, float) and math.isfinite(value) and spec['minimum'] < value <= spec['maximum']
+
+
+def default_policy():
+    """The default and ceiling of every limit when no operator has changed them."""
+    return {key: {'default': spec['default'], 'ceiling': spec['ceiling']} for key, spec in LIMITS.items()}
+
+
+def validate_policy(policy):
+    require(isinstance(policy, dict) and set(policy) == set(LIMITS), 'Agent job limits are not configured')
+    for key, entry in policy.items():
+        require(isinstance(entry, dict) and set(entry) == {'default', 'ceiling'} and limit_value(key, entry['default'])
+                and limit_value(key, entry['ceiling']) and entry['default'] <= entry['ceiling'],
+                f'Agent job limit {key} is not configured')
+    return policy
+
+
+def limit_range(key, ceiling):
+    if key == 'max_budget_usd': return f'limits.max_budget_usd must be above 0 and at most {ceiling:g}'
+    return f"limits.{key} must be a whole number from {LIMITS[key]['minimum']} to {ceiling}"
+
+
+def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=None, account_builder=None):
     """The frozen input for one agent job, from a validated API body. Defaults are filled in so the frozen
-    bytes say exactly what runs; the caller's budget can lower the server cap but never raise it."""
+    bytes say exactly what runs. policy gives each limit's default and ceiling (see LIMITS); a request may
+    lower or raise a limit up to its ceiling. budget_cap, when given, is the budget ceiling.
+
+    account_builder(question, claims) returns the account block of a scientific_account job (agent_account.py:
+    it mints DAPPER nodes, which this standard-library module cannot)."""
     require(isinstance(body, dict) and body.get('kind') == 'agent', 'Not an agent job')
-    tools = body.get('tools', list(DEFAULT_TOOLS))
+    deliverable = body.get('deliverable', 'answer')
+    require(deliverable in DELIVERABLES, 'deliverable must be answer or scientific_account')
+    accounting = deliverable == 'scientific_account'
+    require(accounting or not {'question', 'claims', 'attribute_requester'} & set(body),
+            'question, claims and attribute_requester belong to deliverable "scientific_account"')
+    tools = body.get('tools', list(ACCOUNT_TOOLS if accounting else DEFAULT_TOOLS))
     require(isinstance(tools, list) and all(tool in BUILTIN_TOOLS for tool in tools) and len(set(tools)) == len(tools),
             'tools must be distinct names from ' + ', '.join(BUILTIN_TOOLS))
     graphs = body.get('graphs', [])
@@ -84,28 +155,66 @@ def freeze_input(body, *, budget_cap, default_model=DEFAULT_MODEL):
     require(network == 'restricted' or not domains, 'allowed_domains narrows the restricted network; network "open" already reaches every host')
     require(network == 'open' or not OPEN_NETWORK_TOOLS & set(tools),
             'WebFetch downloads pages from inside the sandbox and needs network "open"; WebSearch works on the restricted network')
+    account = None
+    if accounting:
+        require(isinstance(tools, list) and set(tools) <= set(ACCOUNT_TOOLS), 'A scientific_account job reads papers through the captured '
+                'literature tools and writes its account as a file: tools may only be ' + ', '.join(ACCOUNT_TOOLS))
+        require(network == 'restricted' and not domains, 'A scientific_account job runs on the restricted network with no extra hosts: '
+                'only captured reads can be cited')
+        require(body.get('literature', True) is True, 'A scientific_account job needs literature: true')
+        require(not graphs, 'A scientific_account job is built from papers the agent reads: graphs are not available for it')
+        question = text(body.get('question'), 'question', MAX_QUESTION_CHARS, required=True).strip()
+        claims = body.get('claims', [])
+        require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS and all(isinstance(claim, str) for claim in claims),
+                f'claims must be a list of at most {MAX_ACCOUNT_CLAIMS} statements')
+        claims = [text(claim, 'each claim', MAX_CLAIM_CHARS, required=True).strip() for claim in claims]
+        require(len(set(claims)) == len(claims), 'claims must be distinct statements')
+        require(callable(account_builder), 'Scientific account jobs are not available on this deployment')
+        # The account names its requester only when the request asks for that. Only this yes or no is frozen: who the
+        # requester is stays with the job's attribution, which never enters the sandbox.
+        attribute = body.get('attribute_requester', False)
+        require(type(attribute) is bool, 'attribute_requester must be true or false')
+        account = {**account_builder(question, claims), 'attribute_requester': attribute}
+    # Reading the claims repository is on for an account job unless the request turns it off, and off otherwise.
+    claims_repository = body.get('claims_repository', accounting)
+    require(type(claims_repository) is bool, 'claims_repository must be true or false')
     limits = body.get('limits') or {}
     require(isinstance(limits, dict), 'limits must be an object')
-    require(math.isfinite(budget_cap) and budget_cap > 0, 'Agent jobs have no configured budget')
-    budget = limits.get('max_budget_usd', min(DEFAULT_MAX_BUDGET_USD, budget_cap))
-    require(type(budget) in (int, float) and math.isfinite(budget) and 0 < budget <= budget_cap,
-            f'limits.max_budget_usd must be above 0 and at most {budget_cap:g}')
-    timeout = limits.get('timeout_seconds', DEFAULT_TIMEOUT_SECONDS)
-    turns = limits.get('max_turns', DEFAULT_MAX_TURNS)
+    unknown = sorted(str(key) for key in set(limits) - set(LIMITS))
+    require(not unknown, 'limits has no ' + ', '.join(unknown)[:200] + '; it accepts ' + ', '.join(LIMITS))
+    policy = default_policy() if policy is None else policy
+    require(isinstance(policy, dict) and all(isinstance(entry, dict) for entry in policy.values()), 'Agent job limits are not configured')
+    policy = {key: dict(entry) for key, entry in policy.items()}
+    if budget_cap is not None:
+        require(type(budget_cap) in (int, float) and math.isfinite(budget_cap) and budget_cap > 0, 'Agent jobs have no configured budget')
+        budget = policy.get('max_budget_usd', {})
+        policy['max_budget_usd'] = {'default': min(budget.get('default', DEFAULT_MAX_BUDGET_USD), budget_cap), 'ceiling': budget_cap}
+    validate_policy(policy)
+    frozen_limits = {}
+    for key, spec in LIMITS.items():
+        # Authoring an account takes many turns, and a run stopped at its time or turn limit returns nothing: an
+        # account job gets the ceiling of both unless the request asks for less.
+        default = policy[key]['ceiling'] if accounting and key in ('timeout_seconds', 'max_turns') else policy[key]['default']
+        value = limits.get(key, default)
+        if spec['type'] is int and type(value) is float and value.is_integer(): value = int(value)
+        require(limit_value(key, value) and value <= policy[key]['ceiling'], limit_range(key, policy[key]['ceiling']))
+        frozen_limits[key] = float(value) if spec['type'] is float else value
     model = body.get('model') or default_model
     frozen = {'format': INPUT_FORMAT,
               'prompt': text(body.get('prompt'), 'prompt', MAX_PROMPT_CHARS, required=True),
               'system_prompt': text(body.get('system_prompt'), 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False),
               'tools': [tool for tool in BUILTIN_TOOLS if tool in tools], 'graphs': sorted(graphs),
-              'literature': body.get('literature', False), 'network': network, 'allowed_domains': domains,
-              'effort': body.get('effort', 'medium'), 'model': model,
-              'limits': {'timeout_seconds': timeout, 'max_turns': turns, 'max_budget_usd': float(budget)}}
+              'literature': True if accounting else body.get('literature', False), 'network': network, 'allowed_domains': domains,
+              'effort': body.get('effort', 'medium'), 'model': model, 'limits': frozen_limits,
+              'deliverable': deliverable, 'account': account, 'claims_repository': claims_repository}
     return validate_input(frozen)
 
 
 def validate_input(value):
     """Strict check of frozen input bytes, repeated in the bundle and inside the Box."""
-    require(isinstance(value, dict) and set(value) == INPUT_KEYS and value['format'] == INPUT_FORMAT, 'Invalid agent input format')
+    require(isinstance(value, dict) and (value.get('format') == INPUT_FORMAT and set(value) == INPUT_KEYS
+                                         or value.get('format') == LEGACY_INPUT_FORMAT and set(value) == LEGACY_INPUT_KEYS),
+            'Invalid agent input format')
     text(value['prompt'], 'prompt', MAX_PROMPT_CHARS, required=True)
     text(value['system_prompt'], 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False)
     tools, graphs = value['tools'], value['graphs']
@@ -113,19 +222,65 @@ def validate_input(value):
             'Invalid frozen agent tools')
     require(isinstance(graphs, list) and graphs == sorted(set(graphs)) and set(graphs) <= set(GRAPHS), 'Invalid frozen agent graphs')
     require(type(value['literature']) is bool, 'literature must be true or false')
+    require(type(value.get('claims_repository', False)) is bool, 'claims_repository must be true or false')
     require(value['network'] in NETWORKS and (value['network'] == 'open' or not OPEN_NETWORK_TOOLS & set(tools)),
             'Invalid frozen agent network')
     validate_domains(value['allowed_domains'], value['network'])
     require(value['effort'] in EFFORTS, 'effort must be low, medium or high')
     require(isinstance(value['model'], str) and MODEL_PATTERN.fullmatch(value['model']), 'model must be a Claude model id')
     limits = value['limits']
-    require(isinstance(limits, dict) and set(limits) == {'timeout_seconds', 'max_turns', 'max_budget_usd'}, 'Invalid agent limits')
-    require(type(limits['timeout_seconds']) is int and TIMEOUT_RANGE[0] <= limits['timeout_seconds'] <= TIMEOUT_RANGE[1],
-            f'limits.timeout_seconds must be from {TIMEOUT_RANGE[0]} to {TIMEOUT_RANGE[1]}')
-    require(type(limits['max_turns']) is int and 1 <= limits['max_turns'] <= 100, 'limits.max_turns must be from 1 to 100')
-    budget = limits['max_budget_usd']
-    require(type(budget) in (int, float) and math.isfinite(budget) and budget > 0, 'Invalid agent budget')
+    keys = set(LIMITS) if value['format'] == INPUT_FORMAT else set(LEGACY_LIMIT_KEYS)
+    require(isinstance(limits, dict) and set(limits) == keys, 'Invalid agent limits')
+    for key in keys:
+        if key == 'max_budget_usd':
+            # An operator may have raised the budget ceiling; only the type and sign are fixed.
+            require(type(limits[key]) in (int, float) and math.isfinite(limits[key]) and limits[key] > 0, 'Invalid agent budget')
+        else:
+            require(limit_value(key, limits[key]), limit_range(key, LIMITS[key]['maximum']))
+    validate_account(value)
     return value
+
+
+def deliverable_of(value):
+    """What a frozen input returns. Inputs frozen before deliverables existed return an answer."""
+    return value.get('deliverable', 'answer')
+
+
+def validate_account(value):
+    """The account block of a frozen input: absent for an answer job; for an account job, the question, the
+    caller's claims as fixed Propositions, and the minimal evidence package the account tools lint against. Checked
+    for shape and internal agreement only; the ids were minted when the job was created."""
+    deliverable, account = deliverable_of(value), value.get('account')
+    require(deliverable in DELIVERABLES, 'Invalid agent deliverable')
+    if deliverable == 'answer':
+        require(account is None, 'Only a scientific_account job carries an account')
+        return
+    require(set(value['tools']) <= set(ACCOUNT_TOOLS) and value['network'] == 'restricted' and not value['allowed_domains']
+            and value['literature'] is True and not value['graphs'], 'Invalid scientific_account sandbox')
+    require(isinstance(account, dict) and set(account) - {'attribute_requester'} == {'question', 'claims', 'package'}
+            and type(account.get('attribute_requester', False)) is bool, 'Invalid account block')
+    question, claims, package = account['question'], account['claims'], account['package']
+    text(question, 'question', MAX_QUESTION_CHARS, required=True)
+    require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS and all(
+        isinstance(claim, dict) and set(claim) == {'statement', 'proposition_id'} and isinstance(claim['statement'], str)
+        and 0 < len(claim['statement']) <= MAX_CLAIM_CHARS and isinstance(claim['proposition_id'], str)
+        and re.fullmatch(DAPPER_ID % 'Proposition', claim['proposition_id']) for claim in claims), 'Invalid account claims')
+    require(isinstance(package, dict) and set(package) == ACCOUNT_PACKAGE_KEYS and package['source_artifacts'] == {}
+            and isinstance(package['selection'], dict) and isinstance(package['dapper_context'], dict)
+            and set(package['dapper_context']) <= {'knowledge_gaps', 'propositions'}, 'Invalid account package')
+    gaps = package['dapper_context'].get('knowledge_gaps')
+    require(isinstance(gaps, list) and len(gaps) == 1 and isinstance(gaps[0], dict) and gaps[0].get('text') == question
+            and isinstance(gaps[0].get('id'), str) and re.fullmatch(DAPPER_ID % 'KnowledgeGap', gaps[0]['id'])
+            and package['selection'].get('knowledge_gap_id') == gaps[0]['id'], 'The account package does not carry the question')
+    propositions = package['dapper_context'].get('propositions', [])
+    require(isinstance(propositions, list) and all(isinstance(node, dict) for node in propositions)
+            and [(node.get('id'), node.get('statement')) for node in propositions]
+            == [(claim['proposition_id'], claim['statement']) for claim in claims], 'The account package does not carry the claims')
+
+
+def run_limits(value):
+    """Every limit of a frozen input. A legacy input names three; the rest are what such a job always had."""
+    return {key: value['limits'].get(key, spec['default']) for key, spec in LIMITS.items()}
 
 
 def validate_domains(domains, network):
@@ -136,7 +291,7 @@ def validate_domains(domains, network):
     return domains
 
 
-def network_policy(selected_graphs, network, literature, allowed_domains=()):
+def network_policy(selected_graphs, network, literature, allowed_domains=(), deliverable='answer', claims_host=None):
     """Box egress for one agent run: the Anthropic API, the services its chosen tools call and the hosts the
     caller allowed; or everything."""
     if network == 'open': return {'mode': 'allow-all'}
@@ -144,18 +299,32 @@ def network_policy(selected_graphs, network, literature, allowed_domains=()):
     domains = [ANTHROPIC_HOST]
     if selected_graphs: domains.append('apps.okn.us')
     if literature: domains.append('www.ebi.ac.uk')
+    if deliverable == 'scientific_account': domains.append(GITHUB_HOST)
+    if claims_host and claims_host not in domains: domains.append(claims_host)
     domains += [domain for domain in allowed_domains if domain not in domains]
     return {'mode': 'custom', 'allowed_domains': domains}
 
 
-def bootstrap_settings(value):
-    """The part of the frozen input the Box bootstrap needs before the runner starts: its egress."""
-    return {'network': value['network'], 'literature': value['literature'], 'allowed_domains': list(value['allowed_domains'])}
+def bootstrap_settings(value, claims_url=None):
+    """The part of the frozen input the Box bootstrap needs before the runner starts: its egress.
+
+    claims_url is this deployment's claims repository (REVEAL_CLAIMS_API_URL on the worker). It is frozen here, for a
+    job that asked to read the repository, so the address the sandbox may reach and the query_claims tool it is
+    offered are fixed with the bootstrap. A deployment with no repository offers no such tool."""
+    settings = {'network': value['network'], 'literature': value['literature'], 'allowed_domains': list(value['allowed_domains']),
+                'deliverable': deliverable_of(value)}
+    claims_url = claims_base_url(claims_url)
+    if value.get('claims_repository') and claims_url: settings['claims_url'] = claims_url
+    return settings
 
 
 def validate_bootstrap_settings(settings):
-    require(isinstance(settings, dict) and set(settings) == {'network', 'literature', 'allowed_domains'} and settings['network'] in NETWORKS
-            and type(settings['literature']) is bool, 'Invalid agent bootstrap settings')
+    # Bootstraps frozen before deliverables existed carry no deliverable: they are answer jobs.
+    base = {'network', 'literature', 'allowed_domains'}
+    require(isinstance(settings, dict) and base <= set(settings) <= base | {'deliverable', 'claims_url'} and settings['network'] in NETWORKS
+            and type(settings['literature']) is bool and settings.get('deliverable', 'answer') in DELIVERABLES
+            and ('claims_url' not in settings or claims_base_url(settings['claims_url']) == settings['claims_url']),
+            'Invalid agent bootstrap settings')
     validate_domains(settings['allowed_domains'], settings['network'])
     return settings
 
@@ -177,8 +346,9 @@ def response_record(job_id, attempt, status, result, secrets=()):
             'duration_ms': number('duration_ms'), 'cost_usd': number('total_cost_usd')}
 
 
-def job_result(record, captured_files, *, job_id, attempt):
-    """The public job result: the answer (cut to a listing-safe size) and the files the agent wrote."""
+def job_result(record, captured_files, *, job_id, attempt, account=None):
+    """The public job result: the answer (cut to a listing-safe size), the files the agent wrote and, for a job that
+    returns a scientific account, what was accepted and whether it was deposited (agent_account.public)."""
     require(isinstance(record, dict) and record.get('format') == RESPONSE_FORMAT and record.get('job_id') == job_id
             and record.get('attempt') == attempt, 'Agent response record belongs to another execution')
     answer = record.get('response')
@@ -192,7 +362,7 @@ def job_result(record, captured_files, *, job_id, attempt):
             'response_sha256': hashlib.sha256(answer.encode()).hexdigest(),
             'turns': record.get('num_turns'), 'cost_usd': record.get('cost_usd'),
             'duration_seconds': round(duration / 1000, 3) if duration is not None else None,
-            'files': files}
+            'files': files, **({'account': account} if account else {})}
 
 
 class KeyProxy:

@@ -7,6 +7,12 @@ REVEAL_API_URL and REVEAL_API_KEY environment variables.
   python3 agent_job.py --handoff my-key.json --prompt "Summarize ..." \\
       --tool Read --tool Write --tool Bash --allow-host eutils.ncbi.nlm.nih.gov
 
+To get a DAPPER Scientific Account built from papers the agent reads, give it a question (and any claims to assess):
+
+  python3 agent_job.py --handoff my-key.json --prompt "Prefer primary studies." \\
+      --question "Does loss of LEPR signalling cause hepatic insulin resistance?" \\
+      --claim "Hepatocyte LEPR loss reduces insulin-stimulated AKT phosphorylation." --account-out account.json
+
 Ctrl-C stops watching; the job keeps running. Resume with --job <id>, or stop it with --cancel <id>.
 """
 import argparse
@@ -68,10 +74,20 @@ def request_body(args):
     if args.allow_host: body['allowed_domains'] = args.allow_host
     if args.graph: body['graphs'] = args.graph
     if args.literature: body['literature'] = True
+    if args.question:
+        body.update(deliverable='scientific_account', question=args.question)
+        if args.claim: body['claims'] = args.claim
+        if args.attribute_requester: body['attribute_requester'] = True
+    elif args.claim or args.attribute_requester:
+        sys.exit('--claim and --attribute-requester belong to a Scientific Account job: pass --question as well.')
+    if args.claims_repository is not None: body['claims_repository'] = args.claims_repository
     for name in ('network', 'effort', 'model'):
         if getattr(args, name): body[name] = getattr(args, name)
     limits = {key: value for key, value in (('timeout_seconds', args.timeout), ('max_turns', args.turns),
-                                            ('max_budget_usd', args.budget)) if value is not None}
+                                            ('max_budget_usd', args.budget), ('tool_calls', args.tool_calls),
+                                            ('literature_searches', args.searches), ('literature_search_results', args.search_results),
+                                            ('literature_papers', args.papers), ('literature_characters', args.paper_characters))
+              if value is not None}
     if limits: body['limits'] = limits
     return body
 
@@ -120,12 +136,26 @@ def main():
     parser.add_argument('--allow-host', action='append', help='Extra host the restricted network may reach (repeat)')
     parser.add_argument('--graph', action='append', help='OKN knowledge graph for the graph tools (repeat)')
     parser.add_argument('--literature', action='store_true', help='Europe PMC search_papers / read_paper tools')
+    parser.add_argument('--question', help='Return a DAPPER Scientific Account that addresses this question, built from papers '
+                                           'the agent reads (sets deliverable scientific_account)')
+    parser.add_argument('--claim', action='append', help='With --question: a statement to assess from the literature (repeat)')
+    parser.add_argument('--attribute-requester', action='store_true',
+                        help='With --question: name you in the account as the Person it is attributed to (default: not named)')
+    parser.add_argument('--claims-repository', action=argparse.BooleanOptionalAction, default=None,
+                        help='Offer (or withhold) the query_claims tool. Default: on for --question jobs, off otherwise')
+    parser.add_argument('--account-out', help='With --question or --job: save the account document (JSON) to this file')
     parser.add_argument('--network', choices=('restricted', 'open'))
     parser.add_argument('--effort', choices=('low', 'medium', 'high'))
     parser.add_argument('--model')
-    parser.add_argument('--timeout', type=int, help='Seconds, 60-3600 (default 900)')
-    parser.add_argument('--turns', type=int, help='Max turns, 1-100 (default 50)')
-    parser.add_argument('--budget', type=float, help='Max dollars (default 2, capped by the server)')
+    # Each limit has a server default and ceiling an operator sets; a value above the ceiling is refused and the message names it.
+    parser.add_argument('--timeout', type=int, help='Seconds, 60-3600 (built-in default 900)')
+    parser.add_argument('--turns', type=int, help='Max turns (built-in default 50, ceiling 100)')
+    parser.add_argument('--budget', type=float, help='Max dollars (built-in default 2, ceiling 5)')
+    parser.add_argument('--tool-calls', type=int, help='Paper and graph tool calls in all (built-in default 30)')
+    parser.add_argument('--searches', type=int, help='Paper searches (built-in default 3)')
+    parser.add_argument('--search-results', type=int, help='Most results per paper search (built-in default 5)')
+    parser.add_argument('--papers', type=int, help='Distinct papers to read (built-in default 4)')
+    parser.add_argument('--paper-characters', type=int, help='Characters of paper text across all reads (built-in default 48000)')
     parser.add_argument('--job', help='Watch an existing job instead of submitting')
     parser.add_argument('--cancel', metavar='JOB_ID', help='Ask a running job to stop')
     parser.add_argument('--out', help='Also save the final answer to this file')
@@ -154,6 +184,19 @@ def main():
         if result.get('response_truncated'): print('(The answer was cut at 50,000 characters.)')
         print('\n' + result.get('response', ''))
         if args.out: Path(args.out).write_text(result.get('response', '')); print(f'\nSaved to {args.out}')
+        account = result.get('account')
+        if account:
+            deposit = account['deposit']
+            outcome = {'deposited': f"deposited as {deposit.get('deposit_id')}", 'not_configured': 'not deposited (no claims repository configured)'}.get(
+                deposit['status'], f"deposit failed ({deposit.get('reason')}); the account is kept with the job")
+            print(f"\nScientific Account {account['account_id']} (DAPPER {account['dapper_version']}): {account['claims']} claims, "
+                  f"{account['value_locators']} located quotes from {len(account['papers'])} paper texts; {outcome}.")
+            for claim in account['requested_claims']:
+                print(f"  {'assessed    ' if claim['assessed'] else 'not assessed'}  {claim['statement']}")
+            if args.account_out:
+                document = client.call('GET', f'/v1/jobs/{job_id}/account')['document']
+                Path(args.account_out).write_text(json.dumps(document, indent=1, ensure_ascii=False) + '\n')
+                print(f'Account document saved to {args.account_out}')
     return 0 if job['status'] == 'succeeded' else 1
 
 

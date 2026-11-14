@@ -16,20 +16,21 @@ from xml.etree import ElementTree
 
 BASE = 'https://www.ebi.ac.uk/europepmc/webservices/rest'
 MAX_RESPONSE_BYTES = 2_000_000
+DEFAULT_SEARCH_RESULTS = 5
 
 
 class LiteratureInputError(ValueError): pass
 
 
-def request_spec(tool, arguments):
+def request_spec(tool, arguments, max_results=DEFAULT_SEARCH_RESULTS, guidance=False):
     def require(condition, message):
         if not condition: raise LiteratureInputError(message)
     require(isinstance(arguments, dict), 'Literature arguments must be an object')
     if tool == 'search_papers':
         require(not set(arguments) - {'query', 'limit'}, 'Unexpected paper search fields')
-        query, limit = arguments.get('query'), arguments.get('limit', 5)
+        query, limit = arguments.get('query'), arguments.get('limit', min(DEFAULT_SEARCH_RESULTS, max_results))
         require(isinstance(query, str) and 2 <= len(query.strip()) <= 300 and not any(ord(c) < 32 for c in query), 'Search query must contain 2–300 printable characters')
-        require(type(limit) is int and 1 <= limit <= 5, 'Paper search limit must be 1–5')
+        require(type(limit) is int and 1 <= limit <= max_results, f'Paper search limit must be 1–{max_results}')
         params = {'query': query, 'format': 'json', 'resultType': 'lite', 'pageSize': limit}
         return {'url': BASE + '/search?' + urlencode(params), 'scope': 'discovery', 'format': 'json'}
     require(tool == 'read_paper', 'Unsupported literature tool')
@@ -42,10 +43,59 @@ def request_spec(tool, arguments):
     offset, limit = arguments.get('offset', 0), arguments.get('limit', 8000)
     require(type(offset) is int and 0 <= offset <= 2_000_000 and type(limit) is int and 1 <= limit <= 12000, 'Invalid bounded paper text window')
     if section == 'full_text':
-        require(source == 'PMC', 'Open-access full text requires the exact PMC identifier from a paper record')
+        require(source == 'PMC', 'Open-access full text requires the exact PMC identifier from a paper record' + (
+            ': read this PMID as an abstract, then call read_paper with source "PMC", the pmcid that record returns and '
+            'section "full_text"' if guidance else ''))
         return {'url': BASE + '/' + identity + '/fullTextXML', 'scope': section, 'format': 'xml'}
     params = {'query': f'EXT_ID:{identity} AND SRC:{source}', 'format': 'json', 'resultType': 'core', 'pageSize': 1}
     return {'url': BASE + '/search?' + urlencode(params), 'scope': section, 'format': 'json'}
+
+
+TEXT_NODES = ('title', 'p', 'article-title')
+
+
+def parse_article(raw):
+    """The article element of a Europe PMC fullTextXML response."""
+    # NLM articles commonly declare an external DTD. ElementTree
+    # does not fetch it; reject entity declarations/expansion.
+    if b'<!ENTITY' in raw.upper():
+        raise ValueError('Unsupported XML declarations in paper response')
+    return ElementTree.fromstring(raw)
+
+
+def article_blocks(article):
+    """The article's text as read_paper serves it, block by block: (tag, text) for every title, paragraph and
+    article-title node in document order. article_text joins them with newlines; nothing else is text here."""
+    return [(node.tag, ''.join(node.itertext())) for node in article.iter() if node.tag in TEXT_NODES]
+
+
+def article_text(article):
+    return '\n'.join(text for _, text in article_blocks(article))
+
+
+def abstract_record(raw, source, identity):
+    """The exact record of one paper in a Europe PMC search response, or None when it returned none."""
+    parsed = json.loads(raw)
+    result_list = parsed.get('resultList') if isinstance(parsed, dict) else None
+    records = result_list.get('result') if isinstance(result_list, dict) else None
+    if not isinstance(records, list) or not all(isinstance(record, dict) for record in records):
+        raise ValueError('Literature response lacks valid result records')
+    if not records:
+        return None
+    record = records[0]
+    if record.get('id') != identity or record.get('source') != source:
+        raise ValueError('Literature response identity differs from exact requested paper')
+    return record
+
+
+def full_text_route(record):
+    """How to read the full text of the paper an abstract record describes, or why this tool cannot."""
+    pmcid = record.get('pmcid')
+    if not isinstance(pmcid, str) or not re.fullmatch(r'PMC[1-9][0-9]{0,11}', pmcid):
+        return {'available': False, 'reason': 'Europe PMC lists no PMC id for this paper, so only its abstract can be read here.'}
+    if record.get('isOpenAccess') != 'Y':
+        return {'available': False, 'pmcid': pmcid, 'reason': 'This paper is not open access in Europe PMC, so only its abstract can be read here.'}
+    return {'available': True, 'read_paper': {'source': 'PMC', 'id': pmcid, 'section': 'full_text'}}
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -55,12 +105,13 @@ class NoRedirect(HTTPRedirectHandler):
 
 class LiteratureClient:
     server_info = {'name': 'Europe PMC REST', 'contract': 'https://europepmc.org/RestfulWebService'}
-    def __init__(self, timeout=20, opener=None):
-        self.timeout = timeout
+    def __init__(self, timeout=20, opener=None, max_results=DEFAULT_SEARCH_RESULTS, guidance=False):
+        # guidance adds, to an agent job's results, how to reach a paper's full text. Research captures stay as they were.
+        self.timeout, self.max_results, self.guidance = timeout, max_results, guidance
         self.opener = opener or build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context()))
 
     def call(self, tool, arguments):
-        spec = request_spec(tool, arguments)
+        spec = request_spec(tool, arguments, self.max_results, self.guidance)
         result = {'provider': 'Europe PMC', 'scope': spec['scope'], 'url': spec['url'],
                   'retrieved_at': datetime.now(timezone.utc).isoformat(), 'data': {}}
         raw = b''; is_error = False
@@ -89,8 +140,11 @@ class LiteratureClient:
                 if tool == 'search_papers':
                     fields = ('id', 'source', 'pmid', 'pmcid', 'doi', 'title', 'authorString', 'pubYear', 'journalTitle', 'isOpenAccess')
                     result['data'] = {'query': arguments['query'], 'hit_count': parsed.get('hitCount'),
-                        'records': [{key: record[key] for key in fields if key in record} for record in records[:arguments.get('limit', 5)]],
-                        'usage': 'Discovery metadata only. Read the exact paper before using a scientific assertion.'}
+                        'records': [{key: record[key] for key in fields if key in record}
+                                    for record in records[:arguments.get('limit', min(DEFAULT_SEARCH_RESULTS, self.max_results))]],
+                        'usage': 'Discovery metadata only. Read the exact paper before using a scientific assertion.' + (
+                            ' read_paper returns the abstract by default. For full text, a record needs a pmcid and isOpenAccess "Y": '
+                            'call read_paper with source "PMC", that pmcid and section "full_text".' if self.guidance else '')}
                     result['row_count'] = len(result['data']['records'])
                 else:
                     if not records:
@@ -103,12 +157,9 @@ class LiteratureClient:
                         if not isinstance(text, str): raise ValueError('Paper abstract has invalid shape')
                         fields = ('id', 'source', 'pmid', 'pmcid', 'doi', 'title', 'authorString', 'pubYear', 'isOpenAccess', 'pubTypeList', 'commentCorrectionList')
                         self.excerpt(result, arguments, {key: record[key] for key in fields if key in record}, text, 'abstract_html')
+                        if self.guidance: result['data']['full_text'] = full_text_route(record)
             else:
-                # NLM articles commonly declare an external DTD. ElementTree
-                # does not fetch it; reject entity declarations/expansion.
-                if b'<!ENTITY' in raw.upper():
-                    raise ValueError('Unsupported XML declarations in paper response')
-                article = ElementTree.fromstring(raw)
+                article = parse_article(raw)
                 ids = article.findall('.//article-meta/article-id')
                 pmc = {''.join(node.itertext()).strip().removeprefix('PMC') for node in ids if node.get('pub-id-type') in ('pmc', 'pmcid')}
                 if arguments['id'].removeprefix('PMC') not in pmc: raise ValueError('Full-text paper identity does not match requested PMC record')
@@ -117,7 +168,7 @@ class LiteratureClient:
                 if title is not None: paper['title'] = ''.join(title.itertext())
                 for node in ids:
                     if node.get('pub-id-type') in ('doi', 'pmid'): paper[node.get('pub-id-type')] = ''.join(node.itertext()).strip()
-                text = '\n'.join(''.join(node.itertext()) for node in article.iter() if node.tag in ('title', 'p', 'article-title'))
+                text = article_text(article)
                 self.excerpt(result, arguments, paper, text, 'oa_xml_text')
             if len(json.dumps(result, ensure_ascii=False).encode()) > 100_000:
                 raise ValueError('Literature metadata exceeded display byte limit')

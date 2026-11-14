@@ -8,6 +8,7 @@ import type { AdminJob as Job } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { AdminPerformance, type RuntimeMetrics } from "./AdminPerformance";
 import { AdminCostsView, JobCost, usd, type AdminCosts } from "./AdminCosts";
+import { AdminLimits } from "./AdminLimits";
 
 type Snapshot = {
   generated_at: string; query_ms: number; database: string;
@@ -42,6 +43,7 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
   const [filter, setFilter] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [inspectedTable, setInspectedTable] = useState<string | null>(null);
+  const [limitsOpened, setLimitsOpened] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const refresh = useCallback(async () => {
     if (controller.current) return;
@@ -84,7 +86,7 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
         <div><strong>{number(data.counts.find(c => c.kind === "principal")?.count || 0)}</strong><span>Workspace identities</span></div>
         <div><strong>{usd(data.costs?.totals.week.spend_usd)}</strong><span>Agent spend, last 7 days</span></div>
       </section>
-      <nav className="admin-tabs" aria-label="Telemetry views">{["Execution", "Costs", "Database", "Activity", "Performance"].map(t => <button key={t} aria-current={tab === t ? "page" : undefined} onClick={() => { setTab(t); setFilter(""); }}>{t}</button>)}</nav>
+      <nav className="admin-tabs" aria-label="Telemetry views">{["Execution", "Costs", "Database", "Activity", "Performance", "Limits"].map(t => <button key={t} aria-current={tab === t ? "page" : undefined} onClick={() => { setTab(t); setFilter(""); if (t === "Limits") setLimitsOpened(true); }}>{t}</button>)}</nav>
       {tab === "Execution" && <section><div className="admin-section-heading"><div><h2>Jobs and Box agents</h2><p>Latest 100 jobs across all workspaces. Elapsed times include recovery pauses.</p></div><input className="field" aria-label="Filter jobs" placeholder="Filter by job, owner, worker or status" value={filter} onChange={e => setFilter(e.target.value)} /></div>
         <div className="admin-statuses">{data.statuses.map(s => <span key={s.status}><Status value={s.status} /> {number(s.count)}</span>)}</div>
         <Table headings={["Job / owner", "State", "Started", "Finished", "Attempt / Box", "Wall time", "Agent time", "Agent cost", "Worker lease"]}>{jobs.map(j => <tr key={j.id}><td><button className="admin-job-link" onClick={() => selectJob(j.id)} aria-label={`View logs for ${j.kind} job ${j.id}`}>{j.id.slice(0, 8)} · {j.kind}</button><small title={j.owner}>{j.owner}</small></td><td><Status value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}</td><td className="admin-date">{date(j.started_at)}</td><td className="admin-date">{date(j.completed_at)}</td><td>{j.attempt}<small>{j.box_phase || "No Box runtime"}</small></td><td>{duration(j.wall_seconds)}{!terminal.has(j.status) && <small>in progress</small>}</td><td>{duration(j.agent_seconds)}</td><td><JobCost job={j} /></td><td>{j.lease_expired ? <span className="admin-warning">Expired; awaiting recovery</span> : terminal.has(j.status) ? "Finished" : j.lease_until ? date(j.lease_until) : "Awaiting worker"}<small>{j.recoveries} recoveries</small></td></tr>)}</Table>
@@ -101,6 +103,8 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
       </section>}
       {tab === "Costs" && (data.costs ? <AdminCostsView costs={data.costs} jobs={data.jobs} onSelect={id => { setTab("Execution"); selectJob(id); }} /> : <p className="admin-empty">This backend does not report agent costs yet.</p>)}
       {tab === "Performance" && <AdminPerformance runtime={data.runtime} />}
+      {/* Mounted on first open and then kept: it loads its own data, so refreshes and tab switches leave unsaved edits alone. */}
+      {limitsOpened && <AdminLimits active={tab === "Limits"} />}
     </>}
   </>;
 }

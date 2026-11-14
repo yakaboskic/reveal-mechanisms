@@ -4833,6 +4833,42 @@
                       "max_budget_usd": 1
                     }
                   }
+                },
+                "agent_account": {
+                  "summary": "General agent authoring a DAPPER ScientificAccount from literature",
+                  "value": {
+                    "kind": "agent",
+                    "deliverable": "scientific_account",
+                    "prompt": "Build the account from open-access papers. Prefer primary studies in mice and humans; say what was not read.",
+                    "question": "Does loss of leptin receptor signalling in hepatocytes cause hepatic insulin resistance?",
+                    "claims": [
+                      "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver."
+                    ],
+                    "limits": {
+                      "literature_searches": 10,
+                      "literature_papers": 20,
+                      "literature_characters": 400000,
+                      "tool_calls": 150
+                    }
+                  }
+                },
+                "agent_literature": {
+                  "summary": "General agent reading literature with its own limits",
+                  "value": {
+                    "kind": "agent",
+                    "prompt": "Search Europe PMC for recent papers on LEPR variants and insulin resistance. Read the open-access ones in full and save a short summary that cites each PMID as output/summary.md.",
+                    "tools": [
+                      "Read",
+                      "Write"
+                    ],
+                    "literature": true,
+                    "limits": {
+                      "literature_searches": 10,
+                      "literature_papers": 20,
+                      "literature_characters": 400000,
+                      "tool_calls": 120
+                    }
+                  }
                 }
               }
             }
@@ -4958,6 +4994,86 @@
                             "sha256": "0000000000000000000000000000000000000000000000000000000000000001"
                           }
                         ]
+                      },
+                      "failure": null,
+                      "warnings": [],
+                      "last_event_id": "42",
+                      "links": {
+                        "self": "/v1/jobs/77777777-7777-4777-8777-777777777777",
+                        "events": "/v1/jobs/77777777-7777-4777-8777-777777777777/events",
+                        "cancel": "/v1/jobs/77777777-7777-4777-8777-777777777777/cancel"
+                      }
+                    }
+                  },
+                  "agent_account_complete": {
+                    "summary": "Agent complete with a ScientificAccount (synthetic)",
+                    "value": {
+                      "id": "77777777-7777-4777-8777-777777777777",
+                      "kind": "agent",
+                      "owner_user_id": "11111111-1111-4111-8111-111111111111",
+                      "status": "succeeded",
+                      "stage": "complete",
+                      "research_request_id": null,
+                      "input_account_id": null,
+                      "created_at": "2026-11-09T15:00:00Z",
+                      "updated_at": "2026-11-09T15:03:12Z",
+                      "completed_at": "2026-11-09T15:03:12Z",
+                      "result": {
+                        "kind": "agent",
+                        "response": "1. Does LEPR signalling loss act through hypothalamic or peripheral insulin resistance? (PMID 00000000)\n2. ...\n\nSaved to output/questions.md.",
+                        "response_truncated": false,
+                        "response_sha256": "f9fd60c9357668537a6a3eec81baeeef4c0ed7e06eea85ea88b61900b53f6ab6",
+                        "turns": 9,
+                        "cost_usd": 0.41,
+                        "duration_seconds": 182.4,
+                        "files": [
+                          {
+                            "path": "account-1.json",
+                            "size_bytes": 5210,
+                            "sha256": "0000000000000000000000000000000000000000000000000000000000000004"
+                          }
+                        ],
+                        "account": {
+                          "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                          "dapper_version": "0.2.1-a1",
+                          "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+                          "document_bytes": 9120,
+                          "objects": 11,
+                          "edges": 4,
+                          "claims": 1,
+                          "value_locators": 1,
+                          "lint_warnings": 1,
+                          "requested_claims": [
+                            {
+                              "statement": "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.",
+                              "assessed": true,
+                              "claim_ids": [
+                                "dapper:Claim.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                              ]
+                            }
+                          ],
+                          "papers": [
+                            {
+                              "source": "PMC",
+                              "id": "PMC0000000",
+                              "section": "full_text",
+                              "reference": "PMID:00000000",
+                              "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                              "text_bytes": 48211,
+                              "media_type": "text/plain",
+                              "filename": "PMC0000000.fulltext.txt",
+                              "evidence_items": 1,
+                              "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+                            }
+                          ],
+                          "deposit": {
+                            "status": "deposited",
+                            "deposit_id": "dep_00000000000000000000000000000000",
+                            "objects": 11,
+                            "stored_differs": 0,
+                            "unresolved_references": 0
+                          }
+                        }
                       },
                       "failure": null,
                       "warnings": [],
@@ -43093,6 +43209,358 @@
           }
         ]
       }
+    },
+    "/v1/jobs/{job_id}/account": {
+      "get": {
+        "operationId": "getJobAccount",
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Read the ScientificAccount an agent job returned",
+        "description": "Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over paper texts named by checksum. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "77777777-7777-4777-8777-777777777777",
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentAccountDocument"
+                },
+                "examples": {
+                  "account": {
+                    "summary": "Account",
+                    "value": {
+                      "job_id": "77777777-7777-4777-8777-777777777777",
+                      "account": {
+                        "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                        "dapper_version": "0.2.1-a1",
+                        "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+                        "document_bytes": 9120,
+                        "objects": 11,
+                        "edges": 4,
+                        "claims": 1,
+                        "value_locators": 1,
+                        "lint_warnings": 1,
+                        "requested_claims": [
+                          {
+                            "statement": "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.",
+                            "assessed": true,
+                            "claim_ids": [
+                              "dapper:Claim.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                            ]
+                          }
+                        ],
+                        "papers": [
+                          {
+                            "source": "PMC",
+                            "id": "PMC0000000",
+                            "section": "full_text",
+                            "reference": "PMID:00000000",
+                            "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                            "text_bytes": 48211,
+                            "media_type": "text/plain",
+                            "filename": "PMC0000000.fulltext.txt",
+                            "evidence_items": 1,
+                            "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+                          }
+                        ],
+                        "deposit": {
+                          "status": "deposited",
+                          "deposit_id": "dep_00000000000000000000000000000000",
+                          "objects": 11,
+                          "stored_differs": 0,
+                          "unresolved_references": 0
+                        }
+                      },
+                      "document": {
+                        "scientific_accounts": [
+                          {
+                            "id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                            "name": "LEPR and hepatic insulin signalling"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate Limited",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Rate limited",
+                    "value": {
+                      "type": "urn:reveal:problem:rate-limited",
+                      "title": "Rate Limited",
+                      "status": 429,
+                      "code": "RATE_LIMITED",
+                      "detail": "Retry after the interval in Retry-After.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "example": 30
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
+    },
+    "/v1/jobs/{job_id}/account/texts/{sha256}": {
+      "get": {
+        "operationId": "downloadJobAccountText",
+        "tags": [
+          "Jobs"
+        ],
+        "summary": "Download a paper text an agent job account quotes",
+        "description": "Owner-only. The exact bytes a ValueLocator of the account addresses: the text of one paper as the agent read it (text_sha256 in the account block). REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "example": "77777777-7777-4777-8777-777777777777",
+            "description": ""
+          },
+          {
+            "name": "sha256",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "example": "0000000000000000000000000000000000000000000000000000000000000002",
+            "description": ""
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response.",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                },
+                "examples": {
+                  "paper_text": {
+                    "summary": "Paper text",
+                    "value": "Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation."
+                  }
+                }
+              }
+            },
+            "headers": {
+              "X-Request-ID": {
+                "description": "Correlation ID for this HTTP request.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication Required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "authentication_required": {
+                    "summary": "Authentication required",
+                    "value": {
+                      "type": "urn:reveal:problem:authentication-required",
+                      "title": "Authentication Required",
+                      "status": 401,
+                      "code": "AUTHENTICATION_REQUIRED",
+                      "detail": "A valid trusted-gateway API assertion is required.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Not found",
+                    "value": {
+                      "type": "urn:reveal:problem:not-found",
+                      "title": "Not Found",
+                      "status": 404,
+                      "code": "NOT_FOUND",
+                      "detail": "No accessible record exists for the supplied identifier or exact revision.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "dependency_unavailable": {
+                    "summary": "Dependency unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:dependency-unavailable",
+                      "title": "Dependency Unavailable",
+                      "status": 503,
+                      "code": "DEPENDENCY_UNAVAILABLE",
+                      "detail": "A required dependency is temporarily unavailable; no replacement ranking or scientific result was fabricated.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "307": {
+            "description": "After authorization, redirect to the exact stored object. The private URL expires after 60 seconds.",
+            "headers": {
+              "Location": {
+                "description": "Short-lived download URL. Never cache or persist as an identifier.",
+                "schema": {
+                  "type": "string",
+                  "format": "uri"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApplicationBearer": []
+          }
+        ],
+        "x-codeSamples": [
+          {
+            "lang": "Shell",
+            "label": "request",
+            "source": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -73441,24 +73909,62 @@
             "type": "integer",
             "minimum": 60,
             "maximum": 3600,
-            "default": 900
+            "default": 900,
+            "description": "Wall-clock seconds for the run."
           },
           "max_turns": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 100,
-            "default": 50
+            "maximum": 1000,
+            "default": 50,
+            "description": "Claude Code turns."
           },
           "max_budget_usd": {
             "type": "number",
             "exclusiveMinimum": 0,
+            "maximum": 1000,
             "default": 2.0,
-            "description": "Lowers, never raises, the server cap (REVEAL_AGENT_JOB_MAX_BUDGET_USD). The default is the smaller of the two."
+            "description": "Provider cost of the run in US dollars."
+          },
+          "tool_calls": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5000,
+            "default": 30,
+            "description": "Calls to the scoped REVEAL tools (search_papers, read_paper and the graph tools), counted together. When they are used up the agent is told and can still finish."
+          },
+          "literature_searches": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 3,
+            "description": "search_papers calls."
+          },
+          "literature_search_results": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "default": 5,
+            "description": "Most records one search_papers call may return."
+          },
+          "literature_papers": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000,
+            "default": 4,
+            "description": "Distinct papers read_paper may open. Paging through one paper with offset does not open another."
+          },
+          "literature_characters": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 20000000,
+            "default": 48000,
+            "description": "Characters of abstract and full text read_paper may return across the run."
           }
         },
         "required": [],
         "additionalProperties": false,
-        "description": "Per-run limits. The run stops at whichever comes first."
+        "description": "Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd. Each limit has a default, used when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the built-in ones and the range the service supports."
       },
       "AgentJobInput": {
         "type": "object",
@@ -73560,6 +74066,42 @@
           },
           "limits": {
             "$ref": "#/components/schemas/AgentJobLimits"
+          },
+          "deliverable": {
+            "type": "string",
+            "enum": [
+              "answer",
+              "scientific_account"
+            ],
+            "default": "answer",
+            "description": "What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it reads through the captured literature tools; REVEAL then checks and mints it. Such a job needs question, has literature on, may use only the tools Read, Write, Edit, Glob, Grep (the default for it), runs on the restricted network with no allowed_domains and no graphs, and by default gets the run-time and turn ceilings."
+          },
+          "question": {
+            "type": "string",
+            "description": "Only with deliverable scientific_account, where it is required: the question the account addresses. It is recorded in the account as a requester-supplied question, not a curated knowledge gap.",
+            "minLength": 1,
+            "maxLength": 2000
+          },
+          "attribute_requester": {
+            "type": "boolean",
+            "default": false,
+            "description": "Only with deliverable scientific_account: name the requester in the account as the Person it is attributed to (display name, and the ORCID iD when it was authenticated). Default false: the account and its deposit say what made it and not who asked."
+          },
+          "claims_repository": {
+            "type": "boolean",
+            "description": "Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence."
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1000
+            },
+            "uniqueItems": true,
+            "maxItems": 20,
+            "default": [],
+            "description": "Only with deliverable scientific_account: statements the requester wants assessed. Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. A claim the agent found no literature for is reported in the result, not included in the account."
           }
         },
         "required": [
@@ -73588,6 +74130,260 @@
           "path",
           "size_bytes",
           "sha256"
+        ],
+        "additionalProperties": false
+      },
+      "AgentAccountDeposit": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "deposited",
+              "failed",
+              "not_configured"
+            ],
+            "description": "deposited: the claims repository stored every object of the account. not_configured: this deployment has no claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job."
+          },
+          "deposit_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "The repository's receipt id for this deposit."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "objects": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Objects the repository accepted, counting ones it already held."
+          },
+          "stored_differs": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Objects the repository already held under the same id with different unhashed content. Its stored copy stands."
+          },
+          "unresolved_references": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "too_large",
+              "rejected",
+              "unauthorized",
+              "unavailable"
+            ]
+          },
+          "http_status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string",
+            "description": "The repository's own reason for refusing the document.",
+            "maxLength": 500
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "additionalProperties": false
+      },
+      "AgentAccountPaper": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "MED",
+              "PMC"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string",
+            "enum": [
+              "abstract",
+              "full_text"
+            ]
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "PMID, PMCID or DOI of the paper."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "text_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "text_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "media_type": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "evidence_items": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "EvidenceItems that quote this text."
+          },
+          "file_id": {
+            "type": "string",
+            "pattern": "^dapper:File\\.[A-Za-z0-9_-]{8,64}$"
+          }
+        },
+        "required": [
+          "source",
+          "id",
+          "section",
+          "reference",
+          "text_sha256",
+          "text_bytes",
+          "media_type",
+          "filename",
+          "evidence_items",
+          "file_id"
+        ],
+        "additionalProperties": false,
+        "description": "One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}."
+      },
+      "AgentAccountRequestedClaim": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string"
+          },
+          "assessed": {
+            "type": "boolean",
+            "description": "False when the agent made no Claim on it."
+          },
+          "claim_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^dapper:Claim\\.[A-Za-z0-9_-]{8,64}$"
+            }
+          }
+        },
+        "required": [
+          "statement",
+          "assessed",
+          "claim_ids"
+        ],
+        "additionalProperties": false
+      },
+      "AgentAccount": {
+        "type": "object",
+        "properties": {
+          "account_id": {
+            "type": "string",
+            "pattern": "^dapper:ScientificAccount\\.[A-Za-z0-9_-]{8,64}$"
+          },
+          "dapper_version": {
+            "type": "string",
+            "description": "DAPPER version the returned and deposited document is minted with."
+          },
+          "document_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "document_bytes": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "objects": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "edges": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "claims": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "value_locators": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Quoted passages located by exact byte span in a paper text."
+          },
+          "lint_warnings": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "requested_claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentAccountRequestedClaim"
+            },
+            "description": "What became of each claim in the request."
+          },
+          "papers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentAccountPaper"
+            }
+          },
+          "deposit": {
+            "$ref": "#/components/schemas/AgentAccountDeposit"
+          }
+        },
+        "required": [
+          "account_id",
+          "dapper_version",
+          "document_sha256",
+          "document_bytes",
+          "objects",
+          "edges",
+          "claims",
+          "value_locators",
+          "lint_warnings",
+          "requested_claims",
+          "papers",
+          "deposit"
+        ],
+        "additionalProperties": false,
+        "description": "The ScientificAccount a deliverable scientific_account job returned. Fetch the document itself from /v1/jobs/{job_id}/account."
+      },
+      "AgentAccountDocument": {
+        "type": "object",
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "account": {
+            "$ref": "#/components/schemas/AgentAccount"
+          },
+          "document": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) and edges, every id a DAPPER-ID-1 address."
+          }
+        },
+        "required": [
+          "job_id",
+          "account",
+          "document"
         ],
         "additionalProperties": false
       },
@@ -73650,6 +74446,9 @@
               "$ref": "#/components/schemas/AgentFile"
             },
             "description": "Files the agent wrote to output/, retained with the job capture."
+          },
+          "account": {
+            "$ref": "#/components/schemas/AgentAccount"
           }
         },
         "required": [

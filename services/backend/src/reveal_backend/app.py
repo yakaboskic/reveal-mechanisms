@@ -243,6 +243,36 @@ def admin_database_authority(request: Request):
     service_authority(request.headers.get('authorization'))
     decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
 
+def admin_settings_authority(request: Request):
+    """Changing limits is a different authority from reading telemetry: its own assertion purpose, and the
+    verified admin's email for the change record."""
+    service_authority(request.headers.get('authorization'))
+    claims = decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_settings')
+    email = claims.get('admin_email')
+    return email if isinstance(email, str) and 0 < len(email) <= 254 else 'admin-console'
+
+@app.get('/internal/v1/admin/agent-limits')
+def admin_agent_limits(actor: str = Depends(admin_settings_authority)):
+    from . import agent_limits
+    with repo.read_transaction() as tx:
+        return JSONResponse(agent_limits.view(tx), headers={'Cache-Control': 'private, no-store'})
+
+@app.put('/internal/v1/admin/agent-limits')
+async def admin_change_agent_limits(request: Request, actor: str = Depends(admin_settings_authority)):
+    from . import agent_limits
+    from .repository import Conflict
+    raw = await request.body()
+    if len(raw) > 16_384: raise Problem(413, 'INVALID_LIMITS', 'The limits change is too large.')
+    try: body = json.loads(raw)
+    except ValueError: raise Problem(422, 'INVALID_LIMITS', 'Send the limits as JSON.') from None
+    def write():
+        with repo.transaction() as tx:
+            return agent_limits.change(tx, body, actor)
+    try: result = await run_in_threadpool(write)
+    except agent_limits.LimitsError as exc: raise Problem(422, 'INVALID_LIMITS', str(exc)[:400]) from None
+    except Conflict as exc: raise Problem(409, 'LIMITS_CHANGED', str(exc)[:400]) from None
+    return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
+
 @app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
 def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
     from .admin_jobs import job_detail
@@ -1003,15 +1033,26 @@ def admit_agent_job(identity):
         raise Problem(409,'AGENT_JOBS_UNAVAILABLE','General agent jobs need the durable workflow runtime.')
 
 
-def agent_job_rows(identity, body):
-    """Freeze the prompt, tools and limits into the queued job; the server's budget cap bounds the caller's."""
-    from .agent_execution import agent_budget_usd
+def agent_job_rows(tx, identity, body):
+    """Freeze the prompt, tools and limits into the queued job. Each limit's default and ceiling come from the
+    admin console, then the environment, then the code (agent_limits). A scientific_account job also freezes its
+    question and claims as DAPPER nodes (agent_account) and, beside the input, who asked for it."""
+    from . import agent_account, agent_limits
     from .box_agent import DEFAULT_MODEL, AgentInputError, freeze_input
     try:
-        frozen=freeze_input(body,budget_cap=agent_budget_usd('agent'),default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL)
+        frozen=freeze_input(body,policy=agent_limits.policy(tx),default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL,
+                            account_builder=agent_account.build)
     except AgentInputError as exc:
         raise Problem(422,'INVALID_REQUEST',str(exc)[:400]) from None
-    return jobs.new(identity['user_id'],'agent',inputs=frozen)
+    job,rows=jobs.new(identity['user_id'],'agent',inputs=frozen)
+    if frozen['deliverable']=='scientific_account':
+        # Attribution of the account, as an analysis freezes it. It sits on the queue record beside the input, never
+        # in it: the input is copied into the Box, and the agent must not be able to read or choose who it writes as.
+        queue=next(data for kind,_,_,data in rows if kind=='queue')
+        queue['attribution']={'user_id':identity['user_id'],'person_id':None,'display_name':identity.get('display_name'),
+            'orcid':identity.get('orcid'),'orcid_authenticated':identity.get('orcid_authenticated',False),'observed_at':now(),
+            'principal_kind':identity['principal_kind']}
+    return job,rows
 
 
 def analysis_job_rows(identity, frozen, binding, inputs):
@@ -1030,7 +1071,7 @@ def create_job_transaction(body,authorization,idempotency_key):
         def create():
             if body['kind']=='agent': admit_agent_job(identity)
             check_job_quota(tx,identity,body['kind'])
-            if body['kind']=='agent': return agent_job_rows(identity,body)
+            if body['kind']=='agent': return agent_job_rows(tx,identity,body)
             if body['kind']=='paragraph':
                 # Research statements need no reference data: allowed on archived accounts.
                 account=owned(tx,'account',body['account_id'],user)
@@ -1396,21 +1437,9 @@ def citation(dapper_id:str,request:Request,revision:int|None=None,format:str='na
 @app.get('/v1/jobs/{job_id}/evidence-package')
 def evidence(job_id:str,request:Request): return scientific(job_id,request,'evidence')
 
-@app.get('/v1/artifacts/{sha256}')
-def artifact_bytes(sha256:str,request:Request):
-    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
-    with repo.read_transaction() as tx:
-        user=optional_identity(tx,request)
-        try:
-            if not user: raise Problem(404,'NOT_FOUND','Artifact unavailable.')
-            row=owned(tx,'artifact',digest([user,sha256]),user)['data']
-        except Problem as error:
-            if error.status!=404: raise
-            try:
-                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
-            except Problem as error:
-                if error.status!=404: raise
-                row=analysis_outcomes.published_artifact(tx,sha256)
+def serve_retained(row,sha256):
+    """Retained bytes named by checksum: a short-lived object-storage link, or the checked local file. `row`
+    holds where they are kept (`storage` or `path`) and the `file` they are (filename, mime_type)."""
     from .artifact_store import s3_enabled, store, StorageUnavailable
     if row.get('storage'):
         if row['storage'].get('sha256')!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','Artifact identity differs.')
@@ -1427,6 +1456,46 @@ def artifact_bytes(sha256:str,request:Request):
     if hashlib.sha256(data).hexdigest()!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','The source artifact failed checksum verification.')
     filename=quote(row['file'].get('filename','source-artifact'),safe='')
     return Response(data,media_type=row['file'].get('mime_type','application/octet-stream'),headers={'Content-Disposition':"attachment; filename*=UTF-8''"+filename,'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
+
+@app.get('/v1/artifacts/{sha256}')
+def artifact_bytes(sha256:str,request:Request):
+    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Artifact unavailable.')
+            row=owned(tx,'artifact',digest([user,sha256]),user)['data']
+        except Problem as error:
+            if error.status!=404: raise
+            try:
+                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
+            except Problem as error:
+                if error.status!=404: raise
+                row=analysis_outcomes.published_artifact(tx,sha256)
+    return serve_retained(row,sha256)
+
+@app.get('/v1/jobs/{job_id}/account')
+def job_account(job_id:str,request:Request):
+    """The Scientific Account an agent job returned, in the form it was deposited. Only the job's owner reads it."""
+    from . import agent_account
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        row=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']
+    return JSONResponse({'job_id':job_id,'account':row['account'],'document':row['document']},headers={'Cache-Control':'private, no-store'})
+
+@app.get('/v1/jobs/{job_id}/account/texts/{sha256}')
+def job_account_text(job_id:str,sha256:str,request:Request):
+    """The text of one paper the account quotes, as the agent read it: the file a ValueLocator's byte span addresses.
+    REVEAL keeps it for the job's owner and does not publish it; the account names it by checksum only."""
+    from . import agent_account
+    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        text=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']['texts'].get(sha256)
+    if not text: raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
+    return serve_retained({**text,'file':{'filename':text['filename'],'mime_type':text['media_type']}},sha256)
 
 @app.get('/v1/paragraphs/{dapper_id}/export')
 def export_paragraph(dapper_id:str,request:Request,format:str='markdown'):

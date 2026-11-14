@@ -171,7 +171,10 @@ def validate_execution_ledger(result,request,expected_model=None):
     require(runtime.get('job_id')==request.job_id,'Runtime belongs to another job')
     require(runtime.get('attempt')==request.attempt,'Runtime belongs to another attempt')
     require(runtime.get('input_sha256')==sha256(request.input_path.read_bytes()),'Execution used different input bytes')
-    if request.kind!='agent':   # a general agent job runs without the DAPPER release
+    # A general agent job runs without the DAPPER release. One that authors a scientific account lints against it
+    # inside the Box, like a research run, so it must have used the pinned release.
+    accounting=request.kind=='agent' and decode(request.input_path.read_bytes()).get('deliverable')=='scientific_account'
+    if request.kind!='agent' or accounting:
         lock=decode(LOCK.read_bytes())
         require(runtime.get('dapper',{}).get('commit')==lock['commit'],'Execution used a different DAPPER release')
     require(runtime.get('model')==(expected_model or setting('REVEAL_CLAUDE_MODEL','claude-sonnet-4-6')),'Execution model differs from frozen input model')

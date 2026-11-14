@@ -21,7 +21,8 @@ import threading
 import time
 
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
-                        KeyProxy, agent_environment, response_record, validate_input as validate_agent_input)
+                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, run_limits as agent_run_limits,
+                        validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
 from .box_timing import RuntimeTiming, provider_metrics
@@ -207,7 +208,12 @@ def setup(request):
         runtime = {'runtime_version': 'reveal.agent-runtime/1', 'working_directory': str(work),
                    'evidence_package_sha256': hashlib.sha256((work / AGENT_INPUT_FILENAME).read_bytes()).hexdigest(),
                    'derived_input_views': {},
-                   'agent': {key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort')}}
+                   'agent': {**{key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort')},
+                             'limits': agent_run_limits(agent_input),
+                             # Frozen with the bootstrap: the one repository address this sandbox may read, or None.
+                             'claims_url': (request.get('agent') or {}).get('claims_url')}}
+        if agent_deliverable(agent_input) == 'scientific_account':
+            account_workspace(work, project, lock, agent_input, runtime)
         prompt = agent_input['prompt']
     else:
         root = BASE / 'workspace'
@@ -233,7 +239,7 @@ def setup(request):
                     'execution_limits': {k: request[k] for k in ['timeout_seconds', 'max_budget_usd', 'max_turns']},
                     'input_sha256': request['input_sha256']})
     runtime['validation_feedback_sha256'] = hashlib.sha256(canonical(request.get('validation_feedback', []))).hexdigest()
-    if request['kind'] == 'research':
+    if request['kind'] == 'research' or runtime.get('deliverable') == 'scientific_account':
         executor_id = 'urn:reveal:runtime:executor'
         activity_id = 'urn:reveal:runtime:execution:' + request['job_id'] + ':' + str(request['attempt'])
         runtime['draft_attribution'] = {'organizations': [{'id': executor_id, 'name': 'REVEAL Mechanisms runtime executor'}],
@@ -248,8 +254,8 @@ def setup(request):
     runtime['output_directory'] = str(OUTPUT)
     runtime['output_alias'] = str(work / 'output')
     write_json(STATE / 'runtime.json', runtime)
-    # An agent run has no DAPPER workspace; every other kind creates one above.
-    for target in [project, BASE / 'input', *([] if request['kind'] == 'agent' else [BASE / 'workspace'])]:
+    # A general agent run has no DAPPER workspace; an account job and every other kind create one above.
+    for target in [project, BASE / 'input', *([BASE / 'workspace'] if (BASE / 'workspace').exists() else [])]:
         protect(target)
     if (BASE / 'trusted').exists():
         protect(BASE / 'trusted')
@@ -342,9 +348,89 @@ def lint_tool(filename, ledger):
         checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
         if checks & {'source-ancestry', 'claim-evidence'}:
             report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
+        if runtime.get('deliverable') == 'scientific_account':
+            # The pinned linter checked each snippet against the read it cites. The deposit also needs the quote's
+            # exact place in the paper, so that is checked here too, while the agent can still fix it.
+            with ledger.lock:
+                calls = json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0])['calls']
+            located = quote_findings(document, ledger.root, calls)
+            if located:
+                report['findings'] = [*report.get('findings', []), *located]
+                report['valid'] = False
+                if isinstance(report.get('counts'), dict):
+                    report['counts'] = {**report['counts'], 'errors': report['counts'].get('errors', 0) + len(located)}
         timing.phase('diagnostic_report')
         return timing.feedback(diagnostic_response(report, output=OUTPUT, filename=filename,
             capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
+
+
+ACCOUNT_SKILL = 'services/backend/agent-skills/construct-literature-account/SKILL.md'
+ACCOUNT_SKILL_PATH = 'account/SKILL.md'
+ACCOUNT_REQUEST_FILENAME = 'account-request.json'
+
+
+def account_workspace(work, project, lock, agent_input, runtime):
+    """What a scientific_account job needs beyond a general agent job, the way a research run has it: the pinned
+    DAPPER release the draft and lint tools check against, the account's evidence package (the requester's question
+    and claims as trusted nodes, no source artifacts), and the authoring skill and schema for the agent to read.
+    The package comes from the frozen input, so the run lints against exactly what was frozen when the job was queued."""
+    from .authoring_contract import pinned_schema
+    from .dapper_release import clone_release
+    root = BASE / 'workspace'
+    root.mkdir()
+    release = clone_release(root / 'dapper', lock)
+    account = agent_input['account']
+    package = root / 'evidence-package.json'
+    package.write_bytes(canonical(account['package']))
+    folder = work / 'account'
+    folder.mkdir()
+    shutil.copyfile(project / ACCOUNT_SKILL, work / ACCOUNT_SKILL_PATH)
+    (folder / 'authoring-schema-excerpt.yaml').write_bytes(pinned_schema(project))
+    request_view = {'question': account['question'], 'question_id': account['package']['selection']['knowledge_gap_id'],
+                    'claims': account['claims'], 'limits': runtime['agent']['limits'],
+                    'deliverable': 'One DAPPER ScientificAccount saved as output/account-1.json. Follow ' + ACCOUNT_SKILL_PATH + '.'}
+    (work / ACCOUNT_REQUEST_FILENAME).write_text(json.dumps(request_view, ensure_ascii=False, indent=2) + '\n')
+    runtime.update({'dapper': release, 'dapper_root': str(root / 'dapper'), 'evidence_package': str(package),
+                    'deliverable': 'scientific_account'})
+    runtime['derived_input_views'] = {str(path.relative_to(work)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                      for path in (work / ACCOUNT_SKILL_PATH, folder / 'authoring-schema-excerpt.yaml', work / ACCOUNT_REQUEST_FILENAME)}
+
+
+# Lint feedback drops a finding's message unless the finding names a `rule` (authoring_structure._normalized_finding):
+# ordinary lint messages may quote private text. A quote finding's message is the repair instruction and never repeats
+# the snippet or the paper (literature_locator.LocatorError), so it carries a rule and reaches the agent as written.
+QUOTE_CHECK = 'literature-quote'
+
+
+def quote_findings(document, ledger_root, calls):
+    """Lint findings for snippets that cannot be located in the paper they quote. The backend puts every literature
+    EvidenceItem into its deposit form after the run (account_deposit), which needs the quote's exact place in the
+    paper; the same check here lets the agent repair a quote while it is still drafting."""
+    from . import literature_locator as locator
+    try:
+        papers = locator.paper_texts(ledger_root, calls)
+    except locator.LocatorError as exc:
+        return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': 'ledger', 'message': str(exc), 'why': ''}]
+    _, problems = locator.document_quotes(document, papers, locator.captures(calls))
+    return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': where, 'message': message, 'why': ''}
+            for where, message in problems]
+
+
+def agent_tools(selected_graphs, ledger, settings, literature_client=LiteratureClient, lint=None, write_draft=None, claims_client=None):
+    """The scoped REVEAL tools of a general agent job, bounded by the job's own frozen limits. A spent allowance
+    is a tool error the agent can finish after, never a failed job. A scientific_account job also gets the draft and
+    lint tools a research run authors with."""
+    limits = settings['limits']
+    literature = literature_client(max_results=limits['literature_search_results'], guidance=True) if settings['literature'] else None
+    claims = None
+    if settings.get('claims_url'):
+        from .box_claims import ClaimsClient
+        claims = (claims_client or ClaimsClient)(settings['claims_url'])
+    return ScopedTools(selected_graphs, ledger, max_calls=limits['tool_calls'], soft_budget=True, literature=literature, claims=claims,
+                       draft_files=('account-1.json',),
+                       lint=lint, write_draft=write_draft,
+                       max_searches=limits['literature_searches'], max_papers=limits['literature_papers'],
+                       max_characters=limits['literature_characters'])
 
 
 def agent_system_prompt(agent_input):
@@ -361,6 +447,12 @@ def agent_system_prompt(agent_input):
         note += (' The network is restricted to the Anthropic API' + ''.join(' and ' + item for item in reachable) +
                  '; other hosts, package installs and arbitrary downloads will fail.' +
                  (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
+    if agent_input.get('deliverable') == 'scientific_account':
+        note += (' This run\'s deliverable is one DAPPER ScientificAccount, saved as output/account-1.json with '
+                 'mcp__reveal__write_account_draft and checked with mcp__reveal__lint_account. Read and follow '
+                 f'{ACCOUNT_SKILL_PATH} before anything else; the question and the requester\'s claims are in '
+                 f'{ACCOUNT_REQUEST_FILENAME}. A run that ends without a saved account returns nothing. Your final message is a '
+                 'short report to the requester: what the account concludes, which of their claims you assessed, and what you did not read.')
     return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
 
 
@@ -591,11 +683,17 @@ def main():
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
         literature = request['kind'] == 'research' or agent and runtime['agent']['literature']
-        tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
-                            write_draft=write_draft_tool if request['kind'] == 'research' else None,
-                            literature=LiteratureClient() if literature else None,
-                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
-                            read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
+        if agent:
+            accounting = runtime.get('deliverable') == 'scientific_account'
+            tools = agent_tools(request['selected_graphs'], ledger, runtime['agent'],
+                                lint=(lambda filename: lint_tool(filename, ledger)) if accounting else None,
+                                write_draft=write_draft_tool if accounting else None)
+        else:
+            tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
+                                write_draft=write_draft_tool if request['kind'] == 'research' else None,
+                                literature=LiteratureClient() if literature else None,
+                                write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
+                                read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'
@@ -693,7 +791,10 @@ def main():
                     outcome = json.loads(outcome_path.read_text())
                     if outcome.get('status') in ('insufficient_evidence', 'failed'):
                         status, reason = outcome['status'], str(outcome.get('reason', ''))[:2000]
-                expected = (list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else
+                # An account job's deliverable is its saved account; a general agent job's is its answer.
+                # An account job returns one file, the one its gate reads (agent_account.accept).
+                expected = ([OUTPUT / 'account-1.json'] if (OUTPUT / 'account-1.json').is_file() else []) if runtime.get('deliverable') == 'scientific_account' else (
+                            list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else
                             [True] if agent else list(OUTPUT.glob('paragraph.json')))
                 reused = outcome.get('existing_account_ids', []) if outcome_path and outcome_path.exists() else []
                 reuse_output = RESEARCH is not None and bool(reused) and isinstance(reused, list) and all(isinstance(item, str) for item in reused) and set(reused) <= RESEARCH.existing_account_ids

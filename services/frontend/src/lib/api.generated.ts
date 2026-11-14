@@ -1703,6 +1703,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job_id}/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the ScientificAccount an agent job returned
+         * @description Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over paper texts named by checksum. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
+         */
+        get: operations["getJobAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/account/texts/{sha256}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a paper text an agent job account quotes
+         * @description Owner-only. The exact bytes a ValueLocator of the account addresses: the text of one paper as the agent read it (text_sha256 in the account block). REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.
+         */
+        get: operations["downloadJobAccountText"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -9644,17 +9684,48 @@ export interface components {
             /** @description The published reference release these rows were read from. */
             release_id: string;
         };
-        /** @description Per-run limits. The run stops at whichever comes first. */
+        /** @description Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd. Each limit has a default, used when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the built-in ones and the range the service supports. */
         AgentJobLimits: {
-            /** @default 900 */
+            /**
+             * @description Wall-clock seconds for the run.
+             * @default 900
+             */
             timeout_seconds: number;
-            /** @default 50 */
+            /**
+             * @description Claude Code turns.
+             * @default 50
+             */
             max_turns: number;
             /**
-             * @description Lowers, never raises, the server cap (REVEAL_AGENT_JOB_MAX_BUDGET_USD). The default is the smaller of the two.
+             * @description Provider cost of the run in US dollars.
              * @default 2
              */
             max_budget_usd: number;
+            /**
+             * @description Calls to the scoped REVEAL tools (search_papers, read_paper and the graph tools), counted together. When they are used up the agent is told and can still finish.
+             * @default 30
+             */
+            tool_calls: number;
+            /**
+             * @description search_papers calls.
+             * @default 3
+             */
+            literature_searches: number;
+            /**
+             * @description Most records one search_papers call may return.
+             * @default 5
+             */
+            literature_search_results: number;
+            /**
+             * @description Distinct papers read_paper may open. Paging through one paper with offset does not open another.
+             * @default 4
+             */
+            literature_papers: number;
+            /**
+             * @description Characters of abstract and full text read_paper may return across the run.
+             * @default 48000
+             */
+            literature_characters: number;
         };
         /** @description Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream. */
         AgentJobInput: {
@@ -9709,11 +9780,98 @@ export interface components {
             /** @description Claude model id. Default claude-opus-5-5 (or REVEAL_AGENT_JOB_MODEL). */
             model?: string;
             limits?: components["schemas"]["AgentJobLimits"];
+            /**
+             * @description What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it reads through the captured literature tools; REVEAL then checks and mints it. Such a job needs question, has literature on, may use only the tools Read, Write, Edit, Glob, Grep (the default for it), runs on the restricted network with no allowed_domains and no graphs, and by default gets the run-time and turn ceilings.
+             * @default answer
+             * @enum {string}
+             */
+            deliverable: "answer" | "scientific_account";
+            /** @description Only with deliverable scientific_account, where it is required: the question the account addresses. It is recorded in the account as a requester-supplied question, not a curated knowledge gap. */
+            question?: string;
+            /**
+             * @description Only with deliverable scientific_account: name the requester in the account as the Person it is attributed to (display name, and the ORCID iD when it was authenticated). Default false: the account and its deposit say what made it and not who asked.
+             * @default false
+             */
+            attribute_requester: boolean;
+            /** @description Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence. */
+            claims_repository?: boolean;
+            /**
+             * @description Only with deliverable scientific_account: statements the requester wants assessed. Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. A claim the agent found no literature for is reported in the result, not included in the account.
+             * @default []
+             */
+            claims: string[];
         };
         AgentFile: {
             path: string;
             size_bytes: number;
             sha256: string;
+        };
+        AgentAccountDeposit: {
+            /**
+             * @description deposited: the claims repository stored every object of the account. not_configured: this deployment has no claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job.
+             * @enum {string}
+             */
+            status: "deposited" | "failed" | "not_configured";
+            deposit_id?: string | null;
+            /** @description Objects the repository accepted, counting ones it already held. */
+            objects?: number;
+            /** @description Objects the repository already held under the same id with different unhashed content. Its stored copy stands. */
+            stored_differs?: number;
+            unresolved_references?: number;
+            /** @enum {string} */
+            reason?: "too_large" | "rejected" | "unauthorized" | "unavailable";
+            http_status?: number;
+            /** @description The repository's own reason for refusing the document. */
+            detail?: string;
+        };
+        /** @description One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}. */
+        AgentAccountPaper: {
+            /** @enum {string} */
+            source: "MED" | "PMC";
+            id: string;
+            /** @enum {string} */
+            section: "abstract" | "full_text";
+            reference: string | null;
+            text_sha256: string;
+            text_bytes: number;
+            media_type: string;
+            filename: string;
+            /** @description EvidenceItems that quote this text. */
+            evidence_items: number;
+            file_id: string;
+        };
+        AgentAccountRequestedClaim: {
+            statement: string;
+            /** @description False when the agent made no Claim on it. */
+            assessed: boolean;
+            claim_ids: string[];
+        };
+        /** @description The ScientificAccount a deliverable scientific_account job returned. Fetch the document itself from /v1/jobs/{job_id}/account. */
+        AgentAccount: {
+            account_id: string;
+            /** @description DAPPER version the returned and deposited document is minted with. */
+            dapper_version: string;
+            document_sha256: string;
+            document_bytes: number;
+            objects: number;
+            edges: number;
+            claims: number;
+            /** @description Quoted passages located by exact byte span in a paper text. */
+            value_locators: number;
+            lint_warnings: number;
+            /** @description What became of each claim in the request. */
+            requested_claims: components["schemas"]["AgentAccountRequestedClaim"][];
+            papers: components["schemas"]["AgentAccountPaper"][];
+            deposit: components["schemas"]["AgentAccountDeposit"];
+        };
+        AgentAccountDocument: {
+            /** Format: uuid */
+            job_id: string;
+            account: components["schemas"]["AgentAccount"];
+            /** @description The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) and edges, every id a DAPPER-ID-1 address. */
+            document: {
+                [key: string]: unknown;
+            };
         };
         AgentResult: {
             /** @constant */
@@ -9728,6 +9886,7 @@ export interface components {
             duration_seconds: number | null;
             /** @description Files the agent wrote to output/, retained with the job capture. */
             files: components["schemas"]["AgentFile"][];
+            account?: components["schemas"]["AgentAccount"];
         };
     };
     responses: never;
@@ -17038,6 +17197,123 @@ export interface operations {
             };
             /** @description Reference Generation Superseded */
             410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getJobAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccountDocument"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    downloadJobAccountText: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                job_id: string;
+                /** @example 0000000000000000000000000000000000000000000000000000000000000002 */
+                sha256: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description After authorization, redirect to the exact stored object. The private URL expires after 60 seconds. */
+            307: {
+                headers: {
+                    /** @description Short-lived download URL. Never cache or persist as an identifier. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
