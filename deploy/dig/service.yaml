@@ -119,6 +119,9 @@ qa:
     # agent-jobs-colleague API-key workspace (REVEAL_API_KEYS). Unset, nobody can start one.
     REVEAL_AGENT_JOB_USERS: '13b86465-2324-43c7-9f13-de73e1d27256,7c363256-ce39-464a-a323-c0d11a279b58'
     REVEAL_AGENT_JOB_MAX_BUDGET_USD: '5'
+    # Claims repository (docs/agent-jobs.md): the agent's query_claims lookups read it, and an accepted
+    # Scientific Account is deposited there with REVEAL_CLAIMS_API_KEY below.
+    REVEAL_CLAIMS_API_URL: https://api-qa.hugeampkpnbi.org/api/claims
   secrets:
     REVEAL_MYSQL_PASSWORD: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_MYSQL_PASSWORD::'
     EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:EMBEDDING_SERVICE_API_KEY::'
@@ -133,6 +136,9 @@ qa:
     REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_USER_ID::'
     # Further keys beside that pair, as comma-separated <sha256>:<user id> entries (docs/api-keys.md).
     REVEAL_API_KEYS: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEYS::'
+    # Deposit key issued by the claims repository (its admin console or scripts/api_key.py). It names REVEAL as the
+    # depositor. Add the field to the secret BEFORE this deploys, or the task cannot start.
+    REVEAL_CLAIMS_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_CLAIMS_API_KEY::'
     # Separate science:read credential; provision both fields before QA rollout.
     REVEAL_ADMIN_READ_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_SHA256::'
     REVEAL_ADMIN_READ_API_KEY_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_ID::'

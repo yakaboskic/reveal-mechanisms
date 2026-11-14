@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DIRECTORIES = (
     'services/backend/src/', 'services/backend/agent-runtime/',
     'services/backend/agent-skills/', 'services/backend/csl/',
+    # The DAPPER release a deposited account is minted with; the image build verifies it (account_deposit.verify_vendor).
+    'services/backend/vendor/',
     'api/', 'schema/', 'docs/', 'data/dapper/2026-09-24-v8/', 'data/dapper/0.2.0/',
     'data/dismech-gaps/2026-09-24/', 'data/gene-identity/hgnc-2026-10-06/',
 )
@@ -27,6 +29,7 @@ FILES = ('.dockerignore', 'services/backend/Dockerfile', 'services/backend/pypro
     'data/cfde-genesets/2026-09-24/manifest.json', 'data/cfde-genesets/2026-09-24/activity.json',
     *RUNTIME_SCRIPTS)
 REQUIRED = (*FILES, 'services/backend/agent-runtime/dapper-release.json',
+    'services/backend/vendor/dapper-0.2.1-a1/VENDOR.json',
     'data/dapper/0.2.0/snapshot.json', 'data/dapper/2026-09-24-v8/snapshot.json',
     'data/gene-identity/hgnc-2026-10-06/manifest.json',
     'data/gene-identity/hgnc-2026-10-06/hgnc_complete_set.tsv.gz',
