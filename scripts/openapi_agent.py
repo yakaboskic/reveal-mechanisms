@@ -10,7 +10,7 @@ COMPLETED_AT = '2026-11-09T15:03:12Z'
 def extend(b, f, e):
     from reveal_backend.box_agent import (ACCOUNT_TOOLS, BUILTIN_TOOLS, DEFAULT_MODEL, DELIVERABLES, LIMITS, MAX_ACCOUNT_CLAIMS,
         MAX_ALLOWED_DOMAINS, MAX_CLAIM_CHARS, DEFAULT_TOOLS, EFFORTS, MAX_PROMPT_CHARS, MAX_QUESTION_CHARS,
-        MAX_RESULT_RESPONSE_CHARS, MAX_SYSTEM_PROMPT_CHARS, NETWORKS)
+        MAX_RESULT_RESPONSE_CHARS, MAX_SYSTEM_PROMPT_CHARS, MAX_TERM_CHARS, NETWORKS, TERM)
     from reveal_backend.box_mcp import GRAPHS
     S = b.SCHEMAS
     obj, ref, array, string, null, enum = b.obj, b.ref, b.array, b.string, b.nullable, b.enum
@@ -76,10 +76,13 @@ def extend(b, f, e):
             'Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that '
             'earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The '
             'tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence.'},
-        'claims': array(string(minLength=1, maxLength=MAX_CLAIM_CHARS), uniqueItems=True, maxItems=MAX_ACCOUNT_CLAIMS, default=[],
-            description='Only with deliverable scientific_account: statements the requester wants assessed. Each becomes a fixed '
-                        'DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. '
-                        'A claim the agent found no literature for is reported in the result, not included in the account.')},
+        'claims': array({'oneOf': [string(minLength=1, maxLength=MAX_CLAIM_CHARS), ref('AgentAccountClaim')]}, uniqueItems=True,
+            maxItems=MAX_ACCOUNT_CLAIMS, default=[],
+            description='Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, '
+                        'or an object that adds the statement\'s structured form (subject_entity, relation, object_entity). Each '
+                        'becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and '
+                        'cannot reword it. Statements must be distinct. A claim the agent found no literature for is reported in '
+                        'the result, not included in the account.')},
         ['kind', 'prompt'],
         description='Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific '
             'validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. '
@@ -107,6 +110,19 @@ def extend(b, f, e):
         'file_id': dapper_id('File')}, description=
         'One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the '
         'exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}.'))
+    term = lambda what: string(minLength=3, maxLength=MAX_TERM_CHARS, pattern='^' + TERM.pattern + '$', description=what)
+    b.add('AgentAccountClaim', obj({
+        'statement': string(minLength=1, maxLength=MAX_CLAIM_CHARS, description='The claim in words.'),
+        'subject_entity': term('Subject of the structured form, as a CURIE or absolute URI, for example HGNC.SYMBOL:LEPR.'),
+        'relation': term('Predicate, for example biolink:genetically_associated_with.'),
+        'object_entity': term('Object, for example KPN.TRAIT:0000505 or MONDO:0005265.')},
+        ['statement'], dependentRequired={'subject_entity': ['relation', 'object_entity'], 'relation': ['subject_entity', 'object_entity'],
+                                          'object_entity': ['subject_entity', 'relation']}, description=
+        'A requested claim with the structured form of its Proposition. subject_entity, relation and object_entity go together: '
+        'give all three or none. A CURIE prefix must be one the pinned DAPPER release declares (MONDO, HGNC, KPN.TRAIT, obo, CL, '
+        '...) or HGNC.SYMBOL or biolink; anything else must be an absolute URI. The three are stored on the Proposition as given, '
+        'so the account can be found by them in the claims repository. A claim sent as a plain statement has no structured form '
+        'unless the agent can supply one from what it was given and read.'))
     b.add('AgentAccountRequestedClaim', obj({
         'statement': string(), 'assessed': {'type': 'boolean', 'description': 'False when the agent made no Claim on it.'},
         'claim_ids': array(dapper_id('Claim'))}))
@@ -162,7 +178,9 @@ def extend(b, f, e):
     account = {'kind': 'agent', 'deliverable': 'scientific_account',
         'prompt': 'Build the account from open-access papers. Prefer primary studies in mice and humans; say what was not read.',
         'question': 'Does loss of leptin receptor signalling in hepatocytes cause hepatic insulin resistance?',
-        'claims': ['Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.'],
+        'claims': ['Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.',
+                   {'statement': 'LEPR is genetically associated with type 2 diabetes.', 'subject_entity': 'HGNC.SYMBOL:LEPR',
+                    'relation': 'biolink:genetically_associated_with', 'object_entity': 'MONDO:0005148'}],
         'limits': {'literature_searches': 10, 'literature_papers': 20, 'literature_characters': 400000, 'tool_calls': 150}}
     operation['requestBody']['content']['application/json']['examples']['agent_account'] = {
         'summary': 'General agent authoring a DAPPER ScientificAccount from literature', 'value': account}

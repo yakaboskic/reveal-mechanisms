@@ -20,15 +20,20 @@ with the job, and `public` is what the job result says about it.
 """
 from pathlib import Path
 
-from .box_agent import MAX_ACCOUNT_CLAIMS
+from .box_agent import MAX_ACCOUNT_CLAIMS, TRIPLE_SLOTS, AgentInputError
 
 PACKAGE_VERSION = 'reveal.evidence-package/0.2-draft'
+# CURIE prefixes a triple in such an account may use beyond the pinned schema's own (MONDO, HGNC, KPN.TRAIT, obo, ...):
+# the bindings a research draft gets (research_seed.CLAIM_PREFIXES). They travel in the package, so the draft writer
+# declares the ones a draft uses and the linter resolves them.
+PREFIXES = {'HGNC.SYMBOL': 'https://identifiers.org/hgnc.symbol:', 'biolink': 'https://w3id.org/biolink/vocab/'}
 GAP_DESCRIPTION = ('Question supplied by the requester of a REVEAL literature account. It is the question the account '
                    'addresses, not a knowledge gap curated from a source catalogue.')
 
 
 def build(question, claims, dapper=None):
-    """{'question', 'claims': [{'statement', 'proposition_id'}], 'package'} for box_agent.freeze_input.
+    """{'question', 'claims': [{'statement', 'proposition_id', and the triple slots when given}], 'package'} for
+    box_agent.freeze_input. `claims` are box_agent.claim_entry values.
 
     Ids are DAPPER-ID-1 addresses minted with the pinned snapshot, so the same question and claims give the same
     nodes in every job."""
@@ -38,13 +43,27 @@ def build(question, claims, dapper=None):
     assert len(claims) <= MAX_ACCOUNT_CLAIMS
     gap = {'text': question, 'gap_description': GAP_DESCRIPTION}
     gap = {'id': dapper.compute_id(gap, 'KnowledgeGap', dapper.schema), **gap}
-    propositions = [{'id': dapper.compute_id({'statement': claim}, 'Proposition', dapper.schema), 'statement': claim} for claim in claims]
-    context = {'knowledge_gaps': [gap], **({'propositions': propositions} if propositions else {})}
+    resolver = dapper.resolver_class(dapper.schema, {'prefixes': PREFIXES})
+    propositions = []
+    for claim in claims:
+        # A claim is {'statement'} or that plus the three triple slots (box_agent.claim_entry). A term the pinned
+        # release cannot resolve would fail the agent's lint on a node it cannot edit, so it is refused here.
+        node = {'statement': claim['statement'], **{slot: claim[slot] for slot in TRIPLE_SLOTS if slot in claim}}
+        for slot in TRIPLE_SLOTS:
+            if slot in node:
+                try: resolver.expand(node[slot])
+                except ValueError:
+                    raise AgentInputError(f'{slot} {node[slot]!r} is not an absolute URI or a CURIE with a prefix REVEAL knows. '
+                                          'Known prefixes: ' + ', '.join(sorted(resolver.prefixes, key=str.lower))) from None
+        propositions.append({'id': dapper.compute_id(node, 'Proposition', dapper.schema), **node})
+    context = {'knowledge_gaps': [gap], 'prefixes': dict(PREFIXES), **({'propositions': propositions} if propositions else {})}
     package = {'package_version': PACKAGE_VERSION,
                'dapper_pin': {'name': 'configured-snapshot', 'snapshot_sha256': dapper.manifest['snapshot_sha256'],
                               'snapshot_manifest_sha256': dapper.manifest_sha256},
                'selection': {'knowledge_gap_id': gap['id']}, 'dapper_context': context, 'source_artifacts': {}}
-    return {'question': question, 'claims': [{'statement': node['statement'], 'proposition_id': node['id']} for node in propositions],
+    return {'question': question,
+            'claims': [{'statement': node['statement'], 'proposition_id': node['id'], **{slot: node[slot] for slot in TRIPLE_SLOTS if slot in node}}
+                       for node in propositions],
             'package': package}
 
 

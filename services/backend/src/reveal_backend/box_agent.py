@@ -72,6 +72,11 @@ ACCOUNT_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep')
 MAX_QUESTION_CHARS = 2000
 MAX_ACCOUNT_CLAIMS = 20
 MAX_CLAIM_CHARS = 1000
+# A claim may carry the structured form of its Proposition: DAPPER's subject_entity, relation and object_entity,
+# all three or none, each a CURIE or an absolute URI.
+TRIPLE_SLOTS = ('subject_entity', 'relation', 'object_entity')
+MAX_TERM_CHARS = 300
+TERM = re.compile(r'[A-Za-z][A-Za-z0-9+._-]*:\S+')
 ACCOUNT_PACKAGE_KEYS = {'package_version', 'dapper_pin', 'selection', 'dapper_context', 'source_artifacts'}
 DAPPER_ID = r'dapper:%s\.[A-Za-z0-9_-]{32}'
 GITHUB_HOST = 'github.com'  # the Box clones the pinned DAPPER release, which the account tools lint against
@@ -92,6 +97,23 @@ class AgentInputError(ValueError):
 
 def require(condition, message):
     if not condition: raise AgentInputError(message)
+
+
+def claim_entry(claim):
+    """One requested claim as {'statement', and the three TRIPLE_SLOTS when given}. A claim is a statement, or an
+    object with a statement and, together, subject_entity, relation and object_entity."""
+    if isinstance(claim, str): claim = {'statement': claim}
+    require(isinstance(claim, dict) and set(claim) <= {'statement', *TRIPLE_SLOTS},
+            'each claim is a statement, or an object with statement and, together, ' + ', '.join(TRIPLE_SLOTS))
+    entry = {'statement': text(claim.get('statement'), 'each claim', MAX_CLAIM_CHARS, required=True).strip()}
+    given = [slot for slot in TRIPLE_SLOTS if claim.get(slot) is not None]
+    if given:
+        require(len(given) == len(TRIPLE_SLOTS), "a claim's " + ', '.join(TRIPLE_SLOTS) + ' go together: give all three or none')
+        for slot in TRIPLE_SLOTS:
+            require(isinstance(claim[slot], str) and len(claim[slot]) <= MAX_TERM_CHARS and TERM.fullmatch(claim[slot]),
+                    f'{slot} must be a CURIE or an absolute URI of at most {MAX_TERM_CHARS} characters, such as HGNC.SYMBOL:LEPR')
+            entry[slot] = claim[slot]
+    return entry
 
 
 def text(value, name, maximum, *, required):
@@ -165,10 +187,9 @@ def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=N
         require(not graphs, 'A scientific_account job is built from papers the agent reads: graphs are not available for it')
         question = text(body.get('question'), 'question', MAX_QUESTION_CHARS, required=True).strip()
         claims = body.get('claims', [])
-        require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS and all(isinstance(claim, str) for claim in claims),
-                f'claims must be a list of at most {MAX_ACCOUNT_CLAIMS} statements')
-        claims = [text(claim, 'each claim', MAX_CLAIM_CHARS, required=True).strip() for claim in claims]
-        require(len(set(claims)) == len(claims), 'claims must be distinct statements')
+        require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS, f'claims must be a list of at most {MAX_ACCOUNT_CLAIMS} claims')
+        claims = [claim_entry(claim) for claim in claims]
+        require(len({claim['statement'] for claim in claims}) == len(claims), 'claims must be distinct statements')
         require(callable(account_builder), 'Scientific account jobs are not available on this deployment')
         # The account names its requester only when the request asks for that. Only this yes or no is frozen: who the
         # requester is stays with the job's attribution, which never enters the sandbox.
@@ -262,20 +283,28 @@ def validate_account(value):
     question, claims, package = account['question'], account['claims'], account['package']
     text(question, 'question', MAX_QUESTION_CHARS, required=True)
     require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS and all(
-        isinstance(claim, dict) and set(claim) == {'statement', 'proposition_id'} and isinstance(claim['statement'], str)
+        isinstance(claim, dict) and set(claim) in ({'statement', 'proposition_id'}, {'statement', 'proposition_id', *TRIPLE_SLOTS})
+        and isinstance(claim['statement'], str)
         and 0 < len(claim['statement']) <= MAX_CLAIM_CHARS and isinstance(claim['proposition_id'], str)
-        and re.fullmatch(DAPPER_ID % 'Proposition', claim['proposition_id']) for claim in claims), 'Invalid account claims')
+        and re.fullmatch(DAPPER_ID % 'Proposition', claim['proposition_id'])
+        and all(isinstance(claim[slot], str) and len(claim[slot]) <= MAX_TERM_CHARS and TERM.fullmatch(claim[slot])
+                for slot in TRIPLE_SLOTS if slot in claim) for claim in claims), 'Invalid account claims')
+    # prefixes: the CURIE bindings triples in this account may use beyond the pinned schema's own (agent_account.PREFIXES).
     require(isinstance(package, dict) and set(package) == ACCOUNT_PACKAGE_KEYS and package['source_artifacts'] == {}
             and isinstance(package['selection'], dict) and isinstance(package['dapper_context'], dict)
-            and set(package['dapper_context']) <= {'knowledge_gaps', 'propositions'}, 'Invalid account package')
+            and set(package['dapper_context']) <= {'knowledge_gaps', 'propositions', 'prefixes'}, 'Invalid account package')
+    prefixes = package['dapper_context'].get('prefixes', {})
+    require(isinstance(prefixes, dict) and all(isinstance(name, str) and isinstance(target, str) and target.startswith('https://')
+                                               for name, target in prefixes.items()), 'Invalid account prefixes')
     gaps = package['dapper_context'].get('knowledge_gaps')
     require(isinstance(gaps, list) and len(gaps) == 1 and isinstance(gaps[0], dict) and gaps[0].get('text') == question
             and isinstance(gaps[0].get('id'), str) and re.fullmatch(DAPPER_ID % 'KnowledgeGap', gaps[0]['id'])
             and package['selection'].get('knowledge_gap_id') == gaps[0]['id'], 'The account package does not carry the question')
     propositions = package['dapper_context'].get('propositions', [])
     require(isinstance(propositions, list) and all(isinstance(node, dict) for node in propositions)
-            and [(node.get('id'), node.get('statement')) for node in propositions]
-            == [(claim['proposition_id'], claim['statement']) for claim in claims], 'The account package does not carry the claims')
+            and [(node.get('id'), node.get('statement'), *(node.get(slot) for slot in TRIPLE_SLOTS)) for node in propositions]
+            == [(claim['proposition_id'], claim['statement'], *(claim.get(slot) for slot in TRIPLE_SLOTS)) for claim in claims],
+            'The account package does not carry the claims')
 
 
 def run_limits(value):

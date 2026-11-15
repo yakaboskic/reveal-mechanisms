@@ -9796,10 +9796,10 @@ export interface components {
             /** @description Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence. */
             claims_repository?: boolean;
             /**
-             * @description Only with deliverable scientific_account: statements the requester wants assessed. Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. A claim the agent found no literature for is reported in the result, not included in the account.
+             * @description Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, or an object that adds the statement's structured form (subject_entity, relation, object_entity). Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. Statements must be distinct. A claim the agent found no literature for is reported in the result, not included in the account.
              * @default []
              */
-            claims: string[];
+            claims: (string | components["schemas"]["AgentAccountClaim"])[];
         };
         AgentFile: {
             path: string;
@@ -9839,6 +9839,17 @@ export interface components {
             /** @description EvidenceItems that quote this text. */
             evidence_items: number;
             file_id: string;
+        };
+        /** @description A requested claim with the structured form of its Proposition. subject_entity, relation and object_entity go together: give all three or none. A CURIE prefix must be one the pinned DAPPER release declares (MONDO, HGNC, KPN.TRAIT, obo, CL, ...) or HGNC.SYMBOL or biolink; anything else must be an absolute URI. The three are stored on the Proposition as given, so the account can be found by them in the claims repository. A claim sent as a plain statement has no structured form unless the agent can supply one from what it was given and read. */
+        AgentAccountClaim: {
+            /** @description The claim in words. */
+            statement: string;
+            /** @description Subject of the structured form, as a CURIE or absolute URI, for example HGNC.SYMBOL:LEPR. */
+            subject_entity?: string;
+            /** @description Predicate, for example biolink:genetically_associated_with. */
+            relation?: string;
+            /** @description Object, for example KPN.TRAIT:0000505 or MONDO:0005265. */
+            object_entity?: string;
         };
         AgentAccountRequestedClaim: {
             statement: string;

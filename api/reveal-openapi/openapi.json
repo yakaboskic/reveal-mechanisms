@@ -4842,7 +4842,13 @@
                     "prompt": "Build the account from open-access papers. Prefer primary studies in mice and humans; say what was not read.",
                     "question": "Does loss of leptin receptor signalling in hepatocytes cause hepatic insulin resistance?",
                     "claims": [
-                      "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver."
+                      "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.",
+                      {
+                        "statement": "LEPR is genetically associated with type 2 diabetes.",
+                        "subject_entity": "HGNC.SYMBOL:LEPR",
+                        "relation": "biolink:genetically_associated_with",
+                        "object_entity": "MONDO:0005148"
+                      }
                     ],
                     "limits": {
                       "literature_searches": 10,
@@ -74094,14 +74100,21 @@
           "claims": {
             "type": "array",
             "items": {
-              "type": "string",
-              "minLength": 1,
-              "maxLength": 1000
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 1000
+                },
+                {
+                  "$ref": "#/components/schemas/AgentAccountClaim"
+                }
+              ]
             },
             "uniqueItems": true,
             "maxItems": 20,
             "default": [],
-            "description": "Only with deliverable scientific_account: statements the requester wants assessed. Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. A claim the agent found no literature for is reported in the result, not included in the account."
+            "description": "Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, or an object that adds the statement's structured form (subject_entity, relation, object_entity). Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. Statements must be distinct. A claim the agent found no literature for is reported in the result, not included in the account."
           }
         },
         "required": [
@@ -74264,6 +74277,57 @@
         ],
         "additionalProperties": false,
         "description": "One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}."
+      },
+      "AgentAccountClaim": {
+        "type": "object",
+        "properties": {
+          "statement": {
+            "type": "string",
+            "description": "The claim in words.",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "subject_entity": {
+            "type": "string",
+            "description": "Subject of the structured form, as a CURIE or absolute URI, for example HGNC.SYMBOL:LEPR.",
+            "minLength": 3,
+            "maxLength": 300,
+            "pattern": "^[A-Za-z][A-Za-z0-9+._-]*:\\S+$"
+          },
+          "relation": {
+            "type": "string",
+            "description": "Predicate, for example biolink:genetically_associated_with.",
+            "minLength": 3,
+            "maxLength": 300,
+            "pattern": "^[A-Za-z][A-Za-z0-9+._-]*:\\S+$"
+          },
+          "object_entity": {
+            "type": "string",
+            "description": "Object, for example KPN.TRAIT:0000505 or MONDO:0005265.",
+            "minLength": 3,
+            "maxLength": 300,
+            "pattern": "^[A-Za-z][A-Za-z0-9+._-]*:\\S+$"
+          }
+        },
+        "required": [
+          "statement"
+        ],
+        "additionalProperties": false,
+        "dependentRequired": {
+          "subject_entity": [
+            "relation",
+            "object_entity"
+          ],
+          "relation": [
+            "subject_entity",
+            "object_entity"
+          ],
+          "object_entity": [
+            "subject_entity",
+            "relation"
+          ]
+        },
+        "description": "A requested claim with the structured form of its Proposition. subject_entity, relation and object_entity go together: give all three or none. A CURIE prefix must be one the pinned DAPPER release declares (MONDO, HGNC, KPN.TRAIT, obo, CL, ...) or HGNC.SYMBOL or biolink; anything else must be an absolute URI. The three are stored on the Proposition as given, so the account can be found by them in the claims repository. A claim sent as a plain statement has no structured form unless the agent can supply one from what it was given and read."
       },
       "AgentAccountRequestedClaim": {
         "type": "object",

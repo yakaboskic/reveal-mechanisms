@@ -322,7 +322,7 @@ p.write_text(json.dumps(doc))
         the backend's gate on the pinned release, and the deposit form minted with DAPPER 0.2.1-a1."""
         import io, os
         from types import SimpleNamespace
-        from reveal_backend import acceptance, account_deposit, agent_account, box_remote
+        from reveal_backend import acceptance, account_deposit, agent_account, box_agent, box_remote
         from reveal_backend.box_literature import LiteratureClient
         from reveal_backend.box_mcp import Ledger
         result = 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation by 42% in liver.'
@@ -334,8 +334,15 @@ p.write_text(json.dumps(doc))
             status = 200
         http = SimpleNamespace(open=lambda request, timeout: Response(article))
         claim_text = 'Loss of hepatocyte LEPR reduces hepatic insulin signalling.'
-        account = agent_account.build('Does loss of LEPR signalling cause hepatic insulin resistance?', [claim_text])
+        # The requester gives the claim's structured form; it is minted into the trusted Proposition.
+        triple = {'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects', 'object_entity': 'obo:GO_0008286'}
+        # A second claim arrives as a plain statement: the agent may restate it word for word with a triple.
+        plain_text = 'Hepatocyte LEPR loss lowers hepatic AKT phosphorylation.'
+        account = agent_account.build('Does loss of LEPR signalling cause hepatic insulin resistance?',
+                                      [box_agent.claim_entry({'statement': claim_text, **triple}), box_agent.claim_entry(plain_text)])
+        plain_id = account['claims'][1]['proposition_id']
         gap_id, proposition_id = account['package']['selection']['knowledge_gap_id'], account['claims'][0]['proposition_id']
+        requested_id = proposition_id
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory); state = base / 'state'; output = base / 'output'
             state.mkdir(); output.mkdir()
@@ -350,8 +357,10 @@ p.write_text(json.dumps(doc))
             ledger = Ledger(state / 'ledger', 'account-job', 1)
             settings = {'tools': ['Read'], 'graphs': [], 'literature': True,
                         'limits': {'tool_calls': 30, 'literature_searches': 3, 'literature_search_results': 5, 'literature_papers': 4, 'literature_characters': 48_000}}
-            def draft(snippet):
-                return {'files': [capture['file']],
+            def draft(snippet, own=None):
+                # own: a Proposition the agent writes itself; the Claim is then about it instead of the requester's.
+                proposition_id = own['id'] if own else requested_id
+                return {'files': [capture['file']], **({'propositions': [own]} if own else {}),
                         'evidence_items': [{'id': 'urn:draft:evidence-1', 'target_proposition': proposition_id, 'direction': 'SUPPORTS',
                                             'snippet': snippet, 'explanation': 'The paper reports this directly in mouse liver.',
                                             'context': 'Source locator: ' + capture['source_locator'] + '. Mouse liver.',
@@ -381,15 +390,55 @@ p.write_text(json.dumps(doc))
                 # The trusted Proposition and KnowledgeGap were hydrated from the package; the agent wrote neither.
                 stored = json.loads((output / 'account-1.json').read_bytes())
                 self.assertEqual([node['id'] for node in stored['knowledge_gaps']], [gap_id])
-                self.assertEqual(stored['propositions'], [{'id': proposition_id, 'statement': claim_text}])
+                self.assertEqual(stored['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])
                 tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
                 clean = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
                 self.assertTrue(clean['valid'], clean.get('findings'))
+                asked = lambda feedback: [(item['where'], item['message']) for item in feedback['advisories'] if item['check'] == 'proposition-triple']
+                self.assertEqual(asked(clean), [])                    # every Proposition in the draft has its triple
+                # A Proposition the agent writes as text only is valid, and the lint asks for its triple.
+                own = {'id': 'urn:draft:prop-own', 'statement': 'Hepatocyte LEPR loss lowers insulin-stimulated AKT phosphorylation.',
+                       'proposition_kind': 'RESULT'}
+                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, own)})
+                text_only = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertTrue(text_only['valid'], text_only.get('findings'))
+                self.assertEqual(asked(text_only), [('propositions[0]', box_remote.TRIPLE_OWN)])
+                # With the triple it is still valid and the reminder is gone. The draft writer declares the prefixes.
+                structured = {**own, 'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects', 'object_entity': 'HGNC.SYMBOL:AKT1'}
+                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, structured)})
+                self.assertFalse(saved.get('isError'), saved)
+                with_triple = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertTrue(with_triple['valid'], with_triple.get('findings'))
+                self.assertEqual(asked(with_triple), [])
+                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['prefixes'], agent_account.PREFIXES)
+                # The requester's plain claim: a Claim on it as it stands is valid, and the lint says how to give it a triple.
+                on_plain = draft(result); on_plain['claims'][0]['proposition'] = on_plain['evidence_items'][0]['target_proposition'] = plain_id
+                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': on_plain})
+                as_sent = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertTrue(as_sent['valid'], as_sent.get('findings'))
+                self.assertEqual(asked(as_sent), [('claims[0].proposition', box_remote.TRIPLE_REQUESTED)])
+                # Restated word for word with a triple, it is accepted, and it still counts as the requester's claim.
+                restated = {'id': 'urn:draft:prop-restated', 'statement': plain_text, 'subject_entity': 'HGNC.SYMBOL:LEPR',
+                            'relation': 'biolink:affects', 'object_entity': 'HGNC.SYMBOL:AKT1'}
+                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, restated)})
+                self.assertFalse(saved.get('isError'), saved)
+                again = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertTrue(again['valid'], again.get('findings'))
+                self.assertEqual(asked(again), [])
+                kept = json.loads((output / 'account-1.json').read_bytes())
+                self.assertEqual([c['assessed'] for c in agent_account.requested_claims(account['claims'], kept)], [False, True])
+                # A triple with an end missing, or a prefix nobody declared, is refused when the draft is saved, with
+                # diagnostics the agent can repair from.
+                for broken in ({k: v for k, v in structured.items() if k != 'relation'}, {**structured, 'object_entity': 'T2D:1'}):
+                    refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, broken)})
+                    self.assertTrue(refused.get('isError'))
+                    self.assertFalse(json.loads(refused['content'][0]['text'])['valid'])
+                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
                 # Trying to reword the requester's claim is refused.
                 reworded = draft(result); reworded['propositions'] = [{'id': proposition_id, 'statement': 'A reworded claim.'}]
                 refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': reworded})
                 self.assertTrue(refused.get('isError')); self.assertIn('trusted source object was changed', refused['content'][0]['text'])
-                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['propositions'], [{'id': proposition_id, 'statement': claim_text}])
+                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])
             ledger.freeze()
             manifest = state / 'ledger/manifest.json'
             requester = {'user_id': '11111111-1111-4111-8111-111111111111', 'principal_kind': 'registered', 'display_name': 'Test Requester',
@@ -408,6 +457,7 @@ p.write_text(json.dumps(doc))
             self.assertEqual(text[located['byte_start']:located['byte_start'] + located['byte_length']].decode(), result)
             self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id
             self.assertEqual(document['claims'][0]['proposition'], proposition_id)                   # and so does the requester's claim
+            self.assertEqual(document['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])   # with its triple
             self.assertEqual(summary['account_id'], document['scientific_accounts'][0]['id'])
             self.assertNotEqual(summary['account_id'], assembled['scientific_accounts'][0]['id'])    # the deposit id is the only public one
             self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('Later, glucose', json.dumps(document))
@@ -420,7 +470,8 @@ p.write_text(json.dumps(doc))
             data, texts = agent_account.stored(work, record)
             kept = json.loads(data)
             self.assertEqual(record['account_id'], kept['scientific_accounts'][0]['id'])
-            self.assertEqual(record['requested_claims'], [{'statement': claim_text, 'assessed': True, 'claim_ids': [kept['claims'][0]['id']]}])
+            self.assertEqual(record['requested_claims'], [{'statement': claim_text, 'assessed': True, 'claim_ids': [kept['claims'][0]['id']]},
+                                                          {'statement': plain_text, 'assessed': False, 'claim_ids': []}])
             self.assertEqual(list(texts), [kept['files'][[node['id'] for node in kept['files']].index(kept['value_locators'][0]['file'])]['sha256']])
             self.assertTrue((work / 'attempt-1/validation-1.json').is_file())
             shown = agent_account.public(record, {'status': 'not_configured'})
@@ -437,7 +488,7 @@ p.write_text(json.dumps(doc))
             self.assertEqual(named_document['scientific_accounts'][0]['was_attributed_to'], [named_document['persons'][0]['id']])
             # A claim the requester asked about and the agent did not assess is reported, not invented.
             other = agent_account.requested_claims([*account['claims'], {'statement': 'An unassessed claim.', 'proposition_id': 'dapper:Proposition.x'}], kept)
-            self.assertEqual(other[1], {'statement': 'An unassessed claim.', 'assessed': False, 'claim_ids': []})
+            self.assertEqual(other[-1], {'statement': 'An unassessed claim.', 'assessed': False, 'claim_ids': []})
             # Bytes that changed after the check are refused at commit.
             saved_bytes = (work / record['document']['path']).read_bytes()
             (work / record['document']['path']).write_bytes(b'{}')

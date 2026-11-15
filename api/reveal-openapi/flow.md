@@ -563,4 +563,4 @@ Fetch the account a deliverable scientific_account agent job returned, and the p
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 98 operations and all 123 exchanges. OpenAPI SHA-256: `588115fcd9decfb12353ca6c6af4b76a2a226492438bb74b4c2ef0318c302c41`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 98 operations and all 123 exchanges. OpenAPI SHA-256: `691e4633f6a3859d673d38ed0885a193c857315ed4ed2589a83b8ea797af2128`. No endpoints or payloads were changed to build this diagram.

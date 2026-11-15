@@ -38,14 +38,20 @@ def legacy_input(value):
             'limits': {key: value['limits'][key] for key in box_agent.LEGACY_LIMIT_KEYS}}
 
 
+TRIPLE = {'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:genetically_associated_with', 'object_entity': 'MONDO:0005148'}
+
+
 def fake_account(question, claims):
     """Stands in for agent_account.build, which mints with the pinned DAPPER snapshot."""
     gap = {'id': 'dapper:KnowledgeGap.' + 'G' * 32, 'text': question, 'gap_description': 'test'}
-    propositions = [{'id': 'dapper:Proposition.' + format(index, '032d'), 'statement': claim} for index, claim in enumerate(claims)]
-    return {'question': question, 'claims': [{'statement': node['statement'], 'proposition_id': node['id']} for node in propositions],
+    propositions = [{'id': 'dapper:Proposition.' + format(index, '032d'), **claim} for index, claim in enumerate(claims)]
+    return {'question': question,
+            'claims': [{'statement': node['statement'], 'proposition_id': node['id'], **{slot: node[slot] for slot in box_agent.TRIPLE_SLOTS if slot in node}}
+                       for node in propositions],
             'package': {'package_version': 'reveal.evidence-package/0.2-draft', 'dapper_pin': {'snapshot_sha256': 'a' * 64},
                         'selection': {'knowledge_gap_id': gap['id']}, 'source_artifacts': {},
-                        'dapper_context': {'knowledge_gaps': [gap], **({'propositions': propositions} if propositions else {})}}}
+                        'dapper_context': {'knowledge_gaps': [gap], 'prefixes': {'biolink': 'https://w3id.org/biolink/vocab/'},
+                                           **({'propositions': propositions} if propositions else {})}}}
 
 
 def account_job(**body):
@@ -177,10 +183,18 @@ def test_an_account_job_freezes_the_question_claims_and_package_and_a_closed_san
     ({'allowed_domains': ['eutils.ncbi.nlm.nih.gov']}, 'restricted network'),
     ({'literature': False}, 'needs literature: true'),
     ({'claims': 'one claim'}, 'claims must be a list'),
-    ({'claims': ['x'] * 21}, 'at most 20 statements'),
+    ({'claims': ['x'] * 21}, 'at most 20 claims'),
     ({'claims': ['same', ' same ']}, 'claims must be distinct'),
+    ({'claims': ['same', {'statement': 'same', **TRIPLE}]}, 'claims must be distinct'),
     ({'claims': ['']}, 'each claim must be nonblank'),
     ({'claims': ['x' * 1001]}, 'each claim must be nonblank'),
+    ({'claims': [{'subject_entity': 'HGNC.SYMBOL:LEPR'}]}, 'each claim must be nonblank'),
+    ({'claims': [7]}, 'each claim is a statement, or an object'),
+    ({'claims': [{'statement': 'c', 'subject': 'HGNC.SYMBOL:LEPR'}]}, 'each claim is a statement, or an object'),
+    ({'claims': [{'statement': 'c', 'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects'}]}, 'give all three or none'),
+    ({'claims': [{'statement': 'c', **TRIPLE, 'object_entity': 'type 2 diabetes'}]}, 'object_entity must be a CURIE or an absolute URI'),
+    ({'claims': [{'statement': 'c', **TRIPLE, 'subject_entity': 'LEPR'}]}, 'subject_entity must be a CURIE or an absolute URI'),
+    ({'claims': [{'statement': 'c', **TRIPLE, 'relation': 'biolink:' + 'x' * 300}]}, 'relation must be a CURIE or an absolute URI'),
     ({'deliverable': 'report'}, 'deliverable must be'),
 ])
 def test_account_jobs_reject_what_would_break_the_closed_sandbox_or_the_account(body, message):
@@ -907,13 +921,15 @@ def test_an_account_job_is_queued_with_minted_nodes_and_its_requester_beside_the
     gap = package['dapper_context']['knowledge_gaps'][0]
     assert gap['text'] == inputs['account']['question'] and 'not a knowledge gap curated' in gap['gap_description']
     assert package['dapper_context']['propositions'] == [{'id': claims[0]['proposition_id'], 'statement': claims[0]['statement']}]
+    assert set(claims[0]) == {'statement', 'proposition_id'}     # a plain statement gets no structured form
     # The ids are real DAPPER addresses under the pinned snapshot, and the same request mints the same nodes.
     from reveal_backend import agent_account
     from reveal_backend.acceptance import public_runtime
     runtime = public_runtime()
     assert runtime.compute_id({k: v for k, v in gap.items() if k != 'id'}, 'KnowledgeGap', runtime.schema) == gap['id']
     assert package['dapper_pin']['snapshot_sha256'] == runtime.manifest['snapshot_sha256']
-    assert {**agent_account.build(inputs['account']['question'], [claims[0]['statement']]), 'attribute_requester': False} == inputs['account']
+    assert {**agent_account.build(inputs['account']['question'], [{'statement': claims[0]['statement']}]), 'attribute_requester': False} == inputs['account']
+    assert package['dapper_context']['prefixes'] == agent_account.PREFIXES
     # Who asked is frozen beside the input, never in it: the input is what the Box, and so the agent, can read.
     assert queue['attribution']['user_id'] == service.users['registered'] and queue['attribution']['principal_kind'] == 'registered'
     assert 'attribution' not in inputs and service.users['registered'] not in canonical_json(inputs).decode()
@@ -1031,3 +1047,90 @@ def test_admin_limit_changes_are_validated_fenced_and_need_their_own_authority(s
         assert request(path, headers=admin_headers(token='wrong' * 8)).status_code == 403
     with service.repo.read_transaction() as tx:
         assert tx.get('agent_limits', 'current')['version'] == 2
+
+
+def test_a_claim_may_carry_its_triple_and_it_is_frozen_on_the_claim_and_its_proposition():
+    value = account_job(claims=['A statement only.', {'statement': ' LEPR is associated with type 2 diabetes. ', **TRIPLE}])
+    plain, structured = value['account']['claims']
+    assert set(plain) == {'statement', 'proposition_id'}
+    assert structured == {'statement': 'LEPR is associated with type 2 diabetes.', 'proposition_id': structured['proposition_id'], **TRIPLE}
+    node = value['account']['package']['dapper_context']['propositions'][1]
+    assert node == {'id': structured['proposition_id'], 'statement': structured['statement'], **TRIPLE}
+    assert box_agent.validate_input(value) == value
+    # The frozen claim and the package node must agree on the triple, and a frozen triple is all three terms.
+    for change in (lambda v: v['account']['claims'][1].update(object_entity='MONDO:0000001'),
+                   lambda v: v['account']['claims'][1].pop('relation'),
+                   lambda v: v['account']['package']['dapper_context']['propositions'][0].update(TRIPLE),
+                   lambda v: v['account']['package']['dapper_context'].update(prefixes={'biolink': 'not a url'})):
+        broken = json.loads(json.dumps(value)); change(broken)
+        with pytest.raises(box_agent.AgentInputError):
+            box_agent.validate_input(broken)
+
+
+def test_a_requested_triple_is_minted_into_the_proposition_and_an_unknown_prefix_is_refused():
+    from reveal_backend import agent_account
+    from reveal_backend.acceptance import public_runtime
+    runtime = public_runtime()
+    plain = box_agent.claim_entry('LEPR is associated with type 2 diabetes.')
+    structured = box_agent.claim_entry({'statement': 'LEPR is associated with type 2 diabetes.', **TRIPLE})
+    built = agent_account.build('Is LEPR a type 2 diabetes gene?', [structured])
+    node = built['package']['dapper_context']['propositions'][0]
+    assert {slot: node[slot] for slot in box_agent.TRIPLE_SLOTS} == TRIPLE == {slot: built['claims'][0][slot] for slot in box_agent.TRIPLE_SLOTS}
+    assert runtime.compute_id({k: v for k, v in node.items() if k != 'id'}, 'Proposition', runtime.schema) == node['id']
+    # The triple is part of what the id addresses: the same statement without it is another Proposition.
+    assert agent_account.build('Is LEPR a type 2 diabetes gene?', [plain])['claims'][0]['proposition_id'] != node['id']
+    assert built['package']['dapper_context']['prefixes'] == agent_account.PREFIXES
+    for slot, value in (('subject_entity', 'GENE:LEPR'), ('relation', 'associated_with:x'), ('object_entity', 'T2D:1')):
+        with pytest.raises(box_agent.AgentInputError, match=slot + '.*prefix REVEAL knows'):
+            agent_account.build('q?', [box_agent.claim_entry({'statement': 's', **TRIPLE, slot: value})])
+    # Absolute URIs and the pinned release's own prefixes need no declaration.
+    agent_account.build('q?', [box_agent.claim_entry({'statement': 's', 'subject_entity': 'https://identifiers.org/hgnc:6554',
+                                                      'relation': 'obo:RO_0002610', 'object_entity': 'KPN.TRAIT:0000505'})])
+
+
+def test_the_lint_asks_for_a_triple_where_a_proposition_has_none_and_never_fails_for_it():
+    from reveal_backend import box_remote
+    requested = [{'id': 'dapper:Proposition.' + 'a' * 32, 'statement': 'Requested, text only.'},
+                 {'id': 'dapper:Proposition.' + 'b' * 32, 'statement': 'Requested, structured.', **TRIPLE}]
+    package = {'dapper_context': {'propositions': requested}}
+    document = {'propositions': [{'id': 'urn:draft:prop-1', 'statement': 'Mine, text only.'},
+                                 {'id': 'urn:draft:prop-2', 'statement': 'Mine, structured.', **TRIPLE},
+                                 {'id': 'urn:draft:prop-3', 'statement': 'Requested, text only.', **TRIPLE}],
+                'claims': [{'id': 'urn:draft:claim-1', 'proposition': requested[0]['id']},
+                           {'id': 'urn:draft:claim-2', 'proposition': requested[0]['id']},
+                           {'id': 'urn:draft:claim-3', 'proposition': requested[1]['id']},
+                           {'id': 'urn:draft:claim-4', 'proposition': 'urn:draft:prop-2'}]}
+    found = box_remote.triple_findings(document, package)
+    assert [(f['where'], f['message']) for f in found] == [('propositions[0]', box_remote.TRIPLE_OWN),
+                                                           ('claims[0].proposition', box_remote.TRIPLE_REQUESTED)]
+    assert all(f['severity'] == 'suggestion' and f['check'] == 'proposition-triple' for f in found)
+    # Fixed text: nothing from the draft is repeated, so the message reaches the agent as written.
+    assert not any(node['statement'] in f['message'] for f in found for node in document['propositions'])
+    assert box_remote.triple_findings({'propositions': 'not a list', 'claims': None}, {}) == []
+    from reveal_backend.authoring_structure import _normalized_finding
+    assert _normalized_finding(found[0])['message'] == box_remote.TRIPLE_OWN
+
+
+def test_a_requested_claim_restated_with_a_triple_still_counts_as_assessed():
+    from reveal_backend import agent_account
+    requested = [{'statement': 'Requested, text only.', 'proposition_id': 'dapper:Proposition.' + 'a' * 32},
+                 {'statement': 'Requested, never assessed.', 'proposition_id': 'dapper:Proposition.' + 'b' * 32}]
+    restated = {'id': 'dapper:Proposition.' + 'c' * 32, 'statement': 'Requested, text only.', **TRIPLE}
+    document = {'propositions': [restated], 'claims': [{'id': 'dapper:Claim.' + 'd' * 32, 'proposition': restated['id']}]}
+    assert agent_account.requested_claims(requested, document) == [
+        {'statement': 'Requested, text only.', 'assessed': True, 'claim_ids': ['dapper:Claim.' + 'd' * 32]},
+        {'statement': 'Requested, never assessed.', 'assessed': False, 'claim_ids': []}]
+
+
+def test_the_api_accepts_structured_claims_and_refuses_a_partial_or_unresolvable_triple(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
+    ask = dict(prompt='Build the account.', deliverable='scientific_account', question='Is LEPR a type 2 diabetes gene?')
+    created = post_agent(service, **ask, claims=['A statement only.', {'statement': 'LEPR is associated with type 2 diabetes.', **TRIPLE}])
+    assert created.status_code == 202, created.text
+    with service.repo.read_transaction() as tx:
+        claims = tx.get('queue', created.json()['id'])['data']['inputs']['account']['claims']
+    assert set(claims[0]) == {'statement', 'proposition_id'} and {slot: claims[1][slot] for slot in box_agent.TRIPLE_SLOTS} == TRIPLE
+    for bad in ({'statement': 's', 'subject_entity': 'HGNC.SYMBOL:LEPR'}, {'statement': 's', **TRIPLE, 'object_entity': 'T2D:1'},
+                {'statement': 's', **TRIPLE, 'subject': 'x'}, {**TRIPLE}):
+        refused = post_agent(service, **ask, claims=[bad])
+        assert refused.status_code == 422, (bad, refused.text)

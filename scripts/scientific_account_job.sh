@@ -12,7 +12,7 @@
 #
 # One HTTP call per step; each call is printed before it runs:
 #   1. GET  {reveal}/v1/me                   check the key and show whose workspace it is
-#   2. POST {claims}/v1/graphql              the candidate genes, with their scores and claim ids (no key)
+#   2. POST {claims}/v1/graphql              the candidate genes, with their scores, claim ids and trait id (no key)
 #   3. POST {reveal}/v1/jobs                 submit the job (the body is printed and saved as request.json)
 #   4. GET  {reveal}/v1/jobs/{id}/events     watch the agent work (agent_job.py --job does the polling)
 #   5. GET  {reveal}/v1/jobs/{id}            read the result; stop unless the account was deposited
@@ -26,7 +26,7 @@
 # stopped. Use a new run directory for a new job.
 #
 # Change what is asked with environment variables (defaults below):
-#   PHENOTYPE, DISEASE, TOP_GENES, PRIOR_MAX, BUDGET_USD, SEARCHES, PAPERS, PAPER_CHARACTERS, TOOL_CALLS,
+#   PHENOTYPE, DISEASE, TOP_GENES, PRIOR_MAX, LEAVE_TO_AGENT, BUDGET_USD, SEARCHES, PAPERS, PAPER_CHARACTERS, TOOL_CALLS,
 #   CLAIMS_API_URL
 set -euo pipefail
 
@@ -37,6 +37,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 PHENOTYPE=${PHENOTYPE:-IBD}                        # the claims repository's phenotype code
 DISEASE=${DISEASE:-inflammatory bowel disease}     # how to name it to the agent
 TOP_GENES=${TOP_GENES:-3}                          # candidates to check, strongest first (at most 20)
+LEAVE_TO_AGENT=${LEAVE_TO_AGENT:-0}                # send the last N claims without a triple, for the agent to supply
 PRIOR_MAX=${PRIOR_MAX:-0.5}                        # keep genes whose gene-set prior is below this
 
 # Limits. A run stopped at its budget, timeout or turn limit returns no account, so the budget is the QA ceiling.
@@ -82,7 +83,7 @@ else
         + "pigeanValidationChallenge(phenotype: $phenotype, where: {prior: {lt: $priorMax}}, "
         + "orderBy: {field: COMBINED, dir: DESC}, topGenes: $topGenes, "
         + "setOrder: {field: BETA_UNCORRECTED, dir: DESC}, setsPerGene: 1, first: 100) { "
-        + "warnings rows { geneAssociation { gene { symbol } combined logBf prior claim { id } } } } }"),
+        + "warnings rows { geneAssociation { gene { symbol } combined logBf prior claim { id triple { object } } } } } }"),
       variables: {phenotype: $phenotype, priorMax: $priorMax, topGenes: $topGenes}
     }' > "$RUN/candidates-query.json"
   jq -r .query "$RUN/candidates-query.json"
@@ -92,25 +93,37 @@ else
   jq -e '.data.pigeanValidationChallenge.rows | length > 0' "$RUN/candidates-response.json" >/dev/null \
     || { echo "The claims repository returned no candidates:" >&2; cat "$RUN/candidates-response.json" >&2; exit 1; }
   jq '[.data.pigeanValidationChallenge.rows[].geneAssociation
-       | {gene: .gene.symbol, combined, direct: .logBf, prior, claim_id: .claim.id}]' \
+       | {gene: .gene.symbol, combined, direct: .logBf, prior, claim_id: .claim.id, trait: .claim.triple.object}]' \
     "$RUN/candidates-response.json" > "$RUN/candidates.json"
+
+  jq -e 'all(.[]; .trait | test("^[A-Za-z][A-Za-z0-9+._-]*:\\S+$"))' "$RUN/candidates.json" >/dev/null \
+    || { echo "A candidate has no trait identifier to build its claim from:" >&2; cat "$RUN/candidates.json" >&2; exit 1; }
 
   # The job: a question, one claim per gene for the agent to assess for or against, and how to do the work.
   # attribute_requester is left out, so the account does not name you: it is attributed to the
   # "REVEAL Mechanisms agent service" organization. Add "attribute_requester": true to be named as a Person.
-  jq --arg disease "$DISEASE" --arg phenotype "$PHENOTYPE" --arg priorMax "$PRIOR_MAX" \
+  jq --arg disease "$DISEASE" --arg phenotype "$PHENOTYPE" --arg priorMax "$PRIOR_MAX" --argjson leave "$LEAVE_TO_AGENT" \
     --argjson budget "$BUDGET_USD" --argjson searches "$SEARCHES" --argjson papers "$PAPERS" \
-    --argjson characters "$PAPER_CHARACTERS" --argjson tool_calls "$TOOL_CALLS" '{
+    --argjson characters "$PAPER_CHARACTERS" --argjson tool_calls "$TOOL_CALLS" 'length as $length_all | def length_all: $length_all; {
       kind: "agent",
       deliverable: "scientific_account",
       question: ("Which of the top PIGEAN candidate genes for \($disease) (\(map(.gene) | join(", "))) "
                  + "have published evidence of a role in the disease?"),
-      claims: map("\(.gene) is associated with \($disease)."),
+      # Each claim carries its structured form, which REVEAL stores on the Proposition: the gene as
+      # HGNC.SYMBOL:<symbol>, and the trait id that the repository claim uses (for IBD, KPN.TRAIT:0000505), so the
+      # account can be found in the repository by that trait id. The last LEAVE_TO_AGENT claims are sent as plain
+      # statements instead, to see the agent supply the triple from the identifiers in the prompt.
+      claims: (to_entries | map(.value as $c
+        | {statement: "\($c.gene) is associated with \($disease)."}
+          + (if .key < (length_all - $leave) then {subject_entity: "HGNC.SYMBOL:\($c.gene)",
+                                                    relation: "biolink:associated_with",
+                                                    object_entity: $c.trait} else {} end))),
       prompt: ("These genes are the top of the claims repository PIGEAN validation challenge for \($disease) "
                + "(\($phenotype)): the strongest combined evidence among genes whose gene-set prior is below "
                + "\($priorMax), so their support is mostly direct GWAS signal. PIGEAN scores are on a log scale.\n\n"
-               + (map("- \(.gene): combined \(.combined), direct GWAS \(.direct), gene-set prior \(.prior); "
-                      + "repository claim \(.claim_id)") | join("\n"))
+               + (map("- \(.gene) (HGNC.SYMBOL:\(.gene)): combined \(.combined), direct GWAS \(.direct), gene-set prior "
+                      + "\(.prior); repository claim \(.claim_id)") | join("\n"))
+               + "\n\nIn the claims repository \($disease) is \(.[0].trait)."
                + "\n\nFor each gene, find out from published studies whether it has a role in \($disease), "
                + "including Crohn disease and ulcerative colitis where relevant: human genetics, expression in "
                + "patient tissue, or functional work in cells or animal models. Assess each claim for or against "

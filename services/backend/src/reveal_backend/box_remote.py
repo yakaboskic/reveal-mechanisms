@@ -359,6 +359,8 @@ def lint_tool(filename, ledger):
                 report['valid'] = False
                 if isinstance(report.get('counts'), dict):
                     report['counts'] = {**report['counts'], 'errors': report['counts'].get('errors', 0) + len(located)}
+            # A Proposition without a triple is valid. The agent is asked for one where it can give it (advisory only).
+            report['advisories'] = [*report.get('advisories', []), *triple_findings(document, decode(Path(evidence_path).read_bytes()))]
         timing.phase('diagnostic_report')
         return timing.feedback(diagnostic_response(report, output=OUTPUT, filename=filename,
             capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
@@ -394,6 +396,42 @@ def account_workspace(work, project, lock, agent_input, runtime):
                     'deliverable': 'scientific_account'})
     runtime['derived_input_views'] = {str(path.relative_to(work)): hashlib.sha256(path.read_bytes()).hexdigest()
                                       for path in (work / ACCOUNT_SKILL_PATH, folder / 'authoring-schema-excerpt.yaml', work / ACCOUNT_REQUEST_FILENAME)}
+
+
+TRIPLE_CHECK = 'proposition-triple'
+TRIPLE_OWN = ('This Proposition has no subject_entity, relation and object_entity. Add all three if you can name both ends with '
+              'identifiers from the request, a claims-repository record or a paper you read (a human gene is HGNC.SYMBOL:<symbol>; '
+              'a relation is a biolink predicate such as biolink:associated_with). Leave it as text if you cannot: do not '
+              'recall an identifier from memory.')
+TRIPLE_REQUESTED = ("This Claim is about a requester's Proposition that has no subject_entity, relation and object_entity. If you "
+                    'can state them, add a Proposition with exactly the same statement plus all three, and point this Claim '
+                    "and its evidence at it. REVEAL still reports the requester's claim as assessed.")
+
+
+def triple_findings(document, package):
+    """Advisories asking for the structured form of a Proposition where it is missing: for each Proposition the draft
+    writes without one, and for each requester Proposition without one that a Claim is about. A text-only Proposition
+    stays valid, so these never fail a lint. The messages are fixed text and quote nothing from the draft."""
+    from .box_agent import TRIPLE_SLOTS
+
+    def bare(node):
+        return not any(node.get(slot) for slot in TRIPLE_SLOTS)
+
+    def advisory(where, message):
+        return {'severity': 'suggestion', 'check': TRIPLE_CHECK, 'where': where, 'message': message}
+    context = package.get('dapper_context') if isinstance(package.get('dapper_context'), dict) else {}
+    requested = {node.get('id'): node for node in context.get('propositions', []) if isinstance(node, dict)}
+    propositions = document.get('propositions') if isinstance(document.get('propositions'), list) else []
+    claims = document.get('claims') if isinstance(document.get('claims'), list) else []
+    found = [advisory(f'propositions[{index}]', TRIPLE_OWN) for index, node in enumerate(propositions)
+             if isinstance(node, dict) and node.get('id') not in requested and bare(node)]
+    seen = set()
+    for index, claim in enumerate(claims):
+        target = claim.get('proposition') if isinstance(claim, dict) else None
+        if isinstance(target, str) and target in requested and target not in seen and bare(requested[target]):
+            seen.add(target)
+            found.append(advisory(f'claims[{index}].proposition', TRIPLE_REQUESTED))
+    return found
 
 
 # Lint feedback drops a finding's message unless the finding names a `rule` (authoring_structure._normalized_finding):

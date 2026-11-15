@@ -76,10 +76,15 @@ def request_body(args):
     if args.literature: body['literature'] = True
     if args.question:
         body.update(deliverable='scientific_account', question=args.question)
-        if args.claim: body['claims'] = args.claim
+        claims = list(args.claim or [])
+        if args.claims_file:
+            listed = json.loads(Path(args.claims_file).read_text())
+            if not isinstance(listed, list): sys.exit('--claims-file must hold a JSON list of claims.')
+            claims += listed
+        if claims: body['claims'] = claims
         if args.attribute_requester: body['attribute_requester'] = True
-    elif args.claim or args.attribute_requester:
-        sys.exit('--claim and --attribute-requester belong to a Scientific Account job: pass --question as well.')
+    elif args.claim or args.claims_file or args.attribute_requester:
+        sys.exit('--claim, --claims-file and --attribute-requester belong to a Scientific Account job: pass --question as well.')
     if args.claims_repository is not None: body['claims_repository'] = args.claims_repository
     for name in ('network', 'effort', 'model'):
         if getattr(args, name): body[name] = getattr(args, name)
@@ -139,6 +144,9 @@ def main():
     parser.add_argument('--question', help='Return a DAPPER Scientific Account that addresses this question, built from papers '
                                            'the agent reads (sets deliverable scientific_account)')
     parser.add_argument('--claim', action='append', help='With --question: a statement to assess from the literature (repeat)')
+    parser.add_argument('--claims-file', help='With --question: a JSON list of claims. Each is a statement, or an object with '
+                                              'statement and, together, subject_entity, relation and object_entity (CURIEs such '
+                                              'as HGNC.SYMBOL:LEPR, biolink:genetically_associated_with, MONDO:0005148)')
     parser.add_argument('--attribute-requester', action='store_true',
                         help='With --question: name you in the account as the Person it is attributed to (default: not named)')
     parser.add_argument('--claims-repository', action=argparse.BooleanOptionalAction, default=None,

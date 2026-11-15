@@ -120,6 +120,9 @@ ceiling when the run is dispatched. The other limits stay as frozen.
 
 These limits apply to general agent jobs only. Research runs keep their fixed allowances.
 
+An account job's frozen input now carries the CURIE prefixes its triples may use, and a claim's triple when one was
+sent. A worker from before that change refuses such an input, so the same rule applies: workers first, or both together.
+
 **Deploy the workflow workers before the API, or both together.** The API freezes new jobs as `reveal.agent-input/2`. A worker from before this change accepts only `/1` and fails such a job at prepare. The newer worker runs both: a `/1` job already queued keeps the built-in tool and literature allowances. Rolling a worker back while `/2` jobs are queued fails them.
 
 Not adjustable, because they bound a single response or the sandbox, not how much work a run may do: 12,000
@@ -152,9 +155,47 @@ deposits it in the claims repository.
 | Field | Notes |
 |---|---|
 | `question` | Required, up to 2,000 characters. It becomes the account's question, recorded as supplied by the requester (it is not a curated knowledge gap). |
-| `claims` | Optional, up to 20 statements of up to 1,000 characters. Each becomes a fixed Proposition. The agent assesses it from what it reads, for or against, and cannot reword it. |
+| `claims` | Optional, up to 20 claims. Each is a statement of up to 1,000 characters, or an object that adds the statement's structured form (see [proposition triples](#proposition-triples)). Each becomes a fixed Proposition. The agent assesses it from what it reads, for or against, and cannot reword it. Statements must be distinct. |
 | `attribute_requester` | Optional, default `false`. Set it to `true` to be named in the account as the `Person` it is attributed to. See [who the account names](#who-the-account-names). |
 | `prompt` | Still required: how you want the work done. |
+
+### Proposition triples
+
+A DAPPER Proposition can say the same thing twice: in words (`statement`) and as `subject_entity`, `relation` and
+`object_entity`, which is the form others can search and join on. REVEAL asks for the triple wherever it can be given.
+
+**From you.** Send a claim as an object and its Proposition is stored with the triple, exactly as given:
+
+```json
+"claims": [{"statement": "LITAF is associated with inflammatory bowel disease.",
+            "subject_entity": "HGNC.SYMBOL:LITAF",
+            "relation": "biolink:associated_with",
+            "object_entity": "KPN.TRAIT:0000505"}]
+```
+
+Make the triple say what the statement says: the agent assesses the statement, and its verdict is stored against both.
+
+The three go together: all or none. Each is a CURIE or an absolute URI of at most 300 characters. A CURIE's prefix
+must be one the pinned DAPPER release declares (`MONDO`, `HGNC`, `KPN.TRAIT`, `obo`, `CL`, ...) or `HGNC.SYMBOL` or
+`biolink`; a request with any other prefix is refused with `422`, and the message lists the prefixes. This is the
+reliable way to get a triple, because you know which identifiers your own system uses. The triple is part of what
+the Proposition's id addresses: the same statement with and without it is two Propositions.
+
+**From the agent.** For a Proposition it writes itself, and for a claim you sent as a plain statement, the agent is
+told to add the triple when it can name both ends with identifiers it was given: in the request, in your prompt, in
+a claims-repository record, or printed in a paper it read. Human genes are `HGNC.SYMBOL:<symbol>` and relations are
+biolink predicates. It is told not to recall an ontology number from memory, so a Proposition whose ends it cannot
+identify stays text. Its `lint_account` tool lists each Proposition without a triple as a `proposition-triple`
+advisory. That is a reminder and never fails the account: a text-only Proposition is valid DAPPER.
+
+When the agent adds a triple to a claim you sent as a plain statement, it writes a Proposition with your exact
+statement plus the triple and makes its Claim about that one. `requested_claims` still reports your claim as assessed.
+
+Triples are stored as you gave them: CURIEs stay CURIEs (`HGNC.SYMBOL:LITAF`), and the deposit does not carry a prefix
+map. The claims repository's own PIGEAN Propositions name a gene by bare symbol (`LITAF`) and use the predicate
+`associated_with`, so an account joins to them by the trait id today, not by gene or predicate.
+
+`scripts/agent_job.py --claims-file claims.json` sends a JSON list of such claims.
 
 What is different about such a job:
 

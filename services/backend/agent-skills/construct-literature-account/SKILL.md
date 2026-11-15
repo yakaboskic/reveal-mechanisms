@@ -7,7 +7,8 @@ questions while you work; decide and finish.
 ## What you have
 
 - `account-request.json`: the question (`question_id` is its fixed DAPPER id), the requester's claims as fixed
-  Propositions (`claims[].proposition_id`), and this run's limits.
+  Propositions (`claims[].proposition_id`, with `subject_entity`, `relation` and `object_entity` when the requester
+  gave them), and this run's limits.
 - `mcp__reveal__search_papers` and `mcp__reveal__read_paper`: Europe PMC. A read returns the abstract unless you pass
   `source: "PMC"`, the paper's PMC id and `section: "full_text"` (open-access papers only). Page with `offset` /
   `next_offset`. Each result ends with a capture descriptor and a `run_budget`; watch the budget.
@@ -46,7 +47,9 @@ for new objects (for example `urn:draft:claim-1`); REVEAL assigns the real ids. 
   "files": [ { "id": "<file.id from the capture descriptor>", "filename": "…", "mime_type": "application/json",
                "sha256": "…", "size_in_bytes": 0 } ],
   "propositions": [ { "id": "urn:draft:prop-1", "statement": "One checkable statement.",
-                      "proposition_kind": "BIOLOGICAL_INTERPRETATION" } ],
+                      "proposition_kind": "BIOLOGICAL_INTERPRETATION",
+                      "subject_entity": "HGNC.SYMBOL:LEPR", "relation": "biolink:affects",
+                      "object_entity": "<an identifier you were given or read>" } ],
   "evidence_items": [ { "id": "urn:draft:evidence-1", "target_proposition": "urn:draft:prop-1",
                         "direction": "SUPPORTS",
                         "snippet": "A verbatim quote from the text read_paper returned.",
@@ -76,9 +79,21 @@ Rules the linter and REVEAL enforce:
 - **Every Claim needs evidence**, and each EvidenceItem's `target_proposition` must be its Claim's `proposition`.
   `direction` is `SUPPORTS`, `DISPUTES`, `MIXED` or `NEUTRAL`. Report contradicting evidence as `DISPUTES`; an empty
   search is a coverage limit, not evidence of absence.
+- **Give each Proposition its triple when you can.** `subject_entity`, `relation` and `object_entity` say the same
+  thing as the statement in a form others can search and join: all three or none, each a CURIE or an absolute URI.
+  A human gene is `HGNC.SYMBOL:<symbol>`. A relation is a biolink predicate, for example `biolink:associated_with`,
+  `biolink:genetically_associated_with`, `biolink:affects`, `biolink:regulates`, `biolink:contributes_to` or
+  `biolink:causes`. For a disease, trait, process, cell type or anything else, use an identifier you were given: in
+  `account-request.json`, in the requester's prompt, in a claims-repository record, or printed in a paper you read
+  (`KPN.TRAIT:…`, `MONDO:…`, `CL:…`, `obo:GO_…`). Do not recall an ontology number from memory: a wrong identifier is
+  worse than none. If you cannot name both ends this way, leave the triple out and keep the Proposition as text.
+  `lint_account` lists each Proposition without a triple as a `proposition-triple` advisory; it is a reminder, not
+  an error.
 - **The requester's claims.** To assess one, write a Claim whose `proposition` is that claim's `proposition_id` from
-  `account-request.json`, with evidence from what you read. Do not restate or reword it as a new Proposition. If you
-  found nothing that bears on it, leave it out and say so in your final message.
+  `account-request.json`, with evidence from what you read. Do not reword it. When the requester's claim has no
+  triple and you can state one by the rule above, write a Proposition with exactly the same `statement` plus the
+  triple, and make your Claim and its evidence about that Proposition instead; REVEAL reports the requester's claim
+  as assessed either way. If you found nothing that bears on a claim, leave it out and say so in your final message.
 - **The question.** `question` is exactly `question_id`. Do not write a KnowledgeGap or Question object.
 - **Do not invent** bibliographic details, numbers or passages. If the papers do not answer the question, say so in
   `closing_remarks` and keep the claims you can support.
