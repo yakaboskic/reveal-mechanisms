@@ -203,6 +203,11 @@ The job result gains an `account` block, and `response` is the agent's short rep
 
 `scripts/agent_job.py --question … --claim … --account-out account.json` does all of this from a terminal.
 
+`scripts/scientific_account_job.sh <key.json> <run-directory>` is a worked example that prints every HTTP call: it takes
+candidate genes from the claims repository's validation-challenge query, submits the job with one claim per gene, and
+reads the deposit back from the repository. Each successful run is a permanent deposit; reusing a run directory resumes
+the same job.
+
 ### Deposit
 
 When the job succeeds REVEAL sends the whole document to the claims repository in one request
