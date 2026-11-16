@@ -12,12 +12,15 @@ FILE_INPUT_FORMAT = 'reveal.file-backed-evidence/2'
 FILE_INPUT_FILENAME = 'evidence-input.json'
 KIT_V2, KIT_V3, KIT_V4 = 'reveal.research-authoring-kit/2', 'reveal.research-authoring-kit/3', 'reveal.research-authoring-kit/4'
 KIT_V5 = 'reveal.research-authoring-kit/5'
-PINNED_KITS = (KIT_V2, KIT_V3, KIT_V4, KIT_V5)
+# A v3.1 kit is a v3 kit whose author quotes each source and says what was asked, and never names a File, checksum or
+# locator: REVEAL ties each quote to its source (source_validation.bind_sources). v3 prompts keep their exact bytes.
+# It is the kit of the QA release branch, which has no v4; this branch knows it so the name means one prompt everywhere.
+KIT_V3_1 = 'reveal.research-authoring-kit/3.1'
+PINNED_KITS = (KIT_V2, KIT_V3, KIT_V3_1, KIT_V4, KIT_V5)
 # A v3 kit adds the claim-structure reference and its prompt guidance; v2 kits keep their exact bytes. A v4 kit adds the
-# release gene set-trait betas and factor-trait links to that guidance; v3 prompts keep their exact bytes. A v5 kit
-# asks the author to quote each source and say what was asked, and never to name a File, checksum or locator: REVEAL
-# ties each quote to its source (source_validation.bind_sources). v4 prompts keep their exact bytes.
-CLAIM_STRUCTURE_KITS, RELEASE_KITS, QUOTE_KITS = (KIT_V3, KIT_V4, KIT_V5), (KIT_V4, KIT_V5), (KIT_V5,)
+# release gene set-trait betas and factor-trait links to that guidance; v3 prompts keep their exact bytes. A v5 kit is a
+# v4 kit that cites by quotation, as v3.1 is to v3; v4 prompts keep their exact bytes.
+CLAIM_STRUCTURE_KITS, RELEASE_KITS, QUOTE_KITS = (KIT_V3, KIT_V3_1, KIT_V4, KIT_V5), (KIT_V4, KIT_V5), (KIT_V3_1, KIT_V5)
 CLAIM_STRUCTURE_PATH = 'docs/evidence-claim-structure.md'
 
 
@@ -159,9 +162,9 @@ Keep public narration brief: short progress updates at meaningful transitions, t
     return instructions + representation
 
 
-# A v5 prompt is the v4 prompt with every instruction to track a source File, checksum or locator restated as: quote
-# the source and say what was asked. Each pair is (the v4 wording, the v5 wording); the v4 text itself is never edited,
-# so a frozen v4 dispatch still validates against the prompt it was measured with.
+# A kit that cites by quotation gets its base kit's prompt with every instruction to track a source File, checksum or
+# locator restated as: quote the source and say what was asked. Each pair is (the earlier wording, the new wording); the
+# earlier text itself is never edited, so a frozen earlier dispatch still validates against the prompt it was measured with.
 QUOTE_WORDING = (
     ('Preserve all scientific identities, values, source locators and coverage qualifications.',
      'Preserve all scientific identities, values and coverage qualifications.'),

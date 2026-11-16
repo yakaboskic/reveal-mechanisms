@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from reveal_backend.dapper_release import prepare_agent_workspace
-from reveal_backend.dispatch_view import (CLAIM_STRUCTURE_PATH, KIT_V2, KIT_V3, KIT_V4, KIT_V5, QUOTE_WORDING, file_input_manifest, pinned_claim_structure_sha256,
+from reveal_backend.dispatch_view import (CLAIM_STRUCTURE_PATH, KIT_V2, KIT_V3, KIT_V3_1, KIT_V4, KIT_V5, QUOTE_WORDING, file_input_manifest, pinned_claim_structure_sha256,
                                           pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256, research_prompt, validate_file_input)
 from reveal_backend.authoring_contract import SKELETON_PATH
 from reveal_backend.evidence_package import canonical_json, EvidenceBuildError, sha256
@@ -205,6 +205,24 @@ class AuthoringPinTests(unittest.TestCase):
         for old, new in QUOTE_WORDING:
             self.assertIn(old, every_v4)
             self.assertNotIn(old, new)
+
+    # The QA release branch has no v4: its quotation kit is v3.1. The same hashes are pinned there, so the name means
+    # one prompt on both branches and a seed frozen on QA still validates when this branch is released.
+    V3_1_PROMPTS = {(False, False, False): '85bf2a500b47fb9f9bfcbcc3b8e5e2f850953f3c266206fb43fc3e193e5d93f5',
+                    (False, True, False): 'b9572be783fe43adc4f6be14c1086e20521587077f7fc9372d5ae1c0b863995e',
+                    (True, False, False): '263e221ac09187e6ded636f43437b2a7680949fb472bef88942633ef11c2f3f2',
+                    (True, False, True): '05e1bec0ff03220b196f91600fc00343adf066e8e4478af9e49bb0ddb1bf4b6a',
+                    (True, True, False): '641e0005e7858777a13668dc93dc5a1f8162bedc356e1923c9642ac554cb3808',
+                    (True, True, True): 'c801eebaf68a22e59798e62bbd18a8c1ff6ad5c5f198fe60109965196962467c'}
+
+    def test_v3_1_kit_is_the_v3_prompt_citing_by_quotation_with_the_bytes_the_release_branch_pins(self):
+        arguments = dict(skeleton_sha256='e'*64, claim_structure_sha256='c'*64,
+                         contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
+        for (progressive, graph, audit), expected in self.V3_1_PROMPTS.items():
+            prompt = research_prompt(['prokn'] if graph else [], kit_version=KIT_V3_1, progressive=progressive, lightning_audit=audit, **arguments)
+            self.assertEqual(sha256(prompt.encode()), expected)
+            self.assertNotIn('get_trait_gene_sets', prompt)                  # no v4 release tools
+            self.assertIn('"snippet":"VERBATIM_SOURCE_ROW_OR_PASSAGE"', prompt)
 
     def test_v2_kit_still_installs_without_the_reference_and_keeps_exact_prompt_bytes(self):
         package = self.frozen_kit(KIT_V2, drop_claim_structure=True)
