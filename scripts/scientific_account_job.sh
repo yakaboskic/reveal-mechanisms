@@ -40,7 +40,9 @@ TOP_GENES=${TOP_GENES:-3}                          # candidates to check, strong
 LEAVE_TO_AGENT=${LEAVE_TO_AGENT:-0}                # send the last N claims without a triple, for the agent to supply
 PRIOR_MAX=${PRIOR_MAX:-0.5}                        # keep genes whose gene-set prior is below this
 
-# Limits. A run stopped at its budget, timeout or turn limit returns no account, so the budget is the QA ceiling.
+# Limits. A run stopped at its budget, timeout or turn limit returns no account, so the budget is generous: a
+# three-gene run has cost $1.30 to $2.10. The operator sets each limit's ceiling; a value above one is refused
+# with 422 and the message names the ceiling.
 # The literature allowances grow with TOP_GENES. The first run (three genes, 8 searches) used every search
 # before it could look for each gene's primary studies, so the default is now 4 searches and 3 papers a gene.
 BUDGET_USD=${BUDGET_USD:-5}
