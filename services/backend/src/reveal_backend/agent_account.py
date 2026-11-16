@@ -89,6 +89,25 @@ def requested_claims(requested, document):
     return result
 
 
+def bind(document, ledger_root, calls):
+    """The agent's account with REVEAL's record of each quoted read attached (literature_locator.bind_sources).
+    Raises AccountValidationError, with one literature-quote finding per quote that cannot be tied to a read."""
+    from . import literature_locator as locator
+    from .scientific_account_lint import AccountValidationError
+
+    def refuse(problems):
+        raise AccountValidationError({'report_version': 'reveal.account-lint/1', 'mode': 'final', 'valid': False, 'findings': [
+            {'severity': 'error', 'check': 'literature-quote', 'where': where, 'message': message, 'why': ''} for where, message in problems]})
+    try:
+        papers = locator.paper_texts(ledger_root, calls)
+    except locator.LocatorError as exc:
+        refuse([('ledger', str(exc))])
+    bound, problems = locator.bind_sources(document, papers, locator.captures(calls))
+    if problems:
+        refuse(problems)
+    return bound
+
+
 def accept(root, job, attempt, account, attribution, result, output_dir):
     """Check the one account an agent job wrote and put it in its deposit form. Returns the record to checkpoint.
 
@@ -116,16 +135,20 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
     directory = root / VALIDATED; (directory / 'papers').mkdir(parents=True, exist_ok=True)
     diagnostics = root / f'attempt-{attempt}'; diagnostics.mkdir(exist_ok=True)
     package_path = directory / 'account-package.json'; package_path.write_bytes(canonical_json(account['package']))
+    ledger_path = Path(result.ledger_manifest_path)
+    calls = decode(ledger_path.read_bytes())['calls']
     try:
-        document, report = assemble_account(assert_artifact(chosen[0], output_dir), package_path,
+        # The agent names each paper and quotes it. REVEAL ties every quote to the read that served it, exactly as
+        # the in-sandbox lint did, and checks that copy; a quote it cannot tie to a read fails the account.
+        bound_path = diagnostics / 'account-bound.json'
+        bound_path.write_bytes(canonical_json(bind(decode(assert_artifact(chosen[0], output_dir).read_bytes()), ledger_path.parent, calls)))
+        document, report = assemble_account(bound_path, package_path,
                                             directory / 'account-assembled.json', attribution, job, attempt, 'box',
                                             result.ledger_manifest_path)
     except AccountValidationError as exc:
         (diagnostics / 'validation-1.json').write_bytes(canonical_json(redact(exc.report)))
         raise
     (diagnostics / 'validation-1.json').write_bytes(canonical_json(redact(report)))
-    ledger_path = Path(result.ledger_manifest_path)
-    calls = decode(ledger_path.read_bytes())['calls']
     try:
         deposit, summary = account_deposit.deposit_document(document, ledger_path.parent, calls,
                                                             attribute_requester=account.get('attribute_requester') is True)

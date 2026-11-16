@@ -153,14 +153,14 @@ The claim can summarize additional evidence lines from other methods or knowledg
 
 Lint reports how closely an account follows this structure as advisory `claim_structure` suggestions; it never blocks on them.
 
-**Legacy single-Claim pattern.** Accounts written before the atomic structure, and agents running a historical authoring kit, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. The EvidenceItem links directly to the retained DAPPER File through `was_derived_from`, with the exact named-artifact/row locator in `context` and a verbatim source excerpt in `snippet`; the original JSON retains the structured metric names and values. This pattern remains valid and lint accepts it. The rest of this section and Appendix B describe it.
+**Legacy single-Claim pattern.** Accounts written before the atomic structure, and agents running a historical authoring kit, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. The EvidenceItem quotes the source row verbatim in `snippet` and says in `context` what was asked; REVEAL finds the retained source that holds the row and records the link itself (an author names no file or pointer); the original JSON retains the structured metric names and values. This pattern remains valid and lint accepts it. The rest of this section and Appendix B describe it.
 
 ```text
 Biological Proposition ← assessed by Claim
                             │
                             └─ has_evidence → EvidenceItem
                                                ├─ target_proposition → biological Proposition
-                                               ├─ was_derived_from → retained source File
+                                               ├─ snippet quotes → the source row (REVEAL records the source)
                                                ├─ snippet + context → observation and exact row locator
                                                └─ explanation → how they bear on this Proposition
 ```
@@ -175,7 +175,7 @@ Biological Proposition ← assessed by Claim
 
 ### Template 1: pre-mint DAPPER fragment
 
-This is a **schematic supporting-assessment template** with symbolic G/M/T/V; F is the source identifier for M. The source File and row locator must resolve to the actual result before it can be instantiated. Mechanism identity is supplied by the source mapping, not another evidence Claim.
+This is a **schematic supporting-assessment template** with symbolic G/M/T/V; F is the source identifier for M. The quoted row must be the actual result before it can be instantiated. Mechanism identity is supplied by the source mapping, not another evidence Claim.
 
 ```yaml
 propositions:
@@ -207,9 +207,8 @@ evidence_items:
       in mechanism M for T. F is the source identity of that same mechanism.
       State the inferential assumptions and material counterevidence.
     context: >-
-      Name the exact factor F, trait fit, model V, source artifact and
-      JSON pointer/row locator, and the biological setting of this use.
-    was_derived_from: [urn:example:source-response-file]
+      Name the exact factor F, trait fit and model V, what was asked of
+      which tool, and the biological setting of this use.
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -328,7 +327,7 @@ Source: [gene-set-factor capture](../data/cfde/cad-in-t2d/pigean-gene-set-factor
 
 A complete multi-claim [ScientificAccount YAML packet](../design/data/cad-account/scientific-account.yaml) now instantiates this approach for the HTML design. See its [source boundaries and reproduction guide](../design/data/cad-account/README.md). The fragments below explain the four core templates individually; the full packet also includes explicitly illustrative gene-set membership and KG evidence.
 
-These examples use the legacy single-Claim pattern of §7; [Evidence claim structure](evidence-claim-structure.md) shows the same observations as atomic Claims with a synthesis. Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and points directly to the captured source File. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
+These examples use the legacy single-Claim pattern of §7; [Evidence claim structure](evidence-claim-structure.md) shows the same observations as atomic Claims with a synthesis. Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and quotes the source row; REVEAL records which source holds it. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
 
 The numbers and row locators come from the captures in Appendix A. The biological Claim statements, `SUPPORTS` directions and evidence explanations are **illustrative authored assessments**, not fields returned by CFDE or output from an executed agent. They show the intended modeling without inventing a score threshold or probability. These are unminted design fragments: File, Activity, agent and imported GeneSet dependencies must be supplied before validation and minting.
 
@@ -399,7 +398,6 @@ evidence_items:
       urn:example:gene-factor-response-file; factor_value is a loading.
       The same direct edge in the contextual response is the same
       observation, not independent corroboration.
-    was_derived_from: [urn:example:gene-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -457,7 +455,6 @@ evidence_items:
       urn:example:geneset-factor-response-file; factor_value is a loading.
       The mechanism's current catalog label repeats G1's source name;
       that repeated label is not an additional observation.
-    was_derived_from: [urn:example:geneset-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -510,7 +507,6 @@ evidence_items:
       The row also reports log_bf=2.14 and prior=1.72. These source
       quantities are retained without an invented transformation or
       treatment as independent corroborating observations.
-    was_derived_from: [urn:example:gene-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -569,13 +565,12 @@ evidence_items:
       GeneSet identity currently establishes catalog/import provenance;
       membership and original construction history are not supplied here.
       The source rs_score is retained without an unverified interpretation.
-    was_derived_from: [urn:example:geneset-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
 
 ### Using these examples in a ScientificAccount
 
-The four `*-involvement` Claims are the biological assessments available for `component_claims`. Their numerical observations remain inspectable through EvidenceItems and retained source Files, with no additional source-result Claims in these examples. B1/B2 describe involvement in the same mechanism; B3/B4 assess the gene and gene program at trait level. The account synthesis explains how the selected assessments address the exact selected KnowledgeGap, as described in [ScientificAccount construction](scientific-account-construction.md). These captures alone do not supply a matching gap or the more specific inhibition/amplification and process/readout assessments from the schematic account.
+The four `*-involvement` Claims are the biological assessments available for `component_claims`. Their numerical observations remain inspectable through EvidenceItems and the sources REVEAL retains, with no additional source-result Claims in these examples. B1/B2 describe involvement in the same mechanism; B3/B4 assess the gene and gene program at trait level. The account synthesis explains how the selected assessments address the exact selected KnowledgeGap, as described in [ScientificAccount construction](scientific-account-construction.md). These captures alone do not supply a matching gap or the more specific inhibition/amplification and process/readout assessments from the schematic account.
 
 The same source artifact/row can inform other Propositions through separate target-specific EvidenceItems. The agent can choose the optional source-Claim pattern when separately addressable source assessments are useful, including for selected Proto-OKN assertions. Either form can supply additional evidence targeting an existing biological Proposition; the owning Claim's statement then summarizes the combined assessment. No external-KG result is fabricated in these captured-data examples.

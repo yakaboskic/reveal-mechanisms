@@ -60,9 +60,9 @@ Rules for every atomic Claim:
 
 1. `proposition_kind: RESULT`, with `subject_entity`, `relation` and `object_entity` all set, in the orientation above.
 2. One observation per Claim: one gene or set, one factor or trait, one family. Several metrics of the same row (for example `combined` and `log_bf`, or `phewas_beta` and `phewas_q`) may share one Claim.
-3. `has_score` references a ClaimScore whose `metric` is the exact captured column, whose `value` is the exact captured value, and whose `score_kind` is the kind in the table. Lint checks metric, value and kind against the cited row. Membership has no score.
+3. `has_score` references a ClaimScore whose `metric` is the exact captured column, whose `value` is the exact captured value, and whose `score_kind` is the kind in the table. Lint checks metric, value and kind against the row the evidence quotes. Membership has no score.
 4. The statement states the value exactly, or rounded to at least three significant digits.
-5. The EvidenceItem's `was_derived_from` lists the captured File; set families also list the trusted GeneSet. The exact row locator (for example `` `/result/items/3` ``) goes in `context`, a verbatim excerpt of that row in `snippet`, and the bearing on this Proposition in `explanation`.
+5. The EvidenceItem quotes the source row verbatim in `snippet`, says in `context` what was asked (the tool and the identifier of the factor, trait, gene or gene set, as passed), and gives the bearing on this Proposition in `explanation`. REVEAL finds the result that holds the row and records the link; the author names no file or pointer. Set families list the trusted GeneSet in `was_derived_from`.
 6. Direction is normally `SUPPORTS`: the row is the observation. Missing data is a coverage limitation, never a contradiction.
 7. Only rows that state an association become atomic Claims. A gene set–trait row whose `beta_uncorrected` is exactly 0 is no association, and a phenotype without a KPN trait id has no trait endpoint; lint does not count either as an atomic Claim of its family and never suggests one. A factor–trait link to the factor's own fitted trait (`is_own_trait`) says the link is **within the factor's fit**.
 
@@ -76,7 +76,7 @@ These readers serve a pinned reference release. They are available when the seed
 
 ## 4. Synthesis Claims
 
-Synthesis Claims are `BIOLOGICAL_INTERPRETATION` Claims whose EvidenceItems cite atomic Claims with `source_claims` (no `was_derived_from` is needed). The cited atomic Claims should come from at least two families and form one connected path: the same gene, gene set, factor and trait across them. The synthesis subject must lie on that path.
+Synthesis Claims are `BIOLOGICAL_INTERPRETATION` Claims whose EvidenceItems cite atomic Claims with `source_claims` (and quote no source of their own). The cited atomic Claims should come from at least two families and form one connected path: the same gene, gene set, factor and trait across them. The synthesis subject must lie on that path.
 
 Number new draft IDs at one width once a kind reaches ten (for example `claim-01` … `claim-30`). Trusted minting reads an ID embedded in a longer ID as a reference, so a synthesis `claim-1` citing `claim-10` cannot be minted; lint reports every such ID as a `draft-id-collision` error.
 
@@ -98,11 +98,11 @@ These are targets, not quotas, and are never enforced:
 - at most about twelve atomic Claims per account;
 - at least one gap-relevance synthesis.
 
-Families without relevant evidence are left out; lint names them only as hints. Do not pad with paraphrases or duplicate observations. Snippet and locator fidelity applies to every atomic Claim, so write the first draft early and lint it.
+Families without relevant evidence are left out; lint names them only as hints. Do not pad with paraphrases or duplicate observations. Snippet fidelity applies to every atomic Claim, so write the first draft early and lint it.
 
 ## 6. Template
 
-Draft IDs, symbolic values and omitted trusted bodies make this a pattern, not a document. The trusted draft writer hydrates the Mechanism, GeneSet, File and gap, and declares the prefixes.
+Draft IDs, symbolic values and omitted trusted bodies make this a pattern, not a document. The trusted draft writer hydrates the Mechanism, GeneSet and gap, and declares the prefixes.
 
 ```yaml
 propositions:
@@ -127,8 +127,8 @@ claims:
      has_evidence: [urn:reveal:local:W:D:evidence-2], direction: SUPPORTS, status: proposed, statement: ...}
 evidence_items:
   - {id: urn:reveal:local:W:D:evidence-1, target_proposition: urn:reveal:local:W:D:proposition-1, direction: SUPPORTS,
-     was_derived_from: [dapper:File.CAPTURE], context: 'get_factor_loadings capture `/result/items/0`',
-     snippet: '"loading":0.2502', explanation: ...}
+     context: 'get_factor_loadings for FACTOR_ID, kind=gene',
+     snippet: '{"gene_index":1,"loading":0.2502,"symbol":"G"}', explanation: ...}
   - {id: urn:reveal:local:W:D:evidence-2, target_proposition: urn:reveal:local:W:D:proposition-2, direction: SUPPORTS,
      source_claims: [urn:reveal:local:W:D:claim-1, ...], context: The atomic Claims on the G/S path, explanation: ...}
 ```

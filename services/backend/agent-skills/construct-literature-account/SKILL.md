@@ -11,7 +11,8 @@ questions while you work; decide and finish.
   gave them), and this run's limits.
 - `mcp__reveal__search_papers` and `mcp__reveal__read_paper`: Europe PMC. A read returns the abstract unless you pass
   `source: "PMC"`, the paper's PMC id and `section: "full_text"` (open-access papers only). Page with `offset` /
-  `next_offset`. Each result ends with a capture descriptor and a `run_budget`; watch the budget.
+  `next_offset`. Each result carries a `run_budget`: what you have used of your searches, papers and characters.
+  Watch it.
 - `mcp__reveal__write_account_draft` and `mcp__reveal__lint_account`: save the account and check it. They do not use
   up your paper budget.
 - `account/authoring-schema-excerpt.yaml`: the DAPPER classes and fields you may write.
@@ -20,7 +21,8 @@ questions while you work; decide and finish.
   your Claim is then about the same Proposition. A repository record is an earlier claim, not evidence. Do not cite
   it, and do not treat its absence as a finding.
 
-You have no shell and no other network. Only text returned by `read_paper` in this run can be cited.
+You have no shell and no other network. Only text returned by `read_paper` in this run can be cited. You cite a
+paper by its identifier and a quote; REVEAL links each quote to the paper and records where in it the quote sits.
 
 Quotes are short on purpose. A snippet is 20 to 400 characters from one paragraph and must occur only once in the
 paper; all your snippets from one paper text together may not exceed 4,000 characters, or 40% of a short text such
@@ -44,20 +46,17 @@ for new objects (for example `urn:draft:claim-1`); REVEAL assigns the real ids. 
 
 ```json
 {
-  "files": [ { "id": "<file.id from the capture descriptor>", "filename": "…", "mime_type": "application/json",
-               "sha256": "…", "size_in_bytes": 0 } ],
   "propositions": [ { "id": "urn:draft:prop-1", "statement": "One checkable statement.",
                       "proposition_kind": "BIOLOGICAL_INTERPRETATION",
                       "subject_entity": "HGNC.SYMBOL:LEPR", "relation": "biolink:affects",
                       "object_entity": "<an identifier you were given or read>" } ],
   "evidence_items": [ { "id": "urn:draft:evidence-1", "target_proposition": "urn:draft:prop-1",
                         "direction": "SUPPORTS",
-                        "snippet": "A verbatim quote from the text read_paper returned.",
-                        "explanation": "In your words: what the passage shows and why it bears on the proposition.",
-                        "context": "Source locator: <source_locator from the capture descriptor>. Species, tissue, design.",
-                        "evidence_source": "Europe PMC open-access full text (PMC…)",
                         "reference": "PMID:…",
-                        "was_derived_from": [ "<the same file.id>" ] } ],
+                        "snippet": "A verbatim quote from the text read_paper returned for that paper.",
+                        "explanation": "In your words: what the passage shows and why it bears on the proposition.",
+                        "context": "Species, tissue, study design, and which part of the paper (abstract, Results).",
+                        "evidence_source": "Europe PMC open-access full text (PMC…)" } ],
   "claims": [ { "id": "urn:draft:claim-1", "proposition": "urn:draft:prop-1", "direction": "SUPPORTS",
                 "status": "proposed", "statement": "What the evidence, taken together, supports.",
                 "has_evidence": [ "urn:draft:evidence-1" ] } ],
@@ -70,11 +69,12 @@ for new objects (for example `urn:draft:claim-1`); REVEAL assigns the real ids. 
 
 Rules the linter and REVEAL enforce:
 
-- **Files.** Copy the `file` object from the capture descriptor of the `read_paper` result you are quoting, unchanged.
-  Search results and failed reads are not evidence.
-- **Snippet.** A verbatim quote from one paragraph of the text that read returned, 20 to 400 characters, that occurs
-  once in what you read of that paper. Quote the sentence that carries the finding. Only whitespace may differ. Put
-  everything else in `explanation`, in your own words. For an abstract the text includes any markup shown.
+- **Reference.** The paper the quote is from: its `PMID:…`, its PMC id (`PMC…`) or its DOI, as `read_paper` returned
+  it. It must be a paper you read in this run. Search results and failed reads are not evidence.
+- **Snippet.** A verbatim quote from one paragraph of the text `read_paper` returned for that paper, 20 to 400
+  characters, that occurs once in the paper. Quote the sentence that carries the finding. Only whitespace may
+  differ. Put everything else in `explanation`, in your own words. For an abstract the text includes any markup
+  shown.
 - **One paper per EvidenceItem.** Use several EvidenceItems for several passages or papers.
 - **Every Claim needs evidence**, and each EvidenceItem's `target_proposition` must be its Claim's `proposition`.
   `direction` is `SUPPORTS`, `DISPUTES`, `MIXED` or `NEUTRAL`. Report contradicting evidence as `DISPUTES`; an empty

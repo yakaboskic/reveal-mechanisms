@@ -106,8 +106,8 @@ MESSAGES = {
     'atomic-score': ('{label} Claim lacks a ClaimScore with the expected metric and kind.',
         'Add has_score: a ClaimScore with the exact captured column as metric and its score_kind ({metrics}), the exact captured value and '
         'an interpretation.'),
-    'atomic-capture': ('{label} evidence does not derive directly from a captured source File{sets}.',
-        'List the capture File{sets} in EvidenceItem.was_derived_from, with the exact row locator in context and a verbatim snippet.'),
+    'atomic-capture': ('{label} evidence does not trace to a retrieved source row{sets}.',
+        'Copy the source row verbatim into EvidenceItem.snippet and say in context what was asked.{set_repair}'),
     'atomic-single-fact': ('{label} Claim bundles more than one observation.',
         'Write one atomic Claim per observed pair and family; cite them together from a synthesis Claim.'),
     'atomic-value-in-statement': ('{label} statement does not state its ClaimScore value.',
@@ -286,7 +286,10 @@ def claim_structure(document, package=None):
         if metrics and not expected: issues.append('atomic-score')
         derived = {ref for item in evidence(claim) for ref in refs(item, 'was_derived_from')}
         sets = {value for value in (subject, obj) if kind_of(value) == 'gene_set'}
-        captured = bool(derived & files) or any(ref.startswith('dapper:File.') for ref in derived)
+        # An author quotes the source row; REVEAL ties the quote to its File (source_validation.bind_sources), and the
+        # linter reports a quote it cannot find. So evidence that quotes a row counts here, linked yet or not.
+        captured = (bool(derived & files) or any(ref.startswith('dapper:File.') for ref in derived)
+                    or any(isinstance(item.get('snippet'), str) and item['snippet'].strip() for item in evidence(claim)))
         if not captured or subject_kind == 'gene_set' and not (derived & sets if sets else any(ref.startswith('dapper:GeneSet.') for ref in derived)):
             issues.append('atomic-capture')
         values = {}
@@ -378,7 +381,8 @@ def claim_structure(document, package=None):
                   'metrics': '; '.join(' or '.join(metric for metric in spec[3] if spec[4][metric] == kind) + ': ' + kind
                                        for kind in dict.fromkeys(spec[4].values())),
                   'label': spec[5][0].upper() + spec[5][1:], 'template': TEMPLATES[family],
-                  'sets': ' and the trusted GeneSet' if spec[0] == 'gene_set' else ''} if spec else {
+                  'sets': ' and the trusted GeneSet' if spec[0] == 'gene_set' else '',
+                  'set_repair': ' List the trusted GeneSet in was_derived_from.' if spec[0] == 'gene_set' else ''} if spec else {
                   'families': ', '.join(FAMILIES[name][5] for name in hints),
                   'tools': '; '.join(f"{FAMILIES[name][5]} via {' or '.join(routes)}" + (f', {ROWS[name]}' if name in ROWS else '')
                                      for name, routes in hints.items())}

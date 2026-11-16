@@ -17,11 +17,16 @@ the whole paper. Every refusal says what to change, because the same check runs 
 The verdict on a quote never turns from accepted to refused as the run reads more: reading more only widens what was
 served. So a draft that linted clean is still clean when the backend checks it against the finished ledger.
 
+The agent never names a capture. It writes the paper (`reference`) and the quote (`snippet`); `bind_sources` finds the
+read that served the quote and attaches REVEAL's own record of it, in a copy the linter and the gate check. The
+agent's saved draft is not changed.
+
 Standard library only: this module is bundled into the Box.
 """
 import hashlib
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 
 from .box_literature import abstract_record, article_blocks, parse_article
@@ -40,6 +45,10 @@ MAX_PAPER_QUOTE_SHARE = 0.4
 
 class LocatorError(ValueError):
     """A quote that cannot be located as written. The message says what to change."""
+
+
+class QuoteAbsent(LocatorError):
+    """The quote is not text of the paper it was looked for in (it may be text of another paper the run read)."""
 
 
 def _read(root, descriptor):
@@ -118,7 +127,7 @@ def paper_texts(ledger_root, calls):
             encoded = text.encode('utf-8')
             paper = papers[key] = {
                 'key': key, 'kind': kind, 'text': text, 'blocks': blocks, 'paper': {**metadata, **(data.get('paper') or {})},
-                'served': [], 'sequences': [], 'captures': {},
+                'served': [], 'sequences': [], 'captures': {}, 'reads': [],
                 'text_sha256': hashlib.sha256(encoded).hexdigest(), 'text_bytes': len(encoded),
                 'upstream': {'sha256': call['upstream_response']['sha256'], 'size_bytes': call['upstream_response']['size_bytes'],
                              'format': form, 'url': view.get('url'), 'retrieved_at': view.get('retrieved_at')}}
@@ -130,6 +139,8 @@ def paper_texts(ledger_root, calls):
         paper['served'] = _merge([*paper['served'], (start, start + len(served))])
         paper['sequences'].append(call['sequence'])
         paper['captures'][call['response']['sha256']] = call['sequence']
+        paper['reads'].append({'sha256': call['response']['sha256'], 'size_bytes': call['response']['size_bytes'],
+                               'sequence': call['sequence'], 'start': start, 'end': start + len(served)})
     return papers
 
 
@@ -171,8 +182,8 @@ def locate(paper, quote):
     pattern = re.compile(r'\s+'.join(re.escape(token) for token in tokens))
     found = [match.span() for match in pattern.finditer(text)]
     if not found:
-        raise LocatorError('The snippet is not verbatim text of this paper. Copy the passage exactly as read_paper returned it '
-                           '(same words, punctuation and symbols); only whitespace may differ')
+        raise QuoteAbsent('The snippet is not verbatim text of this paper. Copy the passage exactly as read_paper returned it '
+                          '(same words, punctuation and symbols); only whitespace may differ')
     served = [span for span in found if any(start <= span[0] and span[1] <= end for start, end in paper['served'])]
     if not served:
         raise LocatorError('The snippet is in a part of this paper you were not served. Read that part with read_paper '
@@ -263,6 +274,133 @@ def document_quotes(document, papers, captured):
                              f'the most is {allowed:,}. Keep the sentences that carry each finding and put the rest in '
                              'explanation, in your own words'))
     return located, problems
+
+
+SERVED_TEXT = '/structuredContent/data/text'
+BOUND_LOCATOR = re.compile(r'ledger_sequence=\d+;pointer=')
+
+
+def paper_ids(paper):
+    """The identifiers one read paper answers to: {('pmid', '123'), ('pmcid', 'PMC1'), ('doi', '10.1/x')}."""
+    metadata, (source, identity, scope) = paper['paper'], paper['key']
+    found = set()
+    pmid = metadata.get('pmid') or (identity if source == 'MED' else None)
+    pmcid = metadata.get('pmcid') or (identity if source == 'PMC' else None)
+    if isinstance(pmid, str) and pmid.strip().isdigit():
+        found.add(('pmid', pmid.strip()))
+    if isinstance(pmcid, str) and re.fullmatch(r'(?i)PMC\d+', pmcid.strip()):
+        found.add(('pmcid', pmcid.strip().upper()))
+    if isinstance(metadata.get('doi'), str) and metadata['doi'].strip():
+        found.add(('doi', metadata['doi'].strip().lower()))
+    return found
+
+
+def named_papers(reference):
+    """The paper identifiers an EvidenceItem's `reference` names, in the forms paper_ids() gives. Empty when the
+    reference is missing or names a paper some other way (a title, an author and year)."""
+    if not isinstance(reference, str):
+        return set()
+    text = reference.strip()
+    found = {('pmcid', 'PMC' + digits) for digits in re.findall(r'(?i)PMC\s*:?\s*(\d+)', text)}
+    found |= {('pmid', digits) for digits in re.findall(r'(?i)\bPMID\s*:?\s*(\d+)', text)}
+    found |= {('doi', doi.rstrip('.,;)').lower()) for doi in re.findall(r'\b(10\.\d+(?:\.\d+)*/[^\s"<>]+)', text)}
+    if re.fullmatch(r'\d{1,9}', text):
+        found.add(('pmid', text))
+    return found
+
+
+def capture_file(read):
+    """REVEAL's File record of one read_paper response: the form the linter and the gate check a quote against.
+    It never leaves REVEAL (account_deposit replaces it with the paper's text file)."""
+    return {'id': 'urn:reveal:tool-response:sha256:' + read['sha256'], 'filename': read['sha256'] + '.json',
+            'mime_type': 'application/json', 'sha256': read['sha256'], 'size_in_bytes': read['size_bytes']}
+
+
+def bind_sources(document, papers, captured):
+    """(a copy of `document` whose paper evidence cites the reads that served it, [(where, what to change)]).
+
+    The agent writes a paper's evidence as a `reference` (PMID, PMC id or DOI) and a verbatim `snippet`. For each
+    such EvidenceItem this finds the one read of this run that served the quote and attaches REVEAL's record of it:
+    the capture File, the `was_derived_from` link, and the read's locator at the end of `context`. Nothing is
+    guessed: a quote found in no paper read, or in two different papers with no reference to tell them apart, is
+    reported with what to change and left unbound.
+
+    An EvidenceItem that already cites a captured response is left as written (document_quotes judges it), and so
+    is one that rests only on other Claims (`source_claims`, no snippet). `papers` is paper_texts(), `captured` is
+    captures(). The same function runs in the draft lint and at the gate, so they cannot disagree."""
+    bound = deepcopy(document)
+    rows = bound.get('files') if isinstance(bound.get('files'), list) else []
+    files = {node.get('id'): node for node in rows if isinstance(node, dict) and isinstance(node.get('id'), str)}
+    items = bound.get('evidence_items') if isinstance(bound.get('evidence_items'), list) else []
+    problems = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        where = item.get('id') if isinstance(item.get('id'), str) else 'evidence_items'
+        sources = [ref for ref in item.get('was_derived_from', []) if isinstance(ref, str)] if isinstance(item.get('was_derived_from'), list) else []
+        if any(isinstance(files.get(ref), dict) and files[ref].get('sha256') in captured for ref in sources):
+            continue
+        snippet = item.get('snippet')
+        if not (isinstance(snippet, str) and snippet.strip()) and isinstance(item.get('source_claims'), list) and item['source_claims']:
+            continue
+        named = named_papers(item.get('reference'))
+        pool = [paper for paper in papers.values() if not named or named & paper_ids(paper)]
+        if not pool:
+            problems.append((where, 'reference names a paper that read_paper did not return in this run. Evidence can quote only a '
+                             'paper you read: set reference to the PMID, PMC id or DOI of the paper this snippet is from'
+                             if named else 'No paper text was read in this run, so there is nothing to quote. Read a paper with '
+                             'read_paper, then quote a passage it returned'))
+            continue
+        found, refusals = [], []
+        for paper in pool:
+            try:
+                found.append((paper, locate(paper, snippet)))
+            except LocatorError as exc:
+                refusals.append(exc)
+        if not found:
+            # A refusal that is about the quote itself (too short, twice in the paper, not yet served) says more than
+            # "not in this paper", which every other paper read also answers.
+            specific = next((exc for exc in refusals if not isinstance(exc, QuoteAbsent)), None)
+            if specific is None and not named and len(pool) > 1:
+                problems.append((where, 'The snippet is not verbatim text of any paper read in this run. Copy the passage exactly '
+                                 'as read_paper returned it (same words, punctuation and symbols); only whitespace may differ'))
+            else:
+                problems.append((where, str(specific or refusals[0])))
+            continue
+        # The abstract and the full text of one paper share an identifier and are one paper; anything else is two.
+        works = []
+        for paper, _ in found:
+            ids = paper_ids(paper)
+            known = next((work for work in works if work & ids), None)
+            if known is None:
+                works.append(set(ids))
+            else:
+                known |= ids
+        if len(works) > 1:
+            problems.append((where, 'This snippet occurs in more than one paper read in this run. Set reference to the PMID, PMC '
+                             'id or DOI of the paper you are quoting'))
+            continue
+        # One paper read both as an abstract and as full text: the full text, then the earliest read.
+        paper, span = min(found, key=lambda hit: (hit[0]['kind'] != 'oa_xml_text', min(hit[0]['sequences'])))
+        read = min((entry for entry in paper['reads'] if entry['start'] <= span['character_start'] and span['character_end'] <= entry['end']),
+                   key=lambda entry: entry['sequence'], default=None)
+        if read is None:
+            problems.append((where, 'The snippet runs across two separate reads of this paper. Quote a passage that lies inside '
+                             'one read'))
+            continue
+        node = capture_file(read)
+        if node['id'] not in files:
+            files[node['id']] = node
+            rows.append(node)
+        item['was_derived_from'] = [*sources, node['id']]
+        context = item.get('context')
+        if isinstance(context, str) and context.strip() and not BOUND_LOCATOR.search(context):
+            context = context.rstrip()
+            item['context'] = (context + ('' if context.endswith(('.', '!', '?', ';', ':')) else '.')
+                               + f" Quote location: ledger_sequence={read['sequence']};pointer={SERVED_TEXT}.")
+    if rows:
+        bound['files'] = rows
+    return bound, problems
 
 
 def text_bytes(paper):

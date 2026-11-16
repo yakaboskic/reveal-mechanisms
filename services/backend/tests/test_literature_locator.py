@@ -267,6 +267,108 @@ class LocatorTests(unittest.TestCase):
         with self.assertRaisesRegex(locator.LocatorError, 'characters in the paper, over the 400 allowed'):
             locator.locate(self.papers()[('PMC', 'PMC12345', 'full_text')], RESULT)
 
+    def bind(self, *items, files=()):
+        document = {'evidence_items': [{'id': f'urn:e:{index}', 'target_proposition': 'urn:p', 'explanation': 'Shown directly.',
+                                        'context': 'Mouse liver', **item} for index, item in enumerate(items, 1)],
+                    **({'files': list(files)} if files else {})}
+        before = json.dumps(document, sort_keys=True)
+        bound, problems = locator.bind_sources(document, self.papers(), locator.captures(self.ledger.entries))
+        self.assertEqual(json.dumps(document, sort_keys=True), before)       # the agent's draft is never changed
+        return bound, problems
+
+    def test_a_quote_and_a_paper_id_are_all_the_agent_writes_and_reveal_ties_them_to_the_read(self):
+        self.read()
+        entry = self.ledger.entries[-1]
+        for reference in ('PMID:99999', 'pmid 99999', '99999', 'PMC12345', 'PMCID:PMC12345', 'doi:10.1/FIXTURE', 'https://doi.org/10.1/fixture.', None, 'Fixture et al. 2020'):
+            bound, problems = self.bind({'snippet': RESULT, **({'reference': reference} if reference else {})})
+            self.assertEqual(problems, [], reference)
+            item, file = bound['evidence_items'][0], bound['files'][0]
+            self.assertEqual(file, {'id': 'urn:reveal:tool-response:sha256:' + entry['response']['sha256'], 'filename': entry['response']['sha256'] + '.json',
+                                    'mime_type': 'application/json', 'sha256': entry['response']['sha256'], 'size_in_bytes': entry['response']['size_bytes']})
+            self.assertEqual(item['was_derived_from'], [file['id']])
+            self.assertEqual(item['context'], f"Mouse liver. Quote location: ledger_sequence={entry['sequence']};pointer=/structuredContent/data/text.")
+            # Bound, it is exactly what the one rule for literature evidence already accepts.
+            located, refused = locator.document_quotes(bound, self.papers(), locator.captures(self.ledger.entries))
+            self.assertEqual((len(located), refused), (1, []))
+        # Two quotes from one read share its File; evidence resting only on other Claims is not paper evidence.
+        bound, problems = self.bind({'snippet': RESULT, 'reference': 'PMID:99999'}, {'snippet': 'Mice were housed at 22 °C.'},
+                                    {'source_claims': ['urn:claim:atomic']})
+        self.assertEqual((problems, len(bound['files'])), ([], 1))
+        self.assertNotIn('was_derived_from', bound['evidence_items'][2])
+        # A draft that names the read itself is left exactly as written.
+        own = {'id': 'urn:file:mine', 'sha256': entry['response']['sha256'], 'size_in_bytes': entry['response']['size_bytes']}
+        bound, problems = self.bind({'snippet': RESULT, 'was_derived_from': ['urn:file:mine'], 'context': 'As written.'}, files=[own])
+        self.assertEqual((problems, bound['files'], bound['evidence_items'][0]['was_derived_from'], bound['evidence_items'][0]['context']),
+                         ([], [own], ['urn:file:mine'], 'As written.'))
+
+    def test_a_quote_reveal_cannot_tie_to_one_read_is_refused_with_what_to_change_and_never_guessed(self):
+        self.assertIn('No paper text was read in this run', self.bind({'snippet': RESULT})[1][0][1])
+        self.read()
+        for item, expected in (({'snippet': RESULT, 'reference': 'PMID:11111'}, 'reference names a paper that read_paper did not return in this run'),
+                               ({'snippet': 'Insulin signalling was abolished in every animal studied.'}, 'not verbatim text of this paper'),
+                               ({'snippet': 'Glucose production rose.'}, 'occurs 2 times in this paper'),
+                               ({'snippet': 'too short'}, 'too short to locate'),
+                               ({'reference': 'PMID:99999'}, 'needs a snippet')):
+            bound, problems = self.bind(item)
+            self.assertEqual([where for where, _ in problems], ['urn:e:1'], item)
+            self.assertIn(expected, problems[0][1])
+            self.assertNotIn('files', bound); self.assertNotIn('was_derived_from', bound['evidence_items'][0])
+            self.assertEqual(bound['evidence_items'][0]['context'], 'Mouse liver')
+            self.assertNotIn(RESULT[:30], problems[0][1])                    # a refusal never repeats paper text
+
+    def test_a_paper_read_in_several_windows_is_tied_to_the_window_that_served_the_quote(self):
+        total = self.read(offset=0, limit=150)['structuredContent']['data']['total_characters']
+        for offset in range(150, total, 150): self.read(offset=offset, limit=150)
+        paper = self.papers()[('PMC', 'PMC12345', 'full_text')]
+        quote = 'Mice were housed at 22 °C.'
+        start = paper['text'].index(quote)
+        serving = [read for read in paper['reads'] if read['start'] <= start and start + len(quote) <= read['end']]
+        self.assertEqual(len(serving), 1)
+        bound, problems = self.bind({'snippet': quote})
+        self.assertEqual(problems, [])
+        self.assertEqual(bound['files'][0]['sha256'], serving[0]['sha256'])
+        self.assertIn(f"ledger_sequence={serving[0]['sequence']};", bound['evidence_items'][0]['context'])
+        # The served text of that one response holds the quote, which is what the pinned linter checks it against.
+        response = json.loads((self.root / next(e for e in self.ledger.entries if e['sequence'] == serving[0]['sequence'])['response']['path']).read_bytes())
+        self.assertIn(quote, response['structuredContent']['data']['text'])
+        # A quote that lies across two windows was served, but no single read holds it.
+        split_ledger = Ledger(self.root / 'split', 'locator-job', 1)
+        split = ScopedTools((), split_ledger, soft_budget=True, max_calls=10, max_searches=1, max_papers=2, max_characters=100_000,
+                            literature=LiteratureClient(opener=self.http, guidance=True))
+        middle = paper['text'].index(RESULT) + 40
+        for arguments in ({'offset': 0, 'limit': middle}, {'offset': middle, 'limit': 12000}):
+            self.assertFalse(split.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text', **arguments}).get('isError'))
+        halves = locator.paper_texts(self.root / 'split', split_ledger.entries)
+        self.assertEqual(locator.locate(halves[('PMC', 'PMC12345', 'full_text')], RESULT)['value_text'], RESULT)   # it was served
+        bound, problems = locator.bind_sources({'evidence_items': [{'id': 'urn:e:1', 'snippet': RESULT, 'context': 'Mouse liver'}]},
+                                               halves, locator.captures(split_ledger.entries))
+        self.assertIn('runs across two separate reads', problems[0][1]); self.assertNotIn('files', bound)
+
+    def test_one_paper_read_as_abstract_and_as_full_text_is_one_paper_and_two_papers_need_a_reference(self):
+        shared = 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation by 42% in liver'
+        self.read()
+        self.http.raw = abstract_response('We report the following. ' + shared + '. This was unexpected.')
+        self.assertFalse(self.tools.call('read_paper', {'source': 'MED', 'id': '99999'}).get('isError'))
+        papers = self.papers()
+        self.assertEqual({key: bool(locator.locate(paper, shared)) for key, paper in papers.items()},
+                         {('PMC', 'PMC12345', 'full_text'): True, ('MED', '99999', 'abstract'): True})
+        # Same paper under either id: the full text is the read cited, whichever was read first and whatever the id.
+        for reference in ('PMID:99999', 'PMC12345', None):
+            bound, problems = self.bind({'snippet': shared, **({'reference': reference} if reference else {})})
+            self.assertEqual(problems, [], reference)
+            self.assertEqual(bound['files'][0]['sha256'], papers[('PMC', 'PMC12345', 'full_text')]['reads'][0]['sha256'])
+        # A second, different paper carrying the same sentence: nothing says which was meant, so nothing is bound.
+        self.http.raw = json.dumps({'hitCount': 1, 'resultList': {'result': [dict(id='77777', source='MED', pmid='77777', doi='10.1/other',
+            title='A review.', isOpenAccess='N', abstractText='As reported before: ' + shared + '.')]}}).encode()
+        self.assertFalse(self.tools.call('read_paper', {'source': 'MED', 'id': '77777'}).get('isError'))
+        bound, problems = self.bind({'snippet': shared})
+        self.assertIn('occurs in more than one paper read in this run', problems[0][1]); self.assertNotIn('files', bound)
+        # Naming the paper settles it, either way.
+        for reference, key in (('PMID:77777', ('MED', '77777', 'abstract')), ('doi:10.1/fixture', ('PMC', 'PMC12345', 'full_text'))):
+            bound, problems = self.bind({'snippet': shared, 'reference': reference})
+            self.assertEqual(problems, [])
+            self.assertEqual(bound['files'][0]['sha256'], self.papers()[key]['reads'][0]['sha256'])
+
 
 if __name__ == '__main__':
     unittest.main()

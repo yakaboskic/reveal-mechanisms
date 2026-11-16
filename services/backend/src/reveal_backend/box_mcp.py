@@ -248,15 +248,50 @@ class ToolBudgetExhausted(ValueError):
     """A general agent job spent its tool-call allowance. The agent is told and may still finish."""
 
 
+LINT_DESCRIPTION = 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns compact field/rule findings, exact counts and a readable report path/hash containing every normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.'
+DRAFT_DESCRIPTION = 'Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. EvidenceItem.context/explanation retain source locators; source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the account. Exact referenced trusted dependencies and real runtime attribution are then supplied automatically. Run lint_account next. To repair findings, Edit only the reported fields in the saved draft file and lint again; resend the whole document only to add objects that reference trusted sources not yet in the draft. No acceptance or minting occurs.'
+# The same two tools for a research kit that cites by quotation (dispatch_view.QUOTE_KITS).
+QUOTE_LINT_DESCRIPTION = ("Run the worker's shared account linter: pinned DAPPER structure, verbatim snippets and metric agreement. "
+                          'REVEAL finds the source each snippet quotes and checks the quote and its ClaimScores against that row. '
+                          'Returns compact field/rule findings, exact counts and a readable report path/hash containing every '
+                          'normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.')
+QUOTE_DRAFT_DESCRIPTION = ('Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one '
+                           'account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; '
+                           'Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. Each '
+                           'EvidenceItem quotes its source row or passage verbatim in snippet and says in context what was asked; '
+                           'source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the '
+                           'account. Exact referenced trusted dependencies and real runtime attribution are then supplied '
+                           'automatically. Run lint_account next. To repair findings, Edit only the reported fields in the saved '
+                           'draft file and lint again; resend the whole document only to add objects. No acceptance or minting occurs.')
+# The same two tools as an agent that cites papers sees them: no File, checksum or locator is its business.
+LITERATURE_LINT_DESCRIPTION = ('Check the saved account: pinned DAPPER structure, and that every snippet is a verbatim passage of a '
+                               'paper read in this run. REVEAL links each quote to the paper it came from. '
+                               'Returns compact findings, exact counts and the path of a report holding every finding. Passing '
+                               'lint is not acceptance: REVEAL checks the account again after the run.')
+LITERATURE_DRAFT_DESCRIPTION = ('Save the account. Write plural arrays scientific_accounts (one account), propositions, claims and '
+                                'evidence_items, as the skill shows. Claim.proposition identifies its Proposition; Claim.statement '
+                                'carries its assessment. ScientificAccount.question is the exact question id. Each EvidenceItem names '
+                                'its paper in reference and quotes it in snippet; REVEAL links the quote to the paper. The '
+                                'structure is checked before anything is saved, and the trusted question, requester Propositions '
+                                'and run attribution are supplied automatically. Run lint_account next. To repair findings, Edit '
+                                'only the reported fields in the saved draft file and lint again; resend the whole document only '
+                                'to add objects. No acceptance or minting occurs.')
+
+
 class ScopedTools:
     def __init__(self, selected_graphs, ledger, client=None, max_calls=30, lint=None, write_draft=None,
                  read_timeout=35, max_parallel_reads=2, literature=None, write_outcome=None, research=None, max_research_calls=80, read_evidence=None,
-                 max_searches=3, max_reads=4, max_papers=None, max_characters=None, soft_budget=False, claims=None, draft_files=None):
+                 max_searches=3, max_reads=4, max_papers=None, max_characters=None, soft_budget=False, claims=None, draft_files=None,
+                 capture_descriptor=True):
         """Research runs keep the fixed allowances: three searches, four reads, and a spent call budget is a denied call.
 
         A general agent job passes its own limits. max_papers and max_characters replace the per-call read count: a run may
         open that many distinct papers and receive that much paper text, so paging through one paper costs characters only.
-        soft_budget makes a spent call budget an ordinary tool error the agent can finish after, not a policy denial."""
+        soft_budget makes a spent call budget an ordinary tool error the agent can finish after, not a policy denial.
+
+        capture_descriptor=False is for an agent that never names a capture (a general agent job: REVEAL ties each quote
+        to the read that served it, literature_locator.bind_sources). Its results carry no File, checksum or ledger
+        locator, only the run budget, and its draft and lint tools are described without them."""
         if set(selected_graphs) - set(GRAPHS):
             raise PolicyError('Unsupported selected graph')
         self.selected_graphs, self.ledger = tuple(selected_graphs), ledger
@@ -277,6 +312,7 @@ class ScopedTools:
                 type(value) is not int or value < 1 for value in (max_searches, max_reads, max_papers, max_characters) if value is not None):
             raise ValueError('Literature limits are out of bounds')
         self.max_searches, self.max_reads, self.soft_budget = max_searches, max_reads, soft_budget
+        self.capture_descriptor = capture_descriptor
         self.max_papers, self.max_characters = max_papers, max_characters
         # papers: (source, id) -> slot of a paper that has returned text; the ids of one paper share a slot.
         # opening: (source, id) -> reads in flight for a paper that has not returned text yet.
@@ -392,7 +428,7 @@ class ScopedTools:
             tools.append({'name': 'query_graph', 'description': 'Fetch bounded triples in one selected named graph. Prefer exact subject/object IRIs. For exact source label or gene-symbol discovery use a schema-derived predicate IRI plus literal (case-sensitive). contains requires a bound predicate or subject; whole-graph text scans are unavailable. A hit needs entity/scope verification; empty or failed reads do not prove biological absence.',
                           'inputSchema': {'type': 'object', 'properties': {'graph': graph, 'subject': {'type': 'string'}, 'predicate': {'type': 'string'}, 'object': {'type': 'string'}, 'literal': {'type': 'string', 'minLength': 1, 'maxLength': 200}, 'contains': {'type': 'string'}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100}}, 'required': ['graph'], 'additionalProperties': False}})
         if self.lint:
-            tools.append({'name': 'lint_account', 'description': 'Run the worker\'s shared account linter: pinned DAPPER structure, exact source pointers, verbatim snippets, metric agreement, and trusted captured Files. Returns compact field/rule findings, exact counts and a readable report path/hash containing every normalized finding. Draft IDs are allowed; passing structure alone is not validation or acceptance.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files)} if self.draft_files else {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
+            tools.append({'name': 'lint_account', 'description': LINT_DESCRIPTION if self.capture_descriptor else LITERATURE_LINT_DESCRIPTION if self.draft_files else QUOTE_LINT_DESCRIPTION, 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files)} if self.draft_files else {'type': 'string', 'pattern': '^account-[1-3]\\.(json|yaml|yml)$'}}, 'required': ['filename'], 'additionalProperties': False}})
         if self.write_draft:
             # Property hints are intentionally open. The pinned preflight owns
             # validation; optional scores, narrative Propositions, source-Claim
@@ -410,11 +446,25 @@ class ScopedTools:
                     'context': {'type': 'string', 'description': 'Exact captured artifact/pointer and biological or analytical scope.'},
                     'explanation': text, 'snippet': text, 'was_derived_from': refs, 'source_claims': refs},
             }
+            if not self.capture_descriptor and not self.draft_files:
+                fields['evidence_items'] = {
+                    'id': text, 'target_proposition': text, 'direction': text,
+                    'snippet': {'type': 'string', 'description': 'The source row or passage, copied verbatim from the tool result.'},
+                    'context': {'type': 'string', 'description': 'What was asked (the tool and the identifier of the factor, trait, gene or gene set, as passed) and the biological or analytical scope.'},
+                    'explanation': text, 'was_derived_from': {'type': 'array', 'items': text, 'description': 'The exact trusted GeneSet, for gene-set evidence only.'},
+                    'source_claims': refs}
+            elif not self.capture_descriptor:
+                fields['evidence_items'] = {
+                    'id': text, 'target_proposition': text, 'direction': text,
+                    'reference': {'type': 'string', 'description': 'The paper quoted: its PMID, PMC id or DOI, as read_paper returned it.'},
+                    'snippet': {'type': 'string', 'description': 'A verbatim passage from that paper, as read_paper returned it.'},
+                    'explanation': text, 'evidence_source': text,
+                    'context': {'type': 'string', 'description': 'Biological or analytical scope: species, tissue, study design.'}}
             document_schema = {'type': 'object', 'properties': {
                 group: {'type': 'array', 'items': {'type': 'object', 'properties': properties}}
                 for group, properties in fields.items()}, 'required': ['scientific_accounts']}
             document_schema['properties']['scientific_accounts'].update(minItems=1, maxItems=1)
-            tools.append({'name': 'write_account_draft', 'description': 'Use the pinned authoring skeleton and schema before drafting. Write plural arrays scientific_accounts (one account), propositions, claims and evidence_items. Claim.proposition identifies its Proposition; Claim.statement carries its assessment. ScientificAccount.question identifies the exact gap. EvidenceItem.context/explanation retain source locators; source_ref is not an EvidenceItem field. Structure is checked before evidence export or changing the account. Exact referenced trusted dependencies and real runtime attribution are then supplied automatically. Run lint_account next. To repair findings, Edit only the reported fields in the saved draft file and lint again; resend the whole document only to add objects that reference trusted sources not yet in the draft. No acceptance or minting occurs.', 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files or ('account-1.json', 'account-2.json', 'account-3.json'))}, 'document': document_schema}, 'required': ['filename', 'document'], 'additionalProperties': False}})
+            tools.append({'name': 'write_account_draft', 'description': DRAFT_DESCRIPTION if self.capture_descriptor else LITERATURE_DRAFT_DESCRIPTION if self.draft_files else QUOTE_DRAFT_DESCRIPTION, 'inputSchema': {'type': 'object', 'properties': {'filename': {'type': 'string', 'enum': list(self.draft_files or ('account-1.json', 'account-2.json', 'account-3.json'))}, 'document': document_schema}, 'required': ['filename', 'document'], 'additionalProperties': False}})
         if self.write_outcome:
             tools.append({'name': 'write_outcome', 'description': 'Save a structured insufficient-evidence outcome to the canonical writable output directory. Follow the skill format; this does not accept scientific claims.',
                           'inputSchema': {'type': 'object', 'properties': {'outcome': {'type': 'object'}}, 'required': ['outcome'], 'additionalProperties': False}})
@@ -585,7 +635,17 @@ class ScopedTools:
                 if raw_response is not None:
                     entry['upstream_response'] = self.ledger.artifact_bytes(raw_response, raw_format)
                 self.ledger.finish(entry, result, status)
-        if tool in ('query_graph', 'get_schema', 'describe_kg', 'search_papers', 'read_paper'):
+        if tool in ('query_graph', 'get_schema', 'describe_kg', 'search_papers', 'read_paper') and not self.capture_descriptor:
+            # This agent cites papers, never captures, so it is shown no File, checksum or ledger locator. What it
+            # does need is the run budget, in the structured result as well as the text: a client that shows the
+            # model only the structured part of a successful result would otherwise never show it.
+            if self.soft_budget:
+                budget = self.budget()
+                if isinstance(result.get('structuredContent'), dict):
+                    result = {**result, 'structuredContent': {**result['structuredContent'], 'run_budget': budget}}
+                result = {**result, 'content': [*result.get('content', []),
+                          {'type': 'text', 'text': json.dumps({'run_budget': budget}, ensure_ascii=False)}]}
+        elif tool in ('query_graph', 'get_schema', 'describe_kg', 'search_papers', 'read_paper'):
             # The response capture is finalized before this descriptor is
             # added to the model-facing envelope, avoiding recursive hashes.
             # This supplies exact bytes/identity metadata, never evidence

@@ -180,73 +180,61 @@
   ],
   "evidence_items": [
     {
-      "context": "Synthetic capture row `/result/factor_loadings/items/0`.",
+      "context": "Synthetic example: get_factor_loadings for synthetic-factor-1, kind=gene.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-1",
       "snippet": "{\"gene_index\":1,\"loading\":0.125,\"symbol\":\"GENEX\"}",
-      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1",
-      "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z"
-      ]
+      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-1"
     },
     {
-      "context": "Synthetic capture row `/result/gene_phenotype/items/0`.",
+      "context": "Synthetic example: get_pigean_gene_phenotype for GENEX and SYNTH.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-2",
       "snippet": "{\"combined\":2.5,\"gene\":\"GENEX\",\"log_bf\":1.25,\"phenotype\":\"SYNTH\",\"prior\":-0.5}",
-      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-2",
-      "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z"
-      ]
+      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-2"
     },
     {
-      "context": "Synthetic capture row `/result/gene_set_members/items/0`.",
+      "context": "Synthetic example: get_gene_set for SYNTHETIC_SET, members.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-3",
       "snippet": "{\"member\":\"HGNC.SYMBOL:GENEX\",\"source_pointer\":\"/members/0\"}",
       "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-3",
       "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z",
         "dapper:GeneSet.0H8ImSxsWuK5XDhmbEnR8UC_CfT1p-N5"
       ]
     },
     {
-      "context": "Synthetic capture row `/result/gene_set_factors/items/0`.",
+      "context": "Synthetic example: get_gene_set_factors for SYNTHETIC_SET.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-4",
       "snippet": "{\"factor_id\":\"synthetic-factor-1\",\"joint_loading\":0.25,\"marginal_loading\":0.375}",
       "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-4",
       "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z",
         "dapper:GeneSet.0H8ImSxsWuK5XDhmbEnR8UC_CfT1p-N5"
       ]
     },
     {
-      "context": "Synthetic capture row `/result/trait_gene_sets/items/0`.",
+      "context": "Synthetic example: get_trait_gene_sets for KPN.TRAIT:0000000.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-5",
       "snippet": "{\"avg_postp\":0.625,\"beta\":0.5,\"beta_uncorrected\":0.75,\"collection_id\":\"synthetic-collection\",\"gene_set_id\":\"SYNTHETIC_SET\",\"gene_set_name\":\"SYNTHETIC_SET\",\"kpn_trait_id\":\"KPN.TRAIT:0000000\",\"library\":\"synthetic_library\",\"library_rank\":1,\"n_genes\":1,\"trait_name\":\"SYNTH\"}",
       "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-5",
       "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z",
         "dapper:GeneSet.0H8ImSxsWuK5XDhmbEnR8UC_CfT1p-N5"
       ]
     },
     {
-      "context": "Synthetic capture row `/result/factor_trait_links/items/0`.",
+      "context": "Synthetic example: get_factor_trait_links for synthetic-factor-1.",
       "direction": "SUPPORTS",
       "explanation": "Synthetic example: the exact captured row is this atomic observation, never an eligible research observation.",
       "id": "urn:reveal:local:synthetic-work:relationships:evidence-6",
       "snippet": "{\"factor_label\":\"SyntheticFactor1\",\"fitted_kpn_trait_id\":\"KPN.TRAIT:0000000\",\"fitted_trait_name\":\"SYNTH\",\"is_atlas_trait\":true,\"is_own_trait\":false,\"nnls_loading\":0.125,\"phenotype\":\"SYNTH2\",\"phenotype_kpn_trait_id\":\"KPN.TRAIT:9999999\",\"phenotype_name\":\"SYNTH2\",\"phewas_beta\":0.25,\"phewas_p_onesided\":0.001,\"phewas_q\":0.01,\"source_id\":\"synthetic-factor-1\"}",
-      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-6",
-      "was_derived_from": [
-        "dapper:File.SaaVl9cKRy4Dr6Ee-A0zzrJo9-cYuT2z"
-      ]
+      "target_proposition": "urn:reveal:local:synthetic-work:relationships:proposition-6"
     },
     {
       "context": "Synthetic atomic Claims on one GENEX, SYNTHETIC_SET, SyntheticFactor1, SYNTH and SYNTH2 path.",

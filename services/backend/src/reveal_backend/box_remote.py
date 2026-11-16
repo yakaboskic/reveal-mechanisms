@@ -151,6 +151,9 @@ def setup(request):
                                  contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen),
                                  claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')),
                                  kit_version=pinned_kit_version(frozen))
+        # A kit that cites by quotation is shown no capture record: its tool results and tool descriptions name no File.
+        from .dispatch_view import QUOTE_KITS
+        runtime['cites_by_quotation'] = pinned_kit_version(frozen) in QUOTE_KITS
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())
@@ -338,6 +341,14 @@ def lint_tool(filename, ledger):
         with ledger.lock:
             write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
         evidence_path = RESEARCH.materialize(deadline=deadline, progress=timing.phase) if RESEARCH else runtime['evidence_package']
+        literature_account = runtime.get('deliverable') == 'scientific_account'
+        unbound = []
+        if literature_account:
+            # The agent names a paper and quotes it; REVEAL attaches its own record of the read that served the quote.
+            # Only this lint copy carries that record: the agent's saved draft is left as it wrote it.
+            calls = json.loads(ledger_path.read_bytes())['calls']
+            document, unbound = bound_sources(document, ledger.root, calls)
+            frozen.write_bytes(canonical(document))
         timing.phase('full_lint')
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -346,19 +357,28 @@ def lint_tool(filename, ledger):
                                          release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
                                          evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
         checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
-        if checks & {'source-ancestry', 'claim-evidence'}:
-            report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
-        if runtime.get('deliverable') == 'scientific_account':
-            # The pinned linter checked each snippet against the read it cites. The deposit also needs the quote's
-            # exact place in the paper, so that is checked here too, while the agent can still fix it.
-            with ledger.lock:
-                calls = json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0])['calls']
-            located = quote_findings(document, ledger.root, calls)
+        if literature_account:
+            report = literature_feedback(report)
+        elif checks & {'source-ancestry', 'claim-evidence'}:
+            report['repair_guidance'] = 'Each component Claim needs target-matched EvidenceItems that quote an eligible scientific source this run retrieved. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
+        if literature_account:
+            # The pinned linter checked each snippet against the read it was bound to. The deposit also needs the
+            # quote's exact place in the paper, so that is checked here too, while the agent can still fix it. A quote
+            # that could not be bound to a read is reported the same way.
+            located = [*quote_problems(unbound), *quote_findings(document, ledger.root, calls)]
             if located:
-                report['findings'] = [*report.get('findings', []), *located]
+                # A Claim whose evidence has a quote to repair is reported once, at the quote: the pinned linter's
+                # finding that the Claim has no source says the same thing less usefully.
+                broken = {finding['where'] for finding in located}
+                waiting = {claim.get('id') for claim in document.get('claims', []) if isinstance(claim, dict)
+                           and isinstance(claim.get('has_evidence'), list) and broken & set(map(str, claim['has_evidence']))}
+                kept = [finding for finding in report.get('findings', [])
+                        if not (finding.get('check') == 'source-ancestry' and finding.get('where') in waiting)
+                        and not (finding.get('check') == 'source-binding' and finding.get('where') in broken)]
+                report['findings'] = [*kept, *located]
                 report['valid'] = False
                 if isinstance(report.get('counts'), dict):
-                    report['counts'] = {**report['counts'], 'errors': report['counts'].get('errors', 0) + len(located)}
+                    report['counts'] = {**report['counts'], 'errors': sum(1 for finding in report['findings'] if finding.get('severity') == 'error')}
             # A Proposition without a triple is valid. The agent is asked for one where it can give it (advisory only).
             report['advisories'] = [*report.get('advisories', []), *triple_findings(document, decode(Path(evidence_path).read_bytes()))]
         timing.phase('diagnostic_report')
@@ -440,6 +460,57 @@ def triple_findings(document, package):
 QUOTE_CHECK = 'literature-quote'
 
 
+def literature_feedback(report):
+    """The pinned linter's report as an agent that cites papers should read it. Its own wording for these checks is
+    about captures and Files, which this agent never handles: each is restated as what to change in the draft, in
+    fixed text that quotes nothing. The run's own Activity having no inputs is REVEAL's business and is not shown."""
+    findings = []
+    for finding in report.get('findings', []):
+        check = finding.get('check')
+        if check == 'activity-inputs' and finding.get('severity') == 'warning':
+            continue
+        if check in LITERATURE_MESSAGES and finding.get('severity') == 'error':
+            finding = {**finding, 'rule': check, 'message': LITERATURE_MESSAGES[check]}
+        findings.append(finding)
+    counts = report.get('counts')
+    if isinstance(counts, dict):
+        counts = {**counts, 'warnings': sum(1 for finding in findings if finding.get('severity') == 'warning')}
+    return {**report, 'findings': findings, **({'counts': counts} if isinstance(counts, dict) else {})}
+
+
+LITERATURE_REPAIR = ('Each Claim needs at least one EvidenceItem that quotes a paper read in this run: reference is the '
+                     "paper's PMID, PMC id or DOI, snippet is a verbatim passage read_paper returned, and target_proposition is "
+                     "the Claim's proposition. Repair the literature-quote findings listed for its evidence; REVEAL links each "
+                     'quote to its paper. Remove a Claim you have no evidence for and say so in your final message.')
+
+
+LITERATURE_MESSAGES = {
+    'source-ancestry': LITERATURE_REPAIR, 'claim-evidence': LITERATURE_REPAIR,
+    'source-file': ('This draft holds a files entry REVEAL did not create. Remove it and every reference to it: name the paper in '
+                    'reference and quote it in snippet.'),
+    'source-locator': ('context holds text that reads as a data path (such as /content/… or /data/…). Describe the study in words '
+                       'and remove the path.'),
+    'evidence-snippet': ('The snippet is not verbatim text of the paper it was matched to. Copy the passage exactly as read_paper '
+                         'returned it; put summaries in explanation.'),
+}
+
+
+def quote_problems(problems):
+    return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': where, 'message': message, 'why': ''}
+            for where, message in problems]
+
+
+def bound_sources(document, ledger_root, calls):
+    """(the draft with REVEAL's record of each quoted read attached, [(where, what to change)] for quotes that could
+    not be tied to a read). literature_locator.bind_sources does the work; agent_account.accept calls it too."""
+    from . import literature_locator as locator
+    try:
+        papers = locator.paper_texts(ledger_root, calls)
+    except locator.LocatorError as exc:
+        return document, [('ledger', str(exc))]
+    return locator.bind_sources(document, papers, locator.captures(calls))
+
+
 def quote_findings(document, ledger_root, calls):
     """Lint findings for snippets that cannot be located in the paper they quote. The backend puts every literature
     EvidenceItem into its deposit form after the run (account_deposit), which needs the quote's exact place in the
@@ -450,8 +521,7 @@ def quote_findings(document, ledger_root, calls):
     except locator.LocatorError as exc:
         return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': 'ledger', 'message': str(exc), 'why': ''}]
     _, problems = locator.document_quotes(document, papers, locator.captures(calls))
-    return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': where, 'message': message, 'why': ''}
-            for where, message in problems]
+    return quote_problems(problems)
 
 
 def agent_tools(selected_graphs, ledger, settings, literature_client=LiteratureClient, lint=None, write_draft=None, claims_client=None):
@@ -465,7 +535,7 @@ def agent_tools(selected_graphs, ledger, settings, literature_client=LiteratureC
         from .box_claims import ClaimsClient
         claims = (claims_client or ClaimsClient)(settings['claims_url'])
     return ScopedTools(selected_graphs, ledger, max_calls=limits['tool_calls'], soft_budget=True, literature=literature, claims=claims,
-                       draft_files=('account-1.json',),
+                       draft_files=('account-1.json',), capture_descriptor=False,
                        lint=lint, write_draft=write_draft,
                        max_searches=limits['literature_searches'], max_papers=limits['literature_papers'],
                        max_characters=limits['literature_characters'])
@@ -731,7 +801,8 @@ def main():
                                 write_draft=write_draft_tool if request['kind'] == 'research' else None,
                                 literature=LiteratureClient() if literature else None,
                                 write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
-                                read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
+                                read_evidence=read_frozen_evidence if request['kind'] == 'research' else None,
+                                capture_descriptor=not runtime.get('cites_by_quotation'))
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'

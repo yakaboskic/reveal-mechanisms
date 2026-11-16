@@ -189,7 +189,11 @@ class AuthoringContractTests(unittest.TestCase):
                             cited=[props[claims[ref]['proposition']] for ref in item['source_claims']]
                             self.assertTrue(any(gene_set in (p.get('subject_entity'),p.get('object_entity')) for p in cited))
                         else:
-                            self.assertIn(gene_set,item['was_derived_from']);self.assertIn(source,item['was_derived_from'])
+                            # The author names the GeneSet, a scientific object, and never the source File.
+                            self.assertEqual(item['was_derived_from'],[gene_set])
+                # No evidence names a File or a pointer: it quotes the row and says what was asked.
+                for item in doc['evidence_items']:
+                    self.assertNotIn(source,item.get('was_derived_from',[]));self.assertNotRegex(item['context'],r'/result/|/items/')
                 self.assertTrue(any(e.get('source_claims') for e in doc['evidence_items']))
                 # Trusted assembly mints final identities and the final gate accepts the account.
                 from reveal_backend import acceptance
@@ -199,6 +203,12 @@ class AuthoringContractTests(unittest.TestCase):
                 self.assertTrue(final['valid'],final)
                 self.assertEqual(final['mode'],'final')
                 self.assertEqual(final['claim_structure']['conformance_rate'],1.0)
+                # REVEAL tied every quoted row to the source that holds it, and recorded where.
+                quoting=[item for item in accepted['evidence_items'] if not item.get('source_claims')]
+                self.assertEqual(len(quoting),6)
+                for item in quoting:
+                    self.assertEqual(item['was_derived_from'][0],source)
+                    self.assertRegex(item['context'],r'Source row: /result/[a-z_]+/items/0$')
 
     def test_draft_ids_embedded_in_longer_ids_fail_draft_lint_before_trusted_minting(self):
         if self.release is None: self.skipTest('Set REVEAL_TEST_DAPPER_RELEASE to a checkout containing the locked release')

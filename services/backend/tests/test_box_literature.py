@@ -188,6 +188,29 @@ class CapturedPaperToolsTests(unittest.TestCase):
         (self.root / entry['response']['path']).write_bytes(b'changed')
         with self.assertRaises(EvidenceBuildError): ledger_sources(self.root / 'manifest.json')
 
+    def test_a_kit_that_cites_by_quotation_is_shown_the_paper_and_no_record_of_its_capture(self):
+        quoting = ScopedTools((), Ledger(self.root / 'quoting', 'literature-job', 1), literature=LiteratureClient(opener=self.http),
+                              capture_descriptor=False, lint=lambda filename: {}, write_draft=lambda filename, document: {})
+        search = quoting.call('search_papers', {'query': 'fixture', 'limit': 1})
+        read = quoting.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertFalse(read.get('isError'), read)
+        for result in (search, read):
+            self.assertEqual(len(result['content']), 1)          # the paper data and nothing appended
+            for internal in ('reveal.tool-capture', 'urn:reveal:tool-response', 'ledger_sequence', 'source_locator', '"file"'):
+                self.assertNotIn(internal, json.dumps({key: result[key] for key in ('content', 'structuredContent')}))
+        # The call is captured all the same: REVEAL ties a quote to it from the ledger.
+        captured = quoting.ledger.freeze()['calls']
+        self.assertEqual([(call['tool'], call['status']) for call in captured], [('search_papers', 'completed'), ('read_paper', 'completed')])
+        self.assertEqual(set(ledger_sources(self.root / 'quoting/manifest.json')), {captured[1]['response']['sha256']})
+        # Its draft and lint tools are described without Files, pointers or locators; the GeneSet is the one thing named.
+        offered = {tool['name']: tool for tool in quoting.definitions()}
+        told = json.dumps([offered['lint_account'], offered['write_account_draft']])
+        for internal in ('File', 'locator', 'pointer', 'checksum', 'capture'):
+            self.assertNotIn(internal, told)
+        evidence = offered['write_account_draft']['inputSchema']['properties']['document']['properties']['evidence_items']['items']['properties']
+        self.assertEqual(set(evidence), {'id', 'target_proposition', 'direction', 'snippet', 'context', 'explanation', 'was_derived_from', 'source_claims'})
+        self.assertIn('GeneSet', evidence['was_derived_from']['description'])
+
     def test_empty_and_failed_papers_retained_but_not_promoted(self):
         self.http.raw = paper_response('')
         self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})

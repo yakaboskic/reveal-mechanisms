@@ -207,6 +207,13 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
     raw = Path(document_path).read_bytes()
     document = decode(raw, 'yaml' if Path(document_path).suffix in ('.yaml', '.yml') else 'json')
     require(isinstance(document, dict), 'Account document must be a mapping')
+    unbound = []
+    if mode != 'profile-only':
+        # An author quotes a source and says what was asked; REVEAL ties the quote to the source that holds it and
+        # checks that copy. A document that already names its source Files is unchanged by this.
+        from reveal_backend.source_validation import bind_sources
+        document, unbound = bind_sources(document, decode(Path(package_path).read_bytes(), 'yaml' if Path(package_path).suffix in ('.yaml', '.yml') else 'json'),
+                                         package_path, ledger_path or None)
     if preloaded is None:
         schema_root = Path(dapper_root).resolve() / 'schema'
         sys.path[:0] = [str(schema_root / 'lint'), str(schema_root / 'identity'), str(schema_root)]
@@ -222,7 +229,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
     with tempfile.TemporaryDirectory(prefix='reveal-account-lint-') as directory:
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))
         upstream = lint(frozen, vocabulary, sv, validator, profile_name='scientific-account')
-    findings = [asdict(f) for f in upstream.findings]
+    findings = [asdict(f) for f in upstream.findings] + unbound
     advisories, structure = [], None
     def error(check, where, message):
         findings.append({'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''})

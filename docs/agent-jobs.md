@@ -209,6 +209,11 @@ What is different about such a job:
   paragraphs, and says what to change. A quote is 20 to 400 characters. An account may quote at most 4,000
   characters of one paper text, and at most 40% of a short one such as an abstract (one quote is always allowed),
   so a deposited account never carries a paper or a whole abstract.
+- **The agent cites a paper, never a file.** For each piece of evidence it writes the paper's PMID, PMC id or DOI
+  (`reference`) and the quote (`snippet`). REVEAL finds the read that served the quote and attaches its own record
+  of it before checking; the agent is shown no file ids, checksums or ledger locators and does not write `files`
+  or `was_derived_from`. A quote that matches no paper read in the run, or matches two different papers when no
+  reference tells them apart, is refused with what to change. Nothing is guessed.
 
 After the run REVEAL applies the same gate a research account passes (pinned DAPPER release, source and snippet
 checks), records what ran, and puts the account in its deposit form, minted with DAPPER 0.2.1-a1:

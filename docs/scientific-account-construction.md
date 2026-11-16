@@ -25,8 +25,8 @@ flowchart TD
   C2 -->|proposition| P2[Scoped Proposition 2]
   C1 -->|has_evidence| E1[Evidence use for Proposition 1]
   C2 -->|has_evidence| E2[Evidence use for Proposition 2]
-  E1 -->|was_derived_from| S[Reusable source File]
-  E2 -->|was_derived_from| S
+  E1 -->|quotes| S[Source result]
+  E2 -->|quotes| S
   E1 -.->|optional source_claims| R[Separately recorded result / KG Claim]
   A -->|closing_remarks| X[Synthesis: how the assessments address the gap]
 ```
@@ -39,7 +39,7 @@ The [evidence-package design](evidence-package.md) defines the draft input envel
 
 - The exact frozen KnowledgeGap, its missing-knowledge description, disease/context and linked DisMech mechanisms.
 - The selected EAGGL mechanisms (called factors by CFDE) and bounded CFDE results, with full mechanism/source identities, available labels, trait/model identities, source artifacts, scores and retrieval limitations.
-- Recorded source observations for the four evidence relationships in the companion document. Its small examples define one biological Proposition/Claim each and retain raw observations in EvidenceItems linked to source Files and exact row locators. Separate source Claims and their typed scores are optional when useful.
+- Recorded source observations for the four evidence relationships in the companion document. Its small examples define one biological Proposition/Claim each and retain raw observations in EvidenceItems that quote the source row. Separate source Claims and their typed scores are optional when useful.
 - Access to related DisMech knowledge gaps and their source context, and to the user-selected Proto-OKN graphs such as BiomarkerKG and ProKN.
 - The current DAPPER schema/identity pin, allowed source identifiers, provenance records and output requirements.
 
@@ -78,9 +78,9 @@ Keep related Claims in one account and order them so the reader can follow their
 For each proposition:
 
 1. State its content and scope so it remains meaningful outside this account.
-2. Classify its content: biological involvement uses `BIOLOGICAL_INTERPRETATION`, including when the evidence comes from a computational result. If a model-output observation warrants a separate source Claim, its Proposition uses `RESULT`; the small examples instead retain observations directly in EvidenceItems/source Files.
+2. Classify its content: biological involvement uses `BIOLOGICAL_INTERPRETATION`, including when the evidence comes from a computational result. If a model-output observation warrants a separate source Claim, its Proposition uses `RESULT`; the small examples instead retain observations directly in EvidenceItems.
 3. Create a Claim recording the assessment, its responsible agent and generating Activity.
-4. Attach EvidenceItems identifying the source artifact/row or optional source Claims used and explaining how they support, dispute or contextualize this exact proposition. For direct artifact evidence, retain `was_derived_from`, an exact locator in `context`, and a verbatim source `snippet` where available.
+4. Attach EvidenceItems identifying the source artifact/row or optional source Claims used and explaining how they support, dispute or contextualize this exact proposition. For direct source evidence, quote the source row in `snippet` and say in `context` what was asked; REVEAL finds the source that holds the row and records the link itself.
 5. Preserve assumptions, uncertainty and conflicting findings. Direction and any score belong to the particular assessment; they are not copied from an unrelated metric or another proposition.
 
 Source result Claims can be included directly as account components when useful, and can also be used as evidence for other Claims. Interpreted Claims can in turn be used as sources for a further assessment, provided support is acyclic and the explanation makes that dependence explicit. Reusing a source does not create an additional independent observation.

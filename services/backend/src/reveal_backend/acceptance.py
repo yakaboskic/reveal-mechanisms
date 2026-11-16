@@ -199,6 +199,12 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
                 if isinstance(node,dict) and node.get('id') in trusted: require(node==trusted[node['id']][1],'Agent altered a trusted input payload')
     retained_edges=[(group,edge) for group,rows in package['dapper_context'].items()
                     if group.endswith('_edges') and isinstance(rows,list) for edge in rows]
+    # An author quotes a source; REVEAL ties each quote to the source that holds it before anything is minted, exactly
+    # as the draft lint did. A quote it cannot tie to one source fails the account.
+    from .source_validation import bind_sources
+    from .scientific_account_lint import AccountValidationError
+    doc,unbound=bind_sources(doc,package,package_path,ledger_path)
+    if unbound: raise AccountValidationError({'report_version':'reveal.account-lint/1','mode':'final','valid':False,'findings':unbound})
     doc=hydrate_inputs(doc,trusted,retained_edges,trusted_prefixes(package))
     # Operational attribution comes from the frozen submitting principal and
     # actual worker, never an agent-authored Person or runtime declaration.

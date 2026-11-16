@@ -360,12 +360,12 @@ p.write_text(json.dumps(doc))
             def draft(snippet, own=None):
                 # own: a Proposition the agent writes itself; the Claim is then about it instead of the requester's.
                 proposition_id = own['id'] if own else requested_id
-                return {'files': [capture['file']], **({'propositions': [own]} if own else {}),
+                # The agent names the paper and quotes it. It writes no File, no was_derived_from and no locator.
+                return {**({'propositions': [own]} if own else {}),
                         'evidence_items': [{'id': 'urn:draft:evidence-1', 'target_proposition': proposition_id, 'direction': 'SUPPORTS',
                                             'snippet': snippet, 'explanation': 'The paper reports this directly in mouse liver.',
-                                            'context': 'Source locator: ' + capture['source_locator'] + '. Mouse liver.',
-                                            'evidence_source': 'Europe PMC open-access full text (PMC12345)', 'reference': 'PMID:99999',
-                                            'was_derived_from': [capture['file']['id']]}],
+                                            'context': 'Mouse liver, hepatocyte-specific knockout',
+                                            'evidence_source': 'Europe PMC open-access full text (PMC12345)', 'reference': 'PMID:99999'}],
                         'claims': [{'id': 'urn:draft:claim-1', 'proposition': proposition_id, 'direction': 'SUPPORTS', 'status': 'proposed',
                                     'statement': 'One mouse study supports the requester\'s claim.', 'has_evidence': ['urn:draft:evidence-1']}],
                         'scientific_accounts': [{'id': 'urn:draft:account-1', 'name': 'LEPR and hepatic insulin signalling', 'question': gap_id,
@@ -377,7 +377,15 @@ p.write_text(json.dumps(doc))
                                                lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool)
                 read = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})
                 self.assertFalse(read.get('isError'), read)
-                capture = json.loads(read['content'][-1]['text'])
+                # A read shows the agent the run budget, where a client that passes on only the structured result still
+                # shows it, and nothing about REVEAL's capture of the read.
+                self.assertEqual(json.loads(read['content'][-1]['text']), {'run_budget': read['structuredContent']['run_budget']})
+                self.assertEqual(read['structuredContent']['run_budget']['papers'], {'used': 1, 'allowed': 4})
+                for internal in ('reveal.tool-capture', 'urn:reveal:tool-response', 'ledger_sequence', 'source_locator', 'sha256'):
+                    self.assertNotIn(internal, json.dumps({key: read[key] for key in ('content', 'structuredContent')}).replace('upstream_sha256', ''))
+                offered = json.dumps(tools.definitions())
+                for internal in ('was_derived_from', 'File', 'locator', 'pointer', 'checksum'):
+                    self.assertNotIn(internal, offered)
                 # A quote that is verbatim (so the pinned linter accepts it) but occurs twice in the paper: only the quote
                 # check can tell the agent, and it does so during the run.
                 saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft('lucose production rose')})
@@ -394,6 +402,26 @@ p.write_text(json.dumps(doc))
                 tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
                 clean = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
                 self.assertTrue(clean['valid'], clean.get('findings'))
+                self.assertEqual(clean['findings'], [])              # nothing about REVEAL's own run records is shown
+                # REVEAL tied the quote to the read in its own lint copy; the agent's saved draft is as the agent wrote it.
+                saved_draft = json.loads((output / 'account-1.json').read_bytes())
+                self.assertNotIn('files', saved_draft); self.assertNotIn('was_derived_from', saved_draft['evidence_items'][0])
+                self.assertEqual(saved_draft['evidence_items'][0]['context'], 'Mouse liver, hepatocyte-specific knockout')
+                checked = json.loads((state / 'lint-account-1.json').read_bytes())
+                self.assertEqual(checked['evidence_items'][0]['was_derived_from'], [checked['files'][0]['id']])
+                # A quote from a paper the run did not read, a quote that is in no paper read, and a Claim left with no
+                # usable evidence are each reported once, at the quote, with what to change.
+                for change, expected in (({'reference': 'PMID:11111'}, 'reference names a paper that read_paper did not return'),
+                                         ({'snippet': 'Hepatic insulin signalling was entirely abolished in every animal.'}, 'not verbatim text of this paper'),
+                                         ({'reference': 'Smith 2019', 'snippet': 'Hepatic insulin signalling was entirely abolished.'}, 'not verbatim text of this paper')):
+                    wrong = draft(result); wrong['evidence_items'][0].update(change)
+                    tools.call('write_account_draft', {'filename': 'account-1.json', 'document': wrong})
+                    refused = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                    errors = [(item['check'], item['where']) for item in refused['findings'] if item['severity'] == 'error']
+                    self.assertEqual(errors, [('literature-quote', 'urn:draft:evidence-1')], refused['findings'])
+                    self.assertIn(expected, refused['findings'][-1]['message'])
+                    self.assertEqual(refused['counts']['errors'], 1)
+                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
                 asked = lambda feedback: [(item['where'], item['message']) for item in feedback['advisories'] if item['check'] == 'proposition-triple']
                 self.assertEqual(asked(clean), [])                    # every Proposition in the draft has its triple
                 # A Proposition the agent writes as text only is valid, and the lint asks for its triple.
@@ -443,13 +471,20 @@ p.write_text(json.dumps(doc))
             manifest = state / 'ledger/manifest.json'
             requester = {'user_id': '11111111-1111-4111-8111-111111111111', 'principal_kind': 'registered', 'display_name': 'Test Requester',
                          'orcid': None, 'orcid_authenticated': False}
+            calls = json.loads(manifest.read_bytes())['calls']
+            # The gate ties the quote to its read exactly as the lint did, then assembles and checks that copy.
+            bound_path = base / 'bound.json'
+            bound_path.write_bytes(canonical_json(agent_account.bind(json.loads((output / 'account-1.json').read_bytes()), state / 'ledger', calls)))
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
-                assembled, report = acceptance.assemble_account(output / 'account-1.json', package_path, base / 'assembled.json',
+                assembled, report = acceptance.assemble_account(bound_path, package_path, base / 'assembled.json',
                                                                 requester, {'id': 'account-job'}, 1, 'box', manifest)
+                # Trusted assembly ties a quote to its source itself, so the agent's own file passes the same gate.
+                _, direct = acceptance.assemble_account(output / 'account-1.json', package_path, base / 'direct.json',
+                                                        requester, {'id': 'account-job'}, 1, 'box', manifest)
+            self.assertTrue(direct['valid'], direct.get('findings'))
             self.assertTrue(report['valid'], report.get('findings'))
             self.assertEqual([node['name'] for node in assembled['persons']], [assembled['persons'][0]['name']])
             self.assertIn('Test Requester', assembled['persons'][0]['name'])
-            calls = json.loads(manifest.read_bytes())['calls']
             document, summary = account_deposit.deposit_document(assembled, state / 'ledger', calls)
             self.assertNotIn('persons', document); self.assertNotIn('Test Requester', json.dumps(document))   # not named unless asked
             located = document['value_locators'][0]
@@ -461,6 +496,10 @@ p.write_text(json.dumps(doc))
             self.assertEqual(summary['account_id'], document['scientific_accounts'][0]['id'])
             self.assertNotEqual(summary['account_id'], assembled['scientific_accounts'][0]['id'])    # the deposit id is the only public one
             self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('Later, glucose', json.dumps(document))
+            # The deposit says where in the paper the quote sits, in words, after what the agent wrote.
+            self.assertEqual(document['evidence_items'][0]['context'],
+                             'Mouse liver, hepatocyte-specific knockout. Quote location: ' + located['selector'] + '.')
+            self.assertNotIn('ledger_sequence', json.dumps(document))
             # The workflow's gate is those two steps taken once, leaving under the workspace all that commit reads back.
             from reveal_backend.evidence_package import EvidenceBuildError
             work = base / 'work'; work.mkdir()
@@ -494,14 +533,36 @@ p.write_text(json.dumps(doc))
             (work / record['document']['path']).write_bytes(b'{}')
             with self.assertRaisesRegex(EvidenceBuildError, 'changed after validation'): agent_account.stored(work, record)
             (work / record['document']['path']).write_bytes(saved_bytes)
-            # An account the pinned linter accepts but whose quote has no single place in the paper fails the gate as a
-            # validation failure (it could only get here past the in-sandbox lint by defect or tampering).
+            # An account whose quote has no single place in the paper fails the gate as a validation failure, with the
+            # finding recorded for operators (it could only get here past the in-sandbox lint by defect or tampering).
             tampered = json.loads((output / 'account-1.json').read_bytes())
             tampered['evidence_items'][0]['snippet'] = 'lucose production rose'
             (output / 'account-1.json').write_bytes(canonical_json(tampered))
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock), \
-                    self.assertRaisesRegex(EvidenceBuildError, 'could not be put in its deposit form.*occurs 2 times'):
+                    self.assertRaises(AccountValidationError) as refused:
                 agent_account.accept(base / 'work', {'id': 'account-job'}, 1, account, requester, captured, output)
+            self.assertEqual([(item['check'], item['where']) for item in refused.exception.report['findings']], [('literature-quote', 'urn:draft:evidence-1')])
+            self.assertIn('occurs 2 times', refused.exception.report['findings'][0]['message'])
+            self.assertIn('occurs 2 times', (base / 'work/attempt-1/validation-1.json').read_text())
+            # A draft written the earlier way, naming REVEAL's capture File itself, is still accepted as written; one
+            # whose quote is not in the read it names is still refused when it takes its deposit form.
+            entry = next(call for call in calls if call['tool'] == 'read_paper')
+            named_file = {'id': 'urn:reveal:tool-response:sha256:' + entry['response']['sha256'], 'filename': entry['response']['sha256'] + '.json',
+                          'mime_type': 'application/json', 'sha256': entry['response']['sha256'], 'size_in_bytes': entry['response']['size_bytes']}
+            for snippet, outcome in ((result, None), ('lucose production rose', 'could not be put in its deposit form.*occurs 2 times')):
+                earlier = json.loads((output / 'account-1.json').read_bytes())
+                earlier['files'] = [named_file]
+                earlier['evidence_items'][0].update(snippet=snippet, was_derived_from=[named_file['id']],
+                    context=f"Source locator: ledger_sequence={entry['sequence']};pointer=/structuredContent/data/text. Mouse liver.")
+                (output / 'account-1.json').write_bytes(canonical_json(earlier))
+                explicit = base / ('explicit-' + str(len(snippet))); explicit.mkdir()
+                with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                    if outcome:
+                        with self.assertRaisesRegex(EvidenceBuildError, outcome):
+                            agent_account.accept(explicit, {'id': 'account-job'}, 1, account, requester, captured, output)
+                    else:
+                        kept_record = agent_account.accept(explicit, {'id': 'account-job'}, 1, account, requester, captured, output)
+                        self.assertEqual((kept_record['claims'], kept_record['value_locators']), (1, 1))
 
     def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
         from reveal_backend import acceptance, box_remote
