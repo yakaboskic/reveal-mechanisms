@@ -18,6 +18,14 @@ For local development, `DISABLE_ADMIN_LOGIN=true` allows direct access. It works
 - Latest 10 scientific import, mapping and embedding runs per table, with persisted status and loading progress where available.
 - All-time job status totals and latest 100 jobs, including ownership IDs, stage, failures, worker leases and recoveries. Analysis and paragraph jobs show their first worker start and recorded finish directly in the execution table; details also show creation, latest update and current attempt start. Retries do not move the original start time. Durable workflow jobs take their start, attempt and recoveries from the workflow execution (step-failure recoveries; delivery recoveries and continue-as-new handoffs are reported separately), because they write no legacy attempt rows.
 - Latest 100 persisted job event envelopes, excluding messages, tool arguments, scientific content and credentials.
+- What kind of agent job each one was. A [general agent job](agent-jobs.md) returns either an answer or a Scientific Account, and the console says which everywhere a job is listed (`agent · scientific account`, `agent · answer`). The **Agent jobs** tab lists the latest 100 agent jobs, selected by kind so research runs do not push them out of view, with:
+  - a tile per type: jobs, succeeded, failed, running, deposited, the typical cost, turns and wall time of a successful run, spend, and how many requesters;
+  - what each job asked for: model and effort, built-in tools, whether it could read papers, the claims repository, graphs or extra hosts, how many claims it named and how many came with a triple, and the size of the prompt;
+  - the limits it was given and what it used: turns, tool calls and failures, agent time, lint checks and draft writes;
+  - what it returned: for an account the object, claim, quote and paper counts; for an answer the size of the response;
+  - **Deposit**, in its own column, because a job can succeed while its account is not deposited. Such jobs are counted on the tile as "succeeded without a deposit".
+
+  The job detail shows the same settings in full under **How this agent job was run**, with every limit. The prompt, system prompt, question, claims and response are never sent to the console: the backend reports their sizes and counts, taken in SQL. Jobs queued before a job could ask for an account are answers and are marked; settings their input never had show as "—". The tiles cover the listed jobs, not all time; the line above them gives the all-time number of jobs of each kind.
 - Agent cost per job, in the **Execution** table, the job detail and the **Costs** tab. When an agent run ends, the workflow records a `job_metrics` row with these fields, copied from the runner's captured `runtime.json`:
   - the provider-reported Claude cost, its dollar cap and the share of the cap used;
   - turns, tokens (input, output, cache write, cache read), agent run time against its limit, and provider API time;

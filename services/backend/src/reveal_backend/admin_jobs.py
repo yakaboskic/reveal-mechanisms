@@ -6,7 +6,7 @@ from uuid import UUID
 
 from .auth import Problem
 from .runtime_config import artifacts_root
-from .telemetry import job_timings, records
+from .telemetry import agent_runs, job_timings, records
 
 MAX_DIAGNOSTIC_BYTES = 128 * 1024
 MAX_DIAGNOSTICS = 20
@@ -100,6 +100,8 @@ def job_detail(repository, job_id, *, before=None, limit=100):
         if not timings: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.')
         metadata = records(tx, 'job', ('failure', 'warnings', 'research_request_id', 'input_account_id'), [job_id])[job_id]['data']
         job = {**timings[0], **redact(metadata)}
+        # How an agent job was asked to run: settings, limits and sizes, never the prompt, question or claims.
+        agent = agent_runs(tx, [job_id])[job_id] if job['kind'] == 'agent' else None
         # The padded event sequence is part of the indexed primary key. Load the
         # tail first so the reason for failure is visible even on very long runs.
         upper = job_id+':'+before.zfill(12) if before else job_id+';'
@@ -127,4 +129,4 @@ def job_detail(repository, job_id, *, before=None, limit=100):
     diagnostics, diagnostics_limited = s3_diagnostics(workspace, allowed) if remote else saved_diagnostics(job_id, allowed)
     return {'job': job, 'events': events, 'next_before': next_before, 'attempts': attempts,
             'attempts_limited': len(values) > 50, 'diagnostics': diagnostics, 'diagnostics_limited': diagnostics_limited,
-            'metrics': redact(metrics['data']) if metrics else None}
+            'metrics': redact(metrics['data']) if metrics else None, 'agent': agent}

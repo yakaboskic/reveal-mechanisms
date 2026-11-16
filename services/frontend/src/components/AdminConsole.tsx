@@ -4,17 +4,20 @@ import { signIn, signOut } from "next-auth/react";
 import { useIdentity } from "./Session";
 import { AdminTableInspector } from "./AdminTableInspector";
 import { AdminJobDetail } from "./AdminJobDetail";
-import type { AdminJob as Job } from "@/lib/admin-job";
+import { jobLabel, type AdminJob as Job, type AgentJobs } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { AdminPerformance, type RuntimeMetrics } from "./AdminPerformance";
 import { AdminCostsView, JobCost, usd, type AdminCosts } from "./AdminCosts";
 import { AdminLimits } from "./AdminLimits";
+import { AdminAgentJobsView } from "./AdminAgentJobs";
 
 type Snapshot = {
   generated_at: string; query_ms: number; database: string;
   counts: { kind: string; count: number; updated_at: string }[];
   recent: { kind: string; id: string; owner: string; version: number; updated_at: string }[];
   statuses: { status: string; count: number }[]; jobs: Job[]; costs?: AdminCosts;
+  // Absent from backends older than agent-job types.
+  job_kinds?: { kind: string; count: number }[]; agent_jobs?: AgentJobs;
   events: { id: string; job_id: string; occurred_at: string; event_type: string; status: string; stage: string }[];
   tables: { name: string; present: boolean; estimated_rows: number | null; bytes: number | null }[];
   imports: Record<string, string | number | null>[];
@@ -61,7 +64,7 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
   }, []);
   useEffect(() => { void refresh(); return () => { controller.current?.abort(); controller.current = null; }; }, [refresh]);
   useEffect(() => { if (!auto) return; const timer = setInterval(() => { if (!document.hidden) void refresh(); }, 15000); return () => clearInterval(timer); }, [auto, refresh]);
-  const jobs = data?.jobs.filter(j => `${j.id} ${j.owner} ${j.kind} ${j.status} ${j.worker || ""}`.toLowerCase().includes(filter.toLowerCase())) || [];
+  const jobs = data?.jobs.filter(j => `${j.id} ${j.owner} ${jobLabel(j)} ${j.status} ${j.worker || ""}`.toLowerCase().includes(filter.toLowerCase())) || [];
   useEffect(() => {
     const fromUrl = () => { const value = new URLSearchParams(window.location.search).get("job"); setJobId(value); if (value) setTab("Execution"); };
     fromUrl(); window.addEventListener("popstate", fromUrl);
@@ -86,10 +89,10 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
         <div><strong>{number(data.counts.find(c => c.kind === "principal")?.count || 0)}</strong><span>Workspace identities</span></div>
         <div><strong>{usd(data.costs?.totals.week.spend_usd)}</strong><span>Agent spend, last 7 days</span></div>
       </section>
-      <nav className="admin-tabs" aria-label="Telemetry views">{["Execution", "Costs", "Database", "Activity", "Performance", "Limits"].map(t => <button key={t} aria-current={tab === t ? "page" : undefined} onClick={() => { setTab(t); setFilter(""); if (t === "Limits") setLimitsOpened(true); }}>{t}</button>)}</nav>
-      {tab === "Execution" && <section><div className="admin-section-heading"><div><h2>Jobs and Box agents</h2><p>Latest 100 jobs across all workspaces. Elapsed times include recovery pauses.</p></div><input className="field" aria-label="Filter jobs" placeholder="Filter by job, owner, worker or status" value={filter} onChange={e => setFilter(e.target.value)} /></div>
+      <nav className="admin-tabs" aria-label="Telemetry views">{["Execution", "Agent jobs", "Costs", "Database", "Activity", "Performance", "Limits"].map(t => <button key={t} aria-current={tab === t ? "page" : undefined} onClick={() => { setTab(t); setFilter(""); if (t === "Limits") setLimitsOpened(true); }}>{t}</button>)}</nav>
+      {tab === "Execution" && <section><div className="admin-section-heading"><div><h2>Jobs and Box agents</h2><p>Latest 100 jobs across all workspaces. Elapsed times include recovery pauses.</p></div><input className="field" aria-label="Filter jobs" placeholder="Filter by job, owner, type, worker or status" value={filter} onChange={e => setFilter(e.target.value)} /></div>
         <div className="admin-statuses">{data.statuses.map(s => <span key={s.status}><Status value={s.status} /> {number(s.count)}</span>)}</div>
-        <Table headings={["Job / owner", "State", "Started", "Finished", "Attempt / Box", "Wall time", "Agent time", "Agent cost", "Worker lease"]}>{jobs.map(j => <tr key={j.id}><td><button className="admin-job-link" onClick={() => selectJob(j.id)} aria-label={`View logs for ${j.kind} job ${j.id}`}>{j.id.slice(0, 8)} · {j.kind}</button><small title={j.owner}>{j.owner}</small></td><td><Status value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}</td><td className="admin-date">{date(j.started_at)}</td><td className="admin-date">{date(j.completed_at)}</td><td>{j.attempt}<small>{j.box_phase || "No Box runtime"}</small></td><td>{duration(j.wall_seconds)}{!terminal.has(j.status) && <small>in progress</small>}</td><td>{duration(j.agent_seconds)}</td><td><JobCost job={j} /></td><td>{j.lease_expired ? <span className="admin-warning">Expired; awaiting recovery</span> : terminal.has(j.status) ? "Finished" : j.lease_until ? date(j.lease_until) : "Awaiting worker"}<small>{j.recoveries} recoveries</small></td></tr>)}</Table>
+        <Table headings={["Job / owner", "State", "Started", "Finished", "Attempt / Box", "Wall time", "Agent time", "Agent cost", "Worker lease"]}>{jobs.map(j => <tr key={j.id}><td><button className="admin-job-link" onClick={() => selectJob(j.id)} aria-label={`View logs for ${jobLabel(j)} job ${j.id}`}>{j.id.slice(0, 8)} · {jobLabel(j)}</button><small title={j.owner}>{j.owner}</small></td><td><Status value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}</td><td className="admin-date">{date(j.started_at)}</td><td className="admin-date">{date(j.completed_at)}</td><td>{j.attempt}<small>{j.box_phase || "No Box runtime"}</small></td><td>{duration(j.wall_seconds)}{!terminal.has(j.status) && <small>in progress</small>}</td><td>{duration(j.agent_seconds)}</td><td><JobCost job={j} /></td><td>{j.lease_expired ? <span className="admin-warning">Expired; awaiting recovery</span> : terminal.has(j.status) ? "Finished" : j.lease_until ? date(j.lease_until) : "Awaiting worker"}<small>{j.recoveries} recoveries</small></td></tr>)}</Table>
         {!jobs.length && <p className="admin-empty">No jobs match this view. Research jobs will appear here as they are created.</p>}
         {jobId && <AdminJobDetail key={jobId} jobId={jobId} auto={auto} onClose={() => selectJob(null)} />}
       </section>}
@@ -101,6 +104,7 @@ export function AdminConsole({ bypass }: { bypass: boolean }) {
       {tab === "Activity" && <section><h2>Recent record changes</h2><p>Latest 100 currently stored records, ordered by last update. This is a snapshot, not a historical audit log; deleted records are not included.</p><Table headings={["Type", "Record", "Owner", "Version", "Updated"]}>{data.recent.map(r => <tr key={`${r.kind}-${r.id}`}><td>{r.kind}</td><td className="admin-mono">{r.id}</td><td className="admin-mono">{r.owner}</td><td>{r.version}</td><td>{date(r.updated_at)}</td></tr>)}</Table>
         <h2>Job event stream</h2><p>Latest 100 event envelopes. Scientific content, tool arguments and credentials are excluded.</p><Table headings={["Time", "Job", "Event", "State", "Stage"]}>{data.events.map(e => <tr key={`${e.job_id}-${e.id}`}><td>{date(e.occurred_at)}</td><td className="admin-mono">{e.job_id}</td><td>{e.event_type}</td><td><Status value={e.status} /></td><td>{e.stage}</td></tr>)}</Table>
       </section>}
+      {tab === "Agent jobs" && (data.agent_jobs ? <AdminAgentJobsView agents={data.agent_jobs} kinds={data.job_kinds} onSelect={id => { setTab("Execution"); selectJob(id); }} /> : <p className="admin-empty">This backend does not report agent job types yet.</p>)}
       {tab === "Costs" && (data.costs ? <AdminCostsView costs={data.costs} jobs={data.jobs} onSelect={id => { setTab("Execution"); selectJob(id); }} /> : <p className="admin-empty">This backend does not report agent costs yet.</p>)}
       {tab === "Performance" && <AdminPerformance runtime={data.runtime} />}
       {/* Mounted on first open and then kept: it loads its own data, so refreshes and tab switches leave unsaved edits alone. */}

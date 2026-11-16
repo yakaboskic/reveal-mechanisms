@@ -3,7 +3,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { formatAdminDate as date, formatAdminDuration as duration, formatAdminJson } from "@/lib/admin-time";
 import { coalesceMessageDeltas } from "@/lib/activity";
 import type { Schema } from "@/lib/client";
-import type { AdminJob } from "@/lib/admin-job";
+import { jobLabel, type AdminJob, type AgentRun } from "@/lib/admin-job";
+import { AgentRunDetail } from "./AdminAgentJobs";
 
 type Diagnostic = { path: string; available: boolean; data?: unknown; reason?: string };
 type Tokens = { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null };
@@ -17,6 +18,8 @@ type Detail = {
   events: Schema<"JobEvent">[]; next_before: string | null;
   attempts: { attempt: number; started_at: string | null; worker_id: string | null; "remote_handle.box_id": string | null }[];
   attempts_limited: boolean; diagnostics: Diagnostic[]; diagnostics_limited: boolean; metrics?: Metrics | null;
+  // How an agent job was asked to run. null for other kinds; absent from older backends.
+  agent?: AgentRun | null;
 };
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
 const json = (value: unknown) => formatAdminJson(JSON.stringify(value, null, 2));
@@ -97,7 +100,7 @@ export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: 
   const events = coalesceMessageDeltas(data?.events || []).filter(e => `${e.message} ${e.stage} ${e.event_type} ${JSON.stringify(e.detail)}`.toLowerCase().includes(search.toLowerCase()));
   const failures = data?.diagnostics.filter(d => d.available && d.path.endsWith("/failure.json")) || [];
   return <section className="admin-job-detail" ref={region} aria-label="Job logs and diagnostics">
-    <div className="admin-section-heading"><div><h2>Execution detail{job ? ` · ${job.kind}` : ""}</h2><p className="admin-mono">{jobId}</p></div><div><button className="text-button" disabled={loading} onClick={() => setRevision(v => v + 1)}>Refresh logs</button><button className="text-button" onClick={onClose}>Close detail</button></div></div>
+    <div className="admin-section-heading"><div><h2>Execution detail{job ? ` · ${jobLabel(job)}` : ""}</h2><p className="admin-mono">{jobId}</p></div><div><button className="text-button" disabled={loading} onClick={() => setRevision(v => v + 1)}>Refresh logs</button><button className="text-button" onClick={onClose}>Close detail</button></div></div>
     {!data && loading && <p role="status">Loading job logs and diagnostics…</p>}
     {error && <p role="alert" className="error">{error}{data && " Showing previously loaded logs."}</p>}
     {data && job && <>
@@ -106,6 +109,7 @@ export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: 
         const failure = item.data as { phase?: string; error_type?: string; message?: string };
         return <div key={item.path}><strong>{failure.error_type || "Saved failure"}{failure.phase ? ` · ${failure.phase.replaceAll("_", " ")}` : ""}</strong><p>{failure.message}</p><small>{item.path}</small></div>;
       })}</div>}
+      {data.agent && <AgentRunDetail run={data.agent} job={job} />}
       {data.metrics && <AgentUsage metrics={data.metrics} />}
       <dl className="admin-detail-grid">{([['Created', job.created_at], ['Started', job.started_at], ['Updated', job.updated_at], ['Finished', job.completed_at], ['Current attempt started', job.attempt_started_at]] as const).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{date(value)}</dd></div>)}<div><dt>Worker</dt><dd>{job.worker || "—"}</dd></div><div><dt>Box</dt><dd>{job.box_id || "No Box runtime recorded"}</dd></div><div><dt>Attempt / recoveries</dt><dd>{job.attempt} / {job.recoveries}</dd></div></dl>
       <div className="admin-section-heading"><div><h3>Event log</h3><p>{data.events.length} stored events loaded{data.next_before ? " · earlier events available" : " · beginning of retained history"}. {active ? auto && !olderLoaded ? "Live logs refresh every 15s." : "Refresh logs to see current activity." : "Job finished."}</p></div><input className="field" aria-label="Search job logs" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search loaded messages, tools or stages" /></div>
