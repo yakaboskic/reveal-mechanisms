@@ -5,7 +5,7 @@ import Link from "next/link";
 import { accountSource, deliverableLabel, depositFilter, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun, type DepositFilter } from "@/lib/admin-job";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
 import type { UrlUpdate } from "./admin/use-url-state";
-import { Age, asTone, Empty, FilterRow, Metric, MetricGrid, PageHeading, Pagination, Panel, SearchFilter, SelectFilter, StateStatus, Status, Table } from "./admin/ui";
+import { Age, asTone, CopyButton, Empty, FilterRow, Metric, MetricGrid, PageHeading, Pagination, Panel, SearchFilter, SelectFilter, StateStatus, Status, Table } from "./admin/ui";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
 import { AgentRequest, LIMIT_LABELS, limitValue } from "./AdminAgentRequest";
@@ -127,7 +127,7 @@ export function AdminAgentJobsView({ agents, kinds, params = new URLSearchParams
       footer={shown.total > AGENT_PAGE_SIZE ? <Pagination page={shown.page} pages={shown.pages} total={shown.total} noun="agent job" href={page => urlWith("/admin/agent-jobs", params, { page })} /> : undefined}>
       {shown.items.length ? <Table label="Agent jobs" className="admin-agent-jobs" headings={AGENT_HEADINGS}>
       {shown.items.map(j => { const run = j.agent; const outcome = depositOutcome(j); const limits = run.limits; const account = run.deliverable === "scientific_account"; return <tr key={j.id}>
-        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View how job ${j.id} was run`} title={j.id}>{j.id.slice(0, 8)}</Link><small title={j.owner}>{j.owner}</small></td>
+        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View how job ${j.id} was run`} title={j.id}>{j.id.slice(0, 8)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{j.owner}</small></td>
         <td>{deliverableLabel(run.deliverable)}</td>
         <td><StateStatus value={j.status} />{j.failure_code && <small>{j.failure_code}</small>}{!terminal.has(j.status) && j.stage !== j.status && <small>{j.stage.replaceAll("_", " ")}</small>}</td>
         <td>{[run.model, run.effort && `${run.effort} effort`].filter(Boolean).join(" · ") || "—"}<small>{sources(run)}</small><small>{run.tools == null ? "Tools not recorded" : run.tools.length ? `Tools: ${run.tools.join(", ")}` : "No built-in tools"}</small>{claimsAsked(run) && <small>{claimsAsked(run)}</small>}<small>Prompt {count(run.prompt_characters)} characters</small></td>

@@ -122,3 +122,21 @@ test("agent jobs: a sources column, a withheld filter with its reason, and the s
   assert.ok(view.includes('href="/admin/jobs?job=w1000000"'));
   assert.ok(render(AdminAgentJobsView, { agents, params: params("deposit=deposited&q=nothing-matches") }).includes("No agent jobs match this view."));
 });
+
+test("filters from the URL show as chosen even when no listed job has that value, and job ids copy whole", () => {
+  const html = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params("status=cancel_requested&q=worker"), update: noUpdate, auto: true });
+  assert.ok(html.includes('<option value="cancel_requested" selected="">cancel requested</option>'), "the outside value is an option, chosen");
+  assert.ok(html.includes('value="worker"'), "the search box starts from the URL");
+  const all = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params(), update: noUpdate, auto: true });
+  assert.ok(all.includes('aria-label="Copy: f1"'));
+});
+
+test("only a table the snapshot lists as present opens in the inspector", () => {
+  const tables = [{ name: "reveal_records", present: true, estimated_rows: 3, bytes: 10 }, { name: "old_table", present: false, estimated_rows: null, bytes: null }];
+  const open = render(DatabaseView, { data: snapshot([], { tables }), params: params("table=reveal_records"), update: noUpdate });
+  assert.ok(open.includes('aria-label="Table contents"') && open.includes("Back to database tables"));
+  for (const name of ["old_table", "no_such_table", "../jobs"]) {
+    const html = render(DatabaseView, { data: snapshot([], { tables }), params: params(`table=${encodeURIComponent(name)}`), update: noUpdate });
+    assert.ok(!html.includes('aria-label="Table contents"') && html.includes("to inspect. Choose one below.") && html.includes('aria-label="Database tables"'), name);
+  }
+});

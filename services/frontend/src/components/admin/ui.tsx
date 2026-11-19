@@ -1,6 +1,6 @@
 "use client";
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
-import React, { useState, type ReactNode } from "react";
+import React, { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { adminDate, formatAdminDate } from "@/lib/admin-time";
 
@@ -126,17 +126,29 @@ export const FilterRow = ({ children, label = "Filters" }: { children: ReactNode
 export function SelectFilter({ label, value, options, onChange, all = "All" }: {
   label: string; value: string; options: ([string, string] | string)[]; onChange: (value: string) => void; all?: string;
 }) {
+  const choices = options.map(option => typeof option === "string" ? [option, option] as const : option);
+  // A value from the URL that is not among today's options (no such job in the latest 100) still shows as chosen.
+  if (value && !choices.some(([v]) => v === value)) choices.push([value, value.replaceAll("_", " ")]);
   return <label className="admin-select"><span>{label}</span>
     <select aria-label={label} value={value} onChange={e => onChange(e.target.value)}>
       <option value="">{all}</option>
-      {options.map(option => { const [v, text] = typeof option === "string" ? [option, option] : option; return <option key={v} value={v}>{text}</option>; })}
+      {choices.map(([v, text]) => <option key={v} value={v}>{text}</option>)}
     </select>
   </label>;
 }
 
+/** Free text filter. The box owns what is typed and writes it to the URL 300 ms after typing stops, as the claims console
+ * does, so a router round trip never drops keystrokes; a change from outside (Clear filters, Back) replaces the text. */
 export function SearchFilter({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
+  const [text, setText] = useState(value);
+  useEffect(() => { setText(current => current.trim() === value ? current : value); }, [value]);
+  useEffect(() => {
+    if (text.trim() === value) return;
+    const timer = setTimeout(() => onChange(text.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [text, value, onChange]);
   return <label className="admin-search"><span className="sr-only">{label}</span>
-    <input className="field" type="search" aria-label={label} placeholder={placeholder} value={value} onChange={e => onChange(e.target.value)} />
+    <input className="field" type="search" aria-label={label} placeholder={placeholder} value={text} onChange={e => setText(e.target.value)} />
   </label>;
 }
 

@@ -6,7 +6,7 @@ import type { Snapshot } from "@/lib/admin-telemetry";
 import { urlWith, type UrlParams } from "@/lib/admin-url";
 import { AdminTableInspector } from "../AdminTableInspector";
 import type { UrlUpdate } from "./use-url-state";
-import { Age, Empty, PageHeading, Panel, StateStatus, Table } from "./ui";
+import { Age, Callout, Empty, PageHeading, Panel, StateStatus, Table } from "./ui";
 
 const number = (value: number | null) => value == null ? "—" : value.toLocaleString();
 
@@ -18,13 +18,16 @@ export function loaded(r: Record<string, string | number | null>) {
 
 /** Tables (with the inspector open on `?table=`), imports and embedding runs, and application record types. */
 export function DatabaseView({ data, params, update }: { data: Snapshot; params: UrlParams; update: UrlUpdate }) {
-  const table = params.get("table");
+  // Only a table the snapshot lists as present opens; any other name from the URL shows the list.
+  const asked = params.get("table");
+  const table = asked && data.tables.some(t => t.present && t.name === asked) ? asked : null;
   if (table) return <>
     <PageHeading title="Database" subtitle={<>Inspecting <span className="admin-mono">{table}</span>, read only.</>} />
     <AdminTableInspector key={table} table={table} onClose={() => update({ table: null })} />
   </>;
   return <>
     <PageHeading title="Database" subtitle={<>Scientific database: {data.database}.</>} />
+    {asked && <Callout tone="warn">There is no table named <span className="admin-mono">{asked}</span> to inspect. Choose one below.</Callout>}
     <Panel title="Tables" description="Select a table to inspect its rows. Table row counts are database estimates; the record type counts below are exact. Missing tables are shown explicitly.">
       {data.tables.length ? <Table label="Database tables" headings={["Prisma table", "Availability", "Estimated rows", "Data + indexes"]}>{data.tables.map(t => <tr key={t.name}>
         <td className="admin-mono">{t.present ? <Link className="admin-job-link" href={urlWith("/admin/database", params, { table: t.name })}>{t.name}</Link> : t.name}</td>

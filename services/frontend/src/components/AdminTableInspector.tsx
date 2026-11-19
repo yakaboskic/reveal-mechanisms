@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+// React is imported by name because the unit tests render this file with the classic JSX runtime.
+import React, { useEffect, useRef, useState } from "react";
 import { adminDate, formatAdminDate, formatAdminJson, localizeAdminValue } from "@/lib/admin-time";
 
 type Column = { name: string; type: string; nullable: boolean };
