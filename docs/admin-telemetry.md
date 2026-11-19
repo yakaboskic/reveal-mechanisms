@@ -193,7 +193,8 @@ unknown is `null`. Times are ISO 8601 strings.
 
 The run's full transcript (Claude Code's stream: every message, thinking block, tool call and tool result, and the
 end of its stderr) is kept with each attempt ([agent jobs](agent-jobs.md#how-it-runs)) and read a page of turns at a
-time. Like the request, it is loaded only when you ask.
+time. Like the request, it is loaded only when you ask. Research and paragraph runs capture the same two files, but
+nothing reads them yet: this route serves general agent jobs only.
 
 The backend route is `GET /internal/v1/admin/jobs/{id}/transcript`, under the same `admin_content` assertion as the
 run view. Every page writes one `admin_content_read` record (route `jobs/transcript`, with the attempt and `after`)

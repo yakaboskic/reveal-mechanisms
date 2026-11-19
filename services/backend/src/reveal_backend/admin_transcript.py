@@ -186,7 +186,9 @@ class Folder:
 def fold(raw):
     """(turns, cut, skipped lines) of a stream's inflated bytes."""
     folder = Folder()
-    for line in raw.decode('utf-8', 'replace').splitlines():
+    # Lines end at \n only, as the runner reads them (box_stream.ClaudeStream): Claude Code writes U+2028 and U+2029
+    # unescaped inside a line, and str.splitlines would split there.
+    for line in raw.decode('utf-8', 'replace').split('\n'):
         if line.strip(): folder.feed(line)
     folder.flush()
     return folder.turns, folder.cut, folder.skipped

@@ -87,6 +87,16 @@ def test_clock_lines_say_when_lines_arrived_at_most_once_a_second(tmp_path):
                      (TRANSCRIPT_CLOCK, '1970-01-01T00:16:43.000Z'), ('assistant', 4)]
 
 
+def test_a_stream_line_up_to_claude_streams_limit_is_never_split(tmp_path):
+    path = tmp_path / 'stream.jsonl.gz'
+    long = json.dumps({'type': 'user', 'text': 'z' * 2_000_000}).encode() + b'\n'
+    times = iter(float(second) for second in range(1000, 2000))
+    with TranscriptWriter(path, 20_000_000, expanded=48_000_000, clock=lambda: next(times)) as writer:
+        for offset in range(0, len(long), 65536):   # arrives over many reads, a second apart
+            writer.write(long[offset:offset + 65536])
+    assert [event['type'] for event in lines(path)] == [TRANSCRIPT_CLOCK, 'user']
+
+
 def test_the_gzip_trailer_is_written_when_the_run_fails_and_an_unfinished_line_is_kept(tmp_path):
     path = tmp_path / 'stderr.txt.gz'
     with pytest.raises(RuntimeError):

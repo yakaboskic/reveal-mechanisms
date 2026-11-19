@@ -179,8 +179,9 @@ class ClaudeStream:
 # Lines the runner adds to a transcript; Claude Code's own event types never start with "reveal_".
 TRANSCRIPT_CUT = 'reveal_transcript_cut'
 TRANSCRIPT_CLOCK = 'reveal_clock'
-# An unfinished line longer than this is written as it is (stderr need not end its lines).
-MAX_PENDING_LINE = 1_000_000
+# An unfinished line longer than this is written as it is (stderr need not end its lines). Above ClaudeStream's 2 MB
+# line limit, so a stream line is never split by a clock line, the cut or the tail's start.
+MAX_PENDING_LINE = 4_000_000
 
 
 class TranscriptWriter:

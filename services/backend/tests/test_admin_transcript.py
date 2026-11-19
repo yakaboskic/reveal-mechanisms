@@ -109,6 +109,14 @@ class FoldTests(unittest.TestCase):
                                         ('assistant', 'text', None, False, True)])
         self.assertEqual((turns[1]['tool_input'], turns[1]['call_id'], turns[2]['text']), ('{"comm', 'call-9', 'Half a sen'))
 
+    def test_line_separators_inside_a_line_do_not_split_it(self):
+        # Claude Code (Node's JSON.stringify) writes U+2028 and U+2029 unescaped.
+        stream = (json.dumps(assistant('m1', {'type': 'tool_use', 'id': 'c', 'name': 'Read', 'input': {}}), ensure_ascii=False) + '\n'
+                  + json.dumps(result('c', 'one\u2028two\u2029three\x85four'), ensure_ascii=False) + '\n').encode()
+        turns, _, skipped = fold(stream)
+        self.assertEqual((len(turns), skipped), (2, 0))
+        self.assertEqual(turns[1]['text'], 'one\u2028two\u2029three\x85four')
+
     def test_a_cut_is_a_turn_where_the_lines_were_left_out(self):
         cut_line = {'type': TRANSCRIPT_CUT, 'omitted_bytes': 12345, 'omitted_lines': 40, 'original_bytes': 99999}
         turns, cut, _ = fold(raw(INIT, message('m1'), start(0, type='text', text=''), delta(0, 'text_delta', text='Before the cut'),
