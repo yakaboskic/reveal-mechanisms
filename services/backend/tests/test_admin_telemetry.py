@@ -117,7 +117,7 @@ class AdminTelemetryTests(unittest.TestCase):
 
 
 SENTINELS = ('PROMPT-TEXT', 'SYSTEM-TEXT', 'QUESTION-TEXT', 'CLAIM-TEXT', 'PACKAGE-TEXT', 'REQUESTER-NAME', '0000-0002-1825-0097',
-             'RESPONSE-TEXT', 'DOCUMENT-TEXT', 'REQUESTED-TEXT', 'DEPOSIT-DETAIL')
+             'RESPONSE-TEXT', 'DOCUMENT-TEXT', 'REQUESTED-TEXT', 'DEPOSIT-DETAIL', 'STORED-PATH')
 LIMITS = {'timeout_seconds': 3600, 'max_turns': 999, 'max_budget_usd': 5.0, 'tool_calls': 90}
 ACCOUNT_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch']
 
@@ -140,12 +140,24 @@ def answer_inputs():
             'deliverable': 'answer', 'account': None, 'claims_repository': False}
 
 
+XML_URL = 'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3491803/fullTextXML'
+# The account's saved sources as the job result lists them; stored_path stands for anything outside the public fields.
+PAPERS = [{'path': 'sources/PMC3491803.xml', 'url': XML_URL, 'sha256': 'a' * 64, 'size_bytes': 48213, 'media_type': 'application/xml',
+           'command': 'curl -sSL -o output/sources/PMC3491803.xml ' + XML_URL,
+           'observed_command': 'mkdir -p output/sources && curl -sSL -o output/sources/PMC3491803.xml ' + XML_URL,
+           'derived_from': None, 'evidence_items': 2, 'file_id': 'dapper:File.x', 'stored_path': 'STORED-PATH'},
+          {'path': 'sources/lepr.txt', 'url': 'https://example.org/lepr.pdf?api_key=SOURCE-KEY-123', 'sha256': 'b' * 64,
+           'size_bytes': 91022, 'media_type': 'text/plain', 'command': 'pdftotext -layout output/sources/lepr.pdf output/sources/lepr.txt',
+           'observed_command': 'pdftotext -layout output/sources/lepr.pdf output/sources/lepr.txt', 'derived_from': 'sources/lepr.pdf',
+           'evidence_items': 4, 'file_id': 'dapper:File.y'}]
+
+
 def account_result(deposit):
     return {'kind': 'agent', 'turns': 49, 'cost_usd': 1.31, 'duration_seconds': 363.5, 'response': 'RESPONSE-TEXT' * 3,
             'response_truncated': False, 'files': [{'path': 'a'}, {'path': 'b'}],
             'account': {'account_id': 'dapper:ScientificAccount.abc', 'objects': 37, 'claims': 3, 'edges': 10, 'value_locators': 6,
                         'lint_warnings': 1, 'dapper_version': '0.2.1-a1', 'document': {'note': 'DOCUMENT-TEXT'},
-                        'papers': [{'id': '1'}, {'id': '2'}], 'deposit': deposit,
+                        'papers': PAPERS, 'deposit': deposit,
                         'requested_claims': [{'statement': 'REQUESTED-TEXT', 'assessed': True}]}}
 
 
@@ -223,7 +235,11 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
                                          'deposit_http_status': None, 'response_characters': 39, 'papers': 2, 'files': 2,
                                          'structured_output_characters': None,
                                          **dict.fromkeys(('screen_outcome', 'screen_check', 'screen_score', 'screen_threshold',
-                                                          'screen_location', 'screen_classifier', 'screen_windows', 'screen_seconds'))})
+                                                          'screen_location', 'screen_classifier', 'screen_windows', 'screen_texts',
+                                                          'screen_seconds'))})
+        # The job list carries no source paths, URLs or commands: only the job detail does.
+        self.assertNotIn('sources', run)
+        self.assertNotIn(XML_URL, json.dumps(block))
         # A job that succeeded while its deposit did not says so, with the reason and not the repository's message.
         result = rows[ids['undeposited']]['agent']['result']
         self.assertEqual([result[key] for key in ('deposit_status', 'deposit_reason', 'deposit_http_status', 'deposit_id')],
@@ -282,10 +298,11 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         block = snapshot(self.repo)['agent_jobs']
         rows = {row['id']: row['agent']['result'] for row in block['jobs']}
         self.assertEqual({key: rows[withheld][key] for key in ('deposit_status', 'deposit_reason', 'screen_outcome', 'screen_check', 'screen_score',
-                                                               'screen_threshold', 'screen_location', 'screen_windows', 'screen_seconds')},
+                                                               'screen_threshold', 'screen_location', 'screen_windows', 'screen_texts',
+                                                               'screen_seconds')},
                          {'deposit_status': 'withheld_unsafe', 'deposit_reason': 'prompt_injection', 'screen_outcome': 'withheld',
                           'screen_check': 'prompt_injection', 'screen_score': 0.9731, 'screen_threshold': 0.5,
-                          'screen_location': 'sources/PMC1.txt line=12-14', 'screen_windows': 84, 'screen_seconds': 2.4})
+                          'screen_location': 'sources/PMC1.txt line=12-14', 'screen_windows': 84, 'screen_texts': 9, 'screen_seconds': 2.4})
         self.assertEqual((rows[passed]['screen_outcome'], rows[passed]['screen_score'], rows[passed]['deposit_status']), ('passed', 0.012, 'deposited'))
         # Counted on its own, by check, and not among the deposits that failed.
         account = {entry['deliverable']: entry for entry in block['types']}['scientific_account']
@@ -314,6 +331,34 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         self.assertEqual(details['deposited']['agent']['result']['deposit_status'], 'deposited')
         self.assertEqual(details['plain']['agent']['deliverable'], 'answer')
         self.assertIsNone(details['analysis']['agent'])
+
+    def test_the_job_detail_lists_each_saved_source_by_its_metadata(self):
+        ids = self.populate()
+        from reveal_backend.admin_jobs import job_detail
+        sources = job_detail(self.repo, ids['deposited'])['agent']['sources']
+        self.assertEqual(sources['total'], 2)
+        self.assertEqual(sources['items'][0], {key: PAPERS[0][key] for key in ('path', 'url', 'command', 'observed_command', 'derived_from',
+                                                                                 'sha256', 'media_type', 'size_bytes', 'evidence_items')})
+        # Only the listed fields; a credential the agent put in a URL is redacted like any diagnostic.
+        self.assertEqual(sources['items'][1]['url'], 'https://example.org/lepr.pdf?api_key=[redacted]')
+        self.assertEqual((sources['items'][1]['derived_from'], sources['items'][1]['evidence_items']), ('sources/lepr.pdf', 4))
+        encoded = json.dumps(sources)
+        for hidden in ('STORED-PATH', 'SOURCE-KEY-123', 'dapper:File.x'):
+            self.assertNotIn(hidden, encoded)
+        # A job with no account has no sources; an answer job is never asked.
+        self.assertIsNone(job_detail(self.repo, ids['failed'])['agent']['sources'])
+        self.assertNotIn('sources', job_detail(self.repo, ids['answer'])['agent'])
+
+    def test_the_job_detail_bounds_the_source_list_and_each_field(self):
+        many = [{**PAPERS[0], 'path': f'sources/p{index}.xml', 'command': 'curl ' + 'x' * 5000, 'size_bytes': True}
+                for index in range(130)]
+        identity = self.agent_job(account_inputs(), 'succeeded', result={**account_result({'status': 'deposited'}),
+                                  'account': {**account_result({'status': 'deposited'})['account'], 'papers': many}})
+        from reveal_backend.admin_jobs import job_detail
+        sources = job_detail(self.repo, identity)['agent']['sources']
+        self.assertEqual((sources['total'], len(sources['items'])), (130, 100))
+        self.assertEqual(len(sources['items'][0]['command']), 2000)
+        self.assertIsNone(sources['items'][0]['size_bytes'])   # a boolean is not a size
 
     def test_an_installation_without_agent_jobs_reports_none(self):
         block = snapshot(self.repo)['agent_jobs']

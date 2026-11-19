@@ -557,3 +557,38 @@ def publication(url):
     if doi:
         node['doi'] = 'doi:' + doi.group(1)
     return node
+
+
+# The programs an Activity's command may run to fetch or convert a paper (deposit_screen.FETCH_PROGRAMS), and the Debian
+# packages the Box toolchain installs them from (box_adapter.toolchain_script).
+SOURCE_PACKAGES = ('curl', 'poppler-utils', 'libxml2-utils')
+SOURCE_PROGRAMS = (('curl', '--version'), ('pdftotext', '-v'), ('xmllint', '--version'))
+
+
+def tool_versions():
+    """{'packages': {package: installed version}, 'programs': {program: first line of its version output}} of the fetch
+    and convert tools, so the Activities an account records can be explained (and the apt pins chosen). A package or
+    program that is not installed, or does not answer, is None. Never raises.
+
+    Self-contained on purpose: the toolchain snapshot builder runs this function's source in its builder Box
+    (scripts/build_box_toolchain_snapshot.py), with SOURCE_PACKAGES and SOURCE_PROGRAMS defined beside it."""
+    import subprocess
+
+    def run(argv):
+        try:
+            return subprocess.run(argv, capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return None
+    packages = dict.fromkeys(SOURCE_PACKAGES)
+    listed = run(['dpkg-query', '-W', '-f', '${Package}=${Version}\n', *SOURCE_PACKAGES])
+    for line in (listed.stdout if listed else '').splitlines():
+        name, _, version = line.partition('=')
+        if name in packages and version.strip():
+            packages[name] = version.strip()[:200]
+    programs = {}
+    for program, flag in SOURCE_PROGRAMS:
+        done = run([program, flag])
+        # pdftotext -v and xmllint --version print to standard error, and pdftotext -v exits non-zero on some releases.
+        lines = [line.strip() for line in ((done.stdout or '') + '\n' + (done.stderr or '') if done else '').splitlines() if line.strip()]
+        programs[program] = lines[0][:200] if lines else None
+    return {'packages': packages, 'programs': programs}

@@ -36,7 +36,7 @@ from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
 from .box_upload import MAX_TOTAL, capture_file_limit, source_file
-from .source_evidence import CHECK as SOURCE_CHECK
+from .source_evidence import CHECK as SOURCE_CHECK, tool_versions as source_tool_versions
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -405,7 +405,10 @@ def account_workspace(work, project, lock, agent_input, runtime):
                     'deliverable': 'One DAPPER ScientificAccount saved as output/account-1.json. Follow ' + ACCOUNT_SKILL_PATH + '.'}
     (work / ACCOUNT_REQUEST_FILENAME).write_text(json.dumps(request_view, ensure_ascii=False, indent=2) + '\n')
     runtime.update({'dapper': release, 'dapper_root': str(root / 'dapper'), 'evidence_package': str(package),
-                    'deliverable': 'scientific_account'})
+                    'deliverable': 'scientific_account',
+                    # The installed versions of the programs the account's Activities run (curl, pdftotext, xmllint),
+                    # so each recorded fetch and conversion can be explained and rerun with the same tools.
+                    'source_tools': source_tool_versions()})
     runtime['derived_input_views'] = {str(path.relative_to(work)): hashlib.sha256(path.read_bytes()).hexdigest()
                                       for path in (work / ACCOUNT_SKILL_PATH, folder / 'authoring-schema-excerpt.yaml', work / ACCOUNT_REQUEST_FILENAME)}
 

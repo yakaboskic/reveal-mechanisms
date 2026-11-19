@@ -1,7 +1,7 @@
 "use client";
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React, { useState } from "react";
-import { deliverableLabel, depositOutcome, jobKindLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
+import { deliverableLabel, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
 
@@ -30,6 +30,27 @@ function Returned({ job }: { job: AgentJob }) {
   }
   if (result.response_characters == null) return <>—</>;
   return <>{count(result.response_characters)} characters{result.response_truncated && <small><span className="admin-warning">Truncated</span></small>}{!!result.files && <small>{plural(result.files, "file")}</small>}</>;
+}
+
+/** The files an account job saved and cited, one row each: what the agent recorded and what REVEAL measured. */
+function SavedSources({ sources }: { sources: NonNullable<AgentRun["sources"]> }) {
+  const cell = (value: string | null) => value ? <code className="admin-mono">{value}</code> : "—";
+  return <>
+    <h3>Sources the agent saved</h3>
+    {sources.items.length ? <div className="admin-table-scroll" tabIndex={0}><table aria-label="Sources the agent saved"><thead><tr>{["Path", "URL", "Command", "Observed command", "Size", "sha256", "Media type", "Quotes citing it"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
+      {sources.items.map((source, index) => <tr key={`${source.path}-${index}`}>
+        <td className="admin-mono">{source.path || "—"}{source.derived_from && <small>converted from {source.derived_from}</small>}</td>
+        <td className="admin-mono">{source.url || "—"}</td>
+        <td>{cell(source.command)}</td>
+        <td>{source.observed_command && source.observed_command === source.command ? "Same as the command" : cell(source.observed_command)}</td>
+        <td>{fileSize(source.size_bytes)}</td>
+        <td className="admin-mono" title={source.sha256 || undefined}>{shortSha(source.sha256)}</td>
+        <td>{source.media_type || "—"}</td>
+        <td>{count(source.evidence_items)}</td>
+      </tr>)}
+    </tbody></table></div> : <p>The account cites no saved source file.</p>}
+    {sources.total > sources.items.length && <p>The first {count(sources.items.length)} of {count(sources.total)} sources.</p>}
+  </>;
 }
 
 /** The settings of one agent job, for the job detail. */
@@ -63,7 +84,8 @@ export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (O
     <dl className="admin-detail-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     <h3>Limits the job was given</h3>
     {run.limits ? <dl className="admin-detail-grid">{LIMIT_LABELS.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{run.limits![key] == null ? "Not part of this input" : limitValue(key, run.limits![key])}</dd></div>)}</dl> : <p>No limits were recorded for this job.</p>}
-    <p>The prompt, question, claims and response are not shown here: sizes and counts only. The event log below holds what the agent did.</p>
+    {account && run.sources && <SavedSources sources={run.sources} />}
+    <p>The prompt, question, claims and response are not shown here: sizes and counts only.{account && run.sources ? " Each saved source shows the path, URL and commands the agent recorded and what REVEAL measured, never the file's text." : ""} The event log below holds what the agent did.</p>
   </details>;
 }
 

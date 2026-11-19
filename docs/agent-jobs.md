@@ -184,6 +184,10 @@ What is different about such a job:
   for the pinned DAPPER release the account tools lint against. The agent fetches each paper with a command and
   saves it under `output/sources/`; the routine is in its skill
   ([`construct-literature-account`](../services/backend/agent-skills/construct-literature-account/SKILL.md)).
+- **The Box has the fetch and convert tools.** Its toolchain installs `curl`, `pdftotext` (poppler-utils) and
+  `xmllint` (libxml2-utils) with the rest. They are not yet pinned to exact versions; each account job records the
+  installed versions in its `runtime.json` (`source_tools`: each package's version and each program's version line),
+  so its Activities can be explained and rerun with the same tools.
 - **It gets the time and turn ceilings by default**, because a run stopped at a limit returns no account. Ask for
   less in `limits` if you want.
 - **The agent keeps a lab notebook, and REVEAL checks it.** For each paper the agent:
@@ -260,6 +264,33 @@ The job result gains an `account` block, and `response` is the agent's short rep
 
 `scripts/agent_job.py --question … --claim … --account-out account.json` does all of this from a terminal.
 
+#### Check that the sources reproduce
+
+`scripts/audit_account_sources.py` reruns each recorded fetch and conversion command in a scratch directory on the
+machine you run it on, fetches before the conversions that read them, and compares SHA-256s with the job result's
+`papers`. It is not part of the deposit: an account is deposited whatever the audit later finds.
+
+```bash
+# From the owner route, with REVEAL_API_URL and REVEAL_API_KEY (or --handoff key.json):
+python3 scripts/audit_account_sources.py --job <job-id>
+# From an exported job result (GET /v1/jobs/{id}, GET /v1/jobs/{id}/account, or the account block):
+python3 scripts/audit_account_sources.py --result job.json --json
+```
+
+Each source is `reproduced`; `changed_upstream` (the publisher's copy changed: not a failure, REVEAL keeps the
+original bytes); `converter_differs` (a conversion read the same bytes and wrote others: the local `pdftotext` or
+`xmllint` is not the Box's version, compare with `source_tools` in the run's `runtime.json`; not a failure); `failed`
+(with the command's exit status); or `refused`. With `--job`, a conversion of a file that changed upstream is run on
+the original bytes, downloaded from `/v1/jobs/{id}/account/sources/{sha256}` (`--originals DIR` supplies them from a
+folder of files named by checksum). The exit status is 1 when a source failed or was refused.
+
+It runs only commands the deposit screen accepts (one plain `curl`, `wget`, `pdftotext` or `xmllint` call writing under
+`output/`, that program as the first word, only the options listed for it, no local file outside `output/` and no
+URL that is not http(s): `deposit_screen.command_refusal`, the same rule that withholds an account). Anything else is
+refused. Commands run without a shell, with their `output/` paths and redirects moved into the
+scratch directory, and with the scratch directory as `HOME`. They do reach the network. The audit in a fresh Box, and
+a console button for it, come later.
+
 `scripts/scientific_account_job.sh <key.json> <run-directory>` is a worked example that prints every HTTP call: it takes
 candidate genes from the claims repository's validation-challenge query, submits the job with one claim per gene, and
 reads the deposit back from the repository. Each successful run is a permanent deposit; reusing a run directory resumes
@@ -283,7 +314,8 @@ A deposit cannot be recalled. A cancellation that arrives before the deposit is 
 Before sending, REVEAL screens the account for prompt injection. The screen looks for attacks, not scientific quality.
 Fixed checks require that the account's prose carries no links, code, markup, hidden characters or text addressed to
 a model; that each recorded command is a plain `curl`, `wget`, `pdftotext` or `xmllint` call writing only under
-`output/`; that its claims are about the claims you asked about (or, if you named none, its own, at most 20); that
+`output/`, using only the options listed for its program (`deposit_screen.OPTIONS`: fetching with GET, converting,
+choosing the output) and naming no local file outside `output/` and no URL that is not http(s); that its claims are about the claims you asked about (or, if you named none, its own, at most 20); that
 each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
 size limit. A classifier, Llama Prompt Guard 2 22M, also scores the saved papers, the other tool results and the
 account's text. Keep links and markup out of `context`, `closing_remarks` and the other prose fields.
@@ -383,6 +415,11 @@ their state, Box phase timings, agent time and cost; the job detail shows the ev
 diagnostics, including `runtime.json` and the response record, so a failed run's Claude Code error text is
 readable without opening S3. The **Costs** tab counts their spend in its own daily series and shows the typical
 cost of a successful agent job, separately from research runs.
+
+An account job's detail also lists each source file it saved: the path, URL, recorded command, the Bash call REVEAL
+saw run, size, short SHA-256, media type and how many quotes cite it, with the deposit screen's verdict (check,
+score against threshold, where, and how many windows and texts it scored). These are metadata the agent wrote and
+REVEAL measured, never a file's text; credentials in a URL or command are redacted. The job list carries none of it.
 
 ## How it runs
 

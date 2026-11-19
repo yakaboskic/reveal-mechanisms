@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { deliverableLabel, depositOutcome, jobKindLabel, jobLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
+import { deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
 import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgentJobs";
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
@@ -110,4 +110,44 @@ test("an account the deposit screen withheld shows the check, the score against 
   for (const text of ["1 withheld as unsafe", "(prompt injection 1)", "Withheld as unsafe: prompt injection", "at sources/PMC3491803.txt line=212-214"])
     assert.ok(view.includes(text), text);
   assert.ok(!view.includes("succeeded without a deposit"));
+});
+
+const XML_URL = "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3491803/fullTextXML";
+const sourcesRun: AgentRun = { ...accountRun, result: { ...accountRun.result, screen_outcome: "passed", screen_score: 0.012, screen_threshold: 0.5,
+  screen_location: "sources/lepr.txt line=40-41", screen_classifier: "prompt-guard-2-22m@0123456789ab", screen_windows: 31, screen_texts: 6, screen_seconds: 0.9 },
+  sources: { total: 2, items: [
+    { path: "sources/PMC3491803.xml", url: XML_URL, command: `curl -sSL -o output/sources/PMC3491803.xml ${XML_URL}`,
+      observed_command: `mkdir -p output/sources && curl -sSL -o output/sources/PMC3491803.xml ${XML_URL}`, derived_from: null,
+      sha256: "3f2a9c41d07be5aa" + "0".repeat(48), media_type: "application/xml", size_bytes: 48213, evidence_items: 2 },
+    { path: "sources/lepr.txt", url: "https://example.org/lepr.pdf", command: "pdftotext -layout output/sources/lepr.pdf output/sources/lepr.txt",
+      observed_command: "pdftotext -layout output/sources/lepr.pdf output/sources/lepr.txt", derived_from: "sources/lepr.pdf",
+      sha256: "b".repeat(64), media_type: "text/plain", size_bytes: 1_204_000, evidence_items: 0 }] } };
+
+test("an account job's detail lists each saved source with its URL, commands, size, checksum, type and quotes", () => {
+  assert.equal(shortSha("3f2a9c41d07be5aa" + "0".repeat(48)), "3f2a9c41d07b");
+  assert.equal(shortSha(null), "—");
+  assert.deepEqual([fileSize(1), fileSize(999), fileSize(48213), fileSize(1_204_000), fileSize(null)], ["1 byte", "999 bytes", "48.2 kB", "1.2 MB", "—"]);
+  const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: sourcesRun, job: job("dddddddd-0000", "succeeded", sourcesRun) }));
+  for (const text of ["Sources the agent saved", "<th>Observed command</th>", "<th>Quotes citing it</th>", "sources/PMC3491803.xml", XML_URL,
+    `curl -sSL -o output/sources/PMC3491803.xml ${XML_URL}`, `mkdir -p output/sources &amp;&amp; curl -sSL -o output/sources/PMC3491803.xml`,
+    "48.2 kB", "3f2a9c41d07b", "application/xml", "converted from sources/lepr.pdf", "Same as the command", "1.2 MB", "text/plain",
+    "never the file&#x27;s text"]) assert.ok(html.includes(text), text);
+  const rows = html.slice(html.indexOf("<tbody>", html.indexOf("Sources the agent saved")));
+  assert.ok(/<td>2<\/td><\/tr>/.test(rows) && /<td>0<\/td><\/tr>/.test(rows), "the quote counts");
+  // The checksum is shortened on screen; the whole one is its tooltip.
+  assert.ok(html.includes(`title="3f2a9c41d07be5aa${"0".repeat(48)}">3f2a9c41d07b</td>`), "the checksum is shortened on screen");
+  assert.ok(!html.includes("The first"));
+  // The screen verdict says how many texts it scored, in the row it already had.
+  assert.equal(screenSummary(sourcesRun.result), "Passed · score 0.01 (threshold 0.50) · highest at sources/lepr.txt line=40-41 · 31 windows from 6 texts in 0.9 s");
+  assert.equal(html.match(/Prompt-injection screen/g)?.length, 1);
+  // A capped list says so; an account citing nothing says so; an older backend or an answer job shows no section.
+  const capped = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: { ...sourcesRun, sources: { ...sourcesRun.sources!, total: 130 } }, job: deposited }));
+  assert.ok(capped.includes("The first 2 of 130 sources."));
+  const none = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: { ...sourcesRun, sources: { items: [], total: 0 } }, job: deposited }));
+  assert.ok(none.includes("The account cites no saved source file."));
+  for (const run of [accountRun, { ...sourcesRun, sources: null }, { ...sparseRun, sources: sourcesRun.sources }])
+    assert.ok(!renderToStaticMarkup(React.createElement(AgentRunDetail, { run, job: deposited })).includes("Sources the agent saved"));
+  // The job list never shows them.
+  const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { ...agents, jobs: [job("dddddddd-0000", "succeeded", sourcesRun)] }, onSelect() {} }));
+  assert.ok(!view.includes(XML_URL) && !view.includes("Sources the agent saved"));
 });

@@ -24,9 +24,12 @@ account cannot carry it out unless it gets past them.
                  Proposition itself, or one with exactly its statement plus a triple. Without any, the agent's own
                  claims are allowed, each Proposition is the subject of a Claim, and there are at most
                  MAX_ACCOUNT_CLAIMS of them. Never more than MAX_CLAIMS Claims in all.
-  commands       Each source Activity's `command` is one plain fetch or conversion (FETCH_PROGRAMS), with no command
-                 substitution and nothing written outside output/; the observed Bash call it came from runs no shell
-                 or interpreter (SHELLS) and writes nowhere outside output/ (or /dev/null).
+  commands       Each source Activity's `command` is one plain fetch or conversion (FETCH_PROGRAMS, the first word),
+                 with no command substitution, nothing written outside output/, only the options OPTIONS lists for
+                 its program, no argument naming a local file outside output/ (absolute, ~, .., @file) and no URL
+                 that is not http(s); the observed Bash call it came from runs no shell or interpreter (SHELLS) and
+                 writes nowhere outside output/ (or /dev/null). scripts/audit_account_sources.py reruns only commands
+                 this accepts (command_refusal).
   size           Every field has a cap (FIELD_CAPS; DEFAULT_TEXT_CAP and IDENTIFIER_CAP otherwise), and the agent's
                  free text together stays under MAX_FREE_TEXT characters.
 
@@ -171,6 +174,41 @@ REFUSED_OPTIONS = {'curl': {'-O', '--remote-name', '--remote-name-all', '-J', '-
                    'wget': {'-e', '--execute', '-i', '--input-file', '-x', '--force-directories', '-r', '--recursive', '-m',
                             '--mirror', '-N', '--timestamping'}}
 DEVICES = ('/dev/null', '/dev/stdout', '/dev/stderr')
+# The only options a source command may use, by program, each with whether it takes a value: fetching with GET,
+# converting, and choosing where the result goes. Anything else (sending data, reading a config, variable, cookie,
+# DTD or catalog file, expanding entities or XIncludes) is refused. Exact names only, so wget's abbreviated long
+# options (--exec for --execute) and xmllint's single-dash spellings (-output) are refused too.
+OPTIONS = {
+    'curl': {'-s': 0, '--silent': 0, '-S': 0, '--show-error': 0, '-L': 0, '--location': 0, '-f': 0, '--fail': 0,
+             '--fail-with-body': 0, '-o': 1, '--output': 1, '-D': 1, '--dump-header': 1, '--create-dirs': 0,
+             '-H': 1, '--header': 1, '-A': 1, '--user-agent': 1, '-e': 1, '--referer': 1, '--compressed': 0,
+             '--retry': 1, '--retry-delay': 1, '--retry-max-time': 1, '--retry-all-errors': 0, '--retry-connrefused': 0,
+             '-m': 1, '--max-time': 1, '--connect-timeout': 1, '--max-filesize': 1, '--max-redirs': 1, '-w': 1,
+             '--write-out': 1, '-g': 0, '--globoff': 0, '-#': 0, '--progress-bar': 0, '--no-progress-meter': 0,
+             '-v': 0, '--verbose': 0, '-q': 0, '--disable': 0, '--url': 1, '--http1.1': 0, '--http2': 0,
+             '--proto': 1, '--proto-redir': 1, '-I': 0, '--head': 0, '-i': 0, '--include': 0, '-R': 0, '--remote-time': 0,
+             '-X': 1, '--request': 1},
+    'wget': {'-q': 0, '--quiet': 0, '-nv': 0, '--no-verbose': 0, '-v': 0, '--verbose': 0, '-O': 1, '--output-document': 1,
+             '-t': 1, '--tries': 1, '-T': 1, '--timeout': 1, '--waitretry': 1, '--retry-connrefused': 0, '-U': 1,
+             '--user-agent': 1, '--header': 1, '--referer': 1, '--max-redirect': 1, '-S': 0, '--server-response': 0,
+             '--content-on-error': 0, '--compression': 1, '--no-cache': 0, '--https-only': 0, '--progress': 1,
+             '--show-progress': 0},
+    'xmllint': {'--format': 0, '--noout': 0, '--xpath': 1, '--nonet': 0, '--recover': 0, '--html': 0, '--encode': 1,
+                '--noblanks': 0, '--nocdata': 0, '--nsclean': 0, '--noenc': 0, '--output': 1, '-o': 1, '--c14n': 0,
+                '--c14n11': 0, '--exc-c14n': 0, '--huge': 0, '--pretty': 1, '--nowarning': 0, '--quiet': 0},
+    'pdftotext': {'-layout': 0, '-raw': 0, '-fixed': 1, '-f': 1, '-l': 1, '-r': 1, '-x': 1, '-y': 1, '-W': 1, '-H': 1,
+                  '-enc': 1, '-eol': 1, '-nopgbrk': 0, '-q': 0, '-nodiag': 0, '-htmlmeta': 0, '-bbox': 0,
+                  '-bbox-layout': 0, '-cropbox': 0, '-tsv': 0},
+}
+# Options whose value must be one of these: a request method that sends nothing.
+OPTION_CHOICES = {'curl': {'-X': {'GET', 'HEAD'}, '--request': {'GET', 'HEAD'}}}
+# Values that are text, not paths: headers, user agents, referrers, write-out formats, XPath expressions. Only @file
+# (curl reads -H @file and -w @file from a file) is refused in them.
+TEXT_VALUES = {'curl': {'-H', '--header', '-A', '--user-agent', '-e', '--referer', '-w', '--write-out'},
+               'wget': {'--header', '-U', '--user-agent', '--referer'},
+               'xmllint': {'--xpath', '--encode'}}
+# A word that starts like a URL (scheme:), as curl and wget read one.
+URL_SCHEME = re.compile(r'^[A-Za-z][A-Za-z0-9+.-]*:(?!\s)')
 
 
 class ScreenError(RuntimeError):
@@ -234,8 +272,91 @@ def _program(tokens):
 VALUE_LETTERS = {'curl': set('AbcCdDeEFHKmoPQrTuUwxXyYz'), 'wget': set('OoaPeitTwQUlARDIXB')}
 
 
+def _local_path(value):
+    """True when a word names a file on this machine by an absolute, home or parent-relative path, or as @file."""
+    return value.startswith(('/', '~', '../', '@')) or value == '..' or '/../' in value or value.endswith('/..') or '=@' in value
+
+
+def options_of(program, token):
+    """(the options one word sets, the value it carries itself or None): --name[=value]; an option the program spells
+    as one word (pdftotext -layout, wget -nv); or each letter of a short-option cluster up to the first that takes a
+    value (VALUE_LETTERS), with the rest of the word as that value (-sSLoPATH)."""
+    if token.startswith('--'):
+        name, equals, value = token.partition('=')
+        return [name], (value if equals else None)
+    if token in OPTIONS.get(program, ()) or program not in VALUE_LETTERS:
+        return [token], None
+    letters = []
+    for offset, letter in enumerate(token[1:], start=2):
+        letters.append('-' + letter)
+        if letter in VALUE_LETTERS[program]:
+            return letters, token[offset:] or None
+    return letters, None
+
+
+def _value_refusal(token, value, option, program):
+    """Why one argument (an option's value, or a positional word) is refused, or None."""
+    if option in OPTION_CHOICES.get(program, {}):
+        return None if value.upper() in OPTION_CHOICES[program][option] else f'{option} {value} is not a plain GET'
+    if option in TEXT_VALUES.get(program, ()):
+        return f'{token} reads a local file' if value.startswith('@') else None
+    if URL_SCHEME.match(value) and not value.lower().startswith(('http://', 'https://')):
+        return f'{token} is not an http(s) URL'
+    if _local_path(value) and not _output_path(value) and value not in DEVICES:
+        return f'{token} names a file outside output/'
+    return None
+
+
+def _argument_refusal(tokens):
+    """Why the words of one plain command (its redirects removed) are refused, or None: the first word is the program
+    itself, every option is one OPTIONS lists for it, and every argument passes _value_refusal."""
+    if not tokens or tokens[0] not in OPTIONS:
+        return 'its first word is not ' + ', '.join(sorted(FETCH_PROGRAMS))
+    program, allowed, awaiting = tokens[0], OPTIONS[tokens[0]], None
+    for token in tokens[1:]:
+        if awaiting is not None:
+            # The value of the option before it, whatever it looks like.
+            reason = _value_refusal(token, token, awaiting, program); awaiting = None
+        elif token.startswith('-') and token != '-':
+            options, inline = options_of(program, token)
+            unknown = next((option for option in options if option not in allowed), None)
+            if unknown:
+                return f'{unknown} is not an option a source command may use with {program}'
+            last = options[-1]
+            if inline is not None and not allowed[last]:
+                return f'{last} takes no value'
+            if allowed[last] and inline is None:
+                awaiting = last; continue
+            reason = _value_refusal(token, inline or '', last, program)
+        else:
+            reason = _value_refusal(token, token, None, program)
+        if reason:
+            return reason
+    return f'{awaiting} has no value' if awaiting else None
+
+
+def command_refusal(command):
+    """Why a source Activity's recorded command is not one plain fetch or conversion writing only under output/, or
+    None when it is. The audit (scripts/audit_account_sources.py) runs only commands this accepts."""
+    if not _plain(command):
+        return 'it is not one plain curl, wget, pdftotext or xmllint command writing only under output/'
+    tokens = _tokens(command)
+    # Standard input may come only from a saved file.
+    for index, token in enumerate(tokens):
+        if '<' in token and not set(token) - set('<>&|;'):
+            if token != '<' or index + 1 >= len(tokens) or not _output_path(tokens[index + 1]):
+                return 'it reads standard input from somewhere other than output/'
+    return _argument_refusal(_redirects(tokens)[0])
+
+
 def check_command(command):
-    """True when a source Activity's recorded command is one plain fetch or conversion writing only under output/."""
+    """True when a source Activity's recorded command is one plain fetch or conversion writing only under output/,
+    using only the options and arguments command_refusal allows."""
+    return command_refusal(command) is None
+
+
+def _plain(command):
+    """True when a command is one fetch or conversion program writing only under output/ (its options unchecked)."""
     if not isinstance(command, str) or HIDDEN.search(command) or '\n' in command or '`' in command or re.search(r'\$\(|<\(|>\(', command):
         return False
     if len(source_evidence.segments(command)) != 1:

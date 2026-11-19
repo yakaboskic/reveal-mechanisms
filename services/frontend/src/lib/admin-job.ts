@@ -26,7 +26,18 @@ export type AgentRun = {
      * account field. Never the text. Absent from backends older than the screen. */
     screen_outcome?: string | null; screen_check?: string | null; screen_score?: number | null; screen_threshold?: number | null;
     screen_location?: string | null; screen_classifier?: string | null; screen_windows?: number | null; screen_seconds?: number | null;
+    /** How many texts (source files, tool results, account fields) the classifier scored. */
+    screen_texts?: number | null;
   };
+  /** The files an account job saved under output/sources/, in the job detail only (never the job list); `total` counts
+   * them all when the list is capped. null when the job returned no account; absent from older backends. */
+  sources?: { items: AgentSource[]; total: number } | null;
+};
+/** One saved source file: what the agent recorded about it (path, URL, its command, the Bash call REVEAL saw run, the file
+ * it was converted from) and what REVEAL measured (size, sha256, media type), with how many quotes cite it. Never its text. */
+export type AgentSource = {
+  path: string | null; url: string | null; command: string | null; observed_command: string | null; derived_from: string | null;
+  sha256: string | null; media_type: string | null; size_bytes: number | null; evidence_items: number | null;
 };
 export type AgentJob = AdminJob & { agent: AgentRun };
 export type AgentJobType = {
@@ -66,6 +77,15 @@ export function screenSummary(result: AgentRun["result"]): string | null {
     : result.screen_score == null ? null : `score ${score(result.screen_score)} (threshold ${score(result.screen_threshold)})`;
   const head = result.screen_outcome === "withheld" ? `Withheld: ${(result.screen_check || "unknown check").replaceAll("_", " ")}` : "Passed";
   const where = result.screen_location ? `${result.screen_outcome === "withheld" ? "at" : "highest at"} ${result.screen_location}` : null;
-  const effort = result.screen_windows ? `${result.screen_windows.toLocaleString()} windows${result.screen_seconds != null ? ` in ${result.screen_seconds.toFixed(1)} s` : ""}` : null;
+  const effort = result.screen_windows ? `${result.screen_windows.toLocaleString()} windows${result.screen_texts ? ` from ${result.screen_texts.toLocaleString()} text${result.screen_texts === 1 ? "" : "s"}` : ""}${result.screen_seconds != null ? ` in ${result.screen_seconds.toFixed(1)} s` : ""}` : null;
   return [head, scored, where, effort].filter(Boolean).join(" · ");
+}
+
+/** The first 12 hex digits of a checksum, enough to tell files apart on screen. */
+export const shortSha = (value: string | null | undefined) => value ? value.slice(0, 12) : "—";
+/** A file size in bytes, kB or MB (decimal, as the capture limits are stated). */
+export function fileSize(bytes: number | null | undefined): string {
+  if (bytes == null) return "—";
+  if (bytes < 1000) return `${bytes.toLocaleString()} byte${bytes === 1 ? "" : "s"}`;
+  return bytes < 1_000_000 ? `${(bytes / 1000).toFixed(1)} kB` : `${(bytes / 1_000_000).toFixed(1)} MB`;
 }

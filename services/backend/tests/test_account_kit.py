@@ -18,7 +18,7 @@ from reveal_backend.box_mcp import Ledger
 from reveal_backend.box_remote import ACCOUNT_SKILL
 from reveal_backend.runtime_config import ROOT
 
-PINS = {ACCOUNT_SKILL: 'ed96c3c5e2343c3e63131cf9d151524adbf2779e950c0c53b69f550eec6d39f3',
+PINS = {ACCOUNT_SKILL: 'df7d53f03a5159a4f34da8ad3af0904286f9cd84606170010bc917d895632118',
         ACCOUNT_EXCERPT: '9ae37c6a974b12cd97bf5ee2bcad0552b5dca0e1e5d87436630336d5be34cd38'}
 LOCK = ROOT / 'services/backend/agent-runtime/dapper-release.json'
 

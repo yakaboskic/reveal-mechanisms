@@ -22,7 +22,7 @@ spec = importlib.util.spec_from_file_location('build_box_toolchain_snapshot', RO
 builder = importlib.util.module_from_spec(spec); spec.loader.exec_module(builder)
 
 INSTALL = ['id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent',
-           'sudo apt-get update -qq', 'sudo apt-get install -y -qq python3-venv', 'sudo python3 -m venv /reveal/venv',
+           'sudo apt-get update -qq', 'sudo apt-get install -y -qq python3-venv curl poppler-utils libxml2-utils', 'sudo python3 -m venv /reveal/venv',
            'sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0', 'sudo mkdir -p /reveal/claude',
            'sudo npm install --prefix /reveal/claude --no-audit --no-fund @anthropic-ai/claude-code@' + CLAUDE_VERSION]
 FAKES = {
@@ -63,6 +63,8 @@ def test_bootstrap_installs_once_then_reuses_only_an_exact_stamped_toolchain(fak
     assert first.returncode == 0, first.stderr
     assert 'toolchain=installed' in first.stdout.split('\n') and first.stdout.strip().endswith(CLAUDE_VERSION + ' (Claude Code)')
     assert [c.split()[0] for c in commands if c] == ['useradd', 'apt-get', 'apt-get', 'venv', 'pip', 'npm']
+    # The fetch and convert programs an account job's Activities run are installed with the rest.
+    assert 'apt-get install -y -qq python3-venv curl poppler-utils libxml2-utils' in commands
     stamp = (tmp_path/'reveal/toolchain.sha256').read_text()
     assert stamp == BoxExecutionAdapter.toolchain_stamp(CLAUDE_VERSION)
     assert stat.S_IMODE((tmp_path/'reveal/state').stat().st_mode) == 0o755
@@ -169,8 +171,13 @@ def clean_facts(**changes):
     expected = builder.plan()
     facts = {'reveal': list(builder.EXPECTED), 'state': [], 'modes': [0o755, 0o755], 'owners': [0, 0], 'temporary': [],
              'credentials': [], 'home': [], 'stamp': expected['stamp'], 'claude': CLAUDE_VERSION + ' (Claude Code)',
-             'python': ['linkml==1.11.1'], 'npm_lock_sha256': 'f' * 64}
+             'python': ['linkml==1.11.1'], 'npm_lock_sha256': 'f' * 64, 'source_tools': SOURCE_TOOLS}
     return {**facts, **changes}
+
+
+SOURCE_TOOLS = {'packages': {'curl': '7.88.1-10+deb12u8', 'poppler-utils': '22.12.0-2+b1', 'libxml2-utils': '2.9.14+dfsg-1.3~deb12u1'},
+                'programs': {'curl': 'curl 7.88.1 (x86_64-pc-linux-gnu) libcurl/7.88.1', 'pdftotext': 'pdftotext version 22.12.0',
+                             'xmllint': 'xmllint: using libxml version 20914'}}
 
 
 class BuilderBox:
@@ -199,11 +206,16 @@ def test_builder_runs_the_job_recipe_on_a_clean_box_and_snapshots_it():
     box.snapshot.assert_awaited_once_with(name=expected['name']); box.update_network_policy.assert_not_awaited()
     box.delete.assert_not_awaited(); box.aclose.assert_awaited_once()
     assert result['snapshot_id'] == 'snap-1' and result['stamp'] == expected['stamp'] and TOOLCHAIN_SNAPSHOT in result['next']
+    # The manifest says which apt versions to pin the fetch and convert tools to.
+    assert result['source_tools'] == SOURCE_TOOLS
+    assert 'def tool_versions' in box.writes[1]['content'] and "'dpkg-query', '-W'" in box.writes[1]['content']
 
 
 @pytest.mark.parametrize('change', [{'state': ['bootstrap-ready']}, {'reveal': builder.EXPECTED + ['credentials.json']},
     {'credentials': ['/reveal/credentials.json']}, {'temporary': ['/tmp/reveal-request.json']}, {'modes': [0o777, 0o755]},
-    {'home': ['.claude']}, {'stamp': '0' * 64}, {'claude': '0.0.1 (Claude Code)'}, {'npm_lock_sha256': None}])
+    {'home': ['.claude']}, {'stamp': '0' * 64}, {'claude': '0.0.1 (Claude Code)'}, {'npm_lock_sha256': None},
+    {'source_tools': None}, {'source_tools': {**SOURCE_TOOLS, 'packages': {**SOURCE_TOOLS['packages'], 'poppler-utils': None}}},
+    {'source_tools': {**SOURCE_TOOLS, 'programs': {'curl': 'curl 7.88.1'}}}])
 def test_builder_refuses_to_snapshot_an_unclean_box_and_deletes_it(change):
     box = BuilderBox(clean_facts(**change)); factory = SimpleNamespace(create=AsyncMock(return_value=box))
     with pytest.raises(RuntimeError, match='not a clean toolchain'):
@@ -234,3 +246,22 @@ def test_prepared_handle_records_which_toolchain_the_stamped_bootstrap_used(froz
     scripts = [call.kwargs['content'] for call in box.files.write.call_args_list if call.kwargs['path'] == '/tmp/reveal-bootstrap.sh']
     assert scripts == [adapter.bootstrap_script(descriptor['config']['claude_version'], unpack=False)]
     assert direct_bootstrap.toolchain('') is None and direct_bootstrap.toolchain('toolchain=other') is None
+
+
+def test_the_builder_probe_records_the_fetch_and_convert_tools_versions(tmp_path):
+    """The probe's tool_versions, run against fake dpkg-query and programs: versions on stdout or stderr, a missing one None."""
+    bin_dir = tmp_path / 'bin'; bin_dir.mkdir()
+    for name, body in {'dpkg-query': 'printf "curl=7.88.1-10+deb12u8\\nlibxml2-utils=2.9.14+dfsg-1.3~deb12u1\\n"; exit 1',
+                       'curl': 'echo "curl 7.88.1 (x86_64-pc-linux-gnu)"; echo "Release-Date: 2023"',
+                       'xmllint': 'echo "xmllint: using libxml version 20914" >&2'}.items():
+        (bin_dir / name).write_text('#!/bin/sh\n' + body + '\n'); (bin_dir / name).chmod(0o755)
+    namespace = {}
+    exec(builder.TOOL_PROBE, namespace)
+    with pytest.MonkeyPatch.context() as patched:
+        patched.setenv('PATH', str(bin_dir))
+        found = namespace['tool_versions']()
+    assert found == {'packages': {'curl': '7.88.1-10+deb12u8', 'poppler-utils': None, 'libxml2-utils': '2.9.14+dfsg-1.3~deb12u1'},
+                     'programs': {'curl': 'curl 7.88.1 (x86_64-pc-linux-gnu)', 'pdftotext': None,
+                                  'xmllint': 'xmllint: using libxml version 20914'}}
+    assert builder.problems(clean_facts(source_tools=found), builder.plan()) == ['fetch and convert tools are missing: poppler-utils, pdftotext']
+    assert builder.TOOL_PROBE in builder.PROBE

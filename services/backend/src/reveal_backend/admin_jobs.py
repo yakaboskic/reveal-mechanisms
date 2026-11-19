@@ -6,7 +6,7 @@ from uuid import UUID
 
 from .auth import Problem
 from .runtime_config import artifacts_root
-from .telemetry import agent_runs, job_timings, records
+from .telemetry import account_sources, agent_runs, job_timings, records
 
 MAX_DIAGNOSTIC_BYTES = 128 * 1024
 MAX_DIAGNOSTICS = 20
@@ -102,6 +102,10 @@ def job_detail(repository, job_id, *, before=None, limit=100):
         job = {**timings[0], **redact(metadata)}
         # How an agent job was asked to run: settings, limits and sizes, never the prompt, question or claims.
         agent = agent_runs(tx, [job_id])[job_id] if job['kind'] == 'agent' else None
+        # An account job's saved sources: paths, URLs, commands, sizes and checksums, never a file's content. Commands
+        # and URLs are the agent's own text, so credentials in them are redacted like any diagnostic.
+        if agent is not None and agent['deliverable'] == 'scientific_account':
+            agent['sources'] = redact(account_sources(tx, job_id))
         # The padded event sequence is part of the indexed primary key. Load the
         # tail first so the reason for failure is visible even on very long runs.
         upper = job_id+':'+before.zfill(12) if before else job_id+';'

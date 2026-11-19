@@ -124,7 +124,7 @@ AGENT_RESULT_FIELDS = {'result.response_truncated': 'response_truncated', 'resul
 AGENT_SCREEN_FIELDS = {'screen.outcome': 'screen_outcome', 'screen.check': 'screen_check', 'screen.score': 'screen_score',
                        'screen.threshold': 'screen_threshold', 'screen.location': 'screen_location',
                        'screen.classifier': 'screen_classifier', 'screen.windows': 'screen_windows',
-                       'screen.seconds': 'screen_seconds'}
+                       'screen.texts': 'screen_texts', 'screen.seconds': 'screen_seconds'}
 # (record kind, output field, JSON path, what is measured). 'text' is a string's length in characters, 'items' a
 # list's length, 'triples' the claims that came with a subject. A missing or null value is None, never 0.
 AGENT_SIZES = (('queue', 'prompt_characters', 'inputs.prompt', 'text'),
@@ -195,6 +195,28 @@ def agent_runs(tx, identities):
         for field in ('response_characters', 'papers', 'files', 'structured_output_characters'):
             runs[identity]['result'][field] = runs[identity].pop(field)
     return runs
+
+
+# Each source file an account job saved, for the admin job detail only (never the job list): what the agent wrote about
+# it (path, URL, the command it recorded and the Bash call REVEAL saw run) and what REVEAL measured (size, sha256, media
+# type), with how many quotes cite it. Metadata, not the file or its text. Caps bound what one job can put on the page.
+AGENT_SOURCE_FIELDS = {'path': 300, 'url': 2_000, 'command': 2_000, 'observed_command': 8_000, 'derived_from': 300,
+                       'sha256': 64, 'media_type': 100, 'size_bytes': None, 'evidence_items': None}
+MAX_AGENT_SOURCES = 100
+
+
+def account_sources(tx, identity):
+    """{'items': [...], 'total': n} for the saved sources the job result's account lists, each with AGENT_SOURCE_FIELDS
+    only; None when the job returned no account."""
+    papers = records(tx, 'job', ('result.account.papers',), [identity]).get(identity, {}).get('data', {}).get('result.account.papers')
+    if not isinstance(papers, list): return None
+    def value(paper, key, cap):
+        item = paper.get(key)
+        if cap is None: return item if isinstance(item, int) and not isinstance(item, bool) else None
+        return item[:cap] if isinstance(item, str) else None
+    items = [{key: value(paper, key, cap) for key, cap in AGENT_SOURCE_FIELDS.items()}
+             for paper in papers[:MAX_AGENT_SOURCES] if isinstance(paper, dict)]
+    return {'items': items, 'total': len(papers)}
 
 
 def median(values):

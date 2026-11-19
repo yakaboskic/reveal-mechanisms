@@ -553,13 +553,18 @@ def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and
     request = {'kind': 'agent', 'job_id': 'agent-job', 'attempt': 1, 'selected_graphs': [], 'model': value['model'],
                'claude_version': '2.1.282', 'input_sha256': 'frozen', **value['limits']}
     protected = []
+    tools = {'packages': {'curl': '7.88.1-10+deb12u8', 'poppler-utils': '22.12.0-2+b1', 'libxml2-utils': None},
+             'programs': {'curl': 'curl 7.88.1', 'pdftotext': 'pdftotext version 22.12.0', 'xmllint': None}}
     with patch.multiple(box_remote, BASE=root, STATE=root / 'state', OUTPUT=root / 'output'), \
             patch.object(box_remote, 'protect', protected.append), patch.object(box_remote, 'verify_writable_output'), \
             patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())), \
-            patch('reveal_backend.dapper_release.clone_release', side_effect=clone):
+            patch('reveal_backend.dapper_release.clone_release', side_effect=clone), \
+            patch.object(box_remote, 'source_tool_versions', return_value=tools):
         work, runtime, prompt = box_remote.setup(request)
     assert protected == [root / 'bundle', root / 'input', root / 'workspace', root / 'trusted']
     assert prompt == 'Build the account.' and runtime['deliverable'] == 'scientific_account'
+    # The versions of the fetch and convert tools the account's Activities ran are part of the run's record.
+    assert runtime['source_tools'] == tools and json.loads((root / 'state/runtime.json').read_bytes())['source_tools'] == tools
     assert runtime['dapper']['commit'] == json.loads((ROOT / 'services/backend/agent-runtime/dapper-release.json').read_bytes())['commit']
     assert runtime['dapper_root'] == str(root / 'workspace/dapper')
     # The run lints against exactly the package frozen when the job was queued.

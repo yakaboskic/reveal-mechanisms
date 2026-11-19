@@ -24,6 +24,7 @@ from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
 from .box_upload import MAX_TOTAL, capture_file_limit
+from .source_evidence import SOURCE_PACKAGES
 
 CLAUDE_VERSION = '2.1.282'
 MODEL = 'claude-sonnet-4-6'
@@ -399,12 +400,16 @@ class BoxExecutionAdapter:
 
     @staticmethod
     def toolchain_script(claude_version):
-        """The pinned agent toolchain install; a prebuilt snapshot holds exactly its result."""
+        """The pinned agent toolchain install; a prebuilt snapshot holds exactly its result.
+
+        It includes the programs an account job fetches and converts papers with (curl, pdftotext, xmllint:
+        source_evidence.SOURCE_PACKAGES). They are not yet pinned to exact apt versions: the snapshot builder records
+        the installed versions, and each account job's runtime.json records them too (source_tools)."""
         if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', claude_version):
             raise BoxConfigurationError('Invalid frozen Claude runtime version')
         return '''id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
 sudo apt-get update -qq
-sudo apt-get install -y -qq python3-venv
+sudo apt-get install -y -qq python3-venv ''' + ' '.join(SOURCE_PACKAGES) + '''
 sudo python3 -m venv /reveal/venv
 sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
 sudo mkdir -p /reveal/claude

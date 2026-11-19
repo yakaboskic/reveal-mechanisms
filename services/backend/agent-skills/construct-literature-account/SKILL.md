@@ -40,6 +40,9 @@ bioRxiv and medRxiv, and publishers' open-access PDFs.
    3. **Read the saved file** (Read, or `grep -n` for the passage) and choose the sentences that carry each finding.
       Keep reading separate from saving: run each fetch and each conversion as its own command, and read with
       Read, `grep`, `head`, `tail`, `sed -n`, `wc` or `cat` without a redirect into the file. Never edit a saved file.
+      Keep fetch and convert commands plain: `curl` or `wget` with an http(s) URL and an output file under
+      `output/sources/`, `pdftotext` or `xmllint` on a saved file. Do not send data (`-d`, `-T`, `@file`), use
+      `$(…)` or pipe into a shell: REVEAL does not store an account whose recorded commands do.
    4. **Record and cite it in the draft**: an Activity per command, a File per saved file, the edges between them,
       and an EvidenceItem per quote (below). Then save the draft and run `lint_account`.
 3. Repair what the linter reports, then go on to the next paper. A run stopped at its time or turn limit returns
