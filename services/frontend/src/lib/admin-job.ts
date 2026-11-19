@@ -6,7 +6,8 @@ export type AdminJob = { id: string; owner: string; kind: string; deliverable?: 
 export type AdminJobMetrics = { cost_usd?: number | null; estimated_cost_usd?: number | null; cost_source?: "provider" | "estimated" | "unreported" | null; budget_usd?: number | null; budget_used?: number | null; turns?: number | null; tokens?: { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null } | null; model?: string | null; agent_status?: string | null; agent_subtype?: string | null; lint_checks?: number | null; draft_writes?: number | null; tool_calls?: number | null; tool_failures?: number | null; turn_limit?: number | null; time_limit_seconds?: number | null; error_phase?: string | null; error_type?: string | null; parent_job_id?: string | null };
 
 /** How an agent job was asked to run and what it returned: settings, limits, sizes and outcomes. The prompt,
- * question, claims and response never reach the console. null means the input or result has no such value. */
+ * question, claims and response are not part of it: only the admin content read (AgentRunContent) returns them.
+ * null means the input or result has no such value. */
 export type AgentRun = {
   deliverable: string | null; input_format: string | null; model: string | null; effort: string | null;
   tools: string[] | null; graphs: string[] | null; network: string | null;
@@ -40,6 +41,40 @@ export type AgentSource = {
   sha256: string | null; media_type: string | null; size_bytes: number | null; evidence_items: number | null;
 };
 export type AgentJob = AdminJob & { agent: AgentRun };
+
+/** One limit as an agent job asked for it, was frozen with and used it (GET /api/admin/jobs/{id}/run).
+ * requested: whether the request named it; null when the job predates that record (requested_basis "not_recorded"),
+ * when differs_from_current_default compares the frozen value with today's default only. ceiling_basis "current"
+ * means the job did not record the ceiling in force when it was queued. applied: what the run was given, which the
+ * dispatch clamp may lower for the budget. used: null where nothing counts it (REVEAL tool calls on their own). */
+export type AgentLimitUse = {
+  key: string; requested: boolean | null; requested_basis: "recorded" | "not_recorded"; differs_from_current_default: boolean | null;
+  frozen: number | null; ceiling: number | null; ceiling_basis: "queue_time" | "current"; applied: number | null; used: number | null; hit: boolean;
+  used_estimated?: boolean; all_tool_calls?: number | null; reached?: boolean | null;
+};
+/** One agent job's content for admins: the frozen request in full, its limits and why it stopped, and its response.
+ * Each read is recorded by the backend under the admin's email. */
+export type AgentRunContent = {
+  job: { id: string; owner: string; status: string; stage: string; created_at: string | null; updated_at: string | null; completed_at: string | null;
+    failure: { code: string | null; message: string | null } | null };
+  input: {
+    format: string | null; prompt: string | null; system_prompt: string | null; tools: string[] | null; graphs: string[] | null; network: string | null;
+    allowed_domains: string[] | null; effort: string | null; model: string | null; deliverable: string | null; claims_repository: boolean | null;
+    output_schema: unknown; limits: Record<string, number | null> | null;
+    account: { question: string | null; attribute_requester: boolean | null;
+      claims: { statement: string; proposition_id?: string; subject_entity?: string; relation?: string; object_entity?: string }[] } | null;
+  };
+  limits: AgentLimitUse[];
+  /** by: who set the limit that was hit: the request, the default, the admin ceiling, or unknown for older jobs. */
+  stop: { limit: string | null; by: "request" | "default" | "admin_ceiling" | "unknown" | null; text: string };
+  run: { subtype: string | null; status: string | null; reason: string | null; tool_calls: number | null; tool_failures: number | null };
+  /** source "captured": the agent's full final message from its response record; "job_result": the job result's copy,
+   * cut at 50,000 characters (truncated says whether it was); null: no response. */
+  response: { source: "captured" | "job_result" | null; attempt?: number | null; text: string | null; truncated: boolean; characters: number | null;
+    status: string | null; subtype: string | null; structured_output: unknown; captured_unavailable: string | null;
+    files: { path: string | null; size_bytes: number | null; sha256: string | null }[] };
+  read: { by: string; at: string };
+};
 export type AgentJobType = {
   deliverable: string; jobs: number; succeeded: number; failed: number; cancelled: number; active: number;
   deposited: number; deposit_not_made: number; spend_usd: number; owners: number; latest_at: string | null;

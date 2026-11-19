@@ -346,6 +346,26 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         self.assertEqual(details['plain']['agent']['deliverable'], 'answer')
         self.assertIsNone(details['analysis']['agent'])
 
+    def test_only_the_admin_content_read_returns_what_the_requester_wrote(self):
+        """c7486dd's sizes-only rule, reversed for GET /internal/v1/admin/jobs/{id}/run alone: the 15-second snapshot and
+        the job detail still select no content, and the content read returns it."""
+        from reveal_backend import telemetry
+        from reveal_backend.admin_run import job_run
+        # The snapshot projects settings by allowlisted path; no content path is among them.
+        content = {'inputs.prompt', 'inputs.system_prompt', 'inputs.account', 'inputs.account.question', 'inputs.account.claims',
+                   'inputs.output_schema', 'result.response', 'result.structured_output', 'result.account.document'}
+        self.assertFalse(content & (set(telemetry.AGENT_INPUT_FIELDS) | set(telemetry.AGENT_RESULT_FIELDS)))
+        ids = self.populate()
+        with patch.dict(os.environ, {'REVEAL_ARTIFACTS_DIR': str(Path(self.repo.sqlite_path).parent / 'artifacts')}):
+            view = job_run(self.repo, ids['deposited'], 'admin@example.org')
+        encoded = json.dumps(view)
+        for text in ('PROMPT-TEXT', 'SYSTEM-TEXT', 'QUESTION-TEXT', 'CLAIM-TEXT', 'RESPONSE-TEXT'):
+            self.assertIn(text, encoded)
+        # Even this read never returns the lease, who the account credits, the evidence package or the account document.
+        for text in ('LEASE-TOKEN', 'REQUESTER-NAME', '0000-0002-1825-0097', 'PACKAGE-TEXT', 'DOCUMENT-TEXT', 'DEPOSIT-DETAIL'):
+            self.assertNotIn(text, encoded)
+        self.assertNotIn('PROMPT-TEXT', json.dumps(snapshot(self.repo)))
+
     def test_the_job_detail_lists_each_saved_source_by_its_metadata(self):
         ids = self.populate()
         from reveal_backend.admin_jobs import job_detail

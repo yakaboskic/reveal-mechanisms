@@ -1224,6 +1224,24 @@ def test_named_registered_user_queues_a_frozen_agent_job(service, monkeypatch):
     assert events.json()['items'][0]['message'] == 'Agent run queued.'
 
 
+def test_the_queue_records_which_limits_the_request_named_and_the_ceilings_beside_the_input(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
+    monkeypatch.setenv('REVEAL_MAX_ACTIVE_JOBS', '10')
+    def queued(**body):
+        created = post_agent(service, **body)
+        assert created.status_code == 202, created.text
+        with service.repo.read_transaction() as tx:
+            return tx.get('queue', created.json()['id'])['data']
+    named = queued(limits={'max_turns': 5, 'max_budget_usd': 1})
+    # The limit names only, never their values; the frozen input itself is unchanged and holds neither key.
+    assert named['requested_limits'] == ['max_budget_usd', 'max_turns']
+    with service.repo.read_transaction() as tx:
+        assert named['limit_ceilings'] == {key: entry['ceiling'] for key, entry in agent_limits.policy(tx).items()}
+    assert not {'requested_limits', 'limit_ceilings'} & set(named['inputs'])
+    assert named['inputs'] == box_agent.validate_input(named['inputs'])
+    assert queued()['requested_limits'] == [] and queued(limits={})['requested_limits'] == []
+
+
 def test_star_admits_registered_users_but_never_anonymous_ones(service, monkeypatch):
     monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
     assert post_agent(service).status_code == 202

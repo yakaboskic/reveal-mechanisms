@@ -77,6 +77,8 @@ KIND_ACTIONS: dict[str, str] = {
         'vote', 'vote_total',
         # The publisher's per-environment marker of the current reference release (reference_release.py).
         'reference_release',
+        # Who read a job's prompt and response in the admin console, and when (admin_run.py).
+        'admin_content_read',
         # Infrastructure: workers, durable workflow, vector bookkeeping and the reference pointers.
         'worker_control', 'runtime', 'probe_result', 'workflow_activity', 'workflow_cleanup', 'workflow_cleanup_completed',
         'workflow_control', 'workflow_delivery', 'workflow_dispatch', 'workflow_handoff', 'workflow_recovery_audit', 'workflow_step',

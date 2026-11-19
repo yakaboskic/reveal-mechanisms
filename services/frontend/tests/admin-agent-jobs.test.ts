@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
+import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentLimitUse, type AgentRun, type AgentRunContent } from "../src/lib/admin-job";
 import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgentJobs";
+import { AgentRequestView } from "../src/components/AdminAgentRequest";
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
   quotes: null, papers: null, lint_warnings: null, dapper_version: null, deposit_status: null, deposit_id: null, deposit_reason: null, deposit_http_status: null };
@@ -171,4 +172,59 @@ test("a screen run with the classifier disabled says it is off until its lock is
     "Withheld: unsafe text · classifier off — lock not pinned · at account scientific_accounts[0].closing_remarks");
   const detail = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: passed, job: job("eeeeeeee-0000", "succeeded", passed) }));
   assert.ok(detail.includes("<dt>Prompt-injection screen</dt><dd>Passed · classifier off — lock not pinned</dd>"), detail);
+});
+
+// The admin content read (GET /api/admin/jobs/{id}/run) of an answer job stopped at the max_turns its request set.
+const limitRow = (key: string, frozen: number, extra: Partial<AgentLimitUse> = {}): AgentLimitUse => ({ key, requested: false, requested_basis: "recorded",
+  differs_from_current_default: null, frozen, ceiling: frozen * 2, ceiling_basis: "queue_time", applied: frozen, used: null, hit: false, ...extra });
+const content: AgentRunContent = {
+  job: { id: "95d0bc18-0000", owner: "owner-1", status: "failed", stage: "complete", created_at: "2026-11-16T16:20:14Z", updated_at: null, completed_at: null,
+    failure: { code: "AGENT_EXECUTION_FAILED", message: "The agent reached its 12-turn limit before finishing." } },
+  input: { format: "reveal.agent-input/5", prompt: "List every LEPR paper.\n  Keep <b>markup</b> as text.", system_prompt: null, tools: ["Read", "Bash"], graphs: [],
+    network: "restricted", allowed_domains: ["eutils.ncbi.nlm.nih.gov"], effort: "high", model: "claude-opus-5-5", deliverable: "answer", claims_repository: false,
+    output_schema: { type: "object" }, limits: { max_turns: 12 }, account: null },
+  limits: [limitRow("timeout_seconds", 600, { used: 42 }), limitRow("max_turns", 12, { requested: true, used: 12, hit: true }),
+    limitRow("max_budget_usd", 1, { used: .31, applied: .5 }), limitRow("tool_calls", 30, { all_tool_calls: 18 }), limitRow("max_output_tokens", 32000, { reached: false, ceiling_basis: "current" })],
+  stop: { limit: "max_turns", by: "request", text: "Stopped at its own max_turns (12), which the request set." },
+  run: { subtype: "error_max_turns", status: "failed", reason: null, tool_calls: 18, tool_failures: 0 },
+  response: { source: "captured", attempt: 2, text: "RESPONSE-TEXT in full", truncated: false, characters: 21, status: "failed", subtype: "error_max_turns",
+    structured_output: { genes: ["LEPR"] }, captured_unavailable: null, files: [{ path: "table.csv", size_bytes: 1200, sha256: "c".repeat(64) }] },
+  read: { by: "admin@example.org", at: "2026-11-19T10:00:00Z" },
+};
+
+test("the request shows the prompt, settings, limits with the hit one highlighted, the stop reason and the response", () => {
+  const html = renderToStaticMarkup(React.createElement(AgentRequestView, { data: content }));
+  assert.ok(html.includes('<p class="admin-stop-reason hit" role="status"><strong>Stopped at its own max_turns (12), which the request set.</strong></p>'));
+  // The prompt is preformatted text, escaped, with a copy button; a missing system prompt says so.
+  assert.ok(html.includes("<pre>List every LEPR paper.\n  Keep &lt;b&gt;markup&lt;/b&gt; as text.</pre>"));
+  assert.ok(html.includes('aria-label="Copy prompt"') && html.includes("No system prompt."));
+  for (const text of ["<dt>Model · effort</dt><dd>claude-opus-5-5 · high</dd>", "<dt>Extra hosts</dt><dd>eutils.ncbi.nlm.nih.gov</dd>", "<dt>Built-in tools</dt><dd>Read, Bash</dd>",
+    "&quot;type&quot;: &quot;object&quot;", "<th>Requested</th><th>Frozen</th><th>Ceiling</th><th>Used</th>", "18 tool calls of every kind", "Not reached",
+    "Today&#x27;s ceiling: not recorded when queued", "The run was given $0.50", "RESPONSE-TEXT in full", "the agent&#x27;s full final message, from its response record (attempt 2)", "&quot;LEPR&quot;",
+    "table.csv</span> · 1.2 kB", "Read by admin@example.org"]) assert.ok(html.includes(text), text);
+  // Only the hit limit's row is highlighted, and it says so in words.
+  assert.equal(html.match(/admin-limit-hit/g)?.length, 1);
+  const hit = html.slice(html.indexOf('<tr class="admin-limit-hit">'), html.indexOf("</tr>", html.indexOf('<tr class="admin-limit-hit">')));
+  assert.ok(hit.includes("Turns") && hit.includes("Hit") && hit.includes("<td>12</td>"), hit);
+  assert.ok(html.includes("<td>Run time</td><td>Not set: default</td>"));
+});
+
+test("an older job's request says what is not recorded, and a cut response says it is cut", () => {
+  const older: AgentRunContent = { ...content, stop: { limit: null, by: null, text: "Finished normally." },
+    limits: content.limits.map(row => ({ ...row, hit: false, requested: null, requested_basis: "not_recorded", differs_from_current_default: row.key === "max_turns" })),
+    response: { ...content.response, source: "job_result", truncated: true, characters: 50000, captured_unavailable: "not_captured", structured_output: null } };
+  const html = renderToStaticMarkup(React.createElement(AgentRequestView, { data: older }));
+  assert.ok(html.includes('<p class="admin-stop-reason" role="status"><strong>Finished normally.</strong></p>'));
+  assert.ok(!html.includes("admin-limit-hit"));
+  assert.equal(html.match(/Not recorded/g)?.length, 5);
+  assert.ok(html.includes("Differs from today&#x27;s default") && html.includes("Same as today&#x27;s default"));
+  assert.ok(html.includes("50,000 characters · truncated") && html.includes("cut at 50,000 characters. The full text is not available: no response record was captured."));
+  assert.ok(!html.includes("Structured output"));
+});
+
+test("the job detail offers the request on demand instead of saying it is never shown", () => {
+  const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: accountRun, job: deposited }));
+  assert.ok(html.includes(">Show request</button>") && html.includes("Each time you show it, your email and the time are recorded."));
+  assert.ok(!/not shown here|never shown/.test(html));
+  assert.ok(!html.includes("admin-stop-reason"));   // nothing is loaded until asked
 });

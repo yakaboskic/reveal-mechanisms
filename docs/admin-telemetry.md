@@ -25,7 +25,7 @@ For local development, `DISABLE_ADMIN_LOGIN=true` allows direct access. It works
   - what it returned: for an account the object, claim, quote and paper counts; for an answer the size of the response;
   - **Deposit**, in its own column, because a job can succeed while its account is not deposited. Such jobs are counted on the tile as "succeeded without a deposit".
 
-  The job detail shows the same settings in full under **How this agent job was run**, with every limit. The prompt, system prompt, question, claims and response are never sent to the console: the backend reports their sizes and counts, taken in SQL. Jobs queued before a job could ask for an account are answers and are marked; settings their input never had show as "—". The tiles cover the listed jobs, not all time; the line above them gives the all-time number of jobs of each kind.
+  The job detail shows the same settings in full under **How this agent job was run**, with every limit. The 15-second snapshot and this settings summary never carry the prompt, system prompt, question, claims or response: the backend reports their sizes and counts, taken in SQL. To read them, open one job and select **Show request** ([below](#read-one-agent-jobs-request)). Jobs queued before a job could ask for an account are answers and are marked; settings their input never had show as "—". The tiles cover the listed jobs, not all time; the line above them gives the all-time number of jobs of each kind.
 - Agent cost per job, in the **Execution** table, the job detail and the **Costs** tab. When an agent run ends, the workflow records a `job_metrics` row with these fields, copied from the runner's captured `runtime.json`:
   - the provider-reported Claude cost, its dollar cap and the share of the cap used;
   - turns, tokens (input, output, cache write, cache read), agent run time against its limit, and provider API time;
@@ -81,6 +81,45 @@ Click any job in **Execution** (analysis, paragraph or general agent) to open it
 The event log starts with the latest 100 persisted events, displayed chronologically so terminal failures are immediately available. **Load earlier events** retrieves previous pages by their indexed sequence without scanning other jobs. Messages, preparation stages, warnings, tool arguments and output excerpts can be searched within the loaded history. Adjacent agent text fragments are combined for readability; **Copy loaded logs** retains each original event and its stored timestamp. Active logs refresh every 15 seconds when dashboard refresh is enabled; loading earlier history pauses this until **Refresh logs** returns to the latest events.
 
 Saved diagnostics come from the job's S3 workspace checkpoint when the artifact store is S3 (QA, prod and the durable local stack), otherwise from the API's configured `REVEAL_ARTIFACTS_DIR`: allowlisted worker failure, token-budget, runtime and validation/grounding JSON files, and a general agent job's response record (`output/ledger/agent-response.json`: its final answer, or Claude Code's error text when the run stopped). Workflow jobs list the files of their current authoring attempt. The local Compose API and worker share that artifact volume; the database event history remains available when files are absent. Previews are limited to 20 files and 128 KiB per file, with missing, oversized or unreadable diagnostics labelled explicitly. Arbitrary filesystem paths, symlinks, queue credentials and private raw agent traces are not exposed. Known environment credentials and credential fields are redacted. These detail reads require the same server-side admin gate and signed assertion as the rest of the console.
+
+## Read one agent job's request
+
+On a general agent job's detail, **Show request** loads what the job was asked and what it answered, so you can see
+whether a requester's own limits stopped the run. It is loaded only when you ask, never by the 15-second refresh.
+
+- **Stop reason**, as a headline: "Stopped at its own max_turns (12), which the request set.", "Hit its budget
+  ($1.00), the default it was given.", "Timed out at 600 s", "A response exceeded max_output_tokens (32,000)",
+  "Finished normally.", or the failure code and message. It comes from the job's failure, Claude Code's result
+  subtype and the runner's recorded reason. A budget the dispatch clamp lowered names the admin ceiling instead.
+- **The request in full:** prompt, system prompt and (for an account job) question and claims as readable text with
+  copy buttons; the output schema; model, effort, tools, graphs, network, extra hosts, claims-repository lookups,
+  whether the requester is named, input format, and the owner workspace id.
+- **Limits:** one row per limit with **Requested**, **Frozen**, **Ceiling** and **Used**; the limit the run hit is
+  highlighted.
+  - *Requested.* Jobs queued from this release record which limits the request named (`requested_limits` on the
+    queue record, beside the input; names only). For older jobs nothing stored tells a requested value from a
+    default, so the column says **Not recorded**, and only notes whether the frozen value differs from today's
+    default.
+  - *Ceiling.* The admin ceiling when the job was queued (`limit_ceilings` on the queue record); for older jobs
+    today's ceiling, marked so.
+  - *Used.* Run time, turns and cost from the job's metrics; whether a response reached the output cap. REVEAL tool
+    calls are not counted on their own; the row shows the run's count of all tool calls instead.
+- **Response:** the agent's full final message from the newest attempt's captured response record
+  (`attempt-N/output/ledger/agent-response.json`, up to the 8 MB capture limit), or, when that record is missing,
+  the job result's copy, marked when it was cut at 50,000 characters. Then any structured output, and the output
+  files by name and size. Credentials in the response are redacted as in saved diagnostics; the prompt is shown as
+  sent.
+
+The proxy route is `/api/admin/jobs/<id>/run`; the backend route is `GET /internal/v1/admin/jobs/{id}/run`. It needs
+the gateway service credential and its own signed assertion purpose, `admin_content`, which must carry the signed-in
+admin's verified email; the telemetry and settings assertions are refused. Any admin may read it. Before returning
+anything, the backend writes one `admin_content_read` record (the admin's email, the job id, the time; never the
+content). If that write fails, the read is refused and nothing is returned. Jobs of other kinds return 404. The lease
+token, the account's attribution and evidence package, and the account document are never returned.
+
+This record covers this read only. The saved-diagnostics preview in the job detail (which includes
+`agent-response.json` up to 128 KiB) and the Database inspector (which shows queue payloads) read under the telemetry
+assertion and are not recorded.
 
 ## Inspect table contents
 

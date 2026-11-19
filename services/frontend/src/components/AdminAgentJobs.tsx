@@ -4,14 +4,13 @@ import React, { useState } from "react";
 import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
+import { AgentRequest, LIMIT_LABELS, limitValue } from "./AdminAgentRequest";
 
 const count = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString();
 const plural = (value: number, noun: string) => `${value.toLocaleString()} ${noun}${value === 1 ? "" : "s"}`;
 const of = (used: number | null | undefined, limit: number | null | undefined) => limit == null ? count(used) : `${count(used)} of ${count(limit)}`;
 const yesNo = (value: boolean | null) => value == null ? "—" : value ? "Yes" : "No";
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
-const LIMIT_LABELS: [string, string][] = [["timeout_seconds", "Run time"], ["max_turns", "Turns"], ["max_budget_usd", "Budget"], ["tool_calls", "REVEAL tool calls"], ["max_output_tokens", "Output per response"]];
-const limitValue = (key: string, value: number) => key === "max_budget_usd" ? usd(value) : key === "timeout_seconds" ? duration(value) : key === "max_output_tokens" ? `${value.toLocaleString()} tokens` : value.toLocaleString();
 
 /** What the agent could read: the claims repository, graphs and the network. Unknown parts are left out. */
 function sources(run: AgentRun) {
@@ -86,7 +85,8 @@ export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (O
     <h3>Limits the job was given</h3>
     {run.limits ? <dl className="admin-detail-grid">{LIMIT_LABELS.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{run.limits![key] == null ? "Not part of this input" : limitValue(key, run.limits![key])}</dd></div>)}</dl> : <p>No limits were recorded for this job.</p>}
     {account && run.sources && <SavedSources sources={run.sources} />}
-    <p>The prompt, question, claims and response are not shown here: sizes and counts only.{account && run.sources ? " Each saved source shows the path, URL and commands the agent recorded and what REVEAL measured, never the file's text." : ""} The event log below holds what the agent did.</p>
+    <p>This summary gives sizes and counts. Show the request to read the prompt, question, claims and full response.{account && run.sources ? " Each saved source shows the path, URL and commands the agent recorded and what REVEAL measured, never the file's text." : ""} The event log below holds what the agent did.</p>
+    <AgentRequest key={job.id} jobId={job.id} />
   </details>;
 }
 
@@ -96,7 +96,7 @@ export function AdminAgentJobsView({ agents, kinds, onSelect }: { agents: AgentJ
   const jobs = agents.jobs.filter(j => (!type || (j.agent.deliverable || "unknown") === type)
     && `${j.id} ${j.owner} ${j.status} ${deliverableLabel(j.agent.deliverable)} ${j.agent.model || ""} ${depositOutcome(j)?.text || ""}`.toLowerCase().includes(filter.toLowerCase()));
   return <section aria-label="Agent jobs by type">
-    <div className="admin-section-heading"><div><h2>Agent jobs</h2><p>The latest {count(agents.jobs.length)} general agent jobs across all workspaces (limit {count(agents.window_limit)}), by what each was asked to return: a Scientific Account deposited in the claims repository, or an answer. Counts and typical figures below cover these jobs, not all time. The prompt, question and claims are never shown; only their sizes.</p></div><input className="field" aria-label="Filter agent jobs" placeholder="Filter by job, owner, state, model or deposit" value={filter} onChange={e => setFilter(e.target.value)} /></div>
+    <div className="admin-section-heading"><div><h2>Agent jobs</h2><p>The latest {count(agents.jobs.length)} general agent jobs across all workspaces (limit {count(agents.window_limit)}), by what each was asked to return: a Scientific Account deposited in the claims repository, or an answer. Counts and typical figures below cover these jobs, not all time. This list shows sizes only; open a job and show its request to read the prompt, question, claims and response.</p></div><input className="field" aria-label="Filter agent jobs" placeholder="Filter by job, owner, state, model or deposit" value={filter} onChange={e => setFilter(e.target.value)} /></div>
     {!!kinds?.length && <p>All jobs ever queued, by kind: {kinds.map(k => `${count(k.count)} ${jobKindLabel(k.kind)}${k.count === 1 ? "" : "s"}`).join(" · ")}.</p>}
     <section className="admin-overview admin-cost-overview" aria-label="Agent jobs by type">
       {agents.types.map(t => <div key={t.deliverable}><strong>{count(t.jobs)}</strong><span>{deliverableLabel(t.deliverable === "unknown" ? null : t.deliverable)} jobs · {count(t.succeeded)} succeeded · {count(t.failed)} failed{t.cancelled ? ` · ${count(t.cancelled)} cancelled` : ""}{t.active ? ` · ${count(t.active)} running or queued` : ""}

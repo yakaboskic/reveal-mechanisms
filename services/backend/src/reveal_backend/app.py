@@ -273,6 +273,21 @@ async def admin_change_agent_limits(request: Request, actor: str = Depends(admin
     except Conflict as exc: raise Problem(409, 'LIMITS_CHANGED', str(exc)[:400]) from None
     return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
 
+def admin_content_authority(request: Request):
+    """Reading what a job was asked and what it answered is its own authority: the admin_content purpose, and the
+    verified admin's email, which every read is recorded under. An assertion that names no admin is refused."""
+    service_authority(request.headers.get('authorization'))
+    claims = decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_content')
+    email = claims.get('admin_email')
+    if not isinstance(email, str) or not 0 < len(email) <= 254:
+        raise Problem(401, 'INVALID_IDENTITY_PROOF', 'The signed session does not name an admin.')
+    return email
+
+@app.get('/internal/v1/admin/jobs/{job_id}/run')
+def admin_job_run(job_id: str, admin: str = Depends(admin_content_authority)):
+    from .admin_run import job_run
+    return JSONResponse(job_run(repo, job_id, admin), headers={'Cache-Control': 'private, no-store'})
+
 @app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
 def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
     from .admin_jobs import job_detail
@@ -1039,16 +1054,21 @@ def agent_job_rows(tx, identity, body):
     question and claims as DAPPER nodes (agent_account) and, beside the input, who asked for it."""
     from . import agent_account, agent_limits, agent_output
     from .box_agent import DEFAULT_MODEL, AgentInputError, freeze_input
+    policy=agent_limits.policy(tx)
     try:
-        frozen=freeze_input(body,policy=agent_limits.policy(tx),default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL,
+        frozen=freeze_input(body,policy=policy,default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL,
                             account_builder=agent_account.build,schema_checker=agent_output.check_schema)
     except AgentInputError as exc:
         raise Problem(422,'INVALID_REQUEST',str(exc)[:400]) from None
     job,rows=jobs.new(identity['user_id'],'agent',inputs=frozen)
+    queue=next(data for kind,_,_,data in rows if kind=='queue')
+    # For the admin console's limits table (admin_run), beside the input and never in it: which limits the request
+    # named (freeze_input refused any other key) and each ceiling in force when the job was queued.
+    queue['requested_limits']=sorted(body.get('limits') or {})
+    queue['limit_ceilings']={key:entry['ceiling'] for key,entry in policy.items()}
     if frozen['deliverable']=='scientific_account':
         # Attribution of the account, as an analysis freezes it. It sits on the queue record beside the input, never
         # in it: the input is copied into the Box, and the agent must not be able to read or choose who it writes as.
-        queue=next(data for kind,_,_,data in rows if kind=='queue')
         queue['attribution']={'user_id':identity['user_id'],'person_id':None,'display_name':identity.get('display_name'),
             'orcid':identity.get('orcid'),'orcid_authenticated':identity.get('orcid_authenticated',False),'observed_at':now(),
             'principal_kind':identity['principal_kind']}
