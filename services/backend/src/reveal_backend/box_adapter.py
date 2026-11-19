@@ -22,7 +22,7 @@ from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
 from .box_stream import inflate
-from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total
 from .source_evidence import SOURCE_PACKAGES
 
 CLAUDE_VERSION = '2.1.282'
@@ -100,7 +100,8 @@ def read_capture_marker(request, handle):
             target = request.output_dir / name
             if relative.is_absolute() or '..' in relative.parts or target.is_symlink() or not target.resolve().is_relative_to(request.output_dir.resolve()):
                 raise ValueError('Capture path escapes attempt')
-            raw = target.read_bytes(); total += len(raw)
+            raw = target.read_bytes()
+            if counts_toward_total(name): total += len(raw)
             if len(raw) > capture_file_limit(name) or total > MAX_TOTAL or len(raw) != expected['size_bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
                 raise ValueError('Captured bytes changed')
         return marker
@@ -584,7 +585,8 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 relative = PurePosixPath(name)
                 if relative.is_absolute() or '..' in relative.parts:
                     raise BoxTransportError('Remote artifact path escapes attempt')
-                content = base64.b64decode(encoded, validate=True); total += len(content)
+                content = base64.b64decode(encoded, validate=True)
+                if counts_toward_total(name): total += len(content)
                 scanned = [content]
                 if name in TRANSCRIPT_FILES:
                     # Compression hides a credential from a byte match: a gzipped transcript is scanned inflated too.

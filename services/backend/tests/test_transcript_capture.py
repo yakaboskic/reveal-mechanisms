@@ -294,3 +294,60 @@ def test_the_stream_parser_keeps_what_claude_code_says_it_has():
     parser = ClaudeStream()
     parser.feed(json.dumps({'type': 'system', 'subtype': 'init', 'tools': ['x' * 500]}).encode() + b'\n')
     assert 'tools' not in parser.runtime
+
+
+# The transcript's own allowance --------------------------------------------------------------------------------
+
+def fill_to_the_total(root):
+    """Output sources that bring the run's other captured files to exactly MAX_TOTAL."""
+    other = sum(path.stat().st_size for path in [*(root / 'output').rglob('*'), *(root / 'state/ledger').rglob('*'), root / 'state/runtime.json']
+                if path.is_file() and path.name not in {Path(name).name for name in upload.TRANSCRIPT_FILES})
+    remaining = upload.MAX_TOTAL - other
+    (root / 'output/sources').mkdir()
+    index = 0
+    while remaining:
+        size = min(remaining, upload.MAX_SOURCE_FILE)
+        (root / f'output/sources/paper-{index}.pdf').write_bytes(b'\0' * size)
+        remaining -= size; index += 1
+
+
+def test_a_run_at_its_source_limit_still_captures_two_full_transcripts(tmp_path):
+    root = fixture(tmp_path)
+    fill_to_the_total(root)
+    for name in upload.TRANSCRIPT_FILES:
+        (root / 'state' / name).write_bytes(b'\1' * upload.MAX_TRANSCRIPT_FILE)
+    files = upload.inventory(root, BINDING)['files']
+    sizes = {item['path']: item['size_bytes'] for item in files}
+    assert sum(size for name, size in sizes.items() if name not in upload.TRANSCRIPT_FILES) == upload.MAX_TOTAL
+    assert [sizes[name] for name in upload.TRANSCRIPT_FILES] == [upload.MAX_TRANSCRIPT_FILE] * 2
+    assert sum(sizes.values()) == upload.MAX_TOTAL + upload.MAX_TRANSCRIPT_TOTAL == 140_000_000
+    state = {'status': 'succeeded'}
+    assert capture.validate_inventory({'format': 'reveal.direct-capture/1', 'binding': BINDING, 'state': state, 'files': files},
+                                      BINDING, state) == files
+    # One byte more of anything else is still over the run's total.
+    with pytest.raises(BoxTransportError, match='byte budget'):
+        capture.validate_inventory({'format': 'reveal.direct-capture/1', 'binding': BINDING, 'state': state,
+                                    'files': [*files, {'path': 'output/extra', 'size_bytes': 1, 'sha256': 'a' * 64}]}, BINDING, state)
+
+
+def test_the_transcript_allowance_is_kept_apart_on_every_capture_path(tmp_path, monkeypatch):
+    """The same rule, at a small scale: the runner's collect and the freeze count everything else to MAX_TOTAL."""
+    root = fixture(tmp_path)
+    for name in upload.TRANSCRIPT_FILES:
+        (root / 'state' / name).write_bytes(b'\1' * 5000)
+    other = sum(path.stat().st_size for path in [root / 'output/account.json', root / 'state/ledger/manifest.json', root / 'state/runtime.json'])
+    monkeypatch.setattr(upload, 'MAX_TOTAL', other)
+    monkeypatch.setattr(box_remote, 'MAX_TOTAL', other)
+    with patch.multiple(box_remote, OUTPUT=root / 'output', STATE=root / 'state'), \
+            patch.object(upload.os, 'geteuid', return_value=(root / 'state/runtime.json').stat().st_uid):
+        collected = box_remote.collect()['files']
+        assert set(upload.TRANSCRIPT_FILES) <= set(collected)
+        names = {item['path'] for item in upload.inventory(root, BINDING)['files']}
+        assert set(upload.TRANSCRIPT_FILES) <= names
+        (root / 'output/extra').write_bytes(b'x')
+        with pytest.raises(ValueError, match='budget'):
+            box_remote.collect()
+    fresh = fixture(tmp_path / 'fresh')
+    (fresh / 'output/extra').write_bytes(b'x')
+    with pytest.raises(ValueError, match='byte budget'):
+        upload.inventory(fresh, BINDING)

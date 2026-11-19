@@ -28,9 +28,22 @@ TRANSCRIPT_FILES = ('ledger/claude-stream.jsonl.gz', 'ledger/claude-stderr.txt.g
 MAX_TRANSCRIPT_FILE = 20_000_000
 MAX_TRANSCRIPT_EXPANDED = 48_000_000
 MAX_RUNTIME = 20_000_000
-# The capture and the account gate's copy of its saved sources (agent_account.accept) share one workspace checkpoint
-# of 256 MiB (REVEAL_WORKSPACE_MAX_BYTES), so a run captures at most 100 MB.
+# Everything a run captures except the transcript: output/, ledger/ and runtime.json.
 MAX_TOTAL = 100_000_000
+# The transcript has its own allowance beside MAX_TOTAL, so it never costs a run its sources.
+MAX_TRANSCRIPT_TOTAL = len(TRANSCRIPT_FILES) * MAX_TRANSCRIPT_FILE
+# One workspace checkpoint of 256 MiB (REVEAL_WORKSPACE_MAX_BYTES = 268,435,456 bytes) holds an attempt's capture and
+# the account gate's copy of the sources it cites (agent_account.accept, at most the captured sources):
+#   frozen input (agent input, at most 8 MB) + capture (MAX_TOTAL, 100 MB) + transcript (MAX_TRANSCRIPT_TOTAL, 40 MB)
+#   + validated copy of the sources (at most 100 MB) + capture marker and diagnostics (well under 1 MB)
+#   <= about 249 MB, about 19 MB under the cap. The checkpoint also keeps earlier attempts' captures (compose_workspace
+#   replaces only the current attempt's), as it did before the transcript was captured.
+assert MAX_TOTAL + MAX_TRANSCRIPT_TOTAL + MAX_TOTAL + 8_000_000 + 1_000_000 < 256 * 1024 * 1024
+
+
+def counts_toward_total(name):
+    """Whether a captured file counts toward MAX_TOTAL; the transcript files count toward MAX_TRANSCRIPT_TOTAL."""
+    return name not in TRANSCRIPT_FILES
 MAX_FILES = 10000
 MAX_PLAN = 16_000_000
 MAX_BUNDLE = 25_000_000
@@ -113,7 +126,7 @@ def inventory(base, binding):
         for root, relative, name in sorted(candidates, key=lambda value: value[2]):
             if not safe_name(name) or len(entries) >= MAX_FILES: raise ValueError('Invalid capture inventory')
             source, before = source_file(root, relative, runtime_metadata=name == 'runtime.json', limit=capture_file_limit(name))
-            total += before.st_size
+            if counts_toward_total(name): total += before.st_size
             if total > MAX_TOTAL: source.close(); raise ValueError('Capture exceeds byte budget')
             target = temporary / 'files' / name; target.parent.mkdir(parents=True, exist_ok=True)
             digest = hashlib.sha256(); count = 0

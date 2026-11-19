@@ -339,7 +339,8 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
         used = sum(os.stat(item, dir_fd=report_fd, follow_symlinks=False).st_size for item in existing)
         if name not in existing and used + len(raw) > MAX_REPORT_TOTAL: raise ValueError('report_total_budget')
         if name not in existing and capture_roots:
-            from reveal_backend.box_upload import MAX_TOTAL
+            from reveal_backend.box_upload import MAX_TOTAL, TRANSCRIPT_FILES
+            transcript = {Path(name).name for name in TRANSCRIPT_FILES}   # their own allowance, beside MAX_TOTAL
             captured = 0
             for root in map(Path, capture_roots):
                 if not root.exists(): continue
@@ -347,7 +348,7 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
                 for path in paths:
                     info = path.lstat()
                     if stat.S_ISLNK(info.st_mode): raise ValueError('unsafe_capture_path')
-                    if stat.S_ISREG(info.st_mode): captured += info.st_size
+                    if stat.S_ISREG(info.st_mode) and path.name not in transcript: captured += info.st_size
             # Leave room for the bounded tool response, its duplicate ledger
             # projection and the final runtime timing/usage update.
             if captured + len(raw) + 100_000 > MAX_TOTAL: raise ValueError('capture_total_budget')

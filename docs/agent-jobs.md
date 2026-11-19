@@ -497,7 +497,8 @@ before it accepts them. Each file is kept under 20 MB: a longer one keeps its be
 saying how much was left out between them. Lines saying when the stream's lines arrived are added, at most once a
 second. Only admins read the transcript, a page at a time and recorded per read
 ([admin telemetry](admin-telemetry.md#read-one-agent-jobs-transcript)); the job's owner never receives it.
-The transcript counts toward the run's 100 MB capture total.
+The transcript has its own allowance (two files of up to 20 MB) beside the run's 100 MB capture total, so it never
+costs a run its sources.
 
 **The run's configuration is recorded** in `runtime.json` under `configuration`: Claude Code's arguments (the system
 prompt and output schema by size and SHA-256), its environment by allowlist (the key proxy's placeholder, never a

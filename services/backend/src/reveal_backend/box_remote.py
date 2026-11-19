@@ -37,7 +37,7 @@ from .evidence_package import declare_trusted_prefixes, trusted_prefixes
 from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
-from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, source_file
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total, source_file
 from .source_evidence import CHECK as SOURCE_CHECK, tool_versions as source_tool_versions
 
 BASE = Path('/reveal')
@@ -1093,8 +1093,9 @@ def collect():
                 raise ValueError('Output symlinks are forbidden')
             if not path.is_file():
                 continue
-            data = path.read_bytes(); size += len(data)
-            if len(data) > capture_file_limit(prefix + '/' + str(path.relative_to(root))) or size > MAX_TOTAL:
+            data = path.read_bytes(); name = prefix + '/' + str(path.relative_to(root))
+            if counts_toward_total(name): size += len(data)
+            if len(data) > capture_file_limit(name) or size > MAX_TOTAL:
                 raise ValueError('Output artifact budget exceeded')
             files[prefix + '/' + str(path.relative_to(root))] = base64.b64encode(data).decode()
     if (STATE / 'runtime.json').exists() or (STATE / 'runtime.json').is_symlink():

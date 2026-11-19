@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from .artifact_store import StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, BoxTransportError, TERMINAL_STATUSES
 from .box_stream import Inflater
-from .box_upload import MAX_TOTAL, MAX_FILES, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit
+from .box_upload import MAX_TOTAL, MAX_FILES, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total
 from .runtime_config import setting
 
 MAX_CONTROL = 16_000_000
@@ -49,7 +49,8 @@ def validate_inventory(value, binding, state):
             and name not in names, 'Unsafe direct capture path')
         size = item.get('size_bytes'); sha = item.get('sha256')
         require(type(size) is int and 0 <= size <= capture_file_limit(name) and isinstance(sha, str) and re.fullmatch('[a-f0-9]{64}', sha), 'Invalid direct capture size or checksum')
-        total += size; names.add(name)
+        if counts_toward_total(name): total += size
+        names.add(name)
         require(total <= MAX_TOTAL, 'Direct capture exceeds byte budget')
     require('ledger/manifest.json' in names, 'Direct capture ledger is missing')
     require(not any(str(parent) in names for name in names for parent in PurePosixPath(name).parents if str(parent) != '.'),
