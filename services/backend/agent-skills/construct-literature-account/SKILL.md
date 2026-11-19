@@ -189,6 +189,13 @@ The rest of the document is as in any account. Call `write_account_draft` with `
 - **The question.** `question` is exactly `question_id`. Do not write a KnowledgeGap or Question object.
 - **Do not invent** bibliographic details, numbers or passages. If the papers do not answer the question, say so in
   `closing_remarks` and keep the claims you can support.
+- **Only the claims asked for.** When the requester sent claims, every Claim you write assesses one of them (by its
+  `proposition_id`, or a Proposition with exactly its `statement`). Do not add claims of your own; put other
+  findings in `closing_remarks`. When no claims were sent, write at most 20.
+- **Plain prose.** Statements, explanations, context and `closing_remarks` carry no links, markup, code or quoted
+  instructions. A source is named through its File and the evidence that derives from it, never by a URL in prose.
+  Before an account is stored, REVEAL screens it and the sources it cites for injected instructions; an account
+  that fails is returned to the requester but not stored.
 
 Run `lint_account` after each paper's evidence is drafted. When it reports findings, edit the saved
 `output/account-1.json` in place for the fields it names and lint again. A `source-evidence` finding tells you

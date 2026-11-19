@@ -276,8 +276,17 @@ REVEAL's key. An object it already holds is left as stored.
 | `deposited` | Stored. `deposit_id` is the repository's receipt. `stored_differs` counts objects it already held with different unhashed content; its copy stands. |
 | `not_configured` | This deployment has no claims repository. The account is still returned. |
 | `failed` | The attempt did not succeed (`reason`: `unavailable`, `rejected`, `unauthorized`, `too_large`). The job still succeeds and keeps its account. There is no automatic retry yet. A redirect from the repository is refused, not followed: the key is sent to the configured address only. |
+| `withheld_unsafe` | REVEAL's prompt-injection screen flagged the account, or text the run read, so it was never sent. The job still succeeds and keeps its account. `reason` names the check (`unsafe_text`, `unsafe_command`, `unrequested_claim`, `unknown_entity`, `oversized_field`, `screen_too_large`, `prompt_injection`) and `detail` says why and where in one line. There is no review or retry. |
 
 A deposit cannot be recalled. A cancellation that arrives before the deposit is sent stops it.
+
+Before sending, REVEAL screens the account for prompt injection. The screen looks for attacks, not scientific quality.
+Fixed checks require that the account's prose carries no links, code, markup, hidden characters or text addressed to
+a model; that each recorded command is a plain `curl`, `wget`, `pdftotext` or `xmllint` call writing only under
+`output/`; that its claims are about the claims you asked about (or, if you named none, its own, at most 20); that
+each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
+size limit. A classifier, Llama Prompt Guard 2 22M, also scores the saved papers, the other tool results and the
+account's text. Keep links and markup out of `context`, `closing_remarks` and the other prose fields.
 
 ### Who the account names
 

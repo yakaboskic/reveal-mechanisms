@@ -17,8 +17,9 @@ knowledge gap.
 
 After the run, `accept` is the gate: the account's record of its sources is checked against the captured files and
 the tool ledger, then the account is assembled and linted exactly as a research account is
-(acceptance.assemble_account), then put in its deposit form (account_deposit). `store` keeps the result with the
-job, and `public` is what the job result says about it.
+(acceptance.assemble_account), then put in its deposit form (account_deposit), and last screened for prompt
+injection (deposit_screen): the verdict travels with the record, so the commit step deposits only a passed account.
+`store` keeps the result with the job, and `public` is what the job result says about it.
 """
 from pathlib import Path, PurePosixPath
 
@@ -158,6 +159,10 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
         # The gate applies the same source rule, so this is a defect or a tampered capture, not a repairable
         # authoring mistake. Either way no account is accepted.
         raise EvidenceBuildError('The account could not be put in its deposit form: ' + str(exc)) from exc
+    # The prompt-injection screen, once, on what would be deposited. A withheld account is still accepted, stored and
+    # returned; the commit step never sends it (deposit_screen).
+    from . import deposit_screen
+    verdict = deposit_screen.screen(deposit, account, summary['papers'], kept, calls, ledger_path.parent)
     data = canonical_json(deposit)
     target = directory / 'account.dapper.json'; target.write_bytes(data)
     papers = []
@@ -170,7 +175,8 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
             'objects': summary['objects'], 'edges': summary['edges'], 'claims': summary['claims'],
             'value_locators': summary['value_locators'], 'papers': papers,
             'requested_claims': requested_claims(account['claims'], deposit),
-            'lint_warnings': sum(1 for finding in findings if isinstance(finding, dict) and finding.get('severity') == 'warning')}
+            'lint_warnings': sum(1 for finding in findings if isinstance(finding, dict) and finding.get('severity') == 'warning'),
+            'screen': verdict}
 
 
 def stored(root, record):

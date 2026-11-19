@@ -221,7 +221,9 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
                                          'claims': 3, 'quotes': 6, 'lint_warnings': 1, 'dapper_version': '0.2.1-a1',
                                          'deposit_status': 'deposited', 'deposit_id': 'dep_1', 'deposit_reason': None,
                                          'deposit_http_status': None, 'response_characters': 39, 'papers': 2, 'files': 2,
-                                         'structured_output_characters': None})
+                                         'structured_output_characters': None,
+                                         **dict.fromkeys(('screen_outcome', 'screen_check', 'screen_score', 'screen_threshold',
+                                                          'screen_location', 'screen_classifier', 'screen_windows', 'screen_seconds'))})
         # A job that succeeded while its deposit did not says so, with the reason and not the repository's message.
         result = rows[ids['undeposited']]['agent']['result']
         self.assertEqual([result[key] for key in ('deposit_status', 'deposit_reason', 'deposit_http_status', 'deposit_id')],
@@ -263,6 +265,33 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         self.assertEqual([answer[key] for key in ('jobs', 'succeeded', 'active', 'deposited', 'deposit_not_made', 'typical_cost_usd')],
                          [2, 1, 1, 0, 0, .1])
         self.assertIsNotNone(account['latest_at'])
+
+    def test_a_withheld_account_reports_the_screens_check_score_threshold_and_location(self):
+        from reveal_backend import job_metrics
+        ids = self.populate()
+        withheld = self.agent_job(account_inputs(), 'succeeded', result=account_result(
+            {'status': 'withheld_unsafe', 'reason': 'prompt_injection', 'detail': 'DEPOSIT-DETAIL'}))
+        passed = ids['deposited']
+        verdicts = {withheld: {'outcome': 'withheld', 'check': 'prompt_injection', 'location': 'sources/PMC1.txt line=12-14',
+                               'score': 0.9731, 'threshold': 0.5, 'classifier': 'prompt-guard-2-22m@0123456789ab', 'windows': 84,
+                               'texts': 9, 'seconds': 2.4},
+                    passed: {'outcome': 'passed', 'check': None, 'location': 'ledger call 7 (WebFetch) line=1-3', 'score': 0.012,
+                             'threshold': 0.5, 'classifier': 'prompt-guard-2-22m@0123456789ab', 'windows': 31, 'texts': 6, 'seconds': 0.9}}
+        for identity, verdict in verdicts.items():
+            self.assertTrue(job_metrics.record(self.repo, {'id': identity}, screen=verdict))
+        block = snapshot(self.repo)['agent_jobs']
+        rows = {row['id']: row['agent']['result'] for row in block['jobs']}
+        self.assertEqual({key: rows[withheld][key] for key in ('deposit_status', 'deposit_reason', 'screen_outcome', 'screen_check', 'screen_score',
+                                                               'screen_threshold', 'screen_location', 'screen_windows', 'screen_seconds')},
+                         {'deposit_status': 'withheld_unsafe', 'deposit_reason': 'prompt_injection', 'screen_outcome': 'withheld',
+                          'screen_check': 'prompt_injection', 'screen_score': 0.9731, 'screen_threshold': 0.5,
+                          'screen_location': 'sources/PMC1.txt line=12-14', 'screen_windows': 84, 'screen_seconds': 2.4})
+        self.assertEqual((rows[passed]['screen_outcome'], rows[passed]['screen_score'], rows[passed]['deposit_status']), ('passed', 0.012, 'deposited'))
+        # Counted on its own, by check, and not among the deposits that failed.
+        account = {entry['deliverable']: entry for entry in block['types']}['scientific_account']
+        self.assertEqual((account['withheld_unsafe'], account['withheld_by_check'], account['deposit_not_made'], account['deposited']),
+                         (1, {'prompt_injection': 1}, 1, 1))
+        self.assertNotIn('DEPOSIT-DETAIL', json.dumps(snapshot(self.repo)))
 
     def test_agent_jobs_stay_listed_when_other_jobs_fill_the_job_list(self):
         agent = self.agent_job(answer_inputs())

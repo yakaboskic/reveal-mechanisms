@@ -39,3 +39,8 @@ COPY .deployment-assets/rds-ca.pem /app/runtime-ca.pem
 ENV GIT_OPTIONAL_LOCKS=0 TMPDIR=/tmp REVEAL_WORK_DIR=/work PYSTOW_HOME=/tmp/pystow XDG_CACHE_HOME=/tmp/cache
 RUN python -c "from reveal_backend.dapper_release import verify_release; verify_release('/app/.runtime/dapper', '/app/services/backend/agent-runtime/dapper-release.json')"
 RUN python -c "from pathlib import Path; import yaml; schema = yaml.safe_load(Path('/app/dismech/src/dismech/schema/dismech.yaml').read_bytes()); assert all(key in schema['prefixes'] for key in ('MONDO', 'CL', 'PMID', 'GO', 'ECTO'))"
+# The deposit screen's prompt-injection classifier (deposit_screen): fetched and pinned by an operator, never in Docker.
+# The build fails unless every file matches prompt-guard-release.json and the model loads and scores once.
+COPY .deployment-assets/prompt-guard-2-22m /app/models/prompt-guard-2-22m
+ENV REVEAL_PROMPT_GUARD_DIR=/app/models/prompt-guard-2-22m
+RUN python -c "from reveal_backend.deposit_screen import verify_model; verify_model('/app/models/prompt-guard-2-22m')"

@@ -1,7 +1,7 @@
 "use client";
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React, { useState } from "react";
-import { deliverableLabel, depositOutcome, jobKindLabel, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
+import { deliverableLabel, depositOutcome, jobKindLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
 
@@ -49,6 +49,7 @@ export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (O
       ["Claims named by the requester", claimsAsked(run) ?? "—"],
       ["Requester named in the account", yesNo(run.attribute_requester)],
       ["Deposit", outcome ? <><span className={`admin-status ${outcome.tone}`}>{outcome.text}</span>{run.result.deposit_id && <small className="admin-mono"> {run.result.deposit_id}</small>}</> : "—"],
+      ["Prompt-injection screen", screenSummary(run.result) ?? "—"],
       ["Account", run.result.account_id ? <span className="admin-mono">{run.result.account_id}</span> : "—"],
       ["Account contents", run.result.account_id ? [`${count(run.result.objects)} objects`, run.result.claims != null && plural(run.result.claims, "claim"), run.result.quotes != null && plural(run.result.quotes, "quote"), run.result.papers != null && plural(run.result.papers, "paper"), run.result.lint_warnings != null && plural(run.result.lint_warnings, "lint warning"), run.result.dapper_version && `DAPPER ${run.result.dapper_version}`].filter(Boolean).join(" · ") : "—"],
     ] as [string, React.ReactNode][] : []),
@@ -76,7 +77,7 @@ export function AdminAgentJobsView({ agents, kinds, onSelect }: { agents: AgentJ
     {!!kinds?.length && <p>All jobs ever queued, by kind: {kinds.map(k => `${count(k.count)} ${jobKindLabel(k.kind)}${k.count === 1 ? "" : "s"}`).join(" · ")}.</p>}
     <section className="admin-overview admin-cost-overview" aria-label="Agent jobs by type">
       {agents.types.map(t => <div key={t.deliverable}><strong>{count(t.jobs)}</strong><span>{deliverableLabel(t.deliverable === "unknown" ? null : t.deliverable)} jobs · {count(t.succeeded)} succeeded · {count(t.failed)} failed{t.cancelled ? ` · ${count(t.cancelled)} cancelled` : ""}{t.active ? ` · ${count(t.active)} running or queued` : ""}
-        {t.deliverable === "scientific_account" && <> · {count(t.deposited)} deposited{t.deposit_not_made ? <> · <b className="admin-warning">{count(t.deposit_not_made)} succeeded without a deposit</b></> : ""}</>}
+        {t.deliverable === "scientific_account" && <> · {count(t.deposited)} deposited{t.deposit_not_made ? <> · <b className="admin-warning">{count(t.deposit_not_made)} succeeded without a deposit</b></> : ""}{t.withheld_unsafe ? <> · <b className="admin-warning">{count(t.withheld_unsafe)} withheld as unsafe</b>{t.withheld_by_check && ` (${Object.entries(t.withheld_by_check).map(([check, n]) => `${check.replaceAll("_", " ")} ${count(n)}`).join(", ")})`}</> : ""}</>}
         <br />Typical successful run: {usd(t.typical_cost_usd)} · {count(t.typical_turns)} turns · {duration(t.typical_seconds)}<br />{usd(t.spend_usd)} spent · {plural(t.owners, "requester")} · latest {date(t.latest_at)}</span></div>)}
     </section>
     <div className="admin-statuses" role="group" aria-label="Job type">
@@ -92,7 +93,7 @@ export function AdminAgentJobsView({ agents, kinds, onSelect }: { agents: AgentJ
         <td>{limits ? <>{limits.max_turns != null ? `${count(limits.max_turns)} turns` : "—"} · {limits.max_budget_usd != null ? usd(limits.max_budget_usd) : "—"} · {limits.timeout_seconds != null ? duration(limits.timeout_seconds) : "—"}{limits.tool_calls != null && <small>{count(limits.tool_calls)} REVEAL tool calls</small>}</> : "—"}</td>
         <td>{j.turns == null ? "—" : <>{of(j.turns, j.turn_limit)} turns{j.tool_calls != null && <small>{count(j.tool_calls)} tool calls{j.tool_failures ? `, ${count(j.tool_failures)} failed` : ""}</small>}{j.agent_seconds != null && <small>{duration(j.agent_seconds)}{j.time_limit_seconds != null ? ` of ${duration(j.time_limit_seconds)}` : ""}</small>}{(j.lint_checks != null || j.draft_writes != null) && <small>{count(j.lint_checks)} lint checks · {count(j.draft_writes)} draft writes</small>}</>}</td>
         <td><Returned job={j} /></td>
-        <td>{outcome ? <><span className={`admin-status ${outcome.tone}`}>{outcome.text}</span>{run.result.deposit_id && <small className="admin-mono" title={run.result.deposit_id}>{run.result.deposit_id.slice(0, 16)}…</small>}</> : <span title="An answer job deposits nothing.">Not applicable</span>}</td>
+        <td>{outcome ? <><span className={`admin-status ${outcome.tone}`}>{outcome.text}</span>{run.result.deposit_id && <small className="admin-mono" title={run.result.deposit_id}>{run.result.deposit_id.slice(0, 16)}…</small>}{run.result.screen_outcome === "withheld" && <small>{screenSummary(run.result)}</small>}</> : <span title="An answer job deposits nothing.">Not applicable</span>}</td>
         <td className="admin-date">{date(j.created_at)}<small>{duration(j.wall_seconds)} wall time</small></td>
         <td><JobCost job={j} /></td>
       </tr>; })}

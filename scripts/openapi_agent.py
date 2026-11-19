@@ -97,17 +97,29 @@ def extend(b, f, e):
     b.add('AgentFile', obj({'path': string(), 'size_bytes': integer(0), 'sha256': digest}))
     dapper_id = lambda name: string(pattern='^dapper:' + name + r'\.[A-Za-z0-9_-]{8,64}$')
     b.add('AgentAccountDeposit', obj({
-        'status': enum('deposited', 'failed', 'not_configured', description=
+        'status': enum('deposited', 'failed', 'not_configured', 'withheld_unsafe', description=
             'deposited: the claims repository stored every object of the account. not_configured: this deployment has no '
-            'claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job.'),
+            'claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job. '
+            'withheld_unsafe: REVEAL\'s prompt-injection screen found text in the account, or in what the run read, that '
+            'could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. '
+            'The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry.'),
         'deposit_id': null(string(description="The repository's receipt id for this deposit.")),
         'objects': integer(0, description='Objects the repository accepted, counting ones it already held.'),
         'stored_differs': integer(0, description='Objects the repository already held under the same id with different '
                                                  'unhashed content. Its stored copy stands.'),
         'unresolved_references': integer(0),
-        'reason': enum('too_large', 'rejected', 'unauthorized', 'unavailable'),
+        'reason': enum('too_large', 'rejected', 'unauthorized', 'unavailable', 'oversized_field', 'unsafe_text', 'unsafe_command',
+                       'unrequested_claim', 'unknown_entity', 'screen_too_large', 'prompt_injection', description=
+            'Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable. For withheld_unsafe, the '
+            'screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, '
+            'markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that '
+            'is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), '
+            'unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large '
+            '(more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote).'),
         'http_status': integer(100, 599),
-        'detail': string(maxLength=500, description="The repository's own reason for refusing the document.")}, ['status']))
+        'detail': string(maxLength=500, description="For rejected, the repository's own reason for refusing the document. For "
+                         'withheld_unsafe, one plain line saying the account was not stored in the claims repository, why, and '
+                         'where (a saved source file and lines, a tool call, or an account field); never the text itself.')}, ['status']))
     b.add('AgentAccountPaper', obj({
         'path': string(description='Where the agent saved the file, relative to output/ (for example sources/PMC3491803.xml).'),
         'url': null(string(description='The URL the bytes were fetched from; for a converted file, the URL of the file it was '

@@ -820,22 +820,41 @@ class WorkflowExecution:
         if current['status'] == 'cancel_requested': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
         return {'next_phase': 'complete', 'done': True}
 
+    def record_screen(self, job, verdict):
+        """Copy the deposit screen's verdict (no text, only the check, score, threshold and location) into admin
+        telemetry; never affects the job."""
+        from .job_metrics import record
+        record(self.repository, job, screen=verdict)
+
     async def commit_account(self, payload, token, job, execution, root):
         """Deposit and store a checked account. Returns the job result's account block, or None when the job was
         cancelled first (it is then finished as cancelled here).
 
         The deposit goes first because the job result reports it and cannot be amended afterwards. It cannot be
         recalled either, so a pending cancellation is honoured before sending, and its receipt is recorded at once: a
-        retried commit stores the account without depositing it twice. A deposit that fails is reported, never raised."""
-        from . import agent_account, claims_deposit
+        retried commit stores the account without depositing it twice. A deposit that fails is reported, never raised.
+
+        Only an account the gate's prompt-injection screen passed is sent. A withheld one is stored and returned as
+        any other, with the deposit status withheld_unsafe; its verdict was checkpointed with the account, so a retried
+        commit reaches the same outcome. An account with no verdict is never sent."""
+        from . import agent_account, claims_deposit, deposit_screen
         record = execution['account']
+        verdict = record.get('screen')
+        require(isinstance(verdict, dict) and verdict.get('outcome') in ('passed', 'withheld'),
+                'The account was not screened before its deposit')
         data, texts = await run_sync(agent_account.stored, root, record)
+        await run_sync(self.record_screen, job, verdict)
         deposit = execution.get('account_deposit')
         if deposit is None:
             current, _, _ = await run_sync(self.context, payload)
             if current['status'] == 'cancel_requested':
                 await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
                 return None
+        if deposit is None and verdict['outcome'] == 'withheld':
+            deposit = deposit_screen.withheld(verdict)
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
+                'message': 'Keeping the account with the job. It is not deposited in the claims repository.'})
+        elif deposit is None:
             if claims_deposit.configuration():
                 await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
                     'message': 'Depositing the account in the claims repository.'})

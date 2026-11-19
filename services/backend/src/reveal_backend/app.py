@@ -1553,8 +1553,12 @@ _routes_lifespan = app.router.lifespan_context
 async def background_lifespan(application):
     """The API process warms the catalog (REVEAL_CATALOG_WARMUP) and runs the readiness monitor
     (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off. Shutdown closes the
-    provenance portal client of this loop."""
-    from . import provenance_portal, readiness
+    provenance portal client of this loop.
+
+    It also loads the deposit screen's prompt-injection model once, before any workflow step can need it; a deployed
+    process without a verified model does not start (deposit_screen.startup)."""
+    from . import deposit_screen, provenance_portal, readiness
+    deposit_screen.startup()
     async with _routes_lifespan(application) as state:
         warmup = getattr(catalog, 'start_warmup', None)
         if warmup and os.getenv('REVEAL_CATALOG_WARMUP', '1') != '0': warmup()

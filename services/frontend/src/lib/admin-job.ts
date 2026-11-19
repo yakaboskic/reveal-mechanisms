@@ -21,12 +21,19 @@ export type AgentRun = {
     account_id: string | null; objects: number | null; claims: number | null; quotes: number | null; papers: number | null;
     lint_warnings: number | null; dapper_version: string | null;
     deposit_status: string | null; deposit_id: string | null; deposit_reason: string | null; deposit_http_status: number | null;
+    /** The deposit screen's verdict: passed or withheld, the check that withheld the account, the classifier's highest
+     * (or flagging) score against its threshold, and where the text was: a source file and lines, a ledger call or an
+     * account field. Never the text. Absent from backends older than the screen. */
+    screen_outcome?: string | null; screen_check?: string | null; screen_score?: number | null; screen_threshold?: number | null;
+    screen_location?: string | null; screen_classifier?: string | null; screen_windows?: number | null; screen_seconds?: number | null;
   };
 };
 export type AgentJob = AdminJob & { agent: AgentRun };
 export type AgentJobType = {
   deliverable: string; jobs: number; succeeded: number; failed: number; cancelled: number; active: number;
   deposited: number; deposit_not_made: number; spend_usd: number; owners: number; latest_at: string | null;
+  /** Accounts the deposit screen withheld from the claims repository, in all and by the check that withheld them. */
+  withheld_unsafe?: number; withheld_by_check?: Record<string, number>;
   typical_cost_usd: number | null; typical_turns: number | null; typical_seconds: number | null;
 };
 export type AgentJobs = { window_limit: number; jobs: AgentJob[]; types: AgentJobType[] };
@@ -46,6 +53,19 @@ export function depositOutcome(job: Pick<AgentJob, "status" | "agent">): { text:
   if (result.deposit_status === "deposited") return { text: "Deposited", tone: "good" };
   if (result.deposit_status === "failed") return { text: `Deposit failed${result.deposit_reason ? `: ${result.deposit_reason.replaceAll("_", " ")}` : ""}${result.deposit_http_status ? ` (HTTP ${result.deposit_http_status})` : ""}`, tone: "bad" };
   if (result.deposit_status === "not_configured") return { text: "Not deposited: no claims repository is configured", tone: "bad" };
+  if (result.deposit_status === "withheld_unsafe") return { text: `Withheld as unsafe${result.screen_check || result.deposit_reason ? `: ${(result.screen_check || result.deposit_reason)!.replaceAll("_", " ")}` : ""}`, tone: "bad" };
   if (job.status === "succeeded") return { text: "No deposit recorded", tone: "bad" };
   return { text: job.status === "failed" || job.status === "cancelled" ? "No account" : "Pending", tone: "" };
+}
+
+const score = (value: number | null | undefined) => value == null ? "—" : value.toFixed(2);
+/** The deposit screen's verdict in one line: what it found, the classifier's score against its threshold, and where. */
+export function screenSummary(result: AgentRun["result"]): string | null {
+  if (!result.screen_outcome) return null;
+  const scored = result.screen_classifier === "not_loaded" ? "classifier not loaded"
+    : result.screen_score == null ? null : `score ${score(result.screen_score)} (threshold ${score(result.screen_threshold)})`;
+  const head = result.screen_outcome === "withheld" ? `Withheld: ${(result.screen_check || "unknown check").replaceAll("_", " ")}` : "Passed";
+  const where = result.screen_location ? `${result.screen_outcome === "withheld" ? "at" : "highest at"} ${result.screen_location}` : null;
+  const effort = result.screen_windows ? `${result.screen_windows.toLocaleString()} windows${result.screen_seconds != null ? ` in ${result.screen_seconds.toFixed(1)} s` : ""}` : null;
+  return [head, scored, where, effort].filter(Boolean).join(" · ");
 }

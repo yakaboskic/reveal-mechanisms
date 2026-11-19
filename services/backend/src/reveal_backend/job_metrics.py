@@ -80,7 +80,21 @@ def failure_metrics(phase, exc):
             'message': redact(str(exc))[:MESSAGE_LIMIT] or None, 'recorded_at': now()}
 
 
-def record(repository, job, *, agent=None, error=None):
+# The deposit screen's verdict (deposit_screen.screen): which check withheld the account, the classifier's score and
+# threshold, and where the text was. Never the text itself.
+SCREEN_FIELDS = ('outcome', 'check', 'location', 'score', 'threshold', 'classifier', 'windows', 'texts', 'seconds')
+
+
+def screen_metrics(verdict):
+    verdict = verdict if isinstance(verdict, dict) else {}
+    return {'outcome': text(verdict.get('outcome'), 20), 'check': text(verdict.get('check'), 40),
+            'location': text(verdict.get('location')), 'score': number(verdict.get('score')),
+            'threshold': number(verdict.get('threshold')), 'classifier': text(verdict.get('classifier'), 80),
+            'windows': number(verdict.get('windows'), integer=True), 'texts': number(verdict.get('texts'), integer=True),
+            'seconds': number(verdict.get('seconds'))}
+
+
+def record(repository, job, *, agent=None, error=None, screen=None):
     """Merge this job's metrics. Returns False instead of raising: telemetry never fails a job."""
     try:
         with repository.transaction() as tx:
@@ -96,6 +110,7 @@ def record(repository, job, *, agent=None, error=None):
                 data['parent_job_id'] = parent if isinstance(parent, str) else None
             if agent is not None: data['agent'] = agent
             if error is not None: data['error'] = error
+            if screen is not None: data['screen'] = screen_metrics(screen)
             tx.put(KIND, job['id'], owner, data)
         return True
     except Exception as exc:  # A metrics write must never become the job's failure.

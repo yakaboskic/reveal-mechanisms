@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { deliverableLabel, depositOutcome, jobKindLabel, jobLabel, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
+import { deliverableLabel, depositOutcome, jobKindLabel, jobLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
 import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgentJobs";
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
@@ -84,4 +84,30 @@ test("the job detail lists how the job was run and never a value the input lacks
   assert.equal(old.match(/Not part of this input/g)?.length, 1);
   assert.ok(old.includes("<dt>Claims repository lookups</dt><dd>—</dd>"));
   assert.ok(!old.includes("Deposit"));
+});
+
+// The deposit screen withheld this account: the job succeeded, its account was returned, nothing was deposited.
+const withheldRun: AgentRun = { ...accountRun, result: { ...accountRun.result, deposit_status: "withheld_unsafe", deposit_id: null, deposit_reason: "prompt_injection",
+  screen_outcome: "withheld", screen_check: "prompt_injection", screen_score: 0.973, screen_threshold: 0.5, screen_location: "sources/PMC3491803.txt line=212-214",
+  screen_classifier: "prompt-guard-2-22m@0123456789ab", screen_windows: 84, screen_seconds: 2.4 } };
+const withheld = job("cccccccc-0000", "succeeded", withheldRun);
+
+test("an account the deposit screen withheld shows the check, the score against its threshold and where", () => {
+  assert.deepEqual(depositOutcome(withheld), { text: "Withheld as unsafe: prompt injection", tone: "bad" });
+  assert.equal(screenSummary(withheldRun.result), "Withheld: prompt injection · score 0.97 (threshold 0.50) · at sources/PMC3491803.txt line=212-214 · 84 windows in 2.4 s");
+  assert.equal(screenSummary({ ...accountRun.result, screen_outcome: "passed", screen_score: 0.012, screen_threshold: 0.5, screen_location: "ledger call 7 (WebFetch) line=1-3",
+    screen_classifier: "prompt-guard-2-22m@0123456789ab", screen_windows: 31, screen_seconds: 0.9 }),
+    "Passed · score 0.01 (threshold 0.50) · highest at ledger call 7 (WebFetch) line=1-3 · 31 windows in 0.9 s");
+  assert.equal(screenSummary({ ...accountRun.result, screen_outcome: "withheld", screen_check: "unsafe_text", screen_score: null, screen_threshold: 0.5,
+    screen_location: "account scientific_accounts[0].closing_remarks", screen_classifier: "not_loaded", screen_windows: 0 }),
+    "Withheld: unsafe text · classifier not loaded · at account scientific_accounts[0].closing_remarks");
+  assert.equal(screenSummary(accountRun.result), null);
+  const detail = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: withheldRun, job: withheld }));
+  for (const text of ["Withheld as unsafe: prompt injection", "<dt>Prompt-injection screen</dt>", "score 0.97 (threshold 0.50)", "sources/PMC3491803.txt line=212-214"])
+    assert.ok(detail.includes(text), text);
+  const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [withheld, deposited], types: [
+    { ...agents.types[0], jobs: 2, succeeded: 2, failed: 0, deposited: 1, deposit_not_made: 0, withheld_unsafe: 1, withheld_by_check: { prompt_injection: 1 } }] }, onSelect() {} }));
+  for (const text of ["1 withheld as unsafe", "(prompt injection 1)", "Withheld as unsafe: prompt injection", "at sources/PMC3491803.txt line=212-214"])
+    assert.ok(view.includes(text), text);
+  assert.ok(!view.includes("succeeded without a deposit"));
 });

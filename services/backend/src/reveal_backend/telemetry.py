@@ -119,6 +119,12 @@ AGENT_RESULT_FIELDS = {'result.response_truncated': 'response_truncated', 'resul
                        'result.account.deposit.status': 'deposit_status', 'result.account.deposit.deposit_id': 'deposit_id',
                        'result.account.deposit.reason': 'deposit_reason',
                        'result.account.deposit.http_status': 'deposit_http_status'}
+# The deposit screen's verdict, from job_metrics (deposit_screen): which check withheld the account, the classifier's
+# score and threshold, and where the text came from (a source file and lines, a ledger call, an account field).
+AGENT_SCREEN_FIELDS = {'screen.outcome': 'screen_outcome', 'screen.check': 'screen_check', 'screen.score': 'screen_score',
+                       'screen.threshold': 'screen_threshold', 'screen.location': 'screen_location',
+                       'screen.classifier': 'screen_classifier', 'screen.windows': 'screen_windows',
+                       'screen.seconds': 'screen_seconds'}
 # (record kind, output field, JSON path, what is measured). 'text' is a string's length in characters, 'items' a
 # list's length, 'triples' the claims that came with a subject. A missing or null value is None, never 0.
 AGENT_SIZES = (('queue', 'prompt_characters', 'inputs.prompt', 'text'),
@@ -166,6 +172,7 @@ def agent_runs(tx, identities):
     identities = list(identities)
     queues = records(tx, 'queue', ('inputs.deliverable', *AGENT_INPUT_FIELDS), identities)
     results = records(tx, 'job', tuple(AGENT_RESULT_FIELDS), identities)
+    screens = records(tx, 'job_metrics', tuple(AGENT_SCREEN_FIELDS), identities)
     queue_sizes, job_sizes = sizes(tx, 'queue', identities), sizes(tx, 'job', identities)
     runs = {}
     for identity in identities:
@@ -179,6 +186,7 @@ def agent_runs(tx, identities):
             else: asked[field] = [item for item in asked[field] if isinstance(item, str)][:50]
         if not isinstance(asked['limits'], dict): asked['limits'] = None
         result = {field: results.get(identity, {}).get('data', {}).get(path) for path, field in AGENT_RESULT_FIELDS.items()}
+        result.update({field: screens.get(identity, {}).get('data', {}).get(path) for path, field in AGENT_SCREEN_FIELDS.items()})
         if result['response_truncated'] is not None: result['response_truncated'] = bool(result['response_truncated'])
         empty = {field: None for record, field, _, _ in AGENT_SIZES}
         runs[identity] = {'deliverable': deliverable_of('agent', queue), **asked,
@@ -208,13 +216,19 @@ def agent_jobs(tx, limit=AGENT_JOB_WINDOW):
     for job in items:
         run = job['agent']; name = run['deliverable'] or 'unknown'
         entry = types.setdefault(name, {'deliverable': name, 'jobs': 0, 'succeeded': 0, 'failed': 0, 'cancelled': 0, 'active': 0,
-                                        'deposited': 0, 'deposit_not_made': 0, 'spend_usd': 0.0, 'owners': set(),
+                                        'deposited': 0, 'deposit_not_made': 0, 'withheld_unsafe': 0, 'withheld_by_check': {},
+                                        'spend_usd': 0.0, 'owners': set(),
                                         'costs': [], 'turns': [], 'seconds': [], 'latest_at': None})
         entry['jobs'] += 1; entry['owners'].add(job['owner'])
         status = job['status']
         entry[status if status in ('succeeded', 'cancelled') else 'failed' if status in TERMINAL else 'active'] += 1
         deposit = run['result']['deposit_status']
         if deposit == 'deposited': entry['deposited'] += 1
+        # Withheld by the deposit screen, counted by the check that withheld it: the rate the threshold is tuned from.
+        elif deposit == 'withheld_unsafe':
+            entry['withheld_unsafe'] += 1
+            check = run['result']['screen_check'] or run['result']['deposit_reason'] or 'unknown'
+            entry['withheld_by_check'][check] = entry['withheld_by_check'].get(check, 0) + 1
         # An account that was accepted and returned but is not in the claims repository: the deposit failed or no
         # repository is configured. The job itself still reads "succeeded".
         elif status == 'succeeded' and name == 'scientific_account': entry['deposit_not_made'] += 1

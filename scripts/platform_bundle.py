@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -10,6 +11,7 @@ import tempfile
 
 from dotenv import dotenv_values
 from platform_assets import prepare as prepare_assets, RDS_CA_SHA256
+from prompt_guard_assets import copy_verified as copy_prompt_guard, fetch as fetch_prompt_guard
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -28,7 +30,12 @@ RUNTIME_SCRIPTS = (
 FILES = ('.dockerignore', 'services/backend/Dockerfile', 'services/backend/pyproject.toml',
     'data/cfde-genesets/2026-09-24/manifest.json', 'data/cfde-genesets/2026-09-24/activity.json',
     *RUNTIME_SCRIPTS)
-REQUIRED = (*FILES, 'services/backend/agent-runtime/dapper-release.json',
+# The deposit screen's classifier (deposit_screen). It is gated on Hugging Face, so it is never fetched in Docker: an
+# operator fetches it once into PROMPT_GUARD with their own token, and every bundle carries that folder, checked
+# against PROMPT_GUARD_LOCK (prompt_guard_assets).
+PROMPT_GUARD = '.deployment-assets/prompt-guard-2-22m'
+PROMPT_GUARD_LOCK = 'services/backend/agent-runtime/prompt-guard-release.json'
+REQUIRED = (*FILES, 'services/backend/agent-runtime/dapper-release.json', PROMPT_GUARD_LOCK,
     'services/backend/vendor/dapper-0.2.1-a1/VENDOR.json',
     'data/dapper/0.2.0/snapshot.json', 'data/dapper/2026-09-24-v8/snapshot.json',
     'data/gene-identity/hgnc-2026-10-06/manifest.json',
@@ -105,10 +112,15 @@ def configured_source(root, env, key, fallback):
     return value if value.is_absolute() else root / value
 
 
-def export(output, *, root=ROOT, allow_dirty=False, fetch_assets=False):
+def export(output, *, root=ROOT, allow_dirty=False, fetch_assets=False, pin_prompt_guard=False, hf_token=None):
     root, output = Path(root).resolve(), Path(output).absolute()
     if output.exists() or output.is_symlink():
         raise FileExistsError('Refusing to overwrite an existing output directory: ' + str(output))
+    if pin_prompt_guard and not fetch_assets:
+        raise RuntimeError('--pin-prompt-guard fetches the model, so it needs --fetch-assets')
+    if fetch_assets:
+        # Before the clean-tree check: pinning writes the lock, which is then a change to review and commit.
+        fetch_prompt_guard(root / PROMPT_GUARD, root / PROMPT_GUARD_LOCK, token=hf_token, pin=pin_prompt_guard)
     dirty = bool(git(root, 'status', '--porcelain', '--untracked-files=all'))
     if dirty and not allow_dirty:
         raise RuntimeError('Commit the source changes first, or use --allow-dirty for a local draft build')
@@ -139,6 +151,8 @@ def export(output, *, root=ROOT, allow_dirty=False, fetch_assets=False):
                 ca = configured_source(root, env, 'REVEAL_MYSQL_CA_FILE', '.runtime/certs/rds-ca.pem')
             assets['verification'] = prepare_assets(staging / '.deployment-assets', root=staging,
                 dapper=dapper, dismech=dismech, ca=ca)
+        # In both modes the classifier comes from the operator's verified folder, never from Docker.
+        assets['prompt_guard'] = copy_prompt_guard(root / PROMPT_GUARD, staging / PROMPT_GUARD, staging / PROMPT_GUARD_LOCK)
         files = {}
         for path in sorted(staging.rglob('*')):
             if path.is_file():
@@ -162,9 +176,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('output', type=Path, help='New standalone Docker context; usually platform/reveal')
     parser.add_argument('--allow-dirty', action='store_true', help='Include allowlisted uncommitted/untracked sources and mark the bundle as a draft')
-    parser.add_argument('--fetch-assets', action='store_true', help='Fetch public pinned assets in Docker (required for a Git-tracked platform service)')
+    parser.add_argument('--fetch-assets', action='store_true', help='Fetch public pinned assets in Docker (required for a Git-tracked '
+                        'platform service), and fetch the gated prompt-injection model here with HF_TOKEN when '
+                        '.deployment-assets/prompt-guard-2-22m does not already match its lock')
+    parser.add_argument('--pin-prompt-guard', action='store_true', help='With --fetch-assets: fetch the current revision of the '
+                        'prompt-injection model, convert it, and write its revision and sha256s into prompt-guard-release.json')
     args = parser.parse_args()
-    manifest = export(args.output, allow_dirty=args.allow_dirty, fetch_assets=args.fetch_assets)
+    manifest = export(args.output, allow_dirty=args.allow_dirty, fetch_assets=args.fetch_assets,
+                      pin_prompt_guard=args.pin_prompt_guard, hf_token=os.environ.get('HF_TOKEN'))
     print(json.dumps({'output': str(args.output.absolute()), 'source_commit': manifest['source_commit'],
         'source_dirty': manifest['source_dirty'], 'files': len(manifest['files']), 'bytes': manifest['total_bytes']}, sort_keys=True))
 
