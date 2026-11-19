@@ -1,3 +1,5 @@
+import type { Schema } from "./client";
+
 /** deliverable: what an agent job was asked to return ("answer" or "scientific_account"); null for other kinds of
  * job, and absent from backends older than this field. */
 export type AdminJob = { id: string; owner: string; kind: string; deliverable?: string | null; status: string; stage: string; created_at: string; started_at: string | null; attempt_started_at: string | null; completed_at: string | null; updated_at: string; wall_seconds: number | null; queue_seconds: number | null; attempt_seconds: number | null; attempt: number; worker: string | null; lease_until: string | null; recoveries: number; delivery_recoveries?: number; handoffs?: number; lease_expired: boolean; box_id: string | null; box_phase: string | null; box_seconds: number | null; setup_seconds: number | null; agent_seconds: number | null; capture_seconds: number | null; cleanup_seconds: number | null; failure_code: string | null } & AdminJobMetrics;
@@ -73,8 +75,62 @@ export type AgentRunContent = {
   response: { source: "captured" | "job_result" | null; attempt?: number | null; text: string | null; truncated: boolean; characters: number | null;
     status: string | null; subtype: string | null; structured_output: unknown; captured_unavailable: string | null;
     files: { path: string | null; size_bytes: number | null; sha256: string | null }[] };
+  /** How the newest attempt's Claude Code was started, from its runtime.json. Absent from backends before Phase 2. */
+  configuration?: RunConfiguration | null;
   read: { by: string; at: string };
 };
+
+/** How one attempt's Claude Code was started (docs/admin-telemetry.md, "The run response, field by field"). Every part is
+ * null when runtime.json is missing; `missing` says why: not_captured, not_recorded (a run from before the configuration
+ * was recorded; observed and transcript may still be set), too_large, unreadable or unavailable. */
+export type RunConfiguration = {
+  attempt: number | null; missing: string | null; format: string | null;
+  claude_code: { pinned_version?: string | null; observed_version?: string | null } | null;
+  cli: { argv?: string[] | null; wrapper?: string[] | string | null; environment?: Record<string, string> | null; prompt?: string | null } | null;
+  tools: { builtin?: string[] | null; mcp?: string[] | null; mcp_servers?: Record<string, unknown> | null } | null;
+  network: { mode?: string | null; allowed_domains?: string[] | null } | null;
+  toolchain: { stamp?: string | null } | null;
+  account_kit: { skill?: string | null; skill_sha256?: string | null; schema_excerpt_sha256?: string | null } | null;
+  limits: { execution?: Record<string, number | null> | null; agent?: Record<string, number | null> | null } | null;
+  source_tools: { packages?: Record<string, string> | null; programs?: Record<string, string> | null } | null;
+  observed: { claude_code_version: string | null; model: string | null; permission_mode: string | null; tools: string[] | null;
+    mcp_servers: { name: string; status: string }[] | null } | null;
+  transcript: Record<string, { stored_bytes?: number | null; original_bytes?: number | null; cut?: boolean | null; omitted_bytes?: number | null; omitted_lines?: number | null }> | null;
+};
+
+/** One turn of an agent job's transcript (GET /api/admin/jobs/{id}/transcript). A tool_use and its tool_result share
+ * call_id; tool_input is compact JSON text that a partial call may leave unparseable. */
+export type TranscriptTurn = {
+  index: number; role: "assistant" | "user" | "tool" | "system" | "result"; kind: "text" | "thinking" | "tool_use" | "tool_result" | "result";
+  text: string | null; truncated: boolean; tool_name: string | null; tool_input: string | null; tool_input_truncated: boolean;
+  call_id: string | null; is_error: boolean; partial: boolean; detail: Record<string, unknown> | null; at: string | null;
+};
+/** One page of a transcript. missing: why there is none (not_captured, too_large, unreadable, unavailable). */
+export type TranscriptPage = {
+  job: { id: string; status: string | null }; attempt: number | null; latest_attempt: number | null; missing: string | null;
+  turns: TranscriptTurn[]; total: number; next_after: number | null; has_more: boolean; cut: boolean; complete: boolean | null; skipped: number;
+  stderr: { text: string | null; truncated: boolean; cut: boolean; unreadable: boolean } | null;
+  read: { by: string; at: string };
+};
+
+export type JobTokens = { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null };
+/** The job_metrics row an agent run records, and the recorded cause of a failed workflow phase. */
+export type JobRunMetrics = {
+  parent_job_id?: string | null; recorded_at?: string;
+  agent?: { model: string | null; status: string | null; subtype: string | null; reason: string | null; cost_usd: number | null; estimated_cost_usd?: number | null; cost_source: string; budget_usd: number | null; budget_used: number | null; turns: number | null; turn_limit: number | null; elapsed_seconds: number | null; time_limit_seconds: number | null; api_seconds: number | null; tokens: JobTokens | null; tool_calls: number | null; tool_failures: number | null; lint_checks: number | null; draft_writes: number | null };
+  error?: { phase: string | null; error_type: string; message: string | null; recorded_at: string };
+};
+export type JobDiagnostic = { path: string; available: boolean; data?: unknown; reason?: string };
+export type JobAttempt = { attempt: number; started_at: string | null; worker_id: string | null; "remote_handle.box_id": string | null };
+/** One job's logs and diagnostics (GET /api/admin/jobs/{id}), read under the telemetry assertion and refreshed while the
+ * job runs. `agent` is how an agent job was asked to run; null for other kinds. */
+export type JobDetail = {
+  job: AdminJob & { failure: { code: string; message: string; retryable: boolean; budget?: { limit_usd: number; spent_usd: number | null } } | null; warnings: string[]; research_request_id: string | null; input_account_id: string | null };
+  events: Schema<"JobEvent">[]; next_before: string | null;
+  attempts: JobAttempt[]; attempts_limited: boolean; diagnostics: JobDiagnostic[]; diagnostics_limited: boolean;
+  metrics?: JobRunMetrics | null; agent?: AgentRun | null;
+};
+
 export type AgentJobType = {
   deliverable: string; jobs: number; succeeded: number; failed: number; cancelled: number; active: number;
   deposited: number; deposit_not_made: number; spend_usd: number; owners: number; latest_at: string | null;

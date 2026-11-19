@@ -3,8 +3,8 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentLimitUse, type AgentRun, type AgentRunContent } from "../src/lib/admin-job";
-import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgentJobs";
-import { AgentRequestView } from "../src/components/AdminAgentRequest";
+import { AdminAgentJobsView } from "../src/components/AdminAgentJobs";
+import { NO_RUN, PromptSettingsSection, ResponseSection, type RunState } from "../src/components/admin/JobContent";
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
   quotes: null, papers: null, lint_warnings: null, dapper_version: null, deposit_status: null, deposit_id: null, deposit_reason: null, deposit_http_status: null };
@@ -77,24 +77,30 @@ test("the agent jobs view shows type, settings, usage and deposit for each job",
   assert.ok(!/searches|REVEAL tool calls|output tokens|claims? to assess|lint checks/.test(row), row);
 });
 
+// The job detail's Prompt and settings and Response sections for one job, with nothing loaded from the recorded read.
+const detail = (run: AgentRun, of: AgentJob, read: RunState = NO_RUN) =>
+  renderToStaticMarkup(React.createElement(PromptSettingsSection, { agent: run, run: read }))
+  + renderToStaticMarkup(React.createElement(ResponseSection, { agent: run, status: of.status, run: read }));
+
 test("an empty window says so", () => {
   const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [], types: [] } }));
   assert.ok(html.includes("No general agent job has been submitted yet."));
 });
 
 test("the job detail lists how the job was run and never a value the input lacks", () => {
-  const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: accountRun, job: deposited }));
-  for (const text of ["How this agent job was run · Scientific account", "Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch", "1,344 characters · no system prompt", "3 claims to assess, 3 with a triple",
-    "Deposited", "dep_01a1e52fa3c2b989bcafce5d37f4feb4", "dapper:ScientificAccount.wF3k", "37 objects · 3 claims · 6 quotes · 5 papers · 1 lint warning · DAPPER 0.2.1-a1",
-    "$5.00", "1.0h", "<dt>REVEAL tool calls</dt><dd>90</dd>", "<dt>Output per response</dt><dd>64,000 tokens</dd>", "open"]) assert.ok(html.includes(text), text);
+  const html = detail(accountRun, deposited);
+  for (const text of ["<dt>Asked to return</dt><dd>Scientific account</dd>", "Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch", "1,344 characters · no system prompt", "3 claims to assess, 3 with a triple",
+    "Deposited", "dep_01a1e52fa3c2b989bcafce5d37f4feb4", "dapper:ScientificAccount.wF3k", "served from the claims repository", "37 objects · 3 claims · 6 quotes · 5 papers · 1 lint warning · DAPPER 0.2.1-a1",
+    "$5.00", "1.0h", "<dt>REVEAL tool calls</dt><dd>90</dd>", "<dt>Output per response</dt><dd>64,000 tokens</dd>", "<dt>Network</dt><dd>open</dd>", "3,111 characters · 5 files"]) assert.ok(html.includes(text), text);
   assert.ok(!html.includes("Paper search") && !html.includes("Papers read"));
-  const old = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: sparseRun, job: sparse }));
-  assert.ok(old.includes("How this agent job was run · Answer"));
+  const old = detail(sparseRun, sparse);
+  assert.ok(old.includes("<dt>Asked to return</dt><dd>Answer</dd>"));
   // An input frozen before these limits existed lacks tool_calls and max_output_tokens.
   assert.equal(old.match(/Not part of this input/g)?.length, 2);
   assert.ok(old.includes("<dt>Output per response</dt><dd>Not part of this input</dd>"));
   assert.ok(old.includes("<dt>Claims repository lookups</dt><dd>—</dd>"));
-  assert.ok(!old.includes("Deposit"));
+  // An answer has no deposit, sources or screen, and says so.
+  assert.ok(!old.includes("Deposit and account") && !old.includes("Deposit screen") && old.includes("An answer job deposits nothing"));
 });
 
 // The deposit screen withheld this account: the job succeeded, its account was returned, nothing was deposited.
@@ -113,9 +119,12 @@ test("an account the deposit screen withheld shows the check, the score against 
     screen_location: "account scientific_accounts[0].closing_remarks", screen_classifier: "not_loaded", screen_windows: 0 }),
     "Withheld: unsafe text · classifier not loaded · at account scientific_accounts[0].closing_remarks");
   assert.equal(screenSummary(accountRun.result), null);
-  const detail = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: withheldRun, job: withheld }));
-  for (const text of ["Withheld as unsafe: prompt injection", "<dt>Prompt-injection screen</dt>", "score 0.97 (threshold 0.50)", "sources/PMC3491803.txt line=212-214"])
-    assert.ok(detail.includes(text), text);
+  const html = detail(withheldRun, withheld);
+  for (const text of ["Withheld as unsafe: prompt injection", "<dt>Prompt-injection screen</dt>", "score 0.97 (threshold 0.50)", "sources/PMC3491803.txt line=212-214",
+    // The screen's parts: verdict, classifier enabled, the failed check, the score and where.
+    '<dt>Verdict</dt><dd><span class="admin-status bad">Withheld</span></dd>', "<dt>Classifier</dt><dd>Enabled · <code", "<dt>Failed check</dt><dd>prompt injection</dd>",
+    "<dt>Score</dt><dd>0.97 against a threshold of 0.50</dd>", "<dt>Where</dt>", "<dt>Texts scored</dt><dd>84 windows in 2.4 s</dd>", "served from the copy kept with the job"])
+    assert.ok(html.includes(text), text);
   const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [withheld, deposited], types: [
     { ...agents.types[0], jobs: 2, succeeded: 2, failed: 0, deposited: 1, deposit_not_made: 0, withheld_unsafe: 1, withheld_by_check: { prompt_injection: 1 } }] } }));
   for (const text of ["1 withheld as unsafe", "(prompt injection 1)", "Withheld as unsafe: prompt injection", "at sources/PMC3491803.txt line=212-214"])
@@ -138,8 +147,8 @@ test("an account job's detail lists each saved source with its URL, commands, si
   assert.equal(shortSha("3f2a9c41d07be5aa" + "0".repeat(48)), "3f2a9c41d07b");
   assert.equal(shortSha(null), "—");
   assert.deepEqual([fileSize(1), fileSize(999), fileSize(48213), fileSize(1_204_000), fileSize(null)], ["1 byte", "999 bytes", "48.2 kB", "1.2 MB", "—"]);
-  const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: sourcesRun, job: job("dddddddd-0000", "succeeded", sourcesRun) }));
-  for (const text of ["Sources the agent saved", "<th>Observed command</th>", "<th>Quotes citing it</th>", "sources/PMC3491803.xml", XML_URL,
+  const html = detail(sourcesRun, job("dddddddd-0000", "succeeded", sourcesRun));
+  for (const text of ['aria-label="Sources the agent saved"', "<th>Observed command</th>", "<th>Quotes citing it</th>", "sources/PMC3491803.xml", XML_URL,
     `curl -sSL -o output/sources/PMC3491803.xml ${XML_URL}`, `mkdir -p output/sources &amp;&amp; curl -sSL -o output/sources/PMC3491803.xml`,
     "48.2 kB", "3f2a9c41d07b", "application/xml", "converted from sources/lepr.pdf", "Same as the command", "1.2 MB", "text/plain",
     "never the file&#x27;s text"]) assert.ok(html.includes(text), text);
@@ -152,12 +161,14 @@ test("an account job's detail lists each saved source with its URL, commands, si
   assert.equal(screenSummary(sourcesRun.result), "Passed · score 0.01 (threshold 0.50) · highest at sources/lepr.txt line=40-41 · 31 windows from 6 texts in 0.9 s");
   assert.equal(html.match(/Prompt-injection screen/g)?.length, 1);
   // A capped list says so; an account citing nothing says so; an older backend or an answer job shows no section.
-  const capped = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: { ...sourcesRun, sources: { ...sourcesRun.sources!, total: 130 } }, job: deposited }));
+  const capped = detail({ ...sourcesRun, sources: { ...sourcesRun.sources!, total: 130 } }, deposited);
   assert.ok(capped.includes("The first 2 of 130 sources."));
-  const none = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: { ...sourcesRun, sources: { items: [], total: 0 } }, job: deposited }));
+  const none = detail({ ...sourcesRun, sources: { items: [], total: 0 } }, deposited);
   assert.ok(none.includes("The account cites no saved source file."));
-  for (const run of [accountRun, { ...sourcesRun, sources: null }, { ...sparseRun, sources: sourcesRun.sources }])
-    assert.ok(!renderToStaticMarkup(React.createElement(AgentRunDetail, { run, job: deposited })).includes("Sources the agent saved"));
+  // An older backend or a job with no account lists no sources and says why; an answer job has no sources section.
+  for (const run of [accountRun, { ...sourcesRun, sources: null }])
+    assert.ok(detail(run, deposited).includes("No sources are recorded: the job returned no account.") && !detail(run, deposited).includes('aria-label="Sources the agent saved"'));
+  assert.ok(!detail({ ...sparseRun, sources: sourcesRun.sources }, deposited).includes("Sources the agent saved"));
   // The job list never shows them.
   const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { ...agents, jobs: [job("dddddddd-0000", "succeeded", sourcesRun)] } }));
   assert.ok(!view.includes(XML_URL) && !view.includes("Sources the agent saved"));
@@ -170,8 +181,9 @@ test("a screen run with the classifier disabled says it is off until its lock is
   assert.equal(screenSummary(passed.result), "Passed · classifier off — lock not pinned");
   assert.equal(screenSummary({ ...passed.result, screen_outcome: "withheld", screen_check: "unsafe_text", screen_location: "account scientific_accounts[0].closing_remarks" }),
     "Withheld: unsafe text · classifier off — lock not pinned · at account scientific_accounts[0].closing_remarks");
-  const detail = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: passed, job: job("eeeeeeee-0000", "succeeded", passed) }));
-  assert.ok(detail.includes("<dt>Prompt-injection screen</dt><dd>Passed · classifier off — lock not pinned</dd>"), detail);
+  const html = detail(passed, job("eeeeeeee-0000", "succeeded", passed));
+  assert.ok(html.includes("<dt>Prompt-injection screen</dt><dd>Passed · classifier off — lock not pinned</dd>"), html);
+  assert.ok(html.includes("<dt>Classifier</dt><dd>Disabled: its lock is not pinned, so only the fixed checks ran</dd>") && html.includes("<dt>Failed check</dt><dd>None</dd>"));
 });
 
 // The admin content read (GET /api/admin/jobs/{id}/run) of an answer job stopped at the max_turns its request set.
@@ -192,8 +204,12 @@ const content: AgentRunContent = {
   read: { by: "admin@example.org", at: "2026-11-19T10:00:00Z" },
 };
 
+// The settings come from the job record, as the request recorded them.
+const contentRun: AgentRun = { ...sparseRun, model: "claude-opus-5-5", effort: "high", tools: ["Read", "Bash"], allowed_domains: ["eutils.ncbi.nlm.nih.gov"], claims_repository: false };
+const loaded = (data: AgentRunContent): RunState => ({ data, loading: false, error: "" });
+
 test("the request shows the prompt, settings, limits with the hit one highlighted, the stop reason and the response", () => {
-  const html = renderToStaticMarkup(React.createElement(AgentRequestView, { data: content }));
+  const html = detail(contentRun, sparse, loaded(content));
   assert.ok(html.includes('<p class="admin-stop-reason hit" role="status"><strong>Stopped at its own max_turns (12), which the request set.</strong></p>'));
   // The prompt is preformatted text, escaped, with a copy button; a missing system prompt says so.
   assert.ok(html.includes("<pre>List every LEPR paper.\n  Keep &lt;b&gt;markup&lt;/b&gt; as text.</pre>"));
@@ -201,30 +217,61 @@ test("the request shows the prompt, settings, limits with the hit one highlighte
   for (const text of ["<dt>Model · effort</dt><dd>claude-opus-5-5 · high</dd>", "<dt>Extra hosts</dt><dd>eutils.ncbi.nlm.nih.gov</dd>", "<dt>Built-in tools</dt><dd>Read, Bash</dd>",
     "&quot;type&quot;: &quot;object&quot;", "<th>Requested</th><th>Frozen</th><th>Ceiling</th><th>Used</th>", "18 tool calls of every kind", "Not reached",
     "Today&#x27;s ceiling: not recorded when queued", "The run was given $0.50", "RESPONSE-TEXT in full", "the agent&#x27;s full final message, from its response record (attempt 2)", "&quot;LEPR&quot;",
-    "table.csv</span> · 1.2 kB", "Read by admin@example.org"]) assert.ok(html.includes(text), text);
+    "table.csv</span> · 1.2 kB", "sha256 cccccccccccc", "Read by admin@example.org", 'aria-label="Copy response text"', "Raw request JSON", "Raw response JSON"]) assert.ok(html.includes(text), text);
+  // The answer is its text in a reading block: never interpreted as markup.
+  assert.ok(html.includes('<div class="admin-answer">RESPONSE-TEXT in full</div>'));
   // Only the hit limit's row is highlighted, and it says so in words.
   assert.equal(html.match(/admin-limit-hit/g)?.length, 1);
   const hit = html.slice(html.indexOf('<tr class="admin-limit-hit">'), html.indexOf("</tr>", html.indexOf('<tr class="admin-limit-hit">')));
   assert.ok(hit.includes("Turns") && hit.includes("Hit") && hit.includes("<td>12</td>"), hit);
   assert.ok(html.includes("<td>Run time</td><td>Not set: default</td>"));
+  // A backend without the configuration says so instead of showing nothing.
+  assert.ok(html.includes("This backend does not report how Claude Code was started."));
+});
+
+test("how Claude Code was started: arguments, environment, tools, MCP servers, network and transcript files", () => {
+  const configuration: NonNullable<AgentRunContent["configuration"]> = {
+    attempt: 2, missing: null, format: "reveal.run-configuration/1", claude_code: { pinned_version: "2.1.3", observed_version: "2.1.3 (Claude Code)" },
+    cli: { argv: ["claude", "--print", "--append-system-prompt", "<120 characters, sha256 ab12>"], wrapper: ["setpriv", "--reuid", "agent", "timeout", "600"],
+      environment: { HOME: "/home/agent", ANTHROPIC_API_KEY: "reveal-loopback-proxy" }, prompt: "stdin" },
+    tools: { builtin: ["Read", "Bash"], mcp: ["mcp__reveal__query_claims"], mcp_servers: { reveal: { type: "http", url: "http://127.0.0.1:8765/mcp" } } },
+    network: { mode: "custom", allowed_domains: ["eutils.ncbi.nlm.nih.gov"] }, toolchain: { stamp: "f".repeat(64) }, account_kit: null,
+    limits: { execution: { timeout_seconds: 600, max_turns: 12 }, agent: { max_turns: 12 } }, source_tools: null,
+    observed: { claude_code_version: "2.1.3", model: "claude-opus-5-5", permission_mode: "bypassPermissions", tools: ["Read", "Bash", "mcp__reveal__query_claims"], mcp_servers: [{ name: "reveal", status: "connected" }] },
+    transcript: { "ledger/claude-stream.jsonl.gz": { stored_bytes: 48_000, original_bytes: 900_000, cut: false, omitted_bytes: 0, omitted_lines: 0 },
+      "ledger/claude-stderr.txt.gz": { stored_bytes: 2_000, original_bytes: 30_000_000, cut: true, omitted_bytes: 10_000_000, omitted_lines: 1200 } } };
+  const html = detail(contentRun, sparse, loaded({ ...content, configuration }));
+  for (const text of ["claude --print --append-system-prompt &lt;120 characters, sha256 ab12&gt;", "setpriv --reuid agent timeout 600", "Standard input (the prompt above)",
+    "<dt>ANTHROPIC_API_KEY</dt><dd><code class=\"admin-mono\">reveal-loopback-proxy</code></dd>", "<dt>REVEAL MCP tools given</dt><dd>mcp__reveal__query_claims</dd>",
+    "http://127.0.0.1:8765/mcp", "Restricted to eutils.ncbi.nlm.nih.gov", "pinned 2.1.3 · observed 2.1.3 (Claude Code)", "permission mode bypassPermissions",
+    "reveal (connected)", "Run time 10.0m · Turns 12", "ledger/claude-stream.jsonl.gz</span> · 48.0 kB stored, 900.0 kB written", "middle left out (10.0 MB, 1,200 lines)",
+    "<dt>Account kit</dt><dd>Not an account job</dd>"]) assert.ok(html.includes(text), text);
+  // A run from before the configuration was recorded says so.
+  const older = detail(contentRun, sparse, loaded({ ...content, configuration: { ...configuration, missing: "not_recorded", cli: null, tools: null } }));
+  assert.ok(older.includes("This run is from before the configuration was recorded."));
 });
 
 test("an older job's request says what is not recorded, and a cut response says it is cut", () => {
   const older: AgentRunContent = { ...content, stop: { limit: null, by: null, text: "Finished normally." },
     limits: content.limits.map(row => ({ ...row, hit: false, requested: null, requested_basis: "not_recorded", differs_from_current_default: row.key === "max_turns" })),
     response: { ...content.response, source: "job_result", truncated: true, characters: 50000, captured_unavailable: "not_captured", structured_output: null } };
-  const html = renderToStaticMarkup(React.createElement(AgentRequestView, { data: older }));
-  assert.ok(html.includes('<p class="admin-stop-reason" role="status"><strong>Finished normally.</strong></p>'));
-  assert.ok(!html.includes("admin-limit-hit"));
-  assert.equal(html.match(/Not recorded/g)?.length, 5);
-  assert.ok(html.includes("Differs from today&#x27;s default") && html.includes("Same as today&#x27;s default"));
-  assert.ok(html.includes("50,000 characters · truncated") && html.includes("cut at 50,000 characters. The full text is not available: no response record was captured."));
-  assert.ok(!html.includes("Structured output"));
+  const settings = renderToStaticMarkup(React.createElement(PromptSettingsSection, { agent: contentRun, run: loaded(older) }));
+  assert.ok(settings.includes('<p class="admin-stop-reason" role="status"><strong>Finished normally.</strong></p>'));
+  assert.ok(!settings.includes("admin-limit-hit"));
+  assert.equal(settings.match(/Not recorded/g)?.length, 5);
+  assert.ok(settings.includes("Differs from today&#x27;s default") && settings.includes("Same as today&#x27;s default"));
+  const response = renderToStaticMarkup(React.createElement(ResponseSection, { agent: contentRun, status: "failed", run: loaded(older) }));
+  assert.ok(response.includes("50,000 characters · truncated") && response.includes("cut at 50,000 characters. The full text is not available: no response record was captured."));
+  assert.ok(!response.includes("Structured output"));
 });
 
-test("the job detail offers the request on demand instead of saying it is never shown", () => {
-  const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: accountRun, job: deposited }));
-  assert.ok(html.includes(">Show request</button>") && html.includes("Each time you show it, your email and the time are recorded."));
+test("until the request is read, the sections say what loads with it and show what the job record holds", () => {
+  const html = detail(accountRun, deposited);
+  assert.ok(html.includes("The prompt, system prompt, question, claims and output schema are not loaded.") && html.includes("each read records your email and the time"));
+  assert.ok(html.includes("The answer, structured output and output files load with the prompt (a recorded read)."));
   assert.ok(!/not shown here|never shown/.test(html));
   assert.ok(!html.includes("admin-stop-reason"));   // nothing is loaded until asked
+  // A failed read says why and keeps any earlier one.
+  const failed = detail(contentRun, sparse, { data: content, loading: false, error: "Access logging is unavailable." });
+  assert.ok(failed.includes('role="alert">Access logging is unavailable. Showing the previous read.</div>') && failed.includes("RESPONSE-TEXT in full"));
 });

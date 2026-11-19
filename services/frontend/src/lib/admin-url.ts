@@ -28,5 +28,5 @@ export function pageOf<T>(items: T[], page: number, size: number): { items: T[];
   return { items: items.slice((current - 1) * size, current * size), page: current, pages, total: items.length };
 }
 
-/** Where one job opens. Today's job detail sits under the Jobs list; slice 3b moves it to /admin/jobs/[id]. */
-export const jobHref = (id: string) => `/admin/jobs?job=${encodeURIComponent(id)}`;
+/** Where one job opens: its own page, /admin/jobs/[id]. */
+export const jobHref = (id: string) => `/admin/jobs/${encodeURIComponent(id)}`;

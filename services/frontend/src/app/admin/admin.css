@@ -104,7 +104,7 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root .admin-key-values dd { margin: 0; overflow-wrap: anywhere; }
 
 /* Text, ids and ages, lists. */
-.admin-root .admin-pre, .admin-root .admin-job-detail pre, .admin-root .admin-request pre, .admin-root .admin-field-detail pre { margin: 0; max-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--a-subtle); border: 1px solid var(--a-line); border-radius: 6px; font: 11.5px/1.6 var(--a-mono); color: var(--a-fg); tab-size: 2; }
+.admin-root .admin-pre, .admin-root .admin-job-page pre, .admin-root .admin-request pre, .admin-root .admin-field-detail pre { margin: 0; max-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; background: var(--a-subtle); border: 1px solid var(--a-line); border-radius: 6px; font: 11.5px/1.6 var(--a-mono); color: var(--a-fg); tab-size: 2; }
 .admin-root .admin-request pre { max-height: 30rem; }
 .admin-root .admin-json { border-top: 0; }
 .admin-root .admin-mono { font-family: var(--a-mono); font-size: 11.5px; overflow-wrap: anywhere; }
@@ -157,16 +157,21 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root .admin-cost-legend i:first-child { margin-left: 0; }
 
 /* Today's job detail, kept until slice 3b replaces it. */
-.admin-root .admin-job-detail { min-width: 0; scroll-margin-top: 64px; padding: 20px 24px; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 8px; }
+.admin-root .admin-job-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
 .admin-root .admin-section-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; }
 .admin-root .admin-section-heading h2 { font-size: 16px; font-weight: 600; margin: 0; }
 .admin-root .admin-section-heading p { margin: 4px 0; font-size: 12px; color: var(--a-muted); }
 .admin-root .admin-section-heading input { max-width: 330px; }
 .admin-root .admin-section-heading .text-button { margin-left: 16px; }
-.admin-root .admin-job-detail h3 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
-.admin-root .admin-job-detail > p { font-size: 13px; }
-.admin-root .admin-job-detail summary { font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
-.admin-root .admin-job-detail li { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.admin-root .admin-job-page h3 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
+.admin-root .admin-job-page .admin-panel-body p { font-size: 13px; }
+.admin-root .admin-job-page summary { font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
+.admin-root .admin-job-page li { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.admin-root .admin-job-page .admin-json { margin-top: 16px; }
+.admin-root .admin-job-page .admin-key-values + .admin-json, .admin-root .admin-job-page .admin-callout + .admin-key-values { margin-top: 16px; }
+.admin-root .admin-callout > p:first-child { margin-top: 0; }
+.admin-root .admin-callout > p:last-child { margin-bottom: 0; }
+.admin-root .admin-callout .admin-job-failure { margin: 8px 0 0; padding: 0; background: none; border: 0; }
 .admin-root .admin-job-failure { margin: 16px 0; padding: 14px 18px; background: var(--a-bad-bg); border: 1px solid var(--a-bad-line); border-radius: 8px; overflow-wrap: anywhere; }
 .admin-root .admin-job-failure h3 { margin: 0 0 6px; font-size: 13px; color: var(--a-bad); }
 .admin-root .admin-job-failure p { margin: 6px 0; font-size: 13px; white-space: pre-wrap; }
@@ -205,6 +210,19 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root tr.admin-limit-hit td { color: var(--a-bad); background: var(--a-bad-bg); }
 .admin-root .admin-request-claims { padding-left: 22px; font-size: 13px; line-height: 1.7; }
 .admin-root .admin-request-response { margin: 14px 0; }
+.admin-root .admin-request h4:first-child { margin-top: 0; }
+/* An agent's answer is shown as its text, wrapped, in the reading font: nothing in it is interpreted as markup. */
+.admin-root .admin-answer { max-height: 36rem; overflow: auto; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.65; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 6px; }
+
+/* Transcript: turns in the event-log style; a failed call is marked like a failed event, thinking is folded. */
+.admin-root .admin-transcript-turns { max-height: 900px; }
+.admin-root .admin-turn .admin-log-meta { align-items: center; }
+.admin-root .admin-turn.thinking > p, .admin-root .admin-turn.thinking summary { color: var(--a-muted); }
+.admin-root .admin-turn.tool_use .admin-tool-name { margin: 8px 0; }
+.admin-root .admin-turn-result { margin-top: 8px; }
+.admin-root .admin-turn.failed .admin-turn-result summary { color: var(--a-bad); font-weight: 500; }
+.admin-root .admin-turn .admin-callout { margin: 8px 0; }
+.admin-root .admin-transcript > .admin-callout { margin: 12px 0; }
 
 /* Table inspector. */
 .admin-root .admin-inspector > p { font-size: 13px; color: var(--a-muted); }
@@ -275,7 +293,7 @@ body:has(.admin-root) .site-nav { display: none; }
   .admin-root .admin-main { padding: 16px; }
   .admin-root .admin-columns, .admin-root .admin-detail-grid { grid-template-columns: 1fr; }
   .admin-root table { min-width: 720px; }
-  .admin-root .admin-job-detail, .admin-root .admin-row-detail { padding: 16px; }
+  .admin-root .admin-row-detail { padding: 16px; }
   .admin-root .admin-timings > div { grid-template-columns: 115px 1fr 45px; gap: 8px; }
   .admin-root .admin-cost-days > div { grid-template-columns: 78px 1fr 56px; }
   .admin-root .admin-cost-days small { display: none; }

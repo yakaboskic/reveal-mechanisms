@@ -30,8 +30,8 @@ const snapshot = (jobs: AdminJob[], extra: Partial<Snapshot> = {}): Snapshot => 
 test("empty lists are said in words", () => {
   const overview = render(OverviewView, { data: snapshot([], { statuses: [] }) });
   for (const text of ["No job has been queued yet.", "No job among the latest 100 has failed.", "Nothing is running or queued."]) assert.ok(overview.includes(text), text);
-  assert.ok(render(JobsView, { data: snapshot([]), params: params(), update: noUpdate, auto: true }).includes("No jobs match this view. Research jobs will appear here as they are created."));
-  assert.ok(render(JobsView, { data: snapshot([job("a", "failed")]), params: params("status=running"), update: noUpdate, auto: true }).includes("Clear the filters to see every job."));
+  assert.ok(render(JobsView, { data: snapshot([]), params: params(), update: noUpdate }).includes("No jobs match this view. Research jobs will appear here as they are created."));
+  assert.ok(render(JobsView, { data: snapshot([job("a", "failed")]), params: params("status=running"), update: noUpdate }).includes("Clear the filters to see every job."));
   const activity = render(ActivityView, { data: snapshot([]), params: params(), update: noUpdate });
   assert.ok(activity.includes("No records are stored yet.") && activity.includes("No job events are retained yet."));
   const database = render(DatabaseView, { data: snapshot([]), params: params(), update: noUpdate });
@@ -69,28 +69,28 @@ test("the overview's five totals link to the lists they count", () => {
     ["Workspace identities", "/admin/database"], ["Agent spend, last 7 days", "/admin/costs"]])
     assert.ok(html.includes(`href="${href}"><span class="admin-metric-title">${title}</span>`), title);
   assert.ok(html.includes('href="/admin/jobs?status=queued"><span class="admin-status info">queued</span> 1</a>'));
-  assert.ok(html.includes('href="/admin/jobs?job=f1000000"') && html.includes("AGENT_EXECUTION_FAILED") && html.includes('href="/admin/jobs?job=r1000000"'));
+  assert.ok(html.includes('href="/admin/jobs/f1000000"') && html.includes("AGENT_EXECUTION_FAILED") && html.includes('href="/admin/jobs/r1000000"'));
 });
 
-test("the jobs list filters by kind, state, owner and text, pages through the latest 100, and opens a job in the URL", () => {
+test("the jobs list filters by kind, state, owner and text, pages through the latest 100, and links each job to its own page", () => {
   const jobs = [job("f1", "failed", { kind: "agent", deliverable: "answer" }), job("r1", "running", { owner: "owner-2" }), job("s1", "succeeded")];
   assert.deepEqual(filterJobs(jobs, { status: "active" }).map(j => j.id), ["r1"]);
   assert.deepEqual(filterJobs(jobs, { owner: "owner-2" }).map(j => j.id), ["r1"]);
   assert.deepEqual(filterJobs(jobs, { kind: "agent" }).map(j => j.id), ["f1"]);
   assert.deepEqual(filterJobs(jobs, { q: "AGENT · answer" }).map(j => j.id), ["f1"]);
   assert.deepEqual(filterJobs(jobs, { q: "worker-a", status: "succeeded" }).map(j => j.id), ["s1"]);
-  const html = render(JobsView, { data: snapshot(jobs), params: params("status=failed"), update: noUpdate, auto: true });
+  const html = render(JobsView, { data: snapshot(jobs), params: params("status=failed"), update: noUpdate });
   assert.deepEqual([...html.matchAll(/<th scope="col">([^<]*)<\/th>/g)].map(m => m[1]), JOB_HEADINGS);
   assert.equal(JOB_HEADINGS.length, 9);
-  assert.ok(html.includes('href="/admin/jobs?status=failed&amp;job=f1"') && !html.includes("job=r1"));
+  assert.ok(html.includes('href="/admin/jobs/f1"') && !html.includes("/admin/jobs/r1"));
   assert.ok(html.includes('aria-current="true"') && html.includes("Clear filters"));
   assert.ok(html.includes('<option value="active">Not finished</option>') && html.includes('<option value="owner-2">owner-2</option>') && html.includes('<option value="agent">agent job</option>'));
   const many = Array.from({ length: 30 }, (_, i) => job(`j${String(i).padStart(2, "0")}`, "succeeded"));
-  const second = render(JobsView, { data: snapshot(many), params: params("page=2"), update: noUpdate, auto: true });
-  assert.ok(second.includes("30 jobs · Page 2 of 2") && second.includes("job=j25") && !second.includes("job=j24"));
-  // The open job's detail is today's, shown under the list.
-  const open = render(JobsView, { data: snapshot(jobs), params: params("job=f1"), update: noUpdate, auto: true });
-  assert.ok(open.includes('aria-label="Job logs and diagnostics"') && open.includes('<tr aria-selected="true">'));
+  const second = render(JobsView, { data: snapshot(many), params: params("page=2"), update: noUpdate });
+  assert.ok(second.includes("30 jobs · Page 2 of 2") && second.includes('href="/admin/jobs/j25"') && !second.includes('href="/admin/jobs/j24"'));
+  // A job opens on its own page, never below the list: an old ?job= in the URL opens nothing here.
+  const old = render(JobsView, { data: snapshot(jobs), params: params("job=f1"), update: noUpdate });
+  assert.ok(!old.includes("Refresh logs") && !old.includes("aria-selected") && !old.includes("Event log"));
 });
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
@@ -119,15 +119,15 @@ test("agent jobs: a sources column, a withheld filter with its reason, and the s
   assert.ok(view.includes("w1000000") && !view.includes("d1000000") && !view.includes("a1000000"));
   assert.ok(view.includes('<span class="admin-status bad">Withheld as unsafe: prompt injection</span>'));
   assert.ok(view.includes("<td>Withheld: prompt injection · score 0.97 (threshold 0.50) · at sources/x.txt line=3-4</td>"));
-  assert.ok(view.includes('href="/admin/jobs?job=w1000000"'));
+  assert.ok(view.includes('href="/admin/jobs/w1000000"'));
   assert.ok(render(AdminAgentJobsView, { agents, params: params("deposit=deposited&q=nothing-matches") }).includes("No agent jobs match this view."));
 });
 
 test("filters from the URL show as chosen even when no listed job has that value, and job ids copy whole", () => {
-  const html = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params("status=cancel_requested&q=worker"), update: noUpdate, auto: true });
+  const html = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params("status=cancel_requested&q=worker"), update: noUpdate });
   assert.ok(html.includes('<option value="cancel_requested" selected="">cancel requested</option>'), "the outside value is an option, chosen");
   assert.ok(html.includes('value="worker"'), "the search box starts from the URL");
-  const all = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params(), update: noUpdate, auto: true });
+  const all = render(JobsView, { data: snapshot([job("f1", "failed")]), params: params(), update: noUpdate });
   assert.ok(all.includes('aria-label="Copy: f1"'));
 });
 

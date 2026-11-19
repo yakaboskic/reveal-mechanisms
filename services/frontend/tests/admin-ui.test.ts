@@ -14,8 +14,8 @@ test("view state goes in the URL: updates set keys, empty values remove them, ot
   assert.equal(urlWith("/admin/jobs", "q=x", { q: "", job: undefined }), "/admin/jobs");
   assert.equal(urlWith("/admin/activity", "", { records: 2 }), "/admin/activity?records=2");
   assert.equal(urlWith("/admin/jobs", "", { q: "a b&c" }), "/admin/jobs?q=a+b%26c");
-  // One job opens under the Jobs list until slice 3b; the old /admin?job= link is gone.
-  assert.equal(jobHref("95d0bc18/x"), "/admin/jobs?job=95d0bc18%2Fx");
+  // One job opens on its own page; the old /admin?job= and /admin/jobs?job= links are gone.
+  assert.equal(jobHref("95d0bc18/x"), "/admin/jobs/95d0bc18%2Fx");
 });
 
 test("pages: a stale or invalid page number never shows nothing", () => {
@@ -55,7 +55,7 @@ test("a metric with a link opens the list it counts; without one it is a card", 
 test("short ids and ages show the whole value on hover and copy it", () => {
   const id = "95d0bc18-6f2a-4b6c-9c1e-3a1d2e4f5a6b";
   const html = render(ShortId, { value: id, href: jobHref(id) });
-  assert.ok(html.includes(`<a title="${id}" href="/admin/jobs?job=${id}">95d0bc18</a>`) && html.includes(`aria-label="Copy: ${id}"`));
+  assert.ok(html.includes(`<a title="${id}" href="/admin/jobs/${id}">95d0bc18</a>`) && html.includes(`aria-label="Copy: ${id}"`));
   assert.ok(render(ShortId, { value: null }).includes("—"));
   const now = Date.parse("2026-11-19T10:00:00Z");
   assert.deepEqual([shortAge(new Date(now - 20_000), now), shortAge(new Date(now - 5 * 60_000), now), shortAge(new Date(now - 3 * 3600_000), now), shortAge(new Date(now - 2 * 86400_000), now)], ["now", "5m", "3h", "2d"]);
