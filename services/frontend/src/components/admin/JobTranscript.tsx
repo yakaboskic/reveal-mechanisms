@@ -2,7 +2,7 @@
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React from "react";
 import type { TranscriptPage, TranscriptTurn } from "@/lib/admin-job";
-import { itemFailed, MISSING_TRANSCRIPT, toolInput, transcriptItems, type TranscriptItem } from "@/lib/admin-transcript";
+import { callFailed, itemFailed, MISSING_TRANSCRIPT, toolInput, transcriptItems, type TranscriptItem } from "@/lib/admin-transcript";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { usd } from "../AdminCosts";
 import { Callout, Json, Status } from "./ui";
@@ -95,14 +95,14 @@ export function TranscriptSection({ transcript, onLoad, onMore }: { transcript: 
     <button type="button" className="submit" disabled={loading} onClick={() => onLoad()}>{loading ? "Loading…" : "Show transcript"}</button>
   </div>;
   const items = transcriptItems(data.turns);
-  const failures = items.filter(itemFailed).length;
+  const failures = items.filter(callFailed).length;
   return <div className="admin-transcript">
     {error && <Callout tone="bad" role="alert">{error} Showing the turns already loaded.</Callout>}
     <div className="admin-log-actions">
       {attempts.length > 1 ? <label className="admin-select"><span>Attempt</span><select aria-label="Attempt" value={data.attempt ?? ""} disabled={loading} onChange={e => onLoad(Number(e.target.value))}>
         {attempts.map(a => <option key={a} value={a}>Attempt {a}{a === data.latest_attempt ? " (newest)" : ""}</option>)}</select></label>
         : <span>{data.attempt == null ? "No attempt has started." : `Attempt ${data.attempt}`}</span>}
-      <span>{data.turns.length.toLocaleString()} of {data.total.toLocaleString()} turns loaded{failures ? ` · ${failures.toLocaleString()} failed` : ""}{data.skipped ? ` · ${data.skipped.toLocaleString()} notices skipped` : ""}</span>
+      <span>{data.turns.length.toLocaleString()} of {data.total.toLocaleString()} turns loaded{failures ? ` · ${failures.toLocaleString()} failed tool call${failures === 1 ? "" : "s"}` : ""}{data.skipped ? ` · ${data.skipped.toLocaleString()} notices skipped` : ""}</span>
       <button type="button" className="text-button" disabled={loading} onClick={() => onLoad(data.attempt ?? undefined)}>Read from the start again</button>
     </div>
     {data.missing && <Callout tone="warn">{MISSING_TRANSCRIPT[data.missing] ?? `No transcript: ${data.missing.replaceAll("_", " ")}.`}</Callout>}

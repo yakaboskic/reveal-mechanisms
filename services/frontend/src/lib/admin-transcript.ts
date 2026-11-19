@@ -26,6 +26,11 @@ export function transcriptItems(turns: TranscriptTurn[]): TranscriptItem[] {
   return items;
 }
 
+/** Whether a tool call failed: a call whose result failed, or a failed result on its own. */
+export function callFailed(item: TranscriptItem): boolean {
+  return item.type === "call" ? !!item.result?.is_error : item.type === "result" && item.result.is_error;
+}
+
 /** Whether a row shows a failure: a call whose result failed, a failed result on its own, or a run that ended in error. */
 export function itemFailed(item: TranscriptItem): boolean {
   if (item.type === "call") return !!item.result?.is_error;

@@ -164,7 +164,7 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root .admin-section-heading input { max-width: 330px; }
 .admin-root .admin-section-heading .text-button { margin-left: 16px; }
 .admin-root .admin-job-page h3 { font-size: 14px; font-weight: 600; margin: 24px 0 8px; }
-.admin-root .admin-job-page .admin-panel-body p { font-size: 13px; }
+.admin-root .admin-job-page .admin-panel-body > p, .admin-root .admin-job-page .admin-request > p { font-size: 13px; }
 .admin-root .admin-job-page summary { font-size: 12px; cursor: pointer; overflow-wrap: anywhere; }
 .admin-root .admin-job-page li { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
 .admin-root .admin-job-page .admin-json { margin-top: 16px; }

@@ -233,7 +233,7 @@ test("how Claude Code was started: arguments, environment, tools, MCP servers, n
   const configuration: NonNullable<AgentRunContent["configuration"]> = {
     attempt: 2, missing: null, format: "reveal.run-configuration/1", claude_code: { pinned_version: "2.1.3", observed_version: "2.1.3 (Claude Code)" },
     cli: { argv: ["claude", "--print", "--append-system-prompt", "<120 characters, sha256 ab12>"], wrapper: ["setpriv", "--reuid", "agent", "timeout", "600"],
-      environment: { HOME: "/home/agent", ANTHROPIC_API_KEY: "reveal-loopback-proxy" }, prompt: "stdin" },
+      environment: { HOME: "/home/agent", ANTHROPIC_API_KEY: "reveal-loopback-proxy", CLAUDE_CODE_MAX_OUTPUT_TOKENS: null }, prompt: "stdin" },
     tools: { builtin: ["Read", "Bash"], mcp: ["mcp__reveal__query_claims"], mcp_servers: { reveal: { type: "http", url: "http://127.0.0.1:8765/mcp" } } },
     network: { mode: "custom", allowed_domains: ["eutils.ncbi.nlm.nih.gov"] }, toolchain: { stamp: "f".repeat(64) }, account_kit: null,
     limits: { execution: { timeout_seconds: 600, max_turns: 12 }, agent: { max_turns: 12 } }, source_tools: null,
@@ -245,7 +245,10 @@ test("how Claude Code was started: arguments, environment, tools, MCP servers, n
     "<dt>ANTHROPIC_API_KEY</dt><dd><code class=\"admin-mono\">reveal-loopback-proxy</code></dd>", "<dt>REVEAL MCP tools given</dt><dd>mcp__reveal__query_claims</dd>",
     "http://127.0.0.1:8765/mcp", "Restricted to eutils.ncbi.nlm.nih.gov", "pinned 2.1.3 · observed 2.1.3 (Claude Code)", "permission mode bypassPermissions",
     "reveal (connected)", "Run time 10.0m · Turns 12", "ledger/claude-stream.jsonl.gz</span> · 48.0 kB stored, 900.0 kB written", "middle left out (10.0 MB, 1,200 lines)",
-    "<dt>Account kit</dt><dd>Not an account job</dd>"]) assert.ok(html.includes(text), text);
+    "<dt>Account kit</dt><dd>Not an account job</dd>", "<dt>CLAUDE_CODE_MAX_OUTPUT_TOKENS</dt><dd>—</dd>"]) assert.ok(html.includes(text), text);
+  // A value of an unexpected kind is shown as text rather than breaking the page.
+  const odd = detail(contentRun, sparse, loaded({ ...content, configuration: { ...configuration, limits: { execution: { max_budget_usd: "1.00" as never }, agent: null } } }));
+  assert.ok(odd.includes("<dt>Limits enforced</dt><dd>Budget 1.00</dd>"));
   // A run from before the configuration was recorded says so.
   const older = detail(contentRun, sparse, loaded({ ...content, configuration: { ...configuration, missing: "not_recorded", cli: null, tools: null } }));
   assert.ok(older.includes("This run is from before the configuration was recorded."));

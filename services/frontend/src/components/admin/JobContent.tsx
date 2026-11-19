@@ -128,7 +128,7 @@ const words = (value: string[] | null | undefined) => value == null ? "—" : va
 const entries = (value: Record<string, unknown> | null | undefined) => value == null ? "—" : Object.keys(value).length
   ? Object.entries(value).map(([k, v]) => `${k} ${typeof v === "string" ? v : JSON.stringify(v)}`).join(" · ") : "None";
 const limitsLine = (value: Record<string, number | null> | null | undefined) => value == null ? "—"
-  : Object.entries(value).map(([key, v]) => `${LIMIT_LABELS.find(([k]) => k === key)?.[1] ?? key} ${v == null ? "—" : limitValue(key, v)}`).join(" · ") || "None";
+  : Object.entries(value).map(([key, v]) => `${LIMIT_LABELS.find(([k]) => k === key)?.[1] ?? key} ${typeof v === "number" ? limitValue(key, v) : v == null ? "—" : String(v)}`).join(" · ") || "None";
 
 /** How the attempt's Claude Code was started: its command line and environment, the tools and MCP servers it was given
  * and what it reported having, the network policy, the toolchain and the transcript files. */
@@ -143,7 +143,7 @@ export function ConfigurationView({ configuration }: { configuration: RunConfigu
     ["Arguments", words(c.cli?.argv)],
     ["Started by", Array.isArray(c.cli?.wrapper) ? words(c.cli.wrapper) : code(c.cli?.wrapper)],
     ["Prompt sent on", c.cli?.prompt === "stdin" ? "Standard input (the prompt above)" : code(c.cli?.prompt)],
-    ["Environment", c.cli?.environment ? <KeyValues rows={Object.entries(c.cli.environment).map(([k, v]) => [k, <code key={k} className="admin-mono">{v}</code>])} /> : "—"],
+    ["Environment", c.cli?.environment ? <KeyValues rows={Object.entries(c.cli.environment).map(([k, v]) => [k, v == null ? "—" : <code key={k} className="admin-mono">{typeof v === "string" ? v : JSON.stringify(v)}</code>])} /> : "—"],
     ["Built-in tools given", list(c.tools?.builtin)],
     ["REVEAL MCP tools given", list(c.tools?.mcp)],
     ["MCP servers", c.tools?.mcp_servers ? code(c.tools.mcp_servers) : "—"],
@@ -155,7 +155,7 @@ export function ConfigurationView({ configuration }: { configuration: RunConfigu
     ["Fetch and convert tools", c.source_tools ? <>{entries(c.source_tools.packages)}<small>{entries(c.source_tools.programs)}</small></> : "—"],
     ["Reported at start", observed ? `Claude Code ${observed.claude_code_version || "—"} · ${observed.model || "—"} · permission mode ${observed.permission_mode || "—"}` : "Not reported"],
     ["Tools it reported", observed ? list(observed.tools) : "—"],
-    ["MCP servers it reported", observed?.mcp_servers ? observed.mcp_servers.length ? observed.mcp_servers.map(s => `${s.name} (${s.status})`).join(", ") : "None" : "—"],
+    ["MCP servers it reported", observed?.mcp_servers ? observed.mcp_servers.length ? observed.mcp_servers.map(s => `${s?.name ?? "unnamed"} (${s?.status ?? "status not reported"})`).join(", ") : "None" : "—"],
     ["Transcript files", c.transcript ? <ul>{Object.entries(c.transcript).map(([name, file]) => <li key={name}><span className="admin-mono">{name}</span> · {fileSize(file.stored_bytes)} stored, {fileSize(file.original_bytes)} written{file.cut ? <> · <b className="admin-warning">middle left out ({fileSize(file.omitted_bytes)}, {count(file.omitted_lines)} lines)</b></> : ""}</li>)}</ul> : "—"],
   ];
   return <>{why && <Callout tone="warn">{why}</Callout>}<KeyValues rows={rows} /></>;

@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AgentRun, JobDetail, TranscriptPage, TranscriptTurn } from "../src/lib/admin-job";
-import { appendPage, itemFailed, toolInput, transcriptItems } from "../src/lib/admin-transcript";
+import { appendPage, callFailed, itemFailed, toolInput, transcriptItems } from "../src/lib/admin-transcript";
 import { boxConsoleUrl, JOB_SECTIONS, JobDetailView } from "../src/components/admin/JobDetail";
 import { TranscriptSection, type TranscriptState } from "../src/components/admin/JobTranscript";
 
@@ -135,7 +135,8 @@ test("calls pair with their results by call id across pages; a result without it
   assert.ok(failed.type === "call" && failed.result?.index === 3 && itemFailed(failed));
   assert.ok(later.type === "call" && later.result?.index === 7 && !itemFailed(later));
   assert.ok(items[5].type === "result" && items[5].result.call_id === "toolu_gone0000");
-  assert.ok(itemFailed(items[7]));   // the run ended in error
+  assert.ok(itemFailed(items[7]) && !callFailed(items[7]));   // the run ended in error; that is not a failed call
+  assert.deepEqual(items.map(callFailed), [false, false, true, false, false, false, false, false]);
   // A result with no call id never pairs.
   assert.deepEqual(transcriptItems([turn(0, { role: "tool", kind: "tool_result", text: "x" })]).map(i => i.type), ["result"]);
   // A partial call's input is shown as received; a whole one is pretty-printed.
@@ -160,7 +161,8 @@ test("the transcript renders turn by turn: failed calls marked, thinking folded,
   assert.ok(html.includes("Its call is not among the loaded turns.") && html.includes("orphan result text"));
   assert.ok(html.includes('<span class="admin-status warn" title="Claude Code never finished this message') && html.includes(">Cut at 20,000 characters</span>"));
   assert.ok(html.includes('<span class="admin-status bad">Error</span>') && html.includes("error_max_turns · stop reason tool_use · 12 turns · 6.1m (API 2.0m) · $0.31"));
-  assert.ok(html.includes("10 of 10 turns loaded · 2 failed · 4 notices skipped"));
+  // One failed call: the run's error end is marked on its own turn, not counted as a failed call.
+  assert.ok(html.includes("10 of 10 turns loaded · 1 failed tool call · 4 notices skipped"));
   assert.ok(html.includes("The stored stream had its middle left out to fit the 20 MB capture limit"));
   // Stderr comes after the turns; nothing more to load.
   assert.ok(html.indexOf("STDERR-TAIL") > html.indexOf("Reached max turns") && html.includes("Its last 20,000 characters."));

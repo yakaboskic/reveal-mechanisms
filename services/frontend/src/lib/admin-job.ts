@@ -86,7 +86,7 @@ export type AgentRunContent = {
 export type RunConfiguration = {
   attempt: number | null; missing: string | null; format: string | null;
   claude_code: { pinned_version?: string | null; observed_version?: string | null } | null;
-  cli: { argv?: string[] | null; wrapper?: string[] | string | null; environment?: Record<string, string> | null; prompt?: string | null } | null;
+  cli: { argv?: string[] | null; wrapper?: string[] | string | null; environment?: Record<string, string | null> | null; prompt?: string | null } | null;
   tools: { builtin?: string[] | null; mcp?: string[] | null; mcp_servers?: Record<string, unknown> | null } | null;
   network: { mode?: string | null; allowed_domains?: string[] | null } | null;
   toolchain: { stamp?: string | null } | null;
