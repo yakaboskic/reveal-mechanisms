@@ -1,6 +1,7 @@
 "use client";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { formatAdminDate as date } from "../lib/admin-time";
+import { Callout, Empty, PageHeading, Panel } from "./admin/ui";
 import {
   LIMIT_FIELDS, fallbackLimit, formatLimitValue as shown, isLimitsView, limitFieldId, limitFields, limitsForm, supportedRange,
   type AgentLimit, type AgentLimitsView, type LimitField, type LimitFields, type LimitsChange,
@@ -61,7 +62,7 @@ export function LimitsTable({ view, fields, errors, changed, disabled, onChange 
 
 export function LimitsHistory({ view }: { view: AgentLimitsView }) {
   const labels = new Map(view.limits.map(limit => [limit.key, limit.label]));
-  if (!view.history.length) return <p className="admin-empty">No change has been saved from this console yet.</p>;
+  if (!view.history.length) return <Empty>No change has been saved from this console yet.</Empty>;
   return <div className="admin-table-scroll" tabIndex={0}><table><thead><tr><th>When</th><th>Who</th><th>What changed</th></tr></thead><tbody>
     {view.history.map((entry, index) => <tr key={`${entry.at}-${index}`}><td className="admin-date">{date(entry.at)}</td><td>{entry.by}</td>
       <td className="admin-limits-history">{Object.entries(entry.changes).flatMap(([key, change]) => LIMIT_FIELDS.filter(field => change[field]).map(field =>
@@ -118,23 +119,22 @@ export function AdminLimits({ active }: { active: boolean }) {
     : invalid ? `Correct ${invalid} marked ${invalid === 1 ? "field" : "fields"} to save.`
     : edits ? `${edits} unsaved ${edits === 1 ? "change" : "changes"}.` : "";
   return <section className="admin-limits" hidden={!active} aria-label="General agent job limits">
-    <div className="admin-section-heading"><div><h2>General agent job limits</h2><p>These limits apply to general agent jobs only. A change applies to jobs queued after it is saved. A request can lower any limit, or raise it up to the ceiling.</p></div>
-      <button className="submit" type="button" disabled={!!busy || edits > 0} title={edits ? "Save or discard your edits first." : undefined} onClick={() => void request()}>{busy === "loading" ? "Loading…" : "Reload limits"}</button></div>
+    <PageHeading title="Limits" subtitle="Defaults and ceilings for general agent jobs, and who changed them."
+      actions={<button className="submit" type="button" disabled={!!busy || edits > 0} title={edits ? "Save or discard your edits first." : undefined} onClick={() => void request()}>{busy === "loading" ? "Loading…" : "Reload limits"}</button>} />
     {!view && !problem && <p role="status">Loading limits…</p>}
-    {problem && <p role="alert" className="error">{problem.message}{problem.conflict && <button type="button" disabled={!!busy} onClick={() => void request()}>Reload limits and discard my edits</button>}</p>}
-    {view && form && <>
-      <p>{view.updated_at ? <>Last changed {date(view.updated_at)} by {view.updated_by || "an unrecorded admin"}.</> : "Nothing has been set from this console yet."} The default is what a request gets when it names no limit; the ceiling is the most a request may ask for. An empty field is not set here, so the environment variable or the built-in value applies.</p>
-      <form noValidate onSubmit={save}>
+    {problem && <Callout tone="bad" role="alert">{problem.message}{problem.conflict && <button type="button" className="text-button" disabled={!!busy} onClick={() => void request()}>Reload limits and discard my edits</button>}</Callout>}
+    <Panel title="General agent job limits" description={<>These limits apply to general agent jobs only. A change applies to jobs queued after it is saved. A request can lower any limit, or raise it up to the ceiling.{view && <> {view.updated_at ? <>Last changed {date(view.updated_at)} by {view.updated_by || "an unrecorded admin"}.</> : "Nothing has been set from this console yet."} The default is what a request gets when it names no limit; the ceiling is the most a request may ask for. An empty field is not set here, so the environment variable or the built-in value applies.</>}</>}>
+      {view && form ? <form noValidate onSubmit={save}>
         <LimitsTable view={view} fields={fields} errors={form.errors} changed={form.changed} disabled={!!busy} onChange={edit} />
         <div className="admin-limits-actions">
           <button className="submit" type="submit" disabled={!edits || !!invalid || !!busy}>{busy === "saving" ? "Saving…" : "Save changes"}</button>
           <button className="text-button" type="button" disabled={!edits || !!busy} onClick={() => { setFields(limitFields(view)); setSaved(false); setProblem(null); }}>Discard changes</button>
           <span role="status">{status}</span>
         </div>
-      </form>
-      <h3>Change history</h3>
-      <p>Changes saved from this console, newest first; the latest 50 are kept. “not set” means the environment or built-in value applied.</p>
+      </form> : problem ? <Empty>The limits could not be read.</Empty> : null}
+    </Panel>
+    {view && <Panel title="Change history" description="Changes saved from this console, newest first; the latest 50 are kept. “not set” means the environment or built-in value applied.">
       <LimitsHistory view={view} />
-    </>}
+    </Panel>}
   </section>;
 }

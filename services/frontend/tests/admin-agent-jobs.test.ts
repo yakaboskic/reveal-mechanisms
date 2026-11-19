@@ -66,7 +66,7 @@ test("the job detail says where the owner's account is read from", () => {
 });
 
 test("the agent jobs view shows type, settings, usage and deposit for each job", () => {
-  const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents, kinds: [{ kind: "analysis", count: 46 }, { kind: "agent", count: 4 }], onSelect() {} }));
+  const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents, kinds: [{ kind: "analysis", count: 46 }, { kind: "agent", count: 4 }] }));
   for (const text of ["Scientific account", "Answer", "46 research runs · 4 agent jobs", "1 deposited", "1 succeeded without a deposit", "Deposit failed: rejected (HTTP 422)",
     "3 claims to assess, 3 with a triple", "49 of 999 turns", "48 tool calls, 7 failed", "90 REVEAL tool calls", "64,000 output tokens per response", "37 objects",
     "VALIDATION_FAILED", "No built-in tools", "12,161 characters", "Not applicable", "claims repository · open network",
@@ -78,7 +78,7 @@ test("the agent jobs view shows type, settings, usage and deposit for each job",
 });
 
 test("an empty window says so", () => {
-  const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [], types: [] }, onSelect() {} }));
+  const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [], types: [] } }));
   assert.ok(html.includes("No general agent job has been submitted yet."));
 });
 
@@ -117,7 +117,7 @@ test("an account the deposit screen withheld shows the check, the score against 
   for (const text of ["Withheld as unsafe: prompt injection", "<dt>Prompt-injection screen</dt>", "score 0.97 (threshold 0.50)", "sources/PMC3491803.txt line=212-214"])
     assert.ok(detail.includes(text), text);
   const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { window_limit: 100, jobs: [withheld, deposited], types: [
-    { ...agents.types[0], jobs: 2, succeeded: 2, failed: 0, deposited: 1, deposit_not_made: 0, withheld_unsafe: 1, withheld_by_check: { prompt_injection: 1 } }] }, onSelect() {} }));
+    { ...agents.types[0], jobs: 2, succeeded: 2, failed: 0, deposited: 1, deposit_not_made: 0, withheld_unsafe: 1, withheld_by_check: { prompt_injection: 1 } }] } }));
   for (const text of ["1 withheld as unsafe", "(prompt injection 1)", "Withheld as unsafe: prompt injection", "at sources/PMC3491803.txt line=212-214"])
     assert.ok(view.includes(text), text);
   assert.ok(!view.includes("succeeded without a deposit"));
@@ -159,7 +159,7 @@ test("an account job's detail lists each saved source with its URL, commands, si
   for (const run of [accountRun, { ...sourcesRun, sources: null }, { ...sparseRun, sources: sourcesRun.sources }])
     assert.ok(!renderToStaticMarkup(React.createElement(AgentRunDetail, { run, job: deposited })).includes("Sources the agent saved"));
   // The job list never shows them.
-  const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { ...agents, jobs: [job("dddddddd-0000", "succeeded", sourcesRun)] }, onSelect() {} }));
+  const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { ...agents, jobs: [job("dddddddd-0000", "succeeded", sourcesRun)] } }));
   assert.ok(!view.includes(XML_URL) && !view.includes("Sources the agent saved"));
 });
 

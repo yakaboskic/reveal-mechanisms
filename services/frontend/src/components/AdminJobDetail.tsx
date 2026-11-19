@@ -1,10 +1,13 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+// React is imported by name because the unit tests render this file with the classic JSX runtime.
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { formatAdminDate as date, formatAdminDuration as duration, formatAdminJson } from "@/lib/admin-time";
 import { coalesceMessageDeltas } from "@/lib/activity";
 import type { Schema } from "@/lib/client";
 import { jobLabel, type AdminJob, type AgentRun } from "@/lib/admin-job";
 import { AgentRunDetail } from "./AdminAgentJobs";
+import { jobHref } from "@/lib/admin-url";
+import { StateStatus } from "./admin/ui";
 
 type Diagnostic = { path: string; available: boolean; data?: unknown; reason?: string };
 type Tokens = { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null };
@@ -47,7 +50,7 @@ function AgentUsage({ metrics }: { metrics: Metrics }) {
     {agent.budget_used != null && <div className="admin-bar" aria-hidden="true"><i style={{ width: `${Math.min(100, 100 * agent.budget_used)}%` }} /></div>}
     <dl className="admin-detail-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     {agent.reason && <p>Runner reason: {agent.reason}</p>}
-    {metrics.parent_job_id && <p>Research statement for <a href={`/admin?job=${metrics.parent_job_id}`}>{metrics.parent_job_id}</a>.</p>}
+    {metrics.parent_job_id && <p>Research statement for <a href={jobHref(metrics.parent_job_id)}>{metrics.parent_job_id}</a>.</p>}
   </details>;
 }
 
@@ -104,7 +107,7 @@ export function AdminJobDetail({ jobId, auto, onClose }: { jobId: string; auto: 
     {!data && loading && <p role="status">Loading job logs and diagnostics…</p>}
     {error && <p role="alert" className="error">{error}{data && " Showing previously loaded logs."}</p>}
     {data && job && <>
-      <p><span className={`admin-status ${job.status === "failed" ? "bad" : job.status === "succeeded" ? "good" : ""}`}>{job.status.replaceAll("_", " ")}</span> <span className="admin-log-stage">{job.stage.replaceAll("_", " ")}</span> · <a href={`/admin?job=${job.id}`}>Link to this job</a></p>
+      <p><StateStatus value={job.status} /> <span className="admin-log-stage">{job.stage.replaceAll("_", " ")}</span> · <a href={jobHref(job.id)}>Link to this job</a></p>
       {job.failure && <div className="admin-job-failure"><h3>{job.failure.code}</h3><p>{job.failure.message}</p>{data.metrics?.error && <div><strong>{data.metrics.error.error_type}{data.metrics.error.phase ? ` · ${data.metrics.error.phase.replaceAll("_", " ")}` : ""}</strong><p>{data.metrics.error.message || "No message was recorded."}</p><small>Recorded cause · {date(data.metrics.error.recorded_at)}</small></div>}{failures.map(item => {
         const failure = item.data as { phase?: string; error_type?: string; message?: string };
         return <div key={item.path}><strong>{failure.error_type || "Saved failure"}{failure.phase ? ` · ${failure.phase.replaceAll("_", " ")}` : ""}</strong><p>{failure.message}</p><small>{item.path}</small></div>;

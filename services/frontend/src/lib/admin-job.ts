@@ -112,6 +112,17 @@ export function depositOutcome(job: Pick<AgentJob, "status" | "agent">): { text:
   return { text: job.status === "failed" || job.status === "cancelled" ? "No account" : "Pending", tone: "" };
 }
 
+/** Which deposit filter an agent job falls under on the Agent jobs page: deposited, withheld by the deposit screen
+ * (withheld_unsafe), failed or missing (the tones depositOutcome marks bad), or none (answers, pending, no account). */
+export type DepositFilter = "deposited" | "withheld" | "failed" | "none";
+export function depositFilter(job: Pick<AgentJob, "status" | "agent">): DepositFilter {
+  if (job.agent.deliverable !== "scientific_account") return "none";
+  const status = job.agent.result.deposit_status;
+  if (status === "deposited") return "deposited";
+  if (status === "withheld_unsafe") return "withheld";
+  return depositOutcome(job)?.tone === "bad" ? "failed" : "none";
+}
+
 const score = (value: number | null | undefined) => value == null ? "—" : value.toFixed(2);
 /** The deposit screen's verdict in one line: what it found, the classifier's score against its threshold, and where. */
 export function screenSummary(result: AgentRun["result"]): string | null {
