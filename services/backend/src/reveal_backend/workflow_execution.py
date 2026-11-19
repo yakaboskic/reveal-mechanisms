@@ -722,7 +722,15 @@ class WorkflowExecution:
             await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
             require(result.status == 'succeeded' and result.response_path is not None, 'The agent run left no response record')
             checked = {}
-            from .box_agent import deliverable_of
+            from .box_agent import deliverable_of, schema_of
+            schema = schema_of(inputs)
+            if schema is not None:
+                # The answer job asked for structured output: the object Claude Code returned must satisfy the frozen
+                # schema. A run that returned none, or one that does not, fails as VALIDATION_FAILED.
+                from .agent_output import check_result
+                await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating',
+                    'message': 'Checking the structured output against the requested schema.'})
+                await run_sync(check_result, decode(assert_artifact(result.response_path, root).read_bytes()), schema)
             if deliverable_of(inputs) == 'scientific_account':
                 # The gate a research account passes, then the deposit form. Both happen here, once: assembly stamps
                 # the time, so the ids differ on a second run, and commit only reads back what this step saved.

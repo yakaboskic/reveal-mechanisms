@@ -55,6 +55,9 @@ export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (O
       ["Account contents", run.result.account_id ? [`${count(run.result.objects)} objects`, run.result.claims != null && plural(run.result.claims, "claim"), run.result.quotes != null && plural(run.result.quotes, "quote"), run.result.papers != null && plural(run.result.papers, "paper"), run.result.lint_warnings != null && plural(run.result.lint_warnings, "lint warning"), run.result.dapper_version && `DAPPER ${run.result.dapper_version}`].filter(Boolean).join(" · ") : "—"],
     ] as [string, React.ReactNode][] : []),
     ["Response", run.result.response_characters == null ? "—" : `${count(run.result.response_characters)} characters${run.result.response_truncated ? " (truncated)" : ""}${run.result.files ? ` · ${plural(run.result.files, "file")}` : ""}`],
+    ...(run.output_schema_characters != null ? [
+      ["Structured output", `Asked for, schema ${count(run.output_schema_characters)} characters · ${run.result.structured_output_characters == null ? "none returned" : `returned ${count(run.result.structured_output_characters)} characters`}`],
+    ] as [string, React.ReactNode][] : []),
     ["Input format", run.input_format || "—"],
   ];
   return <details className="admin-agent-usage" open><summary>How this agent job was run · {deliverableLabel(run.deliverable)}</summary>

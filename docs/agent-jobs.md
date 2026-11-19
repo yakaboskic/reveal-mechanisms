@@ -302,6 +302,40 @@ refers to a DAPPER id, or by id. The sandbox may reach that one host and holds n
 `tool_calls`. What they return is an earlier claim, not evidence, and cannot be cited in an account. If the
 deployment has no repository, the tool is not offered.
 
+## Return structured output
+
+An answer job can ask for its result as a JSON object of a shape you define. Send `output_schema`, a JSON
+Schema, with an answer job:
+
+```json
+{"kind": "agent", "prompt": "Grade the evidence that each gene has a role in IBD: NKX2-3, JARID2, EMSY.",
+ "literature": true,
+ "output_schema": {"type": "object", "required": ["genes"], "additionalProperties": false,
+   "properties": {"genes": {"type": "array", "items": {"type": "object", "required": ["symbol", "evidence"],
+     "properties": {"symbol": {"type": "string"}, "evidence": {"enum": ["strong", "weak", "none"]},
+                    "pmids": {"type": "array", "items": {"type": "string"}}}}}}}}
+```
+
+- **What the schema must be.** Its top level is `"type": "object"`, it uses only local references
+  (`"$ref": "#/..."`), and it is at most 32,000 bytes. It is checked as Draft 2020-12 unless it names another
+  draft with `$schema`. An invalid schema is refused with 422 and says where it is wrong. It is for
+  `deliverable` `answer` only.
+- **How it runs.** The runner passes the schema to Claude Code as `--json-schema`, the mechanism Upstash Box's
+  structured output (`response_schema`) uses. REVEAL keeps running Claude Code itself, so the job keeps its
+  tools, tool ledger, limits and key proxy. Claude Code makes the final answer an object that satisfies the
+  schema and retries when it does not.
+- **What comes back.** `result.structured_output` holds the object, beside `response` (the final message). The
+  backend checks it against the frozen schema again before storing it. It is at most 100,000 bytes; have the
+  agent write anything larger to `output/`.
+- **When it fails.** A run that returns no object, or one that does not satisfy the schema, fails with
+  `VALIDATION_FAILED`. A run in which Claude Code gave up after its retries fails with
+  `AGENT_EXECUTION_FAILED` and says so.
+- **The input format.** A job with `output_schema` is frozen as `reveal.agent-input/3`. A job without one is
+  still frozen as `reveal.agent-input/2`, byte for byte as before.
+
+`scripts/agent_job.py --output-schema schema.json --structured-out result.json` sends a schema from a file and
+saves the object.
+
 ## Watch it and read the result
 
 Progress arrives on `GET /v1/jobs/{id}/events` like any other job: the agent's text (`agent_message`
@@ -320,7 +354,8 @@ A succeeded job's `result` is an `AgentResult`:
 `response` is cut at 50,000 characters (`response_truncated`); the full text and every file the agent wrote
 to `output/` are kept with the job's captured workspace in S3. There is not yet an endpoint that downloads
 those files. A Scientific Account job also returns an `account` block; see
-[Return a Scientific Account](#return-a-scientific-account).
+[Return a Scientific Account](#return-a-scientific-account). A job that sent `output_schema` also returns `structured_output`; see
+[Return structured output](#return-structured-output).
 
 ## Telemetry
 

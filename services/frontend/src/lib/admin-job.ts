@@ -13,8 +13,11 @@ export type AgentRun = {
   allowed_domains: string[] | null; claims_repository: boolean | null; limits: Record<string, number> | null;
   attribute_requester: boolean | null; prompt_characters: number | null; system_prompt_characters: number | null;
   question_characters: number | null; claims_requested: number | null; claims_with_triple: number | null;
+  /** Size of the requester's output_schema, when the answer job asked for structured output. */
+  output_schema_characters?: number | null;
   result: {
     response_truncated: boolean | null; response_characters: number | null; files: number | null;
+    structured_output_characters?: number | null;
     account_id: string | null; objects: number | null; claims: number | null; quotes: number | null; papers: number | null;
     lint_warnings: number | null; dapper_version: string | null;
     deposit_status: string | null; deposit_id: string | null; deposit_reason: string | null; deposit_http_status: number | null;

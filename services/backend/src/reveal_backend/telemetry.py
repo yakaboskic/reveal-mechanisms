@@ -131,7 +131,10 @@ AGENT_SIZES = (('queue', 'prompt_characters', 'inputs.prompt', 'text'),
                ('queue', 'claims_with_triple', 'inputs.account.claims', 'triples'),
                ('job', 'response_characters', 'result.response', 'text'),
                ('job', 'papers', 'result.account.papers', 'items'),
-               ('job', 'files', 'result.files', 'items'))
+               ('job', 'files', 'result.files', 'items'),
+               # Structured output: only how large the schema and the returned object are, never either one.
+               ('queue', 'output_schema_characters', 'inputs.output_schema', 'json'),
+               ('job', 'structured_output_characters', 'result.structured_output', 'json'))
 
 
 def measure(tx, path, what):
@@ -140,11 +143,13 @@ def measure(tx, path, what):
     if tx.sqlite:
         if what == 'text': return f"CASE WHEN json_type(payload,{path})='text' THEN length(json_extract(payload,{path})) END"
         if what == 'items': return f"CASE WHEN json_type(payload,{path})='array' THEN json_array_length(payload,{path}) END"
+        if what == 'json': return f"CASE WHEN json_type(payload,{path}) IN ('object','array') THEN length(json_extract(payload,{path})) END"
         return (f"CASE WHEN json_type(payload,{path})='array' THEN (SELECT COUNT(*) FROM json_each(payload,{path}) "
                 "WHERE type='object' AND json_type(value,'$.subject_entity')='text') END")
     value = f"JSON_EXTRACT(payload,{path})"
     if what == 'text': return f"IF(JSON_TYPE({value})='STRING',CHAR_LENGTH(JSON_UNQUOTE({value})),NULL)"
     if what == 'items': return f"IF(JSON_TYPE({value})='ARRAY',JSON_LENGTH({value}),NULL)"
+    if what == 'json': return f"IF(JSON_TYPE({value}) IN ('OBJECT','ARRAY'),CHAR_LENGTH(CAST({value} AS CHAR)),NULL)"
     subjects = "JSON_EXTRACT(payload,'$." + path[3:-1] + "[*].subject_entity')"
     return f"IF(JSON_TYPE({value})='ARRAY',COALESCE(JSON_LENGTH({subjects}),0),NULL)"
 
@@ -182,7 +187,8 @@ def agent_runs(tx, identities):
         runs[identity] = {'deliverable': deliverable_of('agent', queue), **asked,
                           **{**empty, **queue_sizes.get(identity, {}), **job_sizes.get(identity, {})}, 'result': result}
         # The sizes that describe the result belong with it.
-        for field in ('response_characters', 'papers', 'files'): runs[identity]['result'][field] = runs[identity].pop(field)
+        for field in ('response_characters', 'papers', 'files', 'structured_output_characters'):
+            runs[identity]['result'][field] = runs[identity].pop(field)
     return runs
 
 

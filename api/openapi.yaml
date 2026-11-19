@@ -50953,6 +50953,18 @@ components:
             groups deposited). Default true for deliverable scientific_account, false
             otherwise. The tool is offered only on a deployment that has a claims
             repository configured; what it returns cannot be cited as evidence.'
+        output_schema:
+          type: object
+          additionalProperties: true
+          description: 'Only with deliverable answer: a JSON Schema (Draft 2020-12
+            unless it names another draft with $schema) that the final answer must
+            satisfy. Its top level must be "type": "object"; it may use only local
+            references ($ref "#/..."); it is at most 32,000 bytes. Claude Code is
+            run with it as --json-schema, the mechanism behind Upstash Box''s response_schema,
+            and returns the object as structured output; REVEAL checks the object
+            against the schema again and returns it as result.structured_output. A
+            run that returns no such object, or one that does not satisfy the schema,
+            fails with VALIDATION_FAILED. An invalid schema is refused with 422.'
         claims:
           type: array
           items:
@@ -51271,6 +51283,12 @@ components:
           items:
             $ref: '#/components/schemas/AgentFile'
           description: Files the agent wrote to output/, retained with the job capture.
+        structured_output:
+          type: object
+          additionalProperties: true
+          description: 'Present only when the request sent output_schema: the object
+            the agent returned, checked against that schema. At most 100,000 bytes;
+            a larger one fails the job.'
         account:
           $ref: '#/components/schemas/AgentAccount'
       required:

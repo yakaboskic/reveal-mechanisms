@@ -9795,6 +9795,10 @@ export interface components {
             attribute_requester: boolean;
             /** @description Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence. */
             claims_repository?: boolean;
+            /** @description Only with deliverable answer: a JSON Schema (Draft 2020-12 unless it names another draft with $schema) that the final answer must satisfy. Its top level must be "type": "object"; it may use only local references ($ref "#/..."); it is at most 32,000 bytes. Claude Code is run with it as --json-schema, the mechanism behind Upstash Box's response_schema, and returns the object as structured output; REVEAL checks the object against the schema again and returns it as result.structured_output. A run that returns no such object, or one that does not satisfy the schema, fails with VALIDATION_FAILED. An invalid schema is refused with 422. */
+            output_schema?: {
+                [key: string]: unknown;
+            };
             /**
              * @description Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, or an object that adds the statement's structured form (subject_entity, relation, object_entity). Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. Statements must be distinct. A claim the agent found no literature for is reported in the result, not included in the account.
              * @default []
@@ -9897,6 +9901,10 @@ export interface components {
             duration_seconds: number | null;
             /** @description Files the agent wrote to output/, retained with the job capture. */
             files: components["schemas"]["AgentFile"][];
+            /** @description Present only when the request sent output_schema: the object the agent returned, checked against that schema. At most 100,000 bytes; a larger one fails the job. */
+            structured_output?: {
+                [key: string]: unknown;
+            };
             account?: components["schemas"]["AgentAccount"];
         };
     };

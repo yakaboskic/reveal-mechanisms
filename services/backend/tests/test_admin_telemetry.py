@@ -216,10 +216,12 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         self.assertEqual(run['limits'], LIMITS)
         self.assertEqual([run[key] for key in ('prompt_characters', 'system_prompt_characters', 'question_characters',
                                                'claims_requested', 'claims_with_triple')], [100, 11, 14, 3, 2])
+        self.assertIsNone(run['output_schema_characters'])                # an account job never asks for structured output
         self.assertEqual(run['result'], {'response_truncated': False, 'account_id': 'dapper:ScientificAccount.abc', 'objects': 37,
                                          'claims': 3, 'quotes': 6, 'lint_warnings': 1, 'dapper_version': '0.2.1-a1',
                                          'deposit_status': 'deposited', 'deposit_id': 'dep_1', 'deposit_reason': None,
-                                         'deposit_http_status': None, 'response_characters': 39, 'papers': 2, 'files': 2})
+                                         'deposit_http_status': None, 'response_characters': 39, 'papers': 2, 'files': 2,
+                                         'structured_output_characters': None})
         # A job that succeeded while its deposit did not says so, with the reason and not the repository's message.
         result = rows[ids['undeposited']]['agent']['result']
         self.assertEqual([result[key] for key in ('deposit_status', 'deposit_reason', 'deposit_http_status', 'deposit_id')],

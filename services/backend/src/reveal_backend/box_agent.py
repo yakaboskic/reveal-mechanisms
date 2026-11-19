@@ -8,6 +8,7 @@ Standard library only: this module is bundled into the Box.
 """
 import hashlib
 import http.client
+import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import math
 import re
@@ -18,6 +19,9 @@ from .box_claims import base_url as claims_base_url, host as claims_host_of
 from .box_mcp import GRAPHS
 
 INPUT_FORMAT = 'reveal.agent-input/2'
+# An answer job that asked for structured output: format /2 plus output_schema. A job without one is still frozen as /2,
+# byte for byte as before, so a worker that predates structured output still runs it.
+STRUCTURED_INPUT_FORMAT = 'reveal.agent-input/3'
 # Jobs frozen before per-run tool and literature limits existed. They run with the allowances they were queued under.
 LEGACY_INPUT_FORMAT = 'reveal.agent-input/1'
 INPUT_FILENAME = 'agent-input.json'
@@ -63,6 +67,13 @@ DEFAULT_MAX_BUDGET_USD = LIMITS['max_budget_usd']['default']
 MAX_RESULT_RESPONSE_CHARS = 50_000
 LEGACY_INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort', 'model', 'limits'}
 INPUT_KEYS = LEGACY_INPUT_KEYS | {'deliverable', 'account', 'claims_repository'}
+STRUCTURED_INPUT_KEYS = INPUT_KEYS | {'output_schema'}
+# Structured output (output_schema): a JSON Schema the final answer must satisfy. Claude Code enforces it during the run
+# (--json-schema, the mechanism Upstash Box's response_schema drives), and the backend checks the result against it again.
+MAX_OUTPUT_SCHEMA_BYTES = 32_000
+MAX_OUTPUT_SCHEMA_DEPTH = 32
+# Job rows are listed whole, so the structured result has a cap like the answer text's; a larger result fails the job.
+MAX_STRUCTURED_OUTPUT_BYTES = 100_000
 # What a job returns. 'answer': the agent's final message. 'scientific_account': a DAPPER ScientificAccount the agent
 # authors from papers it reads through the captured literature tools, which the backend then attributes, mints and
 # deposits. An account job has no shell and no network beyond its tools, like a research run: everything the
@@ -93,6 +104,36 @@ MAX_PROXY_REQUEST_BYTES = 32_000_000
 
 class AgentInputError(ValueError):
     pass
+
+
+def canonical_json(value):
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
+
+
+def output_schema(value):
+    """The shape checks of an output_schema that need no JSON Schema library (this module runs inside the Box). The
+    backend also checks it is a valid JSON Schema (agent_output.check_schema) before the job is queued."""
+    require(isinstance(value, dict), 'output_schema must be a JSON Schema object')
+    try:
+        size = len(canonical_json(value).encode())
+    except (TypeError, ValueError):
+        raise AgentInputError('output_schema must be plain JSON') from None
+    require(size <= MAX_OUTPUT_SCHEMA_BYTES, f'output_schema is {size:,} bytes; the most is {MAX_OUTPUT_SCHEMA_BYTES:,}')
+    require(value.get('type') == 'object', 'output_schema must describe an object: its top level needs "type": "object"')
+
+    def walk(node, depth):
+        require(depth <= MAX_OUTPUT_SCHEMA_DEPTH, f'output_schema nests more than {MAX_OUTPUT_SCHEMA_DEPTH} levels')
+        if isinstance(node, dict):
+            for key, child in node.items():
+                # A reference may point only inside the schema: nothing is fetched to resolve it.
+                require(key != '$ref' or isinstance(child, str) and child.startswith('#'),
+                        'output_schema may use only local references ("$ref": "#/...")')
+                walk(child, depth + 1)
+        elif isinstance(node, list):
+            for child in node:
+                walk(child, depth + 1)
+    walk(value, 0)
+    return value
 
 
 def require(condition, message):
@@ -150,19 +191,26 @@ def limit_range(key, ceiling):
     return f"limits.{key} must be a whole number from {LIMITS[key]['minimum']} to {ceiling}"
 
 
-def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=None, account_builder=None):
+def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=None, account_builder=None, schema_checker=None):
     """The frozen input for one agent job, from a validated API body. Defaults are filled in so the frozen
     bytes say exactly what runs. policy gives each limit's default and ceiling (see LIMITS); a request may
     lower or raise a limit up to its ceiling. budget_cap, when given, is the budget ceiling.
 
     account_builder(question, claims) returns the account block of a scientific_account job (agent_account.py:
-    it mints DAPPER nodes, which this standard-library module cannot)."""
+    it mints DAPPER nodes, which this standard-library module cannot). schema_checker(schema) raises AgentInputError
+    when an output_schema is not a valid JSON Schema (agent_output.check_schema)."""
     require(isinstance(body, dict) and body.get('kind') == 'agent', 'Not an agent job')
     deliverable = body.get('deliverable', 'answer')
     require(deliverable in DELIVERABLES, 'deliverable must be answer or scientific_account')
     accounting = deliverable == 'scientific_account'
     require(accounting or not {'question', 'claims', 'attribute_requester'} & set(body),
             'question, claims and attribute_requester belong to deliverable "scientific_account"')
+    schema = body.get('output_schema')
+    require(schema is None or not accounting, 'output_schema belongs to deliverable "answer": a scientific_account job returns its account')
+    if schema is not None:
+        output_schema(schema)
+        require(callable(schema_checker), 'Structured output is not available on this deployment')
+        schema_checker(schema)
     tools = body.get('tools', list(ACCOUNT_TOOLS if accounting else DEFAULT_TOOLS))
     require(isinstance(tools, list) and all(tool in BUILTIN_TOOLS for tool in tools) and len(set(tools)) == len(tools),
             'tools must be distinct names from ' + ', '.join(BUILTIN_TOOLS))
@@ -228,14 +276,20 @@ def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=N
               'literature': True if accounting else body.get('literature', False), 'network': network, 'allowed_domains': domains,
               'effort': body.get('effort', 'medium'), 'model': model, 'limits': frozen_limits,
               'deliverable': deliverable, 'account': account, 'claims_repository': claims_repository}
+    if schema is not None:
+        frozen = {**frozen, 'format': STRUCTURED_INPUT_FORMAT, 'output_schema': schema}
     return validate_input(frozen)
 
 
 def validate_input(value):
     """Strict check of frozen input bytes, repeated in the bundle and inside the Box."""
     require(isinstance(value, dict) and (value.get('format') == INPUT_FORMAT and set(value) == INPUT_KEYS
+                                         or value.get('format') == STRUCTURED_INPUT_FORMAT and set(value) == STRUCTURED_INPUT_KEYS
                                          or value.get('format') == LEGACY_INPUT_FORMAT and set(value) == LEGACY_INPUT_KEYS),
             'Invalid agent input format')
+    if value['format'] == STRUCTURED_INPUT_FORMAT:
+        output_schema(value['output_schema'])
+        require(deliverable_of(value) == 'answer', 'output_schema belongs to deliverable "answer"')
     text(value['prompt'], 'prompt', MAX_PROMPT_CHARS, required=True)
     text(value['system_prompt'], 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False)
     tools, graphs = value['tools'], value['graphs']
@@ -250,7 +304,7 @@ def validate_input(value):
     require(value['effort'] in EFFORTS, 'effort must be low, medium or high')
     require(isinstance(value['model'], str) and MODEL_PATTERN.fullmatch(value['model']), 'model must be a Claude model id')
     limits = value['limits']
-    keys = set(LIMITS) if value['format'] == INPUT_FORMAT else set(LEGACY_LIMIT_KEYS)
+    keys = set(LEGACY_LIMIT_KEYS) if value['format'] == LEGACY_INPUT_FORMAT else set(LIMITS)
     require(isinstance(limits, dict) and set(limits) == keys, 'Invalid agent limits')
     for key in keys:
         if key == 'max_budget_usd':
@@ -265,6 +319,11 @@ def validate_input(value):
 def deliverable_of(value):
     """What a frozen input returns. Inputs frozen before deliverables existed return an answer."""
     return value.get('deliverable', 'answer')
+
+
+def schema_of(value):
+    """The output_schema a frozen input asked the answer to satisfy, or None."""
+    return value.get('output_schema') if value.get('format') == STRUCTURED_INPUT_FORMAT else None
 
 
 def validate_account(value):
@@ -369,7 +428,19 @@ def response_record(job_id, attempt, status, result, secrets=()):
     def number(key):
         value = usage.get(key)
         return value if type(value) in (int, float) and math.isfinite(value) and value >= 0 else None
+    structured = usage.get('structured_output') if isinstance(usage.get('structured_output'), (dict, list)) else None
+    if structured is not None and secrets:
+        def scrub(node):
+            if isinstance(node, str):
+                for secret in secrets:
+                    if secret: node = node.replace(secret, '[REDACTED_CREDENTIAL]')
+                return node
+            if isinstance(node, dict): return {key: scrub(child) for key, child in node.items()}
+            if isinstance(node, list): return [scrub(child) for child in node]
+            return node
+        structured = scrub(structured)
     return {'format': RESPONSE_FORMAT, 'job_id': job_id, 'attempt': attempt, 'status': status, 'response': answer,
+            **({'structured_output': structured} if structured is not None else {}),
             'subtype': usage.get('subtype') if isinstance(usage.get('subtype'), str) else None,
             'is_error': usage.get('is_error') is True, 'num_turns': number('num_turns'),
             'duration_ms': number('duration_ms'), 'cost_usd': number('total_cost_usd')}
@@ -391,7 +462,9 @@ def job_result(record, captured_files, *, job_id, attempt, account=None):
             'response_sha256': hashlib.sha256(answer.encode()).hexdigest(),
             'turns': record.get('num_turns'), 'cost_usd': record.get('cost_usd'),
             'duration_seconds': round(duration / 1000, 3) if duration is not None else None,
-            'files': files, **({'account': account} if account else {})}
+            'files': files, **({'account': account} if account else {}),
+            # Present only for a job that asked for it; the backend checked it against the job's output_schema.
+            **({'structured_output': record['structured_output']} if 'structured_output' in record else {})}
 
 
 class KeyProxy:

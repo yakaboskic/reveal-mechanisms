@@ -1037,11 +1037,11 @@ def agent_job_rows(tx, identity, body):
     """Freeze the prompt, tools and limits into the queued job. Each limit's default and ceiling come from the
     admin console, then the environment, then the code (agent_limits). A scientific_account job also freezes its
     question and claims as DAPPER nodes (agent_account) and, beside the input, who asked for it."""
-    from . import agent_account, agent_limits
+    from . import agent_account, agent_limits, agent_output
     from .box_agent import DEFAULT_MODEL, AgentInputError, freeze_input
     try:
         frozen=freeze_input(body,policy=agent_limits.policy(tx),default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL,
-                            account_builder=agent_account.build)
+                            account_builder=agent_account.build,schema_checker=agent_output.check_schema)
     except AgentInputError as exc:
         raise Problem(422,'INVALID_REQUEST',str(exc)[:400]) from None
     job,rows=jobs.new(identity['user_id'],'agent',inputs=frozen)

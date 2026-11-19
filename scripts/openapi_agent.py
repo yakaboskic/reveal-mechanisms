@@ -9,7 +9,7 @@ COMPLETED_AT = '2026-11-09T15:03:12Z'
 
 def extend(b, f, e):
     from reveal_backend.box_agent import (ACCOUNT_TOOLS, BUILTIN_TOOLS, DEFAULT_MODEL, DELIVERABLES, LIMITS, MAX_ACCOUNT_CLAIMS,
-        MAX_ALLOWED_DOMAINS, MAX_CLAIM_CHARS, DEFAULT_TOOLS, EFFORTS, MAX_PROMPT_CHARS, MAX_QUESTION_CHARS,
+        MAX_ALLOWED_DOMAINS, MAX_CLAIM_CHARS, MAX_OUTPUT_SCHEMA_BYTES, MAX_STRUCTURED_OUTPUT_BYTES, DEFAULT_TOOLS, EFFORTS, MAX_PROMPT_CHARS, MAX_QUESTION_CHARS,
         MAX_RESULT_RESPONSE_CHARS, MAX_SYSTEM_PROMPT_CHARS, MAX_TERM_CHARS, NETWORKS, TERM)
     from reveal_backend.box_mcp import GRAPHS
     S = b.SCHEMAS
@@ -76,6 +76,13 @@ def extend(b, f, e):
             'Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that '
             'earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The '
             'tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence.'},
+        'output_schema': {'type': 'object', 'additionalProperties': True, 'description':
+            'Only with deliverable answer: a JSON Schema (Draft 2020-12 unless it names another draft with $schema) that the '
+            'final answer must satisfy. Its top level must be "type": "object"; it may use only local references ($ref "#/..."); '
+            f'it is at most {MAX_OUTPUT_SCHEMA_BYTES:,} bytes. Claude Code is run with it as --json-schema, the mechanism behind '
+            "Upstash Box's response_schema, and returns the object as structured output; REVEAL checks the object against the "
+            'schema again and returns it as result.structured_output. A run that returns no such object, or one that does not '
+            'satisfy the schema, fails with VALIDATION_FAILED. An invalid schema is refused with 422.'},
         'claims': array({'oneOf': [string(minLength=1, maxLength=MAX_CLAIM_CHARS), ref('AgentAccountClaim')]}, uniqueItems=True,
             maxItems=MAX_ACCOUNT_CLAIMS, default=[],
             description='Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, '
@@ -151,6 +158,9 @@ def extend(b, f, e):
         'turns': null(integer(0)), 'cost_usd': null({'type': 'number', 'minimum': 0}),
         'duration_seconds': null({'type': 'number', 'minimum': 0}),
         'files': array(ref('AgentFile'), description='Files the agent wrote to output/, retained with the job capture.'),
+        'structured_output': {'type': 'object', 'additionalProperties': True, 'description':
+            f'Present only when the request sent output_schema: the object the agent returned, checked against that schema. At '
+            f'most {MAX_STRUCTURED_OUTPUT_BYTES:,} bytes; a larger one fails the job.'},
         'account': ref('AgentAccount')},
         ['kind', 'response', 'response_truncated', 'response_sha256', 'turns', 'cost_usd', 'duration_seconds', 'files']))
     S['JobCreate']['oneOf'].append(ref('AgentJobInput'))

@@ -21,7 +21,7 @@ import threading
 import time
 
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
-                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, run_limits as agent_run_limits,
+                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, run_limits as agent_run_limits, schema_of,
                         validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
@@ -541,6 +541,14 @@ def agent_tools(selected_graphs, ledger, settings, literature_client=LiteratureC
                        max_characters=limits['literature_characters'])
 
 
+def structured_output_arguments(agent_input):
+    """Claude Code arguments for an answer job that asked for structured output: the frozen schema as --json-schema, so
+    the final answer is an object satisfying it, reported as the result's structured_output (the mechanism behind
+    Upstash Box's response_schema). None for every other job."""
+    schema = schema_of(agent_input)
+    return [] if schema is None else ['--json-schema', json.dumps(schema, ensure_ascii=False, separators=(',', ':'))]
+
+
 def agent_system_prompt(agent_input):
     """Harness facts the agent needs, then the caller's system prompt; appended to Claude Code's own."""
     note = ('You are running unattended in an isolated, disposable sandbox. Nobody can answer questions mid-run, so '
@@ -561,6 +569,9 @@ def agent_system_prompt(agent_input):
                  f'{ACCOUNT_SKILL_PATH} before anything else; the question and the requester\'s claims are in '
                  f'{ACCOUNT_REQUEST_FILENAME}. A run that ends without a saved account returns nothing. Your final message is a '
                  'short report to the requester: what the account concludes, which of their claims you assessed, and what you did not read.')
+    if schema_of(agent_input) is not None:
+        note += (' The requester asked for structured output: finish by returning your result as one object that satisfies '
+                 'the JSON Schema you were given. That object is the result; your final message is kept beside it.')
     return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
 
 
@@ -607,6 +618,8 @@ def provider_failure_reason(request, result):
             return f"The agent reached its {request['max_turns']}-turn limit before finishing."
         if result.get('subtype') == 'error_max_budget_usd':
             return f"The agent reached its ${request['max_budget_usd']:g} budget before finishing."
+        if result.get('subtype') == 'error_max_structured_output_retries':
+            return 'The agent could not produce an answer that satisfies output_schema, after the retries Claude Code allows.'
         return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
     if result.get('subtype') == 'error_max_turns':
         return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
@@ -827,7 +840,9 @@ def main():
                    '--strict-mcp-config', '--mcp-config', str(config_path),
                    '--setting-sources', '', '--disable-slash-commands']
         if agent:
-            command += ['--append-system-prompt', agent_system_prompt(json.loads((work / AGENT_INPUT_FILENAME).read_bytes()))]
+            agent_input = json.loads((work / AGENT_INPUT_FILENAME).read_bytes())
+            command += ['--append-system-prompt', agent_system_prompt(agent_input)]
+            command += structured_output_arguments(agent_input)
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    cwd=work, env=env, start_new_session=True)
         process.stdin.write(prompt.encode()); process.stdin.close()

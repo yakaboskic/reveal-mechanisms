@@ -85,6 +85,11 @@ def request_body(args):
         if args.attribute_requester: body['attribute_requester'] = True
     elif args.claim or args.claims_file or args.attribute_requester:
         sys.exit('--claim, --claims-file and --attribute-requester belong to a Scientific Account job: pass --question as well.')
+    if args.output_schema:
+        if args.question: sys.exit('--output-schema belongs to an answer job; a Scientific Account job returns its account.')
+        schema = json.loads(Path(args.output_schema).read_text())
+        if not isinstance(schema, dict): sys.exit('--output-schema must hold a JSON Schema object.')
+        body['output_schema'] = schema
     if args.claims_repository is not None: body['claims_repository'] = args.claims_repository
     for name in ('network', 'effort', 'model'):
         if getattr(args, name): body[name] = getattr(args, name)
@@ -152,6 +157,9 @@ def main():
     parser.add_argument('--claims-repository', action=argparse.BooleanOptionalAction, default=None,
                         help='Offer (or withhold) the query_claims tool. Default: on for --question jobs, off otherwise')
     parser.add_argument('--account-out', help='With --question or --job: save the account document (JSON) to this file')
+    parser.add_argument('--output-schema', metavar='SCHEMA_JSON', help='A JSON Schema file (top level "type": "object") the answer must '
+                                                                       'satisfy; the result then carries structured_output')
+    parser.add_argument('--structured-out', help='Save the structured output (JSON) to this file')
     parser.add_argument('--network', choices=('restricted', 'open'))
     parser.add_argument('--effort', choices=('low', 'medium', 'high'))
     parser.add_argument('--model')
@@ -192,6 +200,11 @@ def main():
         if result.get('response_truncated'): print('(The answer was cut at 50,000 characters.)')
         print('\n' + result.get('response', ''))
         if args.out: Path(args.out).write_text(result.get('response', '')); print(f'\nSaved to {args.out}')
+        if 'structured_output' in result:
+            print('\nStructured output:\n' + json.dumps(result['structured_output'], indent=2, ensure_ascii=False))
+            if args.structured_out:
+                Path(args.structured_out).write_text(json.dumps(result['structured_output'], indent=2, ensure_ascii=False) + '\n')
+                print(f'Saved to {args.structured_out}')
         account = result.get('account')
         if account:
             deposit = account['deposit']
