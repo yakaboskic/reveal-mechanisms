@@ -2,18 +2,16 @@
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React from "react";
 import Link from "next/link";
-import { accountSource, deliverableLabel, depositFilter, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun, type DepositFilter } from "@/lib/admin-job";
+import { deliverableLabel, depositFilter, depositOutcome, jobKindLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun, type DepositFilter } from "@/lib/admin-job";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
 import type { UrlUpdate } from "./admin/use-url-state";
 import { Age, asTone, CopyButton, Empty, FilterRow, Metric, MetricGrid, PageHeading, Pagination, Panel, SearchFilter, SelectFilter, StateStatus, Status, Table } from "./admin/ui";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
-import { AgentRequest, LIMIT_LABELS, limitValue } from "./AdminAgentRequest";
 
 const count = (value: number | null | undefined) => value == null ? "—" : value.toLocaleString();
 const plural = (value: number, noun: string) => `${value.toLocaleString()} ${noun}${value === 1 ? "" : "s"}`;
 const of = (used: number | null | undefined, limit: number | null | undefined) => limit == null ? count(used) : `${count(used)} of ${count(limit)}`;
-const yesNo = (value: boolean | null) => value == null ? "—" : value ? "Yes" : "No";
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
 
 /** What the agent could read: the claims repository, graphs and the network. Unknown parts are left out. */
@@ -33,65 +31,6 @@ function Returned({ job }: { job: AgentJob }) {
   }
   if (result.response_characters == null) return <>—</>;
   return <>{count(result.response_characters)} characters{result.response_truncated && <small><span className="admin-warning">Truncated</span></small>}{!!result.files && <small>{plural(result.files, "file")}</small>}</>;
-}
-
-/** The files an account job saved and cited, one row each: what the agent recorded and what REVEAL measured. */
-function SavedSources({ sources }: { sources: NonNullable<AgentRun["sources"]> }) {
-  const cell = (value: string | null) => value ? <code className="admin-mono">{value}</code> : "—";
-  return <>
-    <h3>Sources the agent saved</h3>
-    {sources.items.length ? <div className="admin-table-scroll" tabIndex={0}><table aria-label="Sources the agent saved"><thead><tr>{["Path", "URL", "Command", "Observed command", "Size", "sha256", "Media type", "Quotes citing it"].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
-      {sources.items.map((source, index) => <tr key={`${source.path}-${index}`}>
-        <td className="admin-mono">{source.path || "—"}{source.derived_from && <small>converted from {source.derived_from}</small>}</td>
-        <td className="admin-mono">{source.url || "—"}</td>
-        <td>{cell(source.command)}</td>
-        <td>{source.observed_command && source.observed_command === source.command ? "Same as the command" : cell(source.observed_command)}</td>
-        <td>{fileSize(source.size_bytes)}</td>
-        <td className="admin-mono" title={source.sha256 || undefined}>{shortSha(source.sha256)}</td>
-        <td>{source.media_type || "—"}</td>
-        <td>{count(source.evidence_items)}</td>
-      </tr>)}
-    </tbody></table></div> : <p>The account cites no saved source file.</p>}
-    {sources.total > sources.items.length && <p>The first {count(sources.items.length)} of {count(sources.total)} sources.</p>}
-  </>;
-}
-
-/** The settings of one agent job, for the job detail. */
-export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (Omit<AgentJob, "agent">) }) {
-  const outcome = depositOutcome({ status: job.status, agent: run });
-  const account = run.deliverable === "scientific_account";
-  const rows: [string, React.ReactNode][] = [
-    ["Asked to return", deliverableLabel(run.deliverable)],
-    ["Model · effort", [run.model, run.effort].filter(Boolean).join(" · ") || "—"],
-    ["Built-in tools", run.tools == null ? "—" : run.tools.length ? run.tools.join(", ") : "None"],
-    ["Claims repository lookups", yesNo(run.claims_repository)],
-    ["Graphs", run.graphs == null ? "—" : run.graphs.length ? run.graphs.join(", ") : "None"],
-    ["Network", run.network ? `${run.network}${run.allowed_domains?.length ? ` · extra hosts: ${run.allowed_domains.join(", ")}` : ""}` : "—"],
-    ["Prompt", run.prompt_characters == null ? "—" : `${count(run.prompt_characters)} characters${run.system_prompt_characters ? ` · system prompt ${count(run.system_prompt_characters)} characters` : " · no system prompt"}`],
-    ...(account ? [
-      ["Question", run.question_characters == null ? "—" : `${count(run.question_characters)} characters`],
-      ["Claims named by the requester", claimsAsked(run) ?? "—"],
-      ["Requester named in the account", yesNo(run.attribute_requester)],
-      ["Deposit", outcome ? <><Status tone={asTone(outcome.tone)}>{outcome.text}</Status>{run.result.deposit_id && <small className="admin-mono"> {run.result.deposit_id}</small>}</> : "—"],
-      ["Prompt-injection screen", screenSummary(run.result) ?? "—"],
-      // No claims-repository address is configured in the frontend, so the account is named by its DAPPER id, not linked.
-      ["Account", run.result.account_id ? <><span className="admin-mono">{run.result.account_id}</span> <small>{accountSource(run.result)}</small></> : "—"],
-      ["Account contents", run.result.account_id ? [`${count(run.result.objects)} objects`, run.result.claims != null && plural(run.result.claims, "claim"), run.result.quotes != null && plural(run.result.quotes, "quote"), run.result.papers != null && plural(run.result.papers, "paper"), run.result.lint_warnings != null && plural(run.result.lint_warnings, "lint warning"), run.result.dapper_version && `DAPPER ${run.result.dapper_version}`].filter(Boolean).join(" · ") : "—"],
-    ] as [string, React.ReactNode][] : []),
-    ["Response", run.result.response_characters == null ? "—" : `${count(run.result.response_characters)} characters${run.result.response_truncated ? " (truncated)" : ""}${run.result.files ? ` · ${plural(run.result.files, "file")}` : ""}`],
-    ...(run.output_schema_characters != null ? [
-      ["Structured output", `Asked for, schema ${count(run.output_schema_characters)} characters · ${run.result.structured_output_characters == null ? "none returned" : `returned ${count(run.result.structured_output_characters)} characters`}`],
-    ] as [string, React.ReactNode][] : []),
-    ["Input format", run.input_format || "—"],
-  ];
-  return <details className="admin-agent-usage" open><summary>How this agent job was run · {deliverableLabel(run.deliverable)}</summary>
-    <dl className="admin-detail-grid">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-    <h3>Limits the job was given</h3>
-    {run.limits ? <dl className="admin-detail-grid">{LIMIT_LABELS.map(([key, label]) => <div key={key}><dt>{label}</dt><dd>{run.limits![key] == null ? "Not part of this input" : limitValue(key, run.limits![key])}</dd></div>)}</dl> : <p>No limits were recorded for this job.</p>}
-    {account && run.sources && <SavedSources sources={run.sources} />}
-    <p>This summary gives sizes and counts. Show the request to read the prompt, question, claims and full response.{account && run.sources ? " Each saved source shows the path, URL and commands the agent recorded and what REVEAL measured, never the file's text." : ""} The event log below holds what the agent did.</p>
-    <AgentRequest key={job.id} jobId={job.id} />
-  </details>;
 }
 
 export const AGENT_PAGE_SIZE = 25;
@@ -123,7 +62,7 @@ export function AdminAgentJobsView({ agents, kinds, params = new URLSearchParams
       <SelectFilter label="Deposit" value={deposit} all="Any deposit" options={DEPOSIT_FILTERS} onChange={set("deposit")} />
       {filtered && <Link className="text-button" href={urlWith("/admin/agent-jobs", params, { q: null, type: null, deposit: null, page: null })}>Clear filters</Link>}
     </FilterRow>
-    <Panel title="Agent jobs" description={<>The latest {count(agents.jobs.length)} general agent jobs across all workspaces (limit {count(agents.window_limit)}). Counts and typical figures above cover these jobs, not all time. This list shows sizes only; open a job and show its request to read the prompt, question, claims and response. Sources counts the files the account lists; each one&apos;s URL, commands and checksum are in the job detail.</>}
+    <Panel title="Agent jobs" description={<>The latest {count(agents.jobs.length)} general agent jobs across all workspaces (limit {count(agents.window_limit)}). Counts and typical figures above cover these jobs, not all time. This list shows sizes only; open a job to read the prompt, question, claims and response (a recorded read). Sources counts the files the account lists; each one&apos;s URL, commands and checksum are on the job&apos;s page.</>}
       footer={shown.total > AGENT_PAGE_SIZE ? <Pagination page={shown.page} pages={shown.pages} total={shown.total} noun="agent job" href={page => urlWith("/admin/agent-jobs", params, { page })} /> : undefined}>
       {shown.items.length ? <Table label="Agent jobs" className="admin-agent-jobs" headings={AGENT_HEADINGS}>
       {shown.items.map(j => { const run = j.agent; const outcome = depositOutcome(j); const limits = run.limits; const account = run.deliverable === "scientific_account"; return <tr key={j.id}>

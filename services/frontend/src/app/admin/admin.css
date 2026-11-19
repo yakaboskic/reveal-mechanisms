@@ -198,18 +198,14 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root .admin-timings strong { text-align: right; font-weight: 500; font-variant-numeric: tabular-nums; }
 .admin-root .admin-bar { height: 8px; overflow: hidden; background: var(--a-hover); border-radius: 3px; }
 .admin-root .admin-bar i { display: block; height: 100%; background: var(--a-bar); }
-.admin-root .admin-agent-usage { margin: 16px 0; font-size: 13px; }
-.admin-root .admin-agent-usage summary { margin-bottom: 8px; font-size: 14px; font-weight: 600; color: var(--a-fg); cursor: pointer; }
+.admin-root .admin-agent-usage { margin: 0; font-size: 13px; }
 .admin-root .admin-agent-usage .admin-bar { max-width: 420px; margin: 4px 0 14px; }
-.admin-root .admin-agent-usage h3 { margin: 18px 0 8px; font-size: 13px; font-weight: 600; }
-.admin-root .admin-request-section { margin: 20px 0 8px; padding-top: 8px; border-top: 1px solid var(--a-line); }
 .admin-root .admin-request h4 { margin: 18px 0 6px; font-size: 13px; font-weight: 600; }
 .admin-root .admin-request-text-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .admin-root .admin-stop-reason { margin: 12px 0; padding: 10px 14px; font-size: 13px; color: var(--a-good); background: var(--a-good-bg); border: 1px solid var(--a-good-line); border-radius: 8px; }
 .admin-root .admin-stop-reason.hit { color: var(--a-bad); background: var(--a-bad-bg); border-color: var(--a-bad-line); }
 .admin-root tr.admin-limit-hit td { color: var(--a-bad); background: var(--a-bad-bg); }
 .admin-root .admin-request-claims { padding-left: 22px; font-size: 13px; line-height: 1.7; }
-.admin-root .admin-request-response { margin: 14px 0; }
 .admin-root .admin-request h4:first-child { margin-top: 0; }
 /* An agent's answer is shown as its text, wrapped, in the reading font: nothing in it is interpreted as markup. */
 .admin-root .admin-answer { max-height: 36rem; overflow: auto; padding: 12px 14px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; line-height: 1.65; background: var(--a-card); border: 1px solid var(--a-line); border-radius: 6px; }

@@ -25,7 +25,7 @@ For local development, `DISABLE_ADMIN_LOGIN=true` allows direct access. It works
   - what it returned: for an account the object, claim, quote and paper counts; for an answer the size of the response;
   - **Deposit**, in its own column, because a job can succeed while its account is not deposited. Such jobs are counted on the tile as "succeeded without a deposit".
 
-  The job detail shows the same settings in full under **How this agent job was run**, with every limit. The 15-second snapshot and this settings summary never carry the prompt, system prompt, question, claims or response: the backend reports their sizes and counts, taken in SQL. To read them, open one job and select **Show request** ([below](#read-one-agent-jobs-request)). Jobs queued before a job could ask for an account are answers and are marked; settings their input never had show as "—". The tiles cover the listed jobs, not all time; the line above them gives the all-time number of jobs of each kind.
+  The job's page shows the same settings in full under **Prompt and settings**, with every limit. The 15-second snapshot and this settings summary never carry the prompt, system prompt, question, claims or response: the backend reports their sizes and counts, taken in SQL. To read them, open one job and select **Show prompt and response** ([below](#read-one-agent-jobs-request)). Jobs queued before a job could ask for an account are answers and are marked; settings their input never had show as "—". The tiles cover the listed jobs, not all time; the line above them gives the all-time number of jobs of each kind.
 - Agent cost per job, in the **Execution** table, the job detail and the **Costs** tab. When an agent run ends, the workflow records a `job_metrics` row with these fields, copied from the runner's captured `runtime.json`:
   - the provider-reported Claude cost, its dollar cap and the share of the cap used;
   - turns, tokens (input, output, cache write, cache read), agent run time against its limit, and provider API time;
@@ -76,7 +76,7 @@ values are one `agent_limits` application record; no migration is needed.
 
 ## Inspect a job's logs
 
-Click any job in **Execution** (analysis, paragraph or general agent) to open its logs and diagnostics. The selection is also addressable as `/admin?job=<job-id>`, including older jobs outside the latest 100 dashboard rows. The detail shows the persisted failure message, the worker's saved diagnostic when available, local timestamps, attempt history, and phase timings.
+Click any job in **Jobs** (analysis, paragraph or general agent), or anywhere else a job is listed, to open its own page, `/admin/jobs/<job-id>`; the address works for older jobs outside the latest 100 too. The page has nine sections: **Summary** (the status, the persisted failure message, its recorded cause and saved `failure.json` files, then the times, worker, Box, attempts and recoveries), **Prompt and settings**, **Response**, **Transcript**, **Event log**, **Usage**, **Timings**, **Sandbox** (the Box id, a link to the Box console when `REVEAL_BOX_CONSOLE_URL_TEMPLATE` is set on the frontend's server as an https URL containing `{box_id}`, and, from Phase 4, the snapshot) and **Diagnostics, attempts and warnings**. A research or paragraph job's page says the three agent-only sections do not apply.
 
 The event log starts with the latest 100 persisted events, displayed chronologically so terminal failures are immediately available. **Load earlier events** retrieves previous pages by their indexed sequence without scanning other jobs. Messages, preparation stages, warnings, tool arguments and output excerpts can be searched within the loaded history. Adjacent agent text fragments are combined for readability; **Copy loaded logs** retains each original event and its stored timestamp. Active logs refresh every 15 seconds when dashboard refresh is enabled; loading earlier history pauses this until **Refresh logs** returns to the latest events.
 
@@ -84,8 +84,9 @@ Saved diagnostics come from the job's S3 workspace checkpoint when the artifact 
 
 ## Read one agent job's request
 
-On a general agent job's detail, **Show request** loads what the job was asked and what it answered, so you can see
-whether a requester's own limits stopped the run. It is loaded only when you ask, never by the 15-second refresh.
+On a general agent job's page, **Show prompt and response** loads what the job was asked and what it answered, so you
+can see whether a requester's own limits stopped the run. It is loaded only when you ask, once for both the **Prompt and
+settings** and **Response** sections, never by the 15-second refresh; **Read again** reads it anew (another record).
 
 - **Stop reason**, as a headline: "Stopped at its own max_turns (12), which the request set.", "Hit its budget
   ($1.00), the default it was given.", "Timed out at 600 s", "A response exceeded max_output_tokens (32,000)",
@@ -193,7 +194,7 @@ unknown is `null`. Times are ISO 8601 strings.
 
 The run's full transcript (Claude Code's stream: every message, thinking block, tool call and tool result, and the
 end of its stderr) is kept with each attempt ([agent jobs](agent-jobs.md#how-it-runs)) and read a page of turns at a
-time. Like the request, it is loaded only when you ask. Research and paragraph runs capture the same two files, but
+time. Like the request, it is loaded only when you ask: **Show transcript** reads the first page, **Load more turns** the next. Research and paragraph runs capture the same two files, but
 nothing reads them yet: this route serves general agent jobs only.
 
 The backend route is `GET /internal/v1/admin/jobs/{id}/transcript`, under the same `admin_content` assertion as the

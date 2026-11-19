@@ -1,11 +1,14 @@
 # Admin console checklist (Phase 3)
 
 Every field of the console as it stood at `d965518`, and where it lives after the restyle
-(`docs/plans/admin-console-and-agent-jobs.md`, Phase 3). A box is ticked when the field is on its new page; every box is ticked except the three marked pending or not in this slice.
-Nothing is dropped; a field the telemetry does not return yet is marked **pending** with the reason.
+(`docs/plans/admin-console-and-agent-jobs.md`, Phase 3). A box is ticked when the field is on its new page; every box is
+ticked except those marked pending or not in this slice. Nothing is dropped; a field the telemetry does not return yet is
+marked **pending** with the reason. Slice 3b ticked the job-detail fields against the new page and then deleted
+`AdminJobDetail`, `AgentRunDetail` and `AdminAgentRequest`.
 
 Pages: **Shell** (sidebar, top bar, notices on every page), **Overview** `/admin`, **Jobs** `/admin/jobs`,
-**Job detail** (today's detail, opened on Jobs with `?job=<id>` until slice 3b moves it to `/admin/jobs/[id]`),
+**Job detail** `/admin/jobs/[id]` (nine sections: Summary, Prompt and settings, Response, Transcript, Event log, Usage,
+Timings, Sandbox, Diagnostics, attempts and warnings),
 **Agent jobs** `/admin/agent-jobs`, **Costs** `/admin/costs`, **Database** `/admin/database`,
 **Activity** `/admin/activity`, **Performance** `/admin/performance`, **Limits** `/admin/limits`.
 
@@ -67,31 +70,36 @@ Pages: **Shell** (sidebar, top bar, notices on every page), **Overview** `/admin
 - [x] Column "Agent cost" (`JobCost`: provider, estimate, not reported, turns, budget share) → Jobs
 - [x] Column "Worker lease": expired warning, Finished, lease time or "Awaiting worker", recoveries → Jobs
 - [x] Empty state "No jobs match this view. Research jobs will appear here as they are created." → Jobs
-- [x] Job detail opens below the table → Jobs with `?job=<id>` (open item in the URL)
+- [x] Job detail opens below the table → its own page, `/admin/jobs/[id]`, from every job link (`jobHref`); `?job=` is
+  dropped with no redirect (settled choice 4)
 
-## `AdminJobDetail` (kept as it is; slice 3b replaces it)
+## `AdminJobDetail` (deleted in slice 3b; every field is on the job detail page)
 
-- [x] Heading "Execution detail · <label>" and the job id → Job detail
-- [x] "Refresh logs" and "Close detail" buttons → Job detail
+- [x] Heading "Execution detail · <label>" and the job id → Job detail heading "Job <short id>", with the job's label and
+  the full id to copy
+- [x] "Refresh logs" and "Close detail" buttons → Job detail heading: "Refresh logs", and "Back to jobs" in place of closing
 - [x] "Loading job logs and diagnostics…" → Job detail
 - [x] Error with "Showing previously loaded logs." (stale banner) → Job detail
-- [x] Status, stage and "Link to this job" → Job detail (link now points at the Jobs page URL)
-- [x] Failure block: code, message, recorded cause (type · phase, message, time), saved `failure.json` files → Job detail
-- [x] `AgentRunDetail` (see Agent jobs below) → Job detail
-- [x] `AgentUsage`: summary with cost; budget bar → Job detail
-- [x] `AgentUsage` rows: Agent cost, Budget used, Turns, Agent run time, Provider API time, Tokens output · input, Tokens cache write · cache read, Tool calls (failed), Lint checks · draft writes, Model, Run outcome → Job detail
-- [x] `AgentUsage`: Runner reason; "Research statement for <parent job>" link → Job detail (link now points at the Jobs page URL)
-- [x] dl rows: Created, Started, Updated, Finished, Current attempt started, Worker, Box, Attempt / recoveries → Job detail
-- [x] Event log heading, count, "earlier events available" / "beginning of retained history", live/refresh/finished note → Job detail
-- [x] Event search "Search loaded messages, tools or stages" → Job detail
-- [x] "Load earlier events", "Copy loaded logs", "Oldest to newest · adjacent agent text fragments are combined" → Job detail
-- [x] Each event: time, id · kind, stage · state, message, tool name · graph, tool arguments, tool output (open when failed), event data; failed events marked → Job detail
-- [x] Event log empty states ("No loaded events match this search." / "No retained events are available for this job.") → Job detail
-- [x] Warnings (count and list) → Job detail
-- [x] Saved diagnostics: heading, description, one `<details>` per file (failure.json open), unavailable reason, empty note, "first 20" note → Job detail
-- [x] Attempt history: Attempt, Started, Worker at claim, Box at claim; "Latest 50 attempt snapshots." → Job detail
-- [x] Wall time and phase timings: Queue / pre-attempt, Attempt wall time, Box lifetime, Box setup, Agent execution, Artifact capture, Box cleanup, with bars and the instrumentation note → Job detail
-- [x] 15-second refresh of an active job's logs, paused once earlier events are loaded → Job detail
+- [x] Status, stage and "Link to this job" → Summary status callout; the page's own URL is the link to the job
+- [x] Failure block: code, message, recorded cause (type · phase, message, time), saved `failure.json` files → Summary
+  status callout
+- [x] `AgentRunDetail` (see below) → Prompt and settings, and Response
+- [x] `AgentUsage`: summary with cost; budget bar → Usage
+- [x] `AgentUsage` rows: Agent cost, Budget used, Turns, Agent run time, Provider API time, Tokens output · input, Tokens cache write · cache read, Tool calls (failed), Lint checks · draft writes, Model, Run outcome → Usage
+- [x] `AgentUsage`: Runner reason; "Research statement for <parent job>" link → Usage (the link opens the parent's page)
+- [x] dl rows: Created, Started, Updated, Finished, Current attempt started, Worker, Box, Attempt / recoveries → Summary
+  key values (with Kind and Owner, and delivery recoveries and handoffs when recorded)
+- [x] Event log heading, count, "earlier events available" / "beginning of retained history", live/refresh/finished note → Event log
+- [x] Event search "Search loaded messages, tools or stages" → Event log
+- [x] "Load earlier events", "Copy loaded logs", "Oldest to newest · adjacent agent text fragments are combined" → Event log
+- [x] Each event: time, id · kind, stage · state, message, tool name · graph, tool arguments, tool output (open when failed), event data; failed events marked → Event log
+- [x] Event log empty states ("No loaded events match this search." / "No retained events are available for this job.") → Event log
+- [x] Warnings (count and list) → Diagnostics, attempts and warnings (and "No warnings." when there are none)
+- [x] Saved diagnostics: heading, description, one `<details>` per file (failure.json open), unavailable reason, empty note, "first 20" note → Diagnostics, attempts and warnings
+- [x] Attempt history: Attempt, Started, Worker at claim, Box at claim; "Latest 50 attempt snapshots." → Diagnostics, attempts and warnings
+- [x] Wall time and phase timings: Queue / pre-attempt, Attempt wall time, Box lifetime, Box setup, Agent execution, Artifact capture, Box cleanup, with bars and the instrumentation note → Timings
+- [x] 15-second refresh of an active job's logs, paused once earlier events are loaded → Job detail (the job record
+  only; the recorded reads never refresh)
 
 ## `AdminAgentJobs`: list (`AdminAgentJobsView`)
 
@@ -118,25 +126,61 @@ Pages: **Shell** (sidebar, top bar, notices on every page), **Overview** `/admin
 - [x] New column "Screen": the deposit screen's verdict (`screenSummary`) → Agent jobs
 - [ ] Lint refusals → **pending**: the telemetry returns only `lint_checks` (calls) and `lint_warnings` (on the accepted account), not refusals
 
-## `AdminAgentJobs`: one job (`AgentRunDetail`, in the job detail)
+## `AdminAgentJobs`: one job (`AgentRunDetail`, deleted in slice 3b)
 
-- [x] Summary "How this agent job was run · <type>" → Job detail
-- [x] dl rows: Asked to return, Model · effort, Built-in tools, Claims repository lookups, Graphs, Network, Prompt → Job detail
-- [x] dl rows (accounts): Question, Claims named by the requester, Requester named in the account, Deposit, Prompt-injection screen, Account, Account contents → Job detail
-- [x] dl rows: Response, Structured output, Input format → Job detail
-- [x] "Limits the job was given" (Run time, Turns, Budget, REVEAL tool calls, Output per response; "Not part of this input") → Job detail
-- [x] "Sources the agent saved": Path (converted from), URL, Command, Observed command ("Same as the command"), Size, sha256, Media type, Quotes citing it; capped and empty notes → Job detail
-- [x] Note on sizes, sources and the event log → Job detail
+- [x] Summary "How this agent job was run · <type>" → Prompt and settings: the "Asked to return" setting (the panel
+  replaces the summary line)
+- [x] dl rows: Asked to return, Model · effort, Built-in tools, Claims repository lookups, Graphs, Network, Prompt → Prompt and settings: Settings (extra hosts in their own row)
+- [x] dl rows (accounts): Question, Claims named by the requester, Requester named in the account → Prompt and settings:
+  Settings; Deposit, Prompt-injection screen, Account, Account contents → Response
+- [x] dl rows: Response, Structured output, Input format → Response (the size line); Prompt and settings: Settings
+  (Structured output, Input format)
+- [x] "Limits the job was given" (Run time, Turns, Budget, REVEAL tool calls, Output per response; "Not part of this input") → Prompt and settings: Limits, until the request is read; then the table's Frozen column, which says "Not part of this input" too
+- [x] "Sources the agent saved": Path (converted from), URL, Command, Observed command ("Same as the command"), Size, sha256, Media type, Quotes citing it; capped and empty notes → Response
+- [x] Note on sizes, sources and the event log → the Prompt and settings, Response and Event log panels' descriptions, and
+  the note under the sources
 
-## `AdminAgentRequest` (in the job detail)
+## `AdminAgentRequest` (deleted in slice 3b; every field is on the job detail page)
 
-- [x] Section "Request" with the recorded-read note; "Show request" / "Loading…" / "Hide request"; error → Job detail
-- [x] Stop reason (highlighted when a limit was hit); failure code and message → Job detail
-- [x] Prompt, System prompt, Question, Claims named (with triples), Output schema, each with Copy → Job detail
-- [x] Settings: Asked to return, Model · effort, Built-in tools, Graphs, Network, Extra hosts, Claims repository lookups, Requester named in the account, Input format, Owner workspace → Job detail
-- [x] Limits table: Limit, Requested, Frozen, Ceiling, Used; hit row; applied, ceiling basis and default notes → Job detail
-- [x] Response: characters, truncated, source, attempt, unavailable reason, text with Copy → Job detail
-- [x] Structured output; Output files (path · size); "Read by … at …" → Job detail
+- [x] Section "Request" with the recorded-read note; "Show request" / "Loading…" / "Hide request"; error → Prompt and
+  settings and Response: "Show prompt and response" / "Loading…" / "Read again" (one read shared by both panels; there is
+  nothing to hide on the job's own page), the recorded-read note in the descriptions, and the error, keeping a previous read
+- [x] Stop reason (highlighted when a limit was hit); failure code and message → Prompt and settings, first
+- [x] Prompt, System prompt, Question, Claims named (with triples), Output schema, each with Copy → Prompt and settings
+- [x] Settings: Asked to return, Model · effort, Built-in tools, Graphs, Network, Extra hosts, Claims repository lookups, Requester named in the account, Input format, Owner workspace → Prompt and settings: Settings (from the job record, so
+  they show before the request is read); Owner workspace → Summary "Owner"
+- [x] Limits table: Limit, Requested, Frozen, Ceiling, Used; hit row; applied, ceiling basis and default notes → Prompt and settings
+- [x] Response: characters, truncated, source, attempt, unavailable reason, text with Copy → Response (the text wrapped
+  in the reading font; the repository has no Markdown renderer, and the agent's text is never interpreted as markup)
+- [x] Structured output; Output files (path · size); "Read by … at …" → Response (output files add their sha256); Prompt
+  and settings ("Read by")
+
+## Job detail page: new in slice 3b
+
+- [x] Raw JSON last in its section, folded: job, request, response, metrics, transcript page → each section
+- [x] How Claude Code was started (`configuration`): attempt, Claude Code pinned and observed versions, arguments,
+  wrapper, prompt on standard input, environment, built-in and REVEAL MCP tools given, MCP servers, Box egress, toolchain
+  stamp, account kit, limits enforced and frozen, fetch and convert tools, what it reported at start (version, model,
+  permission mode, tools, MCP servers with status), transcript files (stored, written, middle left out); why it is
+  missing → Prompt and settings
+- [x] Deposit screen in parts: verdict, classifier (enabled, disabled with its lock not pinned, not loaded), failed
+  check, score against threshold, where, texts scored → Response
+- [x] Account: where it is served from (claims repository or the copy kept with the job) → Response
+- [x] Transcript: "Show transcript"; attempt chooser; turns loaded of total, failures, notices skipped; each turn's
+  index, role and time; text; thinking folded with its size; tool calls with arguments (pretty JSON, or as received and
+  marked when partial or cut) and their result paired by call id across pages; failed calls marked and opened; a result
+  whose call is not loaded; unfinished (partial) and cut-at-20,000 marks; the cut marker; the run's end (subtype, stop
+  reason, turns, duration, API time, cost); "Load more turns" while more remain; missing reasons; stream cut and
+  incomplete notes; stderr last (last 20,000 characters, cut, unreadable); "Last page read by … at …" → Transcript
+- [x] Sandbox: Box id with copy, Box phase, Box lifetime, Boxes by attempt → Sandbox
+- [x] Box console link → Sandbox, only when `REVEAL_BOX_CONSOLE_URL_TEMPLATE` (server-side, an https URL with
+  `{box_id}`) is set; otherwise the id to copy and a note that the link comes with Phase 4
+- [ ] Box snapshot → **not in this slice**: Sandbox says "Not yet: Box snapshots come with Phase 4."
+- [ ] Each source's fetch time, software and reproducibility result → **pending**: the job record's sources carry path,
+  URL, command, observed command, size, sha256, media type and citing quotes only
+- [ ] The account linked to the claims console → **pending**: no claims-console address is configured in the frontend,
+  so the account is named by its DAPPER id
+- [ ] A withheld account's passage → **not shown by design**: the screen records where the text was, never the text
 
 ## `AdminCosts`
 
