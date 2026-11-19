@@ -35,6 +35,7 @@ RUN=${2:-account-run}
 HERE=$(cd "$(dirname "$0")" && pwd)
 
 PHENOTYPE=${PHENOTYPE:-IBD}                        # the claims repository's phenotype code
+COLLECTION=${COLLECTION:-mouse_msigdb}             # the PIGEAN gene-set library the scores come from (cfde-inc-v2 is retired)
 DISEASE=${DISEASE:-inflammatory bowel disease}     # how to name it to the agent
 TOP_GENES=${TOP_GENES:-3}                          # candidates to check, strongest first (at most 20)
 LEAVE_TO_AGENT=${LEAVE_TO_AGENT:-0}                # send the last N claims without a triple, for the agent to supply
@@ -77,25 +78,26 @@ jq '{user_id, principal_kind, workspace_expires_at}' <<< "$ME"
 if [ -s "$RUN/request.json" ]; then
   step "2. Candidate genes: reusing $RUN/candidates.json and $RUN/request.json from the earlier run"
 else
-  step "2. Candidate genes for $PHENOTYPE from the claims repository"
-  # The validation-challenge query: genes ranked by PIGEAN combined evidence, keeping those whose gene-set
-  # prior is below PRIOR_MAX. Each gene's association is a Claim the repository holds, with its scores.
-  jq -n --arg phenotype "$PHENOTYPE" --argjson priorMax "$PRIOR_MAX" --argjson topGenes "$TOP_GENES" '{
-      query: ("query Candidates($phenotype: ID!, $priorMax: Float!, $topGenes: Int!) { "
-        + "pigeanValidationChallenge(phenotype: $phenotype, where: {prior: {lt: $priorMax}}, "
-        + "orderBy: {field: COMBINED, dir: DESC}, topGenes: $topGenes, "
-        + "setOrder: {field: BETA_UNCORRECTED, dir: DESC}, setsPerGene: 1, first: 100) { "
-        + "warnings rows { geneAssociation { gene { symbol } combined logBf prior claim { id triple { object } } } } } }"),
-      variables: {phenotype: $phenotype, priorMax: $priorMax, topGenes: $topGenes}
+  step "2. Candidate genes for $PHENOTYPE ($COLLECTION gene sets) from the claims repository"
+  # The validation-challenge query: the pigean collection's top-genes-with-sets query template, run with runQuery.
+  # Genes ranked by PIGEAN combined evidence, keeping those whose gene-set prior is below PRIOR_MAX. Each row
+  # serves its measurement Claim, which the repository holds, with its scores. (GET $CLAIMS_API_URL/v1/queries
+  # describes the template's params and rows.)
+  jq -n --arg phenotype "$PHENOTYPE" --arg collection "$COLLECTION" --argjson priorMax "$PRIOR_MAX" --argjson topGenes "$TOP_GENES" '{
+      query: ("query Candidates($variables: JSON) { runQuery(collection: \"pigean\", query: \"top-genes-with-sets\", "
+        + "variables: $variables, claims: [\"measurement\"]) }"),
+      variables: {variables: {trait: $phenotype, library: $collection, priorMax: $priorMax, topGenes: $topGenes,
+                              setsPerGene: 1}}
     }' > "$RUN/candidates-query.json"
   jq -r .query "$RUN/candidates-query.json"
   show "curl -X POST $CLAIMS_API_URL/v1/graphql -H 'Content-Type: application/json' -d @$RUN/candidates-query.json"
   curl -sS --fail-with-body -X POST "$CLAIMS_API_URL/v1/graphql" -H 'Content-Type: application/json' \
     -d @"$RUN/candidates-query.json" > "$RUN/candidates-response.json"
-  jq -e '.data.pigeanValidationChallenge.rows | length > 0' "$RUN/candidates-response.json" >/dev/null \
+  jq -e '.data.runQuery.rows | length > 0' "$RUN/candidates-response.json" >/dev/null \
     || { echo "The claims repository returned no candidates:" >&2; cat "$RUN/candidates-response.json" >&2; exit 1; }
-  jq '[.data.pigeanValidationChallenge.rows[].geneAssociation
-       | {gene: .gene.symbol, combined, direct: .logBf, prior, claim_id: .claim.id, trait: .claim.triple.object}]' \
+  jq '[.data.runQuery.rows[]
+       | {gene: .subject.value, combined: .metrics.combined, direct: .metrics.log_bf, prior: .metrics.prior,
+          claim_id: .claims.measurement.id, trait: .claims.measurement.triple.object}]' \
     "$RUN/candidates-response.json" > "$RUN/candidates.json"
 
   jq -e 'all(.[]; .trait | test("^[A-Za-z][A-Za-z0-9+._-]*:\\S+$"))' "$RUN/candidates.json" >/dev/null \
@@ -104,7 +106,7 @@ else
   # The job: a question, one claim per gene for the agent to assess for or against, and how to do the work.
   # attribute_requester is left out, so the account does not name you: it is attributed to the
   # "REVEAL Mechanisms agent service" organization. Add "attribute_requester": true to be named as a Person.
-  jq --arg disease "$DISEASE" --arg phenotype "$PHENOTYPE" --arg priorMax "$PRIOR_MAX" --argjson leave "$LEAVE_TO_AGENT" \
+  jq --arg disease "$DISEASE" --arg phenotype "$PHENOTYPE" --arg collection "$COLLECTION" --arg priorMax "$PRIOR_MAX" --argjson leave "$LEAVE_TO_AGENT" \
     --argjson budget "$BUDGET_USD" --argjson searches "$SEARCHES" --argjson papers "$PAPERS" \
     --argjson characters "$PAPER_CHARACTERS" --argjson tool_calls "$TOOL_CALLS" 'length as $length_all | def length_all: $length_all; {
       kind: "agent",
@@ -121,7 +123,7 @@ else
                                                     relation: "biolink:associated_with",
                                                     object_entity: $c.trait} else {} end))),
       prompt: ("These genes are the top of the claims repository PIGEAN validation challenge for \($disease) "
-               + "(\($phenotype)): the strongest combined evidence among genes whose gene-set prior is below "
+               + "(\($phenotype)), run with the \($collection) gene-set library: the strongest combined evidence among genes whose gene-set prior is below "
                + "\($priorMax), so their support is mostly direct GWAS signal. PIGEAN scores are on a log scale.\n\n"
                + (map("- \(.gene) (HGNC.SYMBOL:\(.gene)): combined \(.combined), direct GWAS \(.direct), gene-set prior "
                       + "\(.prior); repository claim \(.claim_id)") | join("\n"))
