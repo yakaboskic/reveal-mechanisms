@@ -116,7 +116,8 @@ other failure reaches creation recovery as before. Nothing else moves earlier:
 the Box is still created at its create step, never in prepare or from a warm pool.
 
 `scripts/build_box_toolchain_snapshot.py` builds the snapshot. It creates one
-paid Box per run and has not been run against Upstash yet. Snapshots belong to
+paid Box per run. QA's snapshot was first built on 2026-11-19 (Upstash Box labels are at most 20
+characters, which the builder's stamp label now respects). Snapshots belong to
 one Box account, so build one with each environment's `UPSTASH_BOX_API_KEY` (QA
 and production differ), set the printed id as `REVEAL_BOX_TOOLCHAIN_SNAPSHOT` in
 that environment, and rebuild whenever `CLAUDE_VERSION` or a pinned package

@@ -94,6 +94,8 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    # Built 2026-11-19 with QA's Box key (toolchain stamp 1889f86520c980d3; .runtime/workflow/toolchain-snapshot-qa.json).
+    REVEAL_BOX_TOOLCHAIN_SNAPSHOT: 6d34c836-21d6-4322-a089-cffe0db69d88
     REVEAL_PUBLIC_API_URL: https://api-qa.hugeampkpnbi.org/api/reveal
     REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms-qa.vercel.app
     REVEAL_CANONICAL_URL: https://reveal-mechanisms-qa.vercel.app

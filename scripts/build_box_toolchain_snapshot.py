@@ -54,11 +54,12 @@ print(json.dumps({'reveal':entries('/reveal'),'state':entries('/reveal/state'),
 
 
 def plan(claude_version=CLAUDE_VERSION):
+    # Upstash Box labels are at most 20 characters, so the label carries 14 hex digits of the stamp.
     stamp = BoxExecutionAdapter.toolchain_stamp(claude_version)
     # The job bootstrap itself (stamp branch included) installs the toolchain; only apt's cache is dropped.
     script = BoxExecutionAdapter.bootstrap_script(claude_version, unpack=False) + 'sudo apt-get clean\n'
     return {'format': TOOLCHAIN_FORMAT, 'claude_version': claude_version, 'stamp': stamp,
-            'name': 'reveal-toolchain-' + stamp[:16], 'labels': ['reveal-toolchain', 'stamp-' + stamp[:16]], 'script': script}
+            'name': 'reveal-toolchain-' + stamp[:16], 'labels': ['reveal-toolchain', 'stamp-' + stamp[:14]], 'script': script}
 
 
 def problems(facts, expected):
@@ -142,9 +143,15 @@ def main(argv=None, factory=None):
     try:
         result = asyncio.run(build(environ, factory, delete_builder=args.delete_builder))
     except Exception as exc:
-        # Provider bodies can echo request details; report only the failure class and our own messages.
-        print('Toolchain snapshot build failed: ' + (str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__),
-              file=sys.stderr)
+        # Provider bodies can echo request details: report the provider's status and message with the key removed,
+        # cut short, and our own messages whole.
+        if isinstance(exc, RuntimeError):
+            detail = str(exc)
+        else:
+            message = ' '.join(str(exc).replace(environ['UPSTASH_BOX_API_KEY'], '[UPSTASH_BOX_API_KEY]').split())[:300]
+            status = getattr(exc, 'status_code', None)
+            detail = type(exc).__name__ + (f' (HTTP {status})' if status else '') + (': ' + message if message else '')
+        print('Toolchain snapshot build failed: ' + detail, file=sys.stderr)
         return 1
     text = json.dumps(result, indent=2)
     if args.manifest: args.manifest.write_text(text + '\n')
