@@ -4,7 +4,8 @@
 The model is gated on Hugging Face, so the platform's CI never downloads it: an operator fetches it once with their own
 token into .deployment-assets/prompt-guard-2-22m/, and platform_bundle.py copies that folder into every bundle,
 checked against services/backend/agent-runtime/prompt-guard-release.json. The image build verifies it again
-(deposit_screen.verify_model) and never converts or downloads anything.
+(deposit_screen.verify_model) and never converts or downloads anything. Until the lock is pinned the classifier is off:
+platform_bundle.py calls nothing here (except to pin) and bundles carry no model.
 
 `fetch`:
   - reuses the folder when it already matches the lock;

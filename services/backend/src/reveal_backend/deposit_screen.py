@@ -43,11 +43,18 @@ short attack never falls only across a boundary). A window scoring at or above t
 (REVEAL_PROMPT_GUARD_THRESHOLD, default 0.5) withholds the account. More than REVEAL_PROMPT_GUARD_MAX_WINDOWS windows
 (default 2,000) or MAX_SCREEN_CHARACTERS characters withholds it too: nothing is ever truncated unscreened.
 
-The model is loaded once per process (`startup`, from the API's lifespan), into one InferenceSession with one
-thread, and warmed with a dummy input. No job loads it. In a deployed environment (REVEAL_ENVIRONMENT other than
-development or test) a missing or unverified model stops the process from starting; the image build checks it too
-(`verify_model`, as verify_release does for DAPPER). In development and tests the classifier is whatever was
-installed (`install`, a fake in tests); with none, only the fixed checks run and the verdict says so.
+**The lock decides whether the classifier runs** (services/backend/agent-runtime/prompt-guard-release.json). The
+model is gated on Hugging Face, so the lock ships unpinned until an operator fetches and pins it. While it is unpinned
+(`enabled` is False) the classifier is off everywhere: the bundle carries no model, the image build's `verify_model`
+prints "classifier disabled: lock not pinned" and checks nothing, every process starts, and every verdict records the
+classifier as `disabled` while the fixed checks still run and withhold exactly as they do with it.
+
+Once the lock is pinned, the model is loaded once per process (`startup`, from the API's lifespan), into one
+InferenceSession with one thread, and warmed with a dummy input. No job loads it. In a deployed environment
+(REVEAL_ENVIRONMENT other than development or test) a missing or unverified model stops the process from starting; the
+image build checks it too (`verify_model`, as verify_release does for DAPPER). In development and tests the classifier
+is whatever was installed (`install`, a fake in tests); with none, only the fixed checks run and the verdict says so
+(`not_loaded`).
 
 **The verdict** is a small record with no text in it: `outcome` ('passed' or 'withheld'), the `check` that failed,
 where (`location`: a source file and line range, a ledger call, or an account field), the classifier's `score` and
@@ -212,7 +219,7 @@ URL_SCHEME = re.compile(r'^[A-Za-z][A-Za-z0-9+.-]*:(?!\s)')
 
 
 class ScreenError(RuntimeError):
-    """The screen cannot run where it must: no verified model in a deployed process."""
+    """The screen cannot run where it must: no verified model in a deployed process whose lock is pinned."""
 
 
 class Finding(Exception):
@@ -793,14 +800,16 @@ def screen(document, account, papers, kept, calls, ledger_root, *, classifier=No
 
     `account` is the job's frozen account block, `papers` the gate's summary of the saved sources with `kept` their
     bytes by sha256, `calls` the run's ledger entries with request and response paths relative to `ledger_root`.
-    Raises ScreenError in a deployed process that has no classifier."""
+    With no classifier and an unpinned lock the classifier is `disabled` and only the fixed checks run. Raises
+    ScreenError in a deployed process whose lock is pinned but that has no classifier."""
     started = time.monotonic()
     classifier = classifier or installed()
-    if classifier is None and deployed():
+    state = classifier.name if classifier else 'not_loaded' if enabled() else 'disabled'
+    if state == 'not_loaded' and deployed():
         raise ScreenError('The prompt-injection classifier is not loaded; a deployed process loads it when it starts')
     limit = threshold()
     verdict = {'outcome': 'passed', 'check': None, 'location': None, 'score': None, 'threshold': limit,
-               'classifier': classifier.name if classifier else 'not_loaded', 'windows': 0, 'texts': 0}
+               'classifier': state, 'windows': 0, 'texts': 0}
     sources = source_texts(papers, kept)
     try:
         fixed_checks(document, account, [text for _, _, text in sources])
@@ -840,11 +849,37 @@ def _sha256(path):
 
 
 def pinned(lock):
-    """True when the lock names a revision and a sha256 for every model file."""
+    """True when the lock names a revision, a sha256 for every model file and for every downloaded source file, as
+    scripts/prompt_guard_assets.py writes it when it pins."""
     files = lock.get('files') if isinstance(lock.get('files'), dict) else {}
+    sources = lock.get('source_files') if isinstance(lock.get('source_files'), dict) else {}
+    hexes = lambda values, size: all(isinstance(value, str) and re.fullmatch(f'[0-9a-f]{{{size}}}', value) for value in values)
     return (isinstance(lock.get('revision'), str) and re.fullmatch(r'[0-9a-f]{40}', lock['revision']) is not None
-            and set(MODEL_FILES) <= set(files)
-            and all(isinstance(digest, str) and re.fullmatch(r'[0-9a-f]{64}', digest) for digest in files.values()))
+            and set(MODEL_FILES) <= set(files) and hexes(files.values(), 64) and bool(sources) and hexes(sources.values(), 64))
+
+
+def unpinned(lock):
+    """True when the lock is exactly the shipped template: no revision, no source files, every file checksum null."""
+    files = lock.get('files')
+    return (lock.get('revision') is None and lock.get('source_files') == {}
+            and isinstance(files, dict) and all(value is None for value in files.values()))
+
+
+def lock_state(lock):
+    """'pinned' or 'disabled'. A lock that is neither (half-pinned, hand-edited) raises ScreenError: it never reads as
+    disabled, so it fails bundling, the image build and startup."""
+    if pinned(lock):
+        return 'pinned'
+    if unpinned(lock):
+        return 'disabled'
+    raise ScreenError(f'{LOCK.name} is half-pinned: neither fully pinned nor the unpinned template. Re-run '
+                      'scripts/platform_bundle.py --fetch-assets --pin-prompt-guard, or restore the lock from git')
+
+
+def enabled(lock_path=None):
+    """True when the lock is pinned, so the classifier runs; False when it is the unpinned template. Read on every call
+    (one small file): the lock, not process state, decides. A missing, malformed or half-pinned lock raises."""
+    return lock_state(json.loads(Path(lock_path or LOCK).read_text())) == 'pinned'
 
 
 def check_files(directory, lock):
@@ -917,22 +952,33 @@ def load_model(directory, lock):
     return classifier
 
 
+DISABLED = 'classifier disabled: lock not pinned'
+
+
 def verify_model(directory=None, lock_path=None, *, loader=None):
     """Check the model folder against the lock and load it once. Returns the Classifier; raises ScreenError (or the
     runtime's own error for a file it cannot load). The image build runs this, so an image without the model, or with
-    other bytes, is never built."""
+    other bytes, is never built while the lock is pinned. With an unpinned lock the classifier is off: it prints so,
+    checks nothing and returns None."""
     lock = json.loads(Path(lock_path or LOCK).read_text())
+    if lock_state(lock) == 'disabled':
+        print(DISABLED)
+        return None
     directory = Path(directory) if directory else model_dir()
     check_files(directory, lock)
     return (loader or load_model)(directory, lock)
 
 
 def startup():
-    """Load and warm the process's classifier when it starts. A deployed process without a verified model raises, so
-    it never starts; elsewhere a missing model is logged and only the fixed checks run."""
+    """Load and warm the process's classifier when it starts. With an unpinned lock the classifier is off and every
+    process starts. With a pinned one, a deployed process without a verified model raises, so it never starts;
+    elsewhere a missing model is logged and only the fixed checks run."""
     threshold(); max_windows()   # a malformed setting stops the process here, not a job later
     if installed() is not None:
         return installed()
+    if not enabled():
+        log.warning('Deposit screen: %s; the fixed checks run alone', DISABLED)
+        return None
     directory = model_dir()
     if deployed():
         install(verify_model(directory))

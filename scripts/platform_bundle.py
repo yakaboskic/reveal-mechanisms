@@ -11,7 +11,7 @@ import tempfile
 
 from dotenv import dotenv_values
 from platform_assets import prepare as prepare_assets, RDS_CA_SHA256
-from prompt_guard_assets import copy_verified as copy_prompt_guard, fetch as fetch_prompt_guard
+from prompt_guard_assets import copy_verified as copy_prompt_guard, fetch as fetch_prompt_guard, pinned as prompt_guard_pinned
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,9 +32,12 @@ FILES = ('.dockerignore', 'services/backend/Dockerfile', 'services/backend/pypro
     *RUNTIME_SCRIPTS)
 # The deposit screen's classifier (deposit_screen). It is gated on Hugging Face, so it is never fetched in Docker: an
 # operator fetches it once into PROMPT_GUARD with their own token, and every bundle carries that folder, checked
-# against PROMPT_GUARD_LOCK (prompt_guard_assets).
+# against PROMPT_GUARD_LOCK (prompt_guard_assets). The lock decides: while it is unpinned the classifier is off, and
+# the bundle's PROMPT_GUARD folder holds only PROMPT_GUARD_DISABLED, so the Dockerfile's COPY of it still succeeds and
+# the image build's verify_model reads the same lock and checks nothing.
 PROMPT_GUARD = '.deployment-assets/prompt-guard-2-22m'
 PROMPT_GUARD_LOCK = 'services/backend/agent-runtime/prompt-guard-release.json'
+PROMPT_GUARD_DISABLED = 'CLASSIFIER-DISABLED'
 REQUIRED = (*FILES, 'services/backend/agent-runtime/dapper-release.json', PROMPT_GUARD_LOCK,
     'services/backend/vendor/dapper-0.2.1-a1/VENDOR.json',
     'data/dapper/0.2.0/snapshot.json', 'data/dapper/2026-09-24-v8/snapshot.json',
@@ -112,14 +115,39 @@ def configured_source(root, env, key, fallback):
     return value if value.is_absolute() else root / value
 
 
+def lock_pinned(lock_path):
+    """True when the lock is pinned, False when it is exactly the unpinned template (the classifier is off). Anything
+    in between raises: a half-pinned lock never quietly turns the classifier off."""
+    lock = json.loads(Path(lock_path).read_text())
+    if prompt_guard_pinned(lock):
+        return True
+    files = lock.get('files')
+    if (lock.get('revision') is None and lock.get('source_files') == {}
+            and isinstance(files, dict) and all(value is None for value in files.values())):
+        return False
+    raise RuntimeError(f'{Path(lock_path).name} is half-pinned: neither fully pinned nor the unpinned template. Re-run '
+                       'scripts/platform_bundle.py --fetch-assets --pin-prompt-guard, or restore the lock from git')
+
+
+def disabled_prompt_guard(target, lock_path):
+    """The bundle's classifier folder while the lock is unpinned: a marker only, never a model."""
+    Path(target).mkdir(parents=True)
+    (Path(target) / PROMPT_GUARD_DISABLED).write_text(
+        'The deposit screen\'s classifier is disabled: ' + PROMPT_GUARD_LOCK + ' is not pinned.\n'
+        'This image carries no model, and the deposit screen runs its fixed checks only.\n')
+    return {'repository': json.loads(Path(lock_path).read_text())['repository'], 'revision': None,
+            'classifier': 'disabled', 'reason': 'lock not pinned'}
+
+
 def export(output, *, root=ROOT, allow_dirty=False, fetch_assets=False, pin_prompt_guard=False, hf_token=None):
     root, output = Path(root).resolve(), Path(output).absolute()
     if output.exists() or output.is_symlink():
         raise FileExistsError('Refusing to overwrite an existing output directory: ' + str(output))
     if pin_prompt_guard and not fetch_assets:
         raise RuntimeError('--pin-prompt-guard fetches the model, so it needs --fetch-assets')
-    if fetch_assets:
-        # Before the clean-tree check: pinning writes the lock, which is then a change to review and commit.
+    if fetch_assets and (pin_prompt_guard or lock_pinned(root / PROMPT_GUARD_LOCK)):
+        # Before the clean-tree check: pinning writes the lock, which is then a change to review and commit. An
+        # unpinned lock that is not being pinned fetches nothing: the classifier is off.
         fetch_prompt_guard(root / PROMPT_GUARD, root / PROMPT_GUARD_LOCK, token=hf_token, pin=pin_prompt_guard)
     dirty = bool(git(root, 'status', '--porcelain', '--untracked-files=all'))
     if dirty and not allow_dirty:
@@ -151,8 +179,12 @@ def export(output, *, root=ROOT, allow_dirty=False, fetch_assets=False, pin_prom
                 ca = configured_source(root, env, 'REVEAL_MYSQL_CA_FILE', '.runtime/certs/rds-ca.pem')
             assets['verification'] = prepare_assets(staging / '.deployment-assets', root=staging,
                 dapper=dapper, dismech=dismech, ca=ca)
-        # In both modes the classifier comes from the operator's verified folder, never from Docker.
-        assets['prompt_guard'] = copy_prompt_guard(root / PROMPT_GUARD, staging / PROMPT_GUARD, staging / PROMPT_GUARD_LOCK)
+        # In both modes the classifier comes from the operator's verified folder, never from Docker, and only when the
+        # bundled lock pins it; otherwise the folder holds the disabled marker.
+        if lock_pinned(staging / PROMPT_GUARD_LOCK):
+            assets['prompt_guard'] = copy_prompt_guard(root / PROMPT_GUARD, staging / PROMPT_GUARD, staging / PROMPT_GUARD_LOCK)
+        else:
+            assets['prompt_guard'] = disabled_prompt_guard(staging / PROMPT_GUARD, staging / PROMPT_GUARD_LOCK)
         files = {}
         for path in sorted(staging.rglob('*')):
             if path.is_file():
@@ -177,8 +209,9 @@ def main():
     parser.add_argument('output', type=Path, help='New standalone Docker context; usually platform/reveal')
     parser.add_argument('--allow-dirty', action='store_true', help='Include allowlisted uncommitted/untracked sources and mark the bundle as a draft')
     parser.add_argument('--fetch-assets', action='store_true', help='Fetch public pinned assets in Docker (required for a Git-tracked '
-                        'platform service), and fetch the gated prompt-injection model here with HF_TOKEN when '
-                        '.deployment-assets/prompt-guard-2-22m does not already match its lock')
+                        'platform service), and fetch the gated prompt-injection model here with HF_TOKEN when its lock is '
+                        'pinned and .deployment-assets/prompt-guard-2-22m does not already match it (an unpinned lock '
+                        'leaves the classifier off and fetches nothing)')
     parser.add_argument('--pin-prompt-guard', action='store_true', help='With --fetch-assets: fetch the current revision of the '
                         'prompt-injection model, convert it, and write its revision and sha256s into prompt-guard-release.json')
     args = parser.parse_args()

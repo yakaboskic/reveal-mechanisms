@@ -348,3 +348,69 @@ def test_the_token_goes_to_hugging_face_only(monkeypatch):
 def test_pinning_needs_the_fetch_step(source, tmp_path):
     with pytest.raises(RuntimeError, match='needs --fetch-assets'):
         bundle.export(tmp_path / 'reveal', root=source, pin_prompt_guard=True)
+
+
+def unpin(root):
+    """The shipped lock: no revision or checksums, and no model folder (the gated model has not been fetched)."""
+    write(root, bundle.PROMPT_GUARD_LOCK, (ROOT / bundle.PROMPT_GUARD_LOCK).read_text())
+    shutil.rmtree(root / bundle.PROMPT_GUARD)
+    commit(root)
+
+
+def test_an_unpinned_lock_bundles_in_both_modes_with_the_classifier_off_and_no_model(source, tmp_path, monkeypatch):
+    unpin(source)
+    monkeypatch.setattr(bundle, 'fetch_prompt_guard', lambda *args, **kwargs: pytest.fail('fetched'))
+    monkeypatch.setattr(bundle, 'prepare_assets', lambda staging, **kwargs: Path(staging).mkdir() or {})
+    disabled = {'repository': 'meta-llama/Llama-Prompt-Guard-2-22M', 'revision': None, 'classifier': 'disabled',
+                'reason': 'lock not pinned'}
+    for name, options in (('fetch', {'fetch_assets': True}), ('local', {})):
+        output = tmp_path / name
+        manifest = bundle.export(output, root=source, hf_token=None, **options)
+        assert manifest['assets']['prompt_guard'] == disabled
+        # The folder the Dockerfile copies is there, holding the marker only: no model file enters the image.
+        assert [path.name for path in (output / bundle.PROMPT_GUARD).iterdir()] == [bundle.PROMPT_GUARD_DISABLED]
+        assert 'not pinned' in (output / bundle.PROMPT_GUARD / bundle.PROMPT_GUARD_DISABLED).read_text()
+        assert not any(path.name in MODEL_FILES for path in (output / '.deployment-assets').rglob('*'))
+        dockerfile = (output / 'Dockerfile').read_text()
+        assert 'COPY .deployment-assets/prompt-guard-2-22m /app/models/prompt-guard-2-22m' in dockerfile
+        assert "verify_model('/app/models/prompt-guard-2-22m')" in dockerfile
+        # The image build's check reads the bundled lock: unpinned, so it loads nothing and says so.
+        from reveal_backend import deposit_screen
+        assert deposit_screen.verify_model(output / bundle.PROMPT_GUARD, output / bundle.PROMPT_GUARD_LOCK,
+                                           loader=lambda *_: pytest.fail('loaded')) is None
+
+
+def test_a_stale_model_folder_is_not_bundled_while_the_lock_is_unpinned(source, tmp_path, monkeypatch):
+    unpin(source)
+    for name, data in MODEL_FILES.items():
+        write(source, f'{bundle.PROMPT_GUARD}/{name}', data.decode())
+    manifest = bundle.export(tmp_path / 'reveal', root=source, fetch_assets=True)
+    assert manifest['assets']['prompt_guard']['classifier'] == 'disabled'
+    assert [path.name for path in (tmp_path / 'reveal' / bundle.PROMPT_GUARD).iterdir()] == [bundle.PROMPT_GUARD_DISABLED]
+
+
+def test_pinning_an_unpinned_lock_still_fetches_and_then_bundles_the_model(source, tmp_path, monkeypatch):
+    unpin(source)
+    calls = []
+
+    def fetch(destination, lock_path, *, token, pin):
+        calls.append((token, pin))
+        pinned_model(source)   # what a successful pin leaves: the lock written, the folder filled
+    monkeypatch.setattr(bundle, 'fetch_prompt_guard', fetch)
+    manifest = bundle.export(tmp_path / 'reveal', root=source, fetch_assets=True, pin_prompt_guard=True,
+                             hf_token='hf_test_token', allow_dirty=True)
+    assert calls == [('hf_test_token', True)] and manifest['assets']['prompt_guard']['revision'] == 'c' * 40
+    assert {path.name: path.read_bytes() for path in (tmp_path / 'reveal' / bundle.PROMPT_GUARD).iterdir()} == MODEL_FILES
+
+
+@pytest.mark.parametrize('fetch_assets', [True, False])
+def test_a_half_pinned_lock_fails_bundling_unless_it_is_being_pinned(source, tmp_path, monkeypatch, fetch_assets):
+    unpin(source)
+    lock = json.loads((source / bundle.PROMPT_GUARD_LOCK).read_text())
+    write(source, bundle.PROMPT_GUARD_LOCK, json.dumps({**lock, 'revision': 'c' * 40}))
+    commit(source)
+    monkeypatch.setattr(bundle, 'fetch_prompt_guard', lambda *args, **kwargs: pytest.fail('fetched'))
+    monkeypatch.setattr(bundle, 'prepare_assets', lambda staging, **kwargs: Path(staging).mkdir() or {})
+    with pytest.raises(RuntimeError, match='half-pinned.*--pin-prompt-guard'):
+        bundle.export(tmp_path / 'reveal', root=source, fetch_assets=fetch_assets)
+    assert not (tmp_path / 'reveal').exists()

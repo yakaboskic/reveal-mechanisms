@@ -943,6 +943,24 @@ def test_a_clean_account_is_screened_then_deposited_and_the_verdict_reaches_tele
     assert (screen['outcome'], screen['check'], screen['score'], screen['classifier']) == ('passed', None, 0.02, 'fake')
 
 
+def test_with_the_classifier_lock_unpinned_a_deployed_job_screens_with_the_fixed_checks_and_deposits(workflow, monkeypatch):
+    from reveal_backend import deposit_screen
+    assert not deposit_screen.enabled()   # the shipped lock
+    monkeypatch.setenv('REVEAL_ARTIFACT_STORE', 'filesystem'); monkeypatch.setenv('REVEAL_ARTIFACTS_DIR', str(workflow.root / 'kept'))
+    monkeypatch.setenv('REVEAL_ENVIRONMENT', 'production')
+    previous = deposit_screen.install(None)
+    try:
+        workflow.execution['account'] = checked_account(workflow)
+    finally:
+        deposit_screen.install(previous)
+    receipt = {'status': 'deposited', 'deposit_id': 'dep_3', 'objects': 9, 'stored_differs': 0, 'unresolved_references': 0}
+    send, finish, _ = commit_account_job(workflow, receipt)
+    send.assert_called_once()
+    assert finish.call_args.kwargs['result']['account']['deposit'] == receipt
+    screen = next(call.kwargs['screen'] for call in workflow.telemetry.call_args_list if 'screen' in call.kwargs)
+    assert (screen['outcome'], screen['classifier'], screen['score'], screen['windows']) == ('passed', 'disabled', None, 0)
+
+
 def test_an_account_without_a_screen_verdict_is_never_deposited(workflow):
     workflow.execution['account'] = {key: value for key, value in checked_account(workflow).items() if key != 'screen'}
     with pytest.raises(EvidenceBuildError, match='not screened'):

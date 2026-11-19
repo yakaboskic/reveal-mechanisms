@@ -320,8 +320,11 @@ a model; that each recorded command is a plain `curl`, `wget`, `pdftotext` or `x
 `output/`, using only the options listed for its program (`deposit_screen.OPTIONS`: fetching with GET, converting,
 choosing the output) and naming no local file outside `output/` and no URL that is not http(s); that its claims are about the claims you asked about (or, if you named none, its own, at most 20); that
 each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
-size limit. A classifier, Llama Prompt Guard 2 22M, also scores the saved papers, the other tool results and the
-account's text. Keep links and markup out of `context`, `closing_remarks` and the other prose fields.
+size limit. A classifier, Llama Prompt Guard 2 22M, will also score the saved papers, the other tool results and the
+account's text, but it is off until an operator pins its model in
+`services/backend/agent-runtime/prompt-guard-release.json`; until then only the fixed checks run, and the screen's
+verdict in job metrics records the classifier as `disabled`. Keep links and markup out of `context`,
+`closing_remarks` and the other prose fields.
 
 ### Reading the account back
 

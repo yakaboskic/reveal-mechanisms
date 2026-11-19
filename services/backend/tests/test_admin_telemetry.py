@@ -310,6 +310,17 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
                          (1, {'prompt_injection': 1}, 1, 1))
         self.assertNotIn('DEPOSIT-DETAIL', json.dumps(snapshot(self.repo)))
 
+    def test_a_screen_run_with_the_classifier_disabled_says_so(self):
+        from reveal_backend import job_metrics
+        ids = self.populate()
+        # The classifier's lock is not pinned: only the fixed checks ran, and the verdict names the classifier disabled.
+        self.assertTrue(job_metrics.record(self.repo, {'id': ids['deposited']}, screen={
+            'outcome': 'passed', 'check': None, 'location': None, 'score': None, 'threshold': 0.5, 'classifier': 'disabled',
+            'windows': 0, 'texts': 0, 'seconds': 0.1}))
+        row = {row['id']: row['agent']['result'] for row in snapshot(self.repo)['agent_jobs']['jobs']}[ids['deposited']]
+        self.assertEqual({key: row[key] for key in ('screen_outcome', 'screen_classifier', 'screen_score', 'screen_windows')},
+                         {'screen_outcome': 'passed', 'screen_classifier': 'disabled', 'screen_score': None, 'screen_windows': 0})
+
     def test_agent_jobs_stay_listed_when_other_jobs_fill_the_job_list(self):
         agent = self.agent_job(answer_inputs())
         with self.repo.transaction() as tx:

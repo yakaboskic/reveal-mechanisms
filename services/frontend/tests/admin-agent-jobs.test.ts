@@ -159,3 +159,14 @@ test("an account job's detail lists each saved source with its URL, commands, si
   const view = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents: { ...agents, jobs: [job("dddddddd-0000", "succeeded", sourcesRun)] }, onSelect() {} }));
   assert.ok(!view.includes(XML_URL) && !view.includes("Sources the agent saved"));
 });
+
+// The classifier's lock is not pinned: only the fixed checks ran, and the screen row says the classifier is off.
+test("a screen run with the classifier disabled says it is off until its lock is pinned", () => {
+  const passed: AgentRun = { ...accountRun, result: { ...accountRun.result, screen_outcome: "passed", screen_check: null, screen_score: null,
+    screen_threshold: 0.5, screen_location: null, screen_classifier: "disabled", screen_windows: 0, screen_texts: 0, screen_seconds: 0.1 } };
+  assert.equal(screenSummary(passed.result), "Passed · classifier off — lock not pinned");
+  assert.equal(screenSummary({ ...passed.result, screen_outcome: "withheld", screen_check: "unsafe_text", screen_location: "account scientific_accounts[0].closing_remarks" }),
+    "Withheld: unsafe text · classifier off — lock not pinned · at account scientific_accounts[0].closing_remarks");
+  const detail = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: passed, job: job("eeeeeeee-0000", "succeeded", passed) }));
+  assert.ok(detail.includes("<dt>Prompt-injection screen</dt><dd>Passed · classifier off — lock not pinned</dd>"), detail);
+});

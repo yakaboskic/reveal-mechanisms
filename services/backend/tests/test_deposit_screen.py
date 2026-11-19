@@ -74,6 +74,14 @@ def no_installed_classifier():
     deposit_screen.install(previous)
 
 
+@pytest.fixture
+def pinned_lock(tmp_path, monkeypatch):
+    """An operator has pinned the classifier: a lock with a revision and every sha256 (fake bytes), and its folder."""
+    directory, lock_path = model_folder(tmp_path)
+    monkeypatch.setattr(deposit_screen, 'LOCK', lock_path)
+    return directory, lock_path
+
+
 # --- the clean account ------------------------------------------------------------------------------------------------
 
 def test_a_clean_account_passes_and_the_verdict_names_no_text(deposited):
@@ -86,7 +94,7 @@ def test_a_clean_account_passes_and_the_verdict_names_no_text(deposited):
     assert 'Hepatocyte' not in json.dumps(result)
 
 
-def test_without_a_classifier_development_runs_the_fixed_checks_and_says_so(deposited, monkeypatch):
+def test_without_a_classifier_development_runs_the_fixed_checks_and_says_so(deposited, monkeypatch, pinned_lock):
     monkeypatch.setenv('REVEAL_ENVIRONMENT', 'development')
     result = verdict(deposited)
     assert (result['outcome'], result['classifier'], result['score'], result['windows']) == ('passed', 'not_loaded', None, 0)
@@ -95,12 +103,26 @@ def test_without_a_classifier_development_runs_the_fixed_checks_and_says_so(depo
     assert verdict(deposited, document=planted)['check'] == 'unsafe_text'
 
 
-def test_a_deployed_process_never_screens_without_its_classifier(deposited, monkeypatch):
+def test_a_deployed_process_never_screens_without_its_classifier(deposited, monkeypatch, pinned_lock):
     monkeypatch.setenv('REVEAL_ENVIRONMENT', 'production')
     with pytest.raises(deposit_screen.ScreenError, match='not loaded'):
         verdict(deposited)
     deposit_screen.install(fake_classifier())
     assert verdict(deposited)['classifier'] == 'fake'
+
+
+@pytest.mark.parametrize('environment', ['production', 'development'])
+def test_with_an_unpinned_lock_the_classifier_is_disabled_and_the_fixed_checks_still_withhold(deposited, monkeypatch, environment):
+    assert not deposit_screen.enabled()   # the shipped lock
+    monkeypatch.setenv('REVEAL_ENVIRONMENT', environment)
+    result = verdict(deposited)
+    assert (result['outcome'], result['classifier'], result['score'], result['windows'], result['texts']) == \
+        ('passed', 'disabled', None, 0, 0)
+    planted = changed(deposited, 'scientific_accounts', 0, closing_remarks=PLANTED)
+    withheld = verdict(deposited, document=planted)
+    assert (withheld['outcome'], withheld['check'], withheld['classifier']) == ('withheld', 'unsafe_text', 'disabled')
+    assert withheld['location'] == 'account scientific_accounts[0].closing_remarks'
+    assert deposit_screen.withheld(withheld)['status'] == 'withheld_unsafe'
 
 
 # --- fixed checks -----------------------------------------------------------------------------------------------------
@@ -452,17 +474,52 @@ def model_folder(tmp_path, revision='a' * 40):
         (directory / name).write_bytes(name.encode() * 3)
         files[name] = hashlib.sha256((directory / name).read_bytes()).hexdigest()
     lock = json.loads(deposit_screen.LOCK.read_text())
-    lock.update(revision=revision, files=files)
+    lock.update(revision=revision, files=files, source_files={'model.safetensors': 'd' * 64})
     lock_path = tmp_path / 'prompt-guard-release.json'; lock_path.write_text(json.dumps(lock))
     return directory, lock_path
 
 
-def test_the_shipped_lock_is_left_for_the_operator_to_pin():
+def test_the_shipped_lock_is_left_for_the_operator_to_pin_and_until_then_verify_model_checks_nothing(capsys):
     lock = json.loads(deposit_screen.LOCK.read_text())
     assert lock['repository'] == 'meta-llama/Llama-Prompt-Guard-2-22M' and set(lock['files']) == set(deposit_screen.MODEL_FILES)
-    assert not deposit_screen.pinned(lock)
-    with pytest.raises(deposit_screen.ScreenError, match='pins no revision'):
-        deposit_screen.verify_model(Path('/nonexistent'))
+    assert not deposit_screen.pinned(lock) and not deposit_screen.enabled()
+    # The image build's check: no model folder, nothing loaded, and the build log says why.
+    assert deposit_screen.verify_model(Path('/nonexistent'), loader=lambda *_: pytest.fail('loaded')) is None
+    assert capsys.readouterr().out == 'classifier disabled: lock not pinned\n'
+
+
+def test_the_runtime_and_the_fetch_agree_on_what_pinned_means(tmp_path):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
+    import prompt_guard_assets
+    _, lock_path = model_folder(tmp_path)
+    lock = json.loads(lock_path.read_text())
+    shipped = json.loads(deposit_screen.LOCK.read_text())
+    for case in (lock, shipped, {**lock, 'source_files': {}}, {**lock, 'revision': None}, {**lock, 'revision': 'main'},
+                 {**lock, 'files': {**lock['files'], 'model.onnx': None}}, {**lock, 'files': {'model.onnx': lock['files']['model.onnx']}}):
+        assert deposit_screen.pinned(case) == prompt_guard_assets.pinned(case), case
+    assert deposit_screen.pinned(lock) and not deposit_screen.pinned(shipped)
+    # A lock that cannot be read never reads as disabled.
+    with pytest.raises(FileNotFoundError):
+        deposit_screen.enabled(tmp_path / 'absent.json')
+
+
+@pytest.mark.parametrize('change', [{'revision': 'a' * 40}, {'source_files': {'model.safetensors': 'd' * 64}},
+                                    {'files': {'config.json': 'e' * 64, 'model.onnx': None, 'tokenizer.json': None}},
+                                    {'source_files': None}, {'files': None}])
+def test_a_half_pinned_lock_fails_loudly_and_never_turns_the_classifier_off(tmp_path, monkeypatch, deposited, change):
+    lock_path = tmp_path / 'prompt-guard-release.json'
+    lock_path.write_text(json.dumps({**json.loads(deposit_screen.LOCK.read_text()), **change}))
+    monkeypatch.setattr(deposit_screen, 'LOCK', lock_path)
+    with pytest.raises(deposit_screen.ScreenError, match='half-pinned.*--pin-prompt-guard'):
+        deposit_screen.enabled()
+    with pytest.raises(deposit_screen.ScreenError, match='half-pinned'):
+        deposit_screen.verify_model(tmp_path / 'absent', loader=lambda *_: pytest.fail('loaded'))
+    monkeypatch.setenv('REVEAL_ENVIRONMENT', 'development')
+    with pytest.raises(deposit_screen.ScreenError, match='half-pinned'):
+        deposit_screen.startup()
+    with pytest.raises(deposit_screen.ScreenError, match='half-pinned'):
+        verdict(deposited)
 
 
 def test_verify_model_checks_every_pinned_file_then_loads_it_once(tmp_path):
@@ -493,7 +550,7 @@ def test_verify_model_refuses_bytes_the_runtime_cannot_load(tmp_path):
         deposit_screen.verify_model(directory, lock_path)
 
 
-def test_a_deployed_process_refuses_to_start_without_its_model(tmp_path, monkeypatch, caplog):
+def test_a_deployed_process_refuses_to_start_without_its_model(tmp_path, monkeypatch, caplog, pinned_lock):
     monkeypatch.setenv('REVEAL_PROMPT_GUARD_DIR', str(tmp_path / 'absent'))
     monkeypatch.setenv('REVEAL_ENVIRONMENT', 'production')
     with pytest.raises(deposit_screen.ScreenError):
@@ -545,3 +602,23 @@ def test_the_contract_names_the_withheld_status_and_every_check():
     deposit = contract['components']['schemas']['AgentAccountDeposit']['properties']
     assert 'withheld_unsafe' in deposit['status']['enum'] and set(deposit_screen.CHECKS) <= set(deposit['reason']['enum'])
     assert set(deposit_screen.WHY) == set(deposit_screen.CHECKS)
+
+
+def test_with_an_unpinned_lock_a_deployed_process_starts_without_a_model(tmp_path, monkeypatch, caplog):
+    from fastapi.testclient import TestClient
+    from reveal_backend import app as api
+    from reveal_backend.repository import Repository
+    repository = Repository(str(tmp_path / 'r.sqlite')); repository.migrate()
+    monkeypatch.setattr(api, 'repo', repository)
+    monkeypatch.setattr(deposit_screen, 'load_model', lambda *_: pytest.fail('loaded'))
+    monkeypatch.setenv('REVEAL_ENVIRONMENT', 'production')
+    monkeypatch.setenv('REVEAL_PROMPT_GUARD_DIR', str(tmp_path / 'absent'))
+    with caplog.at_level(logging.WARNING, logger='reveal_backend.deposit_screen'):
+        assert deposit_screen.startup() is None
+    assert 'classifier disabled: lock not pinned' in caplog.text
+    with TestClient(api.app):
+        assert deposit_screen.installed() is None
+    # A malformed setting still stops the process.
+    monkeypatch.setenv('REVEAL_PROMPT_GUARD_THRESHOLD', 'high')
+    with pytest.raises(ValueError):
+        deposit_screen.startup()

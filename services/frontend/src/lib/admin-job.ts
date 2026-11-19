@@ -81,7 +81,9 @@ const score = (value: number | null | undefined) => value == null ? "—" : valu
 /** The deposit screen's verdict in one line: what it found, the classifier's score against its threshold, and where. */
 export function screenSummary(result: AgentRun["result"]): string | null {
   if (!result.screen_outcome) return null;
-  const scored = result.screen_classifier === "not_loaded" ? "classifier not loaded"
+  // "disabled": the classifier's lock (prompt-guard-release.json) is not pinned, so only the fixed checks ran.
+  const scored = result.screen_classifier === "disabled" ? "classifier off — lock not pinned"
+    : result.screen_classifier === "not_loaded" ? "classifier not loaded"
     : result.screen_score == null ? null : `score ${score(result.screen_score)} (threshold ${score(result.screen_threshold)})`;
   const head = result.screen_outcome === "withheld" ? `Withheld: ${(result.screen_check || "unknown check").replaceAll("_", " ")}` : "Passed";
   const where = result.screen_location ? `${result.screen_outcome === "withheld" ? "at" : "highest at"} ${result.screen_location}` : null;

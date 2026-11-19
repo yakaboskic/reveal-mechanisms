@@ -521,9 +521,9 @@ p.write_text(json.dumps(doc))
             named_document = json.loads(agent_account.stored(named_work, named)[0])
             self.assertIn('Test Requester', named_document['persons'][0]['name']); self.assertEqual(named['objects'], record['objects'])
             self.assertEqual(document['scientific_accounts'][0]['was_attributed_to'], [document['organizations'][0]['id']])
-            # The prompt-injection screen ran last at the gate, on the deposit form: this account passed (no model is
-            # loaded in tests, so its fixed checks ran and the verdict says the classifier did not).
-            self.assertEqual((record['screen']['outcome'], record['screen']['check'], record['screen']['classifier']), ('passed', None, 'not_loaded'))
+            # The prompt-injection screen ran last at the gate, on the deposit form: this account passed (the shipped lock
+            # is not pinned, so the classifier is off, its fixed checks ran and the verdict says the classifier was disabled).
+            self.assertEqual((record['screen']['outcome'], record['screen']['check'], record['screen']['classifier']), ('passed', None, 'disabled'))
             self.assertNotIn('screen', shown)
             # A cited paper carrying planted instructions: the gate still accepts the account, and the screen withholds it.
             from reveal_backend import deposit_screen
