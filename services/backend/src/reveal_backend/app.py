@@ -288,6 +288,13 @@ def admin_job_run(job_id: str, admin: str = Depends(admin_content_authority)):
     from .admin_run import job_run
     return JSONResponse(job_run(repo, job_id, admin), headers={'Cache-Control': 'private, no-store'})
 
+@app.get('/internal/v1/admin/jobs/{job_id}/transcript')
+def admin_job_transcript(job_id: str, attempt: int | None = Query(None, ge=1, le=100000), after: int | None = Query(None, ge=0),
+                         limit: int = Query(100, ge=1, le=200), admin: str = Depends(admin_content_authority)):
+    from .admin_transcript import job_transcript
+    return JSONResponse(job_transcript(repo, job_id, admin, attempt=attempt, after=after, limit=limit),
+                        headers={'Cache-Control': 'private, no-store'})
+
 @app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
 def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
     from .admin_jobs import job_detail

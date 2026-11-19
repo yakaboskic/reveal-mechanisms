@@ -24,9 +24,10 @@ from .runtime_config import artifacts_root
 
 ACCESS_FORMAT = 'reveal.admin-content-read/1'
 ACCESS_OWNER = 'admin-console'
-# The response record of attempt N, relative to the job's workspace.
-RESPONSE_PATH = 'attempt-{}/output/' + RESPONSE_CAPTURE_PATH
 MAX_RESPONSE_BYTES = capture_file_limit(RESPONSE_CAPTURE_PATH)
+MAX_RUNTIME_BYTES = capture_file_limit('runtime.json')
+# The parts of runtime.json's configuration (box_remote.run_configuration) the run view returns.
+CONFIGURATION_KEYS = ('format', 'claude_code', 'cli', 'tools', 'network', 'toolchain', 'account_kit', 'limits', 'source_tools')
 INPUT_SETTINGS = ('format', 'prompt', 'system_prompt', 'tools', 'graphs', 'network', 'allowed_domains', 'effort', 'model',
                   'deliverable', 'claims_repository')
 # Claude Code's result subtypes and the runner's reasons for each limit (box_remote.provider_failure_reason,
@@ -171,37 +172,106 @@ def checked_record(raw, job_id, attempt):
     return record
 
 
-def local_response(job_id, attempt):
-    """(record, None) from the artifact volume, or (None, why it is unavailable). Explicit names only; never a symlink."""
+def local_files(job_id, wanted):
+    """{relative: (bytes, None) or (None, why it is unavailable)} of captured files of the job's workspace on the artifact
+    volume. wanted: {relative path: the most bytes it may have}. Explicit names only; never a symlink."""
     base = artifacts_root()
     root = base / job_id
-    if root.is_symlink() or not root.resolve().is_relative_to(base): return None, 'unavailable'
-    if attempt is None: return None, 'not_captured'
-    path = root / RESPONSE_PATH.format(attempt)
-    if any(parent.is_symlink() for parent in (path, *path.parents) if parent != base and parent.is_relative_to(base)): return None, 'unavailable'
-    if not path.is_file() or not path.resolve().is_relative_to(root.resolve()): return None, 'not_captured'
-    try:
-        with path.open('rb') as stream: raw = stream.read(MAX_RESPONSE_BYTES + 1)
-        if len(raw) > MAX_RESPONSE_BYTES: return None, 'too_large'
-        return checked_record(raw, job_id, attempt), None
-    except (OSError, ValueError):
-        return None, 'unreadable'
+    if root.is_symlink() or not root.resolve().is_relative_to(base): return {name: (None, 'unavailable') for name in wanted}
+    found = {}
+    for relative, limit in wanted.items():
+        path = root / relative
+        if any(parent.is_symlink() for parent in (path, *path.parents) if parent != base and parent.is_relative_to(base)):
+            found[relative] = (None, 'unavailable'); continue
+        if not path.is_file() or not path.resolve().is_relative_to(root.resolve()):
+            found[relative] = (None, 'not_captured'); continue
+        try:
+            with path.open('rb') as stream: raw = stream.read(limit + 1)
+            found[relative] = (None, 'too_large') if len(raw) > limit else (raw, None)
+        except OSError:
+            found[relative] = (None, 'unreadable')
+    return found
 
 
-def s3_response(workspace, job_id, attempt):
-    """(record, None) from the job's workspace checkpoint, or (None, why it is unavailable)."""
+def s3_files(workspace, wanted):
+    """As local_files, from the job's workspace checkpoint."""
     from .artifact_store import store, StorageUnavailable
-    if not workspace or attempt is None: return None, 'not_captured'
+    if not workspace: return {name: (None, 'not_captured') for name in wanted}
     storage = store()
     try:
         manifest = json.loads(storage.get(workspace))
         if manifest.get('format') != 'reveal.workspace/1': raise ValueError('Invalid checkpoint')
-        item = next((item for item in manifest['files'] if item['path'] == RESPONSE_PATH.format(attempt)), None)
-        if item is None: return None, 'not_captured'
-        if item['storage']['size_bytes'] > MAX_RESPONSE_BYTES: return None, 'too_large'
-        return checked_record(storage.get(item['storage']), job_id, attempt), None
+        items = {item['path']: item for item in manifest['files']}
     except (StorageUnavailable, ValueError, KeyError, TypeError):
-        return None, 'unavailable'
+        return {name: (None, 'unavailable') for name in wanted}
+    found = {}
+    for relative, limit in wanted.items():
+        item = items.get(relative)
+        try:
+            if item is None: found[relative] = (None, 'not_captured')
+            elif item['storage']['size_bytes'] > limit: found[relative] = (None, 'too_large')
+            else: found[relative] = (storage.get(item['storage']), None)
+        except (StorageUnavailable, ValueError, KeyError, TypeError):
+            found[relative] = (None, 'unavailable')
+    return found
+
+
+def attempt_files(remote, workspace, job_id, attempt, wanted):
+    """{name: (bytes, why)} of files attempt N captured, by capture name (ledger/..., runtime.json). wanted: {name: limit}."""
+    if attempt is None: return {name: (None, 'not_captured') for name in wanted}
+    paths = {f'attempt-{attempt}/output/{name}': limit for name, limit in wanted.items()}
+    found = s3_files(workspace, paths) if remote else local_files(job_id, paths)
+    return {name: found[f'attempt-{attempt}/output/{name}'] for name in wanted}
+
+
+def captured_response(found, job_id, attempt, remote):
+    """(record, None) from the captured response record, or (None, why it is unavailable)."""
+    raw, why = found
+    if raw is None: return None, why
+    try: return checked_record(raw, job_id, attempt), None
+    except ValueError: return None, 'unavailable' if remote else 'unreadable'
+
+
+def configuration_view(found, job_id, attempt):
+    """How the newest attempt's Claude Code was started, from its runtime.json (box_remote.run_configuration), with
+    what Claude Code itself reported and what the transcript files hold. Every field is None when runtime.json is
+    missing; `missing` says why. A run from before the configuration was recorded is `not_recorded`."""
+    raw, why = found
+    view = {'attempt': attempt, 'missing': why, **{key: None for key in CONFIGURATION_KEYS}, 'observed': None, 'transcript': None}
+    if raw is None: return view
+    try:
+        runtime = json.loads(raw)
+        if not (isinstance(runtime, dict) and runtime.get('job_id') == job_id and runtime.get('attempt') == attempt):
+            raise ValueError('The runtime record belongs to another execution')
+    except ValueError:
+        return {**view, 'missing': 'unreadable'}
+    recorded = runtime.get('configuration')
+    if isinstance(recorded, dict):
+        view.update({key: recorded.get(key) for key in CONFIGURATION_KEYS}, missing=None)
+    else:
+        view['missing'] = 'not_recorded'
+    observed = runtime.get('observed_claude_runtime')
+    if isinstance(observed, dict) and observed:
+        view['observed'] = {'claude_code_version': observed.get('claude_code_version'), 'model': observed.get('model'),
+                            'permission_mode': observed.get('permissionMode'), 'tools': observed.get('tools'),
+                            'mcp_servers': observed.get('mcp_servers')}
+    if isinstance(runtime.get('transcript'), dict):
+        view['transcript'] = runtime['transcript']
+    return redact(view)
+
+
+def record_read(repository, admin, job_id, route, **extra):
+    """One admin_content_read record, written before any content leaves; returns when it was read. A read that cannot
+    be recorded is refused."""
+    read_at = now()
+    try:
+        repository.append('admin_content_read', uid(), ACCESS_OWNER,
+                          {'format': ACCESS_FORMAT, 'admin': admin, 'job_id': job_id, 'route': route, **extra, 'read_at': read_at})
+    except Exception:
+        logging.getLogger('uvicorn.error').warning('admin_content_read not recorded job_id=%s', job_id)
+        raise Problem(503, 'ACCESS_LOG_UNAVAILABLE', 'This read could not be recorded, so nothing was returned. Retry shortly.') from None
+    logging.getLogger('uvicorn.error').info('admin_content_read job_id=%s route=%s', job_id, route)
+    return read_at
 
 
 def response_view(record, why, result):
@@ -225,31 +295,46 @@ def response_view(record, why, result):
     return view
 
 
+def require_job_id(job_id):
+    try:
+        if str(UUID(job_id)) != job_id: raise ValueError()
+    except ValueError: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.') from None
+
+
+def agent_job(tx, job_id):
+    """(job row, queue record) of a general agent job; 404 for a missing job or one of another kind."""
+    row = tx.get('job', job_id)
+    if not row: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.')
+    queue_row = tx.get('queue', job_id)
+    if row['data'].get('kind') != 'agent' or not queue_row or not isinstance(queue_row['data'].get('inputs'), dict):
+        raise Problem(404, 'NOT_AN_AGENT_JOB', 'Only general agent jobs have a request to show.')
+    return row, queue_row['data']
+
+
+def workspace_of(tx, job_id, queue):
+    """(whether captures are in S3, the job's workspace checkpoint reference there or None)."""
+    from .artifact_store import s3_enabled
+    if not s3_enabled(): return False, None
+    execution = tx.get('execution', job_id)
+    return True, (execution['data'].get('workspace') if execution else None) or queue.get('workspace')
+
+
 def job_run(repository, job_id, admin, environ=None):
     """GET /internal/v1/admin/jobs/{id}/run. admin: the verified admin email the access record names."""
     from . import agent_limits
     from .job_metrics import KIND as METRICS
-    try:
-        if str(UUID(job_id)) != job_id: raise ValueError()
-    except ValueError: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.') from None
+    require_job_id(job_id)
     with repository.read_transaction(utc=True) as tx:
-        row = tx.get('job', job_id)
-        if not row: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.')
+        row, queue = agent_job(tx, job_id)
         job = row['data']
-        queue_row = tx.get('queue', job_id)
-        if job.get('kind') != 'agent' or not queue_row or not isinstance(queue_row['data'].get('inputs'), dict):
-            raise Problem(404, 'NOT_AN_AGENT_JOB', 'Only general agent jobs have a request to show.')
-        queue = queue_row['data']
         metrics = tx.get(METRICS, job_id)
         agent = metrics['data'].get('agent') if metrics and isinstance(metrics['data'].get('agent'), dict) else {}
         policy = agent_limits.policy(tx, environ)
         attempt = latest_attempt(tx, job_id)
-        execution = tx.get('execution', job_id)
-        from .artifact_store import s3_enabled
-        remote = s3_enabled()
-        workspace = ((execution['data'].get('workspace') if execution else None) or queue.get('workspace')) if remote else None
+        remote, workspace = workspace_of(tx, job_id, queue)
     # Storage reads stay outside the database transaction.
-    record, why = s3_response(workspace, job_id, attempt) if remote else local_response(job_id, attempt)
+    found = attempt_files(remote, workspace, job_id, attempt, {RESPONSE_CAPTURE_PATH: MAX_RESPONSE_BYTES, 'runtime.json': MAX_RUNTIME_BYTES})
+    record, why = captured_response(found[RESPONSE_CAPTURE_PATH], job_id, attempt, remote)
     inputs = frozen_input(queue['inputs'])
     result = job.get('result') if isinstance(job.get('result'), dict) else {}
     failure = redact(job.get('failure')) if isinstance(job.get('failure'), dict) else None
@@ -266,14 +351,7 @@ def job_run(repository, job_id, admin, environ=None):
             'run': {'subtype': agent.get('subtype') or (record or {}).get('subtype'), 'status': agent.get('status'),
                     'reason': redact(agent.get('reason')) if isinstance(agent.get('reason'), str) else None,
                     'tool_calls': number(agent.get('tool_calls')), 'tool_failures': number(agent.get('tool_failures'))},
-            'response': response_view(record, why, result)}
-    read_at = now()
-    try:
-        # Recorded before the content leaves: a read that cannot be recorded is refused.
-        repository.append('admin_content_read', uid(), ACCESS_OWNER,
-                          {'format': ACCESS_FORMAT, 'admin': admin, 'job_id': job_id, 'route': 'jobs/run', 'read_at': read_at})
-    except Exception:
-        logging.getLogger('uvicorn.error').warning('admin_content_read not recorded job_id=%s', job_id)
-        raise Problem(503, 'ACCESS_LOG_UNAVAILABLE', 'This read could not be recorded, so nothing was returned. Retry shortly.') from None
-    logging.getLogger('uvicorn.error').info('admin_content_read job_id=%s', job_id)
+            'response': response_view(record, why, result),
+            'configuration': configuration_view(found['runtime.json'], job_id, attempt)}
+    read_at = record_read(repository, admin, job_id, 'jobs/run')
     return {**view, 'read': {'by': admin, 'at': read_at}}
