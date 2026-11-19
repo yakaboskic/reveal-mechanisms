@@ -98,8 +98,10 @@ def extend(b, f, e):
     dapper_id = lambda name: string(pattern='^dapper:' + name + r'\.[A-Za-z0-9_-]{8,64}$')
     b.add('AgentAccountDeposit', obj({
         'status': enum('deposited', 'failed', 'not_configured', 'withheld_unsafe', description=
-            'deposited: the claims repository stored every object of the account. not_configured: this deployment has no '
-            'claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job. '
+            'deposited: the claims repository stored every object of the account as sent; GET /v1/jobs/{job_id}/account '
+            'rebuilds it from there. not_configured: this deployment has no claims repository. failed: the attempt did not '
+            'succeed, or (reason inconsistent) the repository took it but holds some object otherwise than sent; the account '
+            'itself is unaffected and stays with the job. '
             'withheld_unsafe: REVEAL\'s prompt-injection screen found text in the account, or in what the run read, that '
             'could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. '
             'The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry.'),
@@ -107,10 +109,14 @@ def extend(b, f, e):
         'objects': integer(0, description='Objects the repository accepted, counting ones it already held.'),
         'stored_differs': integer(0, description='Objects the repository already held under the same id with different '
                                                  'unhashed content. Its stored copy stands.'),
-        'unresolved_references': integer(0),
-        'reason': enum('too_large', 'rejected', 'unauthorized', 'unavailable', 'oversized_field', 'unsafe_text', 'unsafe_command',
+        'unresolved_references': integer(0, description='References the deposit left unresolved in the repository.'),
+        'collection': string(description='The collection the deposit went into, when it named one. Accounts name none.'),
+        'release': string(description='The release of that collection.'),
+        'reason': enum('too_large', 'rejected', 'unauthorized', 'unavailable', 'inconsistent', 'oversized_field', 'unsafe_text', 'unsafe_command',
                        'unrequested_claim', 'unknown_entity', 'screen_too_large', 'prompt_injection', description=
-            'Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable. For withheld_unsafe, the '
+            'Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable; or inconsistent, when the '
+            'receipt shows an object the repository already held with different unhashed content (stored_differs) or an '
+            'unresolved reference: deposit_id and the counts are kept, and the account is served from the job. For withheld_unsafe, the '
             'screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, '
             'markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that '
             'is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), '
@@ -165,9 +171,16 @@ def extend(b, f, e):
         '/v1/jobs/{job_id}/account.'))
     b.add('AgentAccountDocument', obj({
         'job_id': string(format='uuid'), 'account': ref('AgentAccount'),
+        'source': enum('claims_repository', 'job_artifact', description=
+            'claims_repository: account.deposit.status is deposited, and the document was rebuilt from the claims repository '
+            '(the deposit, its objects and its edges in stored order) and checked to be the account the job sent: the same '
+            'account_id and the same sha256 as account.document_sha256. job_artifact: the repository does not hold the account '
+            '(account.deposit.status withheld_unsafe, failed or not_configured), so this is the copy REVEAL kept with the job, '
+            'checked against the same sha256.'),
         'document': {'type': 'object', 'additionalProperties': True, 'description':
             'The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, '
-            'value_locators, files, publications, ...) and edges, every id a DAPPER-ID-1 address.'}}))
+            'value_locators, files, publications, ...) each ordered by id, and edges, every id a DAPPER-ID-1 address. Its '
+            'canonical JSON (sorted keys, compact, UTF-8, final newline) hashes to account.document_sha256.'}}))
     b.add('AgentResult', obj({
         'kind': {'const': 'agent', 'type': 'string'},
         'response': string(maxLength=MAX_RESULT_RESPONSE_CHARS, description="The agent's final message."),
@@ -240,15 +253,29 @@ def extend(b, f, e):
     getter['responses']['200']['content']['application/json']['examples']['agent_account_complete'] = {
         'summary': 'Agent complete with a ScientificAccount (synthetic)', 'value': account_complete}
     job_parameter = b.parameter('job_id', 'path', string(format='uuid'), JOB_ID, True)
-    b.operation('/v1/jobs/{job_id}/account', 'get', 'getJobAccount', 'Jobs', 'Read the ScientificAccount an agent job returned',
-        'Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document '
+    reader = b.operation('/v1/jobs/{job_id}/account', 'get', 'getJobAccount', 'Jobs', 'Read the ScientificAccount an agent job returned',
+        'Owner-only, private no-store caching. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document '
         'with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum '
-        'and URL, and the commands that saved them. Returns 404 '
+        'and URL, and the commands that saved them. A deposited account is read back from the claims repository (source '
+        'claims_repository; REVEAL keeps no copy of it); any other is the copy kept with the job (source job_artifact), '
+        'with the deposit status in account.deposit. A deposited account the repository cannot serve, or no longer holds as '
+        'sent, is a 502, never a local copy. Returns 404 '
         'until the job has succeeded, and for any other job. The document names the requester as the Person the account is '
         'attributed to only when the job asked for that with attribute_requester.',
-        'AgentAccountDocument', {'account': {'job_id': JOB_ID, 'account': account_block, 'document': {
-            'scientific_accounts': [{'id': account_id, 'name': 'LEPR and hepatic insulin signalling'}]}}},
-        parameters=[job_parameter], errors=('401', '404', '429'))
+        'AgentAccountDocument', {'account': {'job_id': JOB_ID, 'account': account_block, 'source': 'claims_repository', 'document': {
+            'scientific_accounts': [{'id': account_id, 'name': 'LEPR and hepatic insulin signalling'}]}},
+            'kept_with_the_job': {'job_id': JOB_ID, 'account': dict(account_block, deposit={'status': 'failed', 'reason': 'inconsistent',
+                'deposit_id': 'dep_' + '0' * 32, 'objects': 11, 'stored_differs': 1, 'unresolved_references': 0}),
+                'source': 'job_artifact', 'document': {'scientific_accounts': [{'id': account_id, 'name': 'LEPR and hepatic insulin signalling'}]}}},
+        parameters=[job_parameter], errors=('401', '404', '429', '503'))
+    reader['responses']['503']['content'] = b.content('Problem', {'artifact_unavailable': b.problem(
+        503, 'ARTIFACT_UNAVAILABLE', 'The account kept with this job is currently unavailable.')}, 'application/problem+json')
+    reader['responses']['502'] = {'description': 'The claims repository could not serve the deposited account as it was sent.',
+        'content': b.content('Problem', {
+            'claims_repository_unavailable': b.problem(502, 'CLAIMS_REPOSITORY_UNAVAILABLE',
+                'The account is deposited, but the claims repository could not be read. Try again later.'),
+            'claims_repository_mismatch': b.problem(502, 'CLAIMS_REPOSITORY_MISMATCH',
+                'The claims repository does not hold this account as it was deposited.')}, 'application/problem+json')}
     text = b.operation('/v1/jobs/{job_id}/account/sources/{sha256}', 'get', 'downloadJobAccountSource', 'Jobs',
         'Download a source file an agent job account records',
         'Owner-only. One file the agent saved under output/sources/ (sha256 in the account block papers), exactly as saved: '

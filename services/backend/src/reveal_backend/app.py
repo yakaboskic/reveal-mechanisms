@@ -1476,13 +1476,36 @@ def artifact_bytes(sha256:str,request:Request):
 
 @app.get('/v1/jobs/{job_id}/account')
 def job_account(job_id:str,request:Request):
-    """The Scientific Account an agent job returned, in the form it was deposited. Only the job's owner reads it."""
-    from . import agent_account
+    """The Scientific Account an agent job returned, in the form it was deposited. Only the job's owner reads it.
+    A deposited account is rebuilt from the claims repository and checked against the job's record (claims_read);
+    one the repository does not hold is the job's own kept copy (agent_account.kept_document). `source` says which."""
+    import logging
+    from . import agent_account, claims_read, job_metrics
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         owned(tx,'job',job_id,user)
         row=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']
-    return JSONResponse({'job_id':job_id,'account':row['account'],'document':row['document']},headers={'Cache-Control':'private, no-store'})
+    account=row['account']; deposit=account['deposit']
+    if deposit.get('status')=='deposited':
+        # The network is read after the read transaction is returned.
+        try:
+            document=claims_read.account_document(deposit.get('deposit_id'),account['account_id'],account['document_sha256'])
+        except claims_read.Mismatch as error:
+            logging.getLogger('reveal').warning('Account of job %s does not rebuild from the claims repository (%s)',job_id,error.reason)
+            job_metrics.record(repo,{'id':job_id},serve=job_metrics.serve_metrics('mismatch',error.reason))
+            raise Problem(502,'CLAIMS_REPOSITORY_MISMATCH','The claims repository does not hold this account as it was deposited.')
+        except claims_read.Unavailable as error:
+            logging.getLogger('reveal').warning('Account of job %s could not be read from the claims repository (%s)',job_id,error)
+            job_metrics.record(repo,{'id':job_id},serve=job_metrics.serve_metrics('unavailable'))
+            raise Problem(502,'CLAIMS_REPOSITORY_UNAVAILABLE','The account is deposited, but the claims repository could not be read. Try again later.')
+        source='claims_repository'
+    else:
+        try: document=agent_account.kept_document(row)
+        except agent_account.Unkept as error:
+            logging.getLogger('reveal').warning('Account of job %s is not kept with the job (%s)',job_id,error)
+            raise Problem(503,'ARTIFACT_UNAVAILABLE','The account kept with this job is currently unavailable.')
+        source='job_artifact'
+    return JSONResponse({'job_id':job_id,'account':account,'source':source,'document':document},headers={'Cache-Control':'private, no-store'})
 
 @app.get('/v1/jobs/{job_id}/account/sources/{sha256}')
 def job_account_source(job_id:str,sha256:str,request:Request):

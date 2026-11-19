@@ -222,11 +222,44 @@ def public(record, deposit):
             'deposit': deposit}
 
 
-def save(tx, owner, job_id, record, document, retained, deposit, observed_at):
+def save(tx, owner, job_id, record, retained, deposit, observed_at, document_artifact=None):
     """Write the account's record inside the caller's fenced transaction. Retrying the commit writes it again.
-    `sources` indexes REVEAL's private copy of each saved source file by checksum, for its owner to download."""
+
+    REVEAL keeps no account document here. A deposited account is read back from the claims repository
+    (claims_read). One the repository does not hold (withheld, failed or not configured) is kept as retained bytes,
+    and `document_artifact` is where (`retain`). `sources` indexes REVEAL's private copy of each saved source file by
+    checksum, for its owner to download."""
     tx.put(ACCOUNT_KIND, job_id, owner, {
-        'job_id': job_id, 'account': public(record, deposit), 'document': document, 'observed_at': observed_at,
+        'job_id': job_id, 'account': public(record, deposit), 'observed_at': observed_at,
+        **({'document_artifact': document_artifact} if document_artifact else {}),
         'sources': {paper['sha256']: {**retained[paper['sha256']], 'filename': PurePosixPath(paper['path']).name,
                                       'media_type': paper['media_type'], 'size_bytes': paper['size_bytes']}
                     for paper in record['papers']}})
+
+
+class Unkept(RuntimeError):
+    """The job's own copy of its account is not where its record says, or is not the account it recorded."""
+
+
+def kept_document(row):
+    """The deposit-form document an account record keeps for its owner when the claims repository holds none: the
+    retained bytes, checked against the account's sha256. Raises Unkept."""
+    from .artifact_store import StorageUnavailable, store
+    from .evidence_package import decode, sha256
+    from .runtime_config import artifacts_root
+    location, expected = row.get('document_artifact'), row['account']['document_sha256']
+    if not isinstance(location, dict):
+        raise Unkept('The job keeps no copy of its account')
+    try:
+        if location.get('storage'):
+            data = store().get(location['storage'])
+        else:
+            path = Path(location['path']).resolve()
+            if not path.is_relative_to(artifacts_root()):
+                raise Unkept('The job keeps its account outside the artifacts directory')
+            data = path.read_bytes()
+    except (StorageUnavailable, OSError, KeyError) as error:
+        raise Unkept('The job\'s copy of its account is unavailable') from error
+    if sha256(data) != expected:
+        raise Unkept('The job\'s copy of its account differs from the account it recorded')
+    return decode(data)

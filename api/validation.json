@@ -1,11 +1,11 @@
 {
   "openapi": "3.1.1",
-  "openapi_sha256": "89367448570885efdad17fa176ad6ea23fd308f8ad2f0cc33d577303213c236e",
+  "openapi_sha256": "8fa1f73b8316732aa112f4a4992c20ace14dd63685a13959a75ad7f1216a6bab",
   "paths": 84,
   "operations": 98,
-  "local_refs_resolved": 1142,
+  "local_refs_resolved": 1144,
   "request_body_examples_validated": 41,
-  "response_examples_validated": 584,
+  "response_examples_validated": 588,
   "parameter_examples_validated": 224,
   "request_exchanges_validated": 123,
   "dapper_documents": {

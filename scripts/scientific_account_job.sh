@@ -16,7 +16,8 @@
 #   3. POST {reveal}/v1/jobs                 submit the job (the body is printed and saved as request.json)
 #   4. GET  {reveal}/v1/jobs/{id}/events     watch the agent work (agent_job.py --job does the polling)
 #   5. GET  {reveal}/v1/jobs/{id}            read the result; stop unless the account was deposited
-#   6. GET  {reveal}/v1/jobs/{id}/account    the DAPPER document, saved as account.json
+#   6. GET  {reveal}/v1/jobs/{id}/account    the DAPPER document, which REVEAL rebuilds from the claims repository
+#                                            (stop unless its source is claims_repository); saved as account.json
 #   7. GET  {claims}/v1/deposits/{id}        read the deposit back from the claims repository (no key)
 #      GET  {claims}/v1/objects/{id}         and the account object it stored
 #
@@ -147,8 +148,9 @@ JOB=$(jq -er .id "$RUN/job.json")
 echo "Job $JOB accepted."      # a repeated request returns the job as first accepted; step 4 shows where it is now
 
 step '4. Watch it (Ctrl-C stops watching, not the job; run this script again to carry on)'
-show "python3 agent_job.py --handoff $HANDOFF --job $JOB --out $RUN/answer.md --account-out $RUN/account.json"
-python3 "$HERE/agent_job.py" --handoff "$HANDOFF" --job "$JOB" --out "$RUN/answer.md" --account-out "$RUN/account.json" \
+# The account itself is read in step 6, which checks where it came from.
+show "python3 agent_job.py --handoff $HANDOFF --job $JOB --out $RUN/answer.md"
+python3 "$HERE/agent_job.py" --handoff "$HANDOFF" --job "$JOB" --out "$RUN/answer.md" \
   || { echo "The job did not succeed, so there is no account and nothing was deposited." >&2; exit 1; }
 
 step '5. Read the result'
@@ -159,16 +161,27 @@ jq '.result.account | {account_id, dapper_version, objects, claims, value_locato
 DEPOSIT_STATUS=$(jq -r '.result.account.deposit.status' "$RUN/job.json")
 if [ "$DEPOSIT_STATUS" != deposited ]; then
   echo "The account was built but not deposited: $(jq -c '.result.account.deposit' "$RUN/job.json")" >&2
-  echo "It is kept with the job and saved in $RUN/account.json. There is no automatic retry." >&2
+  reveal GET "/v1/jobs/$JOB/account" | jq '.document' > "$RUN/account.json" || true
+  echo "It is kept with the job (source job_artifact) and saved in $RUN/account.json. There is no automatic retry." >&2
   exit 1
 fi
 ACCOUNT_ID=$(jq -er '.result.account.account_id' "$RUN/job.json")
 DEPOSIT_ID=$(jq -er '.result.account.deposit.deposit_id' "$RUN/job.json")
 
-step '6. The DAPPER document (step 4 saved it)'
-show 'curl "$REVEAL_API_URL/v1/jobs/'"$JOB"'/account" -H "Authorization: Bearer $REVEAL_API_KEY" | jq .document'
-jq -r 'to_entries | map("\(.value | length) \(.key)") | join(", ")' "$RUN/account.json"
-echo "Saved as $RUN/account.json"
+step '6. The DAPPER document, read back through REVEAL from the claims repository'
+# REVEAL keeps no copy of a deposited account: it rebuilds the document from the deposit, checks it hashes to the
+# document it sent (document_sha256) and says where it came from. Anything but claims_repository is a failure here.
+show 'curl "$REVEAL_API_URL/v1/jobs/'"$JOB"'/account" -H "Authorization: Bearer $REVEAL_API_KEY"'
+reveal GET "/v1/jobs/$JOB/account" > "$RUN/account-response.json" \
+  || { cat "$RUN/account-response.json" >&2; echo >&2; echo "REVEAL could not serve the deposited account back." >&2; exit 1; }
+SOURCE=$(jq -r '.source' "$RUN/account-response.json")
+if [ "$SOURCE" != claims_repository ]; then
+  echo "REVEAL served the account from '$SOURCE', not from the claims repository, although it is deposited." >&2
+  exit 1
+fi
+jq '.document' "$RUN/account-response.json" > "$RUN/account.json"
+jq -r '.document | to_entries | map("\(.value | length) \(.key)") | join(", ")' "$RUN/account-response.json"
+echo "Source: $SOURCE. Saved as $RUN/account.json"
 
 step '7. Read the deposit back from the claims repository (no key needed)'
 show "curl $CLAIMS_API_URL/v1/deposits/$DEPOSIT_ID"

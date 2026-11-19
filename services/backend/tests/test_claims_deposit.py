@@ -54,13 +54,35 @@ def test_a_local_repository_may_be_plain_http(monkeypatch):
 
 def test_the_whole_document_goes_in_one_keyed_request_and_the_receipt_is_summarised(configured):
     opener = Opener({'deposit_id': 'dep_1', 'depositor': {'key_id': 'key_1', 'name': 'reveal'}, 'edges': 2, 'unresolved_references': [],
-                     'deposited': [{'id': 'dapper:Claim.x', 'stored': 'new'}, {'id': 'dapper:Person.y', 'stored': 'existing', 'stored_differs': True}]})
+                     'deposited': [{'id': 'dapper:Claim.x', 'status': 'created'}, {'id': 'dapper:Person.y', 'status': 'exists'}]})
     outcome = claims_deposit.send(DOCUMENT, opener=opener)
-    assert outcome == {'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 2, 'stored_differs': 1, 'unresolved_references': 0}
+    assert outcome == {'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 2, 'stored_differs': 0, 'unresolved_references': 0}
     (request, timeout), = opener.requests
     assert request.full_url == 'https://claims.test/v1/deposits' and request.get_method() == 'POST' and timeout == claims_deposit.TIMEOUT_SECONDS
     assert request.get_header('X-api-key') == KEY and json.loads(request.data) == {'document': json.loads(DOCUMENT)}
     assert KEY not in json.dumps(outcome)
+
+
+@pytest.mark.parametrize('deposited, unresolved, counts', [
+    ([{'id': 'dapper:Claim.x', 'status': 'created'}, {'id': 'dapper:Person.y', 'status': 'exists', 'stored_differs': True}], [], (1, 0)),
+    ([{'id': 'dapper:Claim.x', 'status': 'created'}], ['dapper:File.z', 'dapper:Claim.w'], (0, 2))])
+def test_a_receipt_whose_objects_the_repository_holds_otherwise_is_a_failed_inconsistent_deposit(configured, deposited, unresolved, counts):
+    """An object already held with different unhashed content, or a reference left unresolved: the repository took the
+    deposit but does not hold the account as sent. The receipt id and counts are kept; nothing is sent again."""
+    opener = Opener({'deposit_id': 'dep_1', 'deposited': deposited, 'unresolved_references': unresolved})
+    assert claims_deposit.send(DOCUMENT, opener=opener) == {
+        'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_1', 'objects': len(deposited),
+        'stored_differs': counts[0], 'unresolved_references': counts[1]}
+    assert len(opener.requests) == 1
+
+
+def test_a_receipt_names_the_collection_and_release_only_when_the_deposit_went_into_one(configured):
+    receipt = {'deposit_id': 'dep_1', 'deposited': [{'id': 'dapper:Claim.x', 'status': 'created'}], 'unresolved_references': [],
+               'collection': {'key': 'dismech', 'release': '2026.11.0', 'state': 'open', 'objects': 1}}
+    assert claims_deposit.send(DOCUMENT, opener=Opener(receipt)) == {
+        'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 1, 'stored_differs': 0, 'unresolved_references': 0,
+        'collection': 'dismech', 'release': '2026.11.0'}
+    assert 'collection' not in claims_deposit.send(DOCUMENT, opener=Opener({**receipt, 'collection': None}))
 
 
 def test_a_refusal_is_final_and_says_why_while_an_outage_is_tried_again(configured):

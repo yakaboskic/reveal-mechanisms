@@ -43202,7 +43202,7 @@
           "Jobs"
         ],
         "summary": "Read the ScientificAccount an agent job returned",
-        "description": "Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.",
+        "description": "Owner-only, private no-store caching. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. A deposited account is read back from the claims repository (source claims_repository; REVEAL keeps no copy of it); any other is the copy kept with the job (source job_artifact), with the deposit status in account.deposit. A deposited account the repository cannot serve, or no longer holds as sent, is a 502, never a local copy. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.",
         "parameters": [
           {
             "name": "job_id",
@@ -43270,6 +43270,64 @@
                           "unresolved_references": 0
                         }
                       },
+                      "source": "claims_repository",
+                      "document": {
+                        "scientific_accounts": [
+                          {
+                            "id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                            "name": "LEPR and hepatic insulin signalling"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "kept_with_the_job": {
+                    "summary": "Kept with the job",
+                    "value": {
+                      "job_id": "77777777-7777-4777-8777-777777777777",
+                      "account": {
+                        "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                        "dapper_version": "0.2.1-a1",
+                        "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
+                        "document_bytes": 9120,
+                        "objects": 11,
+                        "edges": 4,
+                        "claims": 1,
+                        "value_locators": 1,
+                        "lint_warnings": 1,
+                        "requested_claims": [
+                          {
+                            "statement": "Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.",
+                            "assessed": true,
+                            "claim_ids": [
+                              "dapper:Claim.CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                            ]
+                          }
+                        ],
+                        "papers": [
+                          {
+                            "path": "sources/PMC0000000.xml",
+                            "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                            "size_bytes": 48211,
+                            "media_type": "application/xml",
+                            "command": "curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "observed_command": "mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "derived_from": null,
+                            "evidence_items": 1,
+                            "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+                          }
+                        ],
+                        "deposit": {
+                          "status": "failed",
+                          "reason": "inconsistent",
+                          "deposit_id": "dep_00000000000000000000000000000000",
+                          "objects": 11,
+                          "stored_differs": 1,
+                          "unresolved_references": 0
+                        }
+                      },
+                      "source": "job_artifact",
                       "document": {
                         "scientific_accounts": [
                           {
@@ -43371,6 +43429,66 @@
                   "minimum": 1
                 },
                 "example": 30
+              }
+            }
+          },
+          "503": {
+            "description": "Dependency Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "artifact_unavailable": {
+                    "summary": "Artifact unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:artifact-unavailable",
+                      "title": "Artifact Unavailable",
+                      "status": 503,
+                      "code": "ARTIFACT_UNAVAILABLE",
+                      "detail": "The account kept with this job is currently unavailable.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The claims repository could not serve the deposited account as it was sent.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                },
+                "examples": {
+                  "claims_repository_unavailable": {
+                    "summary": "Claims repository unavailable",
+                    "value": {
+                      "type": "urn:reveal:problem:claims-repository-unavailable",
+                      "title": "Claims Repository Unavailable",
+                      "status": 502,
+                      "code": "CLAIMS_REPOSITORY_UNAVAILABLE",
+                      "detail": "The account is deposited, but the claims repository could not be read. Try again later.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  },
+                  "claims_repository_mismatch": {
+                    "summary": "Claims repository mismatch",
+                    "value": {
+                      "type": "urn:reveal:problem:claims-repository-mismatch",
+                      "title": "Claims Repository Mismatch",
+                      "status": 502,
+                      "code": "CLAIMS_REPOSITORY_MISMATCH",
+                      "detail": "The claims repository does not hold this account as it was deposited.",
+                      "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                      "retryable": false
+                    }
+                  }
+                }
               }
             }
           }
@@ -74108,7 +74226,7 @@
               "not_configured",
               "withheld_unsafe"
             ],
-            "description": "deposited: the claims repository stored every object of the account. not_configured: this deployment has no claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job. withheld_unsafe: REVEAL's prompt-injection screen found text in the account, or in what the run read, that could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry."
+            "description": "deposited: the claims repository stored every object of the account as sent; GET /v1/jobs/{job_id}/account rebuilds it from there. not_configured: this deployment has no claims repository. failed: the attempt did not succeed, or (reason inconsistent) the repository took it but holds some object otherwise than sent; the account itself is unaffected and stays with the job. withheld_unsafe: REVEAL's prompt-injection screen found text in the account, or in what the run read, that could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry."
           },
           "deposit_id": {
             "anyOf": [
@@ -74133,7 +74251,16 @@
           },
           "unresolved_references": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "References the deposit left unresolved in the repository."
+          },
+          "collection": {
+            "type": "string",
+            "description": "The collection the deposit went into, when it named one. Accounts name none."
+          },
+          "release": {
+            "type": "string",
+            "description": "The release of that collection."
           },
           "reason": {
             "type": "string",
@@ -74142,6 +74269,7 @@
               "rejected",
               "unauthorized",
               "unavailable",
+              "inconsistent",
               "oversized_field",
               "unsafe_text",
               "unsafe_command",
@@ -74150,7 +74278,7 @@
               "screen_too_large",
               "prompt_injection"
             ],
-            "description": "Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable. For withheld_unsafe, the screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large (more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote)."
+            "description": "Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable; or inconsistent, when the receipt shows an object the repository already held with different unhashed content (stored_differs) or an unresolved reference: deposit_id and the counts are kept, and the account is served from the job. For withheld_unsafe, the screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large (more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote)."
           },
           "http_status": {
             "type": "integer",
@@ -74404,15 +74532,24 @@
           "account": {
             "$ref": "#/components/schemas/AgentAccount"
           },
+          "source": {
+            "type": "string",
+            "enum": [
+              "claims_repository",
+              "job_artifact"
+            ],
+            "description": "claims_repository: account.deposit.status is deposited, and the document was rebuilt from the claims repository (the deposit, its objects and its edges in stored order) and checked to be the account the job sent: the same account_id and the same sha256 as account.document_sha256. job_artifact: the repository does not hold the account (account.deposit.status withheld_unsafe, failed or not_configured), so this is the copy REVEAL kept with the job, checked against the same sha256."
+          },
           "document": {
             "type": "object",
             "additionalProperties": true,
-            "description": "The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) and edges, every id a DAPPER-ID-1 address."
+            "description": "The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) each ordered by id, and edges, every id a DAPPER-ID-1 address. Its canonical JSON (sorted keys, compact, UTF-8, final newline) hashes to account.document_sha256."
           }
         },
         "required": [
           "job_id",
           "account",
+          "source",
           "document"
         ],
         "additionalProperties": false

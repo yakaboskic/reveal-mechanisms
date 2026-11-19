@@ -254,7 +254,8 @@ The job result gains an `account` block, and `response` is the agent's short rep
   "deposit": {"status": "deposited", "deposit_id": "dep_…", "objects": 11, "stored_differs": 0, "unresolved_references": 0}}
 ```
 
-- `GET /v1/jobs/{id}/account` returns the DAPPER document (owner only).
+- `GET /v1/jobs/{id}/account` returns the DAPPER document (owner only), with `source` saying where it was read from;
+  see [Reading the account back](#reading-the-account-back).
 - `papers` lists every file the account's record names: its path under `output/`, the URL its bytes came from (for a
   converted file, the original's), REVEAL's checksum and size, the recorded and observed commands, the file it was
   converted from, and how many EvidenceItems quote it.
@@ -292,8 +293,9 @@ scratch directory, and with the scratch directory as `HOME`. They do reach the n
 a console button for it, come later.
 
 `scripts/scientific_account_job.sh <key.json> <run-directory>` is a worked example that prints every HTTP call: it takes
-candidate genes from the claims repository's validation-challenge query, submits the job with one claim per gene, and
-reads the deposit back from the repository. Each successful run is a permanent deposit; reusing a run directory resumes
+candidate genes from the claims repository's validation-challenge query, submits the job with one claim per gene,
+reads the account back through REVEAL (failing unless its `source` is `claims_repository`), and reads the deposit
+from the repository directly. Each successful run is a permanent deposit; reusing a run directory resumes
 the same job.
 
 ### Deposit
@@ -304,9 +306,10 @@ REVEAL's key. An object it already holds is left as stored.
 
 | `deposit.status` | Meaning |
 |---|---|
-| `deposited` | Stored. `deposit_id` is the repository's receipt. `stored_differs` counts objects it already held with different unhashed content; its copy stands. |
+| `deposited` | Stored, every object as sent. `deposit_id` is the repository's receipt. Accounts are deposited in no collection; a deposit that named one would carry `collection` and `release`. |
 | `not_configured` | This deployment has no claims repository. The account is still returned. |
 | `failed` | The attempt did not succeed (`reason`: `unavailable`, `rejected`, `unauthorized`, `too_large`). The job still succeeds and keeps its account. There is no automatic retry yet. A redirect from the repository is refused, not followed: the key is sent to the configured address only. |
+| `failed`, `reason: inconsistent` | The repository took the deposit, but its receipt shows an object it already held with different unhashed content (`stored_differs`; its copy stands) or a reference left unresolved (`unresolved_references`). It does not hold the account as sent, so REVEAL keeps the `deposit_id` and counts, records the reason in job telemetry, never sends it again, and serves the account from the job. |
 | `withheld_unsafe` | REVEAL's prompt-injection screen flagged the account, or text the run read, so it was never sent. The job still succeeds and keeps its account. `reason` names the check (`unsafe_text`, `unsafe_command`, `unrequested_claim`, `unknown_entity`, `oversized_field`, `screen_too_large`, `prompt_injection`) and `detail` says why and where in one line. There is no review or retry. |
 
 A deposit cannot be recalled. A cancellation that arrives before the deposit is sent stops it.
@@ -319,6 +322,31 @@ choosing the output) and naming no local file outside `output/` and no URL that 
 each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
 size limit. A classifier, Llama Prompt Guard 2 22M, also scores the saved papers, the other tool results and the
 account's text. Keep links and markup out of `context`, `closing_remarks` and the other prose fields.
+
+### Reading the account back
+
+REVEAL keeps no copy of a deposited account. `GET /v1/jobs/{id}/account` rebuilds it from the claims repository's
+public read routes, sending no key:
+
+1. `GET /v1/deposits/{deposit_id}`: the ids and classes of every object the deposit carried, and its edges in the
+   order they were sent;
+2. `POST /v1/objects:batchGet`, 500 ids at a time: the objects;
+3. the document is laid out as REVEAL sent it (each object group ordered by id, edges in their order) and serialized
+   in the same canonical JSON.
+
+The rebuilt document must hold the job's `account_id` and hash to its `document_sha256`. Then the response says
+`"source": "claims_repository"`. If the repository cannot be reached, or answers with anything else (a missing or
+changed object), the route returns 502 (`CLAIMS_REPOSITORY_UNAVAILABLE` or `CLAIMS_REPOSITORY_MISMATCH`) and records
+it in the job's telemetry; it never falls back to a local copy for a deposited account. The API keeps a rebuilt
+deposit in memory for a few minutes (`REVEAL_CLAIMS_READ_CACHE_SECONDS`), and checks it against the job on every read.
+
+When the repository holds nothing for the job (`withheld_unsafe`, `failed`, including `inconsistent`, or
+`not_configured`), REVEAL keeps the document's bytes with the job, beside the saved sources, and the route serves
+that copy, checked against the same `document_sha256`, as `"source": "job_artifact"`; `account.deposit.status` says
+why. The requester always gets their account.
+
+Deposited accounts are readable by anyone who can reach the claims repository: its object, deposit and search routes
+have no read check.
 
 ### Who the account names
 
@@ -336,12 +364,14 @@ researcher" with that code. The Person is deposited with the account, and a depo
 Either way the document does not include paper text beyond the quoted passages, REVEAL's internal capture files, or
 the prompt.
 
-Operators turn deposits on with two settings on the **workers**:
+Operators turn deposits on with two settings on the **workers**, and set the address on the **API** too, which reads
+deposited accounts back:
 
 | Setting | Value |
 |---|---|
-| `REVEAL_CLAIMS_API_URL` | Base address of the claims repository, `https://…` (plain `http` only for localhost). |
-| `REVEAL_CLAIMS_API_KEY` | A deposit key minted in the claims repository's admin console (Keys). It names REVEAL as the depositor. |
+| `REVEAL_CLAIMS_API_URL` | Base address of the claims repository, `https://…` (plain `http` only for localhost). Workers and API. |
+| `REVEAL_CLAIMS_API_KEY` | A deposit key minted in the claims repository's admin console (Keys). It names REVEAL as the depositor. Workers only. |
+| `REVEAL_CLAIMS_READ_CACHE_SECONDS` | How long the API keeps a deposit it read back (default 300; 0 turns the cache off). API. |
 
 The key stays in the worker's environment. It is not written to jobs, records or logs, and it is not among the
 credentials passed to the sandbox.

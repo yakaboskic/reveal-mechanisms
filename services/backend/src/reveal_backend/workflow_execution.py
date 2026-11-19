@@ -826,6 +826,12 @@ class WorkflowExecution:
         from .job_metrics import record
         record(self.repository, job, screen=verdict)
 
+    def record_deposit(self, job, deposit):
+        """Copy the deposit outcome (status, reason, receipt id and counts; never the document) into admin telemetry;
+        never affects the job."""
+        from .job_metrics import record
+        record(self.repository, job, deposit=deposit)
+
     async def commit_account(self, payload, token, job, execution, root):
         """Deposit and store a checked account. Returns the job result's account block, or None when the job was
         cancelled first (it is then finished as cancelled here).
@@ -833,6 +839,8 @@ class WorkflowExecution:
         The deposit goes first because the job result reports it and cannot be amended afterwards. It cannot be
         recalled either, so a pending cancellation is honoured before sending, and its receipt is recorded at once: a
         retried commit stores the account without depositing it twice. A deposit that fails is reported, never raised.
+        A receipt showing the repository holds the account otherwise than sent is `failed`/`inconsistent`
+        (claims_deposit): recorded like any receipt, and the account is kept with the job like an undeposited one.
 
         Only an account the gate's prompt-injection screen passed is sent. A withheld one is stored and returned as
         any other, with the deposit status withheld_unsafe; its verdict was checkpointed with the account, so a retried
@@ -859,23 +867,29 @@ class WorkflowExecution:
                 await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
                     'message': 'Depositing the account in the claims repository.'})
             deposit = await run_sync(claims_deposit.send, data)
-            if deposit['status'] == 'deposited':
+            # Any receipt is recorded, an inconsistent one too: the repository has taken the objects either way.
+            if deposit.get('deposit_id'):
                 def remember():
                     with self.repository.transaction() as tx:
                         owner, current = state.owned(tx, payload, token)
                         current.update(account_deposit=deposit, updated_at=now())
                         tx.put('execution', payload['job_id'], owner, current)
                 await run_sync(remember)
+        await run_sync(self.record_deposit, job, deposit)
         retained = {}
         for paper in record['papers']:
             retained[paper['sha256']] = await run_sync(agent_account.retain, job['id'], paper['sha256'],
                                                        texts[paper['sha256']], paper['media_type'])
-        document = decode(data)
+        # A deposited account is served back from the claims repository; REVEAL keeps the document only when the
+        # repository does not hold it as sent, so its owner still gets it (claims_read, agent_account.kept_document).
+        kept = None
+        if deposit['status'] != 'deposited':
+            kept = await run_sync(agent_account.retain, job['id'], record['document']['sha256'], data, 'application/json')
         def save():
             with self.repository.transaction() as tx:
                 pair = jobs.fenced(tx, job['id'], token)
                 if not pair: return False
-                agent_account.save(tx, pair[0]['owner_user_id'], job['id'], record, document, retained, deposit, now())
+                agent_account.save(tx, pair[0]['owner_user_id'], job['id'], record, retained, deposit, now(), kept)
                 return True
         if not await run_sync(save): return None
         return agent_account.public(record, deposit)

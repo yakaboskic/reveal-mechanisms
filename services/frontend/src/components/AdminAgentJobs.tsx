@@ -1,7 +1,7 @@
 "use client";
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React, { useState } from "react";
-import { deliverableLabel, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
+import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "@/lib/admin-job";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { JobCost, usd } from "./AdminCosts";
 
@@ -71,7 +71,8 @@ export function AgentRunDetail({ run, job }: { run: AgentRun; job: AgentJob | (O
       ["Requester named in the account", yesNo(run.attribute_requester)],
       ["Deposit", outcome ? <><span className={`admin-status ${outcome.tone}`}>{outcome.text}</span>{run.result.deposit_id && <small className="admin-mono"> {run.result.deposit_id}</small>}</> : "—"],
       ["Prompt-injection screen", screenSummary(run.result) ?? "—"],
-      ["Account", run.result.account_id ? <span className="admin-mono">{run.result.account_id}</span> : "—"],
+      // No claims-repository address is configured in the frontend, so the account is named by its DAPPER id, not linked.
+      ["Account", run.result.account_id ? <><span className="admin-mono">{run.result.account_id}</span> <small>{accountSource(run.result)}</small></> : "—"],
       ["Account contents", run.result.account_id ? [`${count(run.result.objects)} objects`, run.result.claims != null && plural(run.result.claims, "claim"), run.result.quotes != null && plural(run.result.quotes, "quote"), run.result.papers != null && plural(run.result.papers, "paper"), run.result.lint_warnings != null && plural(run.result.lint_warnings, "lint warning"), run.result.dapper_version && `DAPPER ${run.result.dapper_version}`].filter(Boolean).join(" · ") : "—"],
     ] as [string, React.ReactNode][] : []),
     ["Response", run.result.response_characters == null ? "—" : `${count(run.result.response_characters)} characters${run.result.response_truncated ? " (truncated)" : ""}${run.result.files ? ` · ${plural(run.result.files, "file")}` : ""}`],

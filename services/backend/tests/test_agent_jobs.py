@@ -831,7 +831,10 @@ def test_account_commit_deposits_the_checked_bytes_once_then_stores_and_reports(
     assert workflow.execution['account_deposit'] == receipt and puts[0].args[:2] == ('execution', 'agent-job')
     kind, identity, owner, stored = puts[1].args
     assert (kind, identity, owner) == ('agent_account', 'agent-job', 'owner')
-    assert stored['document']['scientific_accounts'][0]['id'] == record['account_id'] and stored['account']['deposit'] == receipt
+    # A deposited account is served back from the claims repository: REVEAL keeps no copy of the document.
+    assert stored['account']['account_id'] == record['account_id'] and stored['account']['deposit'] == receipt
+    assert 'document' not in stored and 'document_artifact' not in stored
+    assert receipt in [call.kwargs.get('deposit') for call in workflow.telemetry.call_args_list]
     text = stored['sources'][record['papers'][0]['sha256']]
     assert Path(text['path']).read_bytes() == b'Glucose production rose in knockout mice.' and Path(text['path']).is_relative_to(workflow.root / 'kept')
     outcome = finish.call_args.kwargs['result']
@@ -860,6 +863,31 @@ def test_a_deposit_that_does_not_happen_is_reported_and_never_fails_the_job(work
     assert finish.call_args.args[3] == 'succeeded' and finish.call_args.kwargs['result']['account']['deposit'] == outcome
     # Nothing was recorded as deposited, so a later delivery of this step would try again.
     assert 'account_deposit' not in workflow.execution and [call.args[0] for call in puts] == ['agent_account']
+    assert_kept_with_the_job(workflow, puts[0].args[3])
+
+
+def assert_kept_with_the_job(workflow, stored):
+    """An account the claims repository does not hold is kept as retained bytes, the deposit-form document exactly,
+    and the record names only where."""
+    record = workflow.execution['account']
+    assert 'document' not in stored and set(stored['document_artifact']) == {'path'}
+    kept = Path(stored['document_artifact']['path'])
+    assert kept.read_bytes() == (workflow.root / record['document']['path']).read_bytes() and kept.is_relative_to(workflow.root / 'kept')
+
+
+def test_a_receipt_the_repository_holds_otherwise_is_recorded_once_and_the_account_kept_with_the_job(workflow, monkeypatch):
+    monkeypatch.setenv('REVEAL_ARTIFACT_STORE', 'filesystem'); monkeypatch.setenv('REVEAL_ARTIFACTS_DIR', str(workflow.root / 'kept'))
+    receipt = {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_3', 'objects': 9, 'stored_differs': 1, 'unresolved_references': 0}
+    send, finish, puts = commit_account_job(workflow, receipt)
+    send.assert_called_once()
+    # The repository took the objects, so the receipt is recorded first and a retried commit never deposits again.
+    assert workflow.execution['account_deposit'] == receipt and puts[0].args[:2] == ('execution', 'agent-job')
+    assert finish.call_args.args[3] == 'succeeded' and finish.call_args.kwargs['result']['account']['deposit'] == receipt
+    assert_kept_with_the_job(workflow, puts[1].args[3])
+    # Operators see the reason in telemetry.
+    assert receipt in [call.kwargs.get('deposit') for call in workflow.telemetry.call_args_list]
+    again, finish, _ = commit_account_job(AgentWorkflowRetry(workflow), receipt)
+    again.assert_not_called(); assert finish.call_args.kwargs['result']['account']['deposit'] == receipt
 
 
 def screen_fake():
@@ -891,8 +919,10 @@ def test_an_account_the_screen_withholds_is_kept_and_returned_but_never_deposite
     # The account is kept with the job for its owner; nothing is recorded as deposited.
     assert [call.args[0] for call in puts] == ['agent_account'] and 'account_deposit' not in workflow.execution
     assert puts[0].args[3]['account']['deposit']['status'] == 'withheld_unsafe'
+    assert_kept_with_the_job(workflow, puts[0].args[3])
     # Operators see which check, the score and threshold, and where the text came from.
-    (job,), recorded = workflow.telemetry.call_args.args[1:], workflow.telemetry.call_args.kwargs
+    call = next(call for call in workflow.telemetry.call_args_list if 'screen' in call.kwargs)
+    (job,), recorded = call.args[1:], call.kwargs
     assert job['id'] == 'agent-job'
     assert {key: recorded['screen'][key] for key in ('outcome', 'check', 'score', 'threshold', 'location', 'classifier')} == {
         'outcome': 'withheld', 'check': 'prompt_injection', 'score': 0.97, 'threshold': 0.5,
@@ -909,7 +939,7 @@ def test_a_clean_account_is_screened_then_deposited_and_the_verdict_reaches_tele
     send, finish, _ = commit_account_job(workflow, receipt)
     send.assert_called_once()
     assert finish.call_args.kwargs['result']['account']['deposit'] == receipt
-    screen = workflow.telemetry.call_args.kwargs['screen']
+    screen = next(call.kwargs['screen'] for call in workflow.telemetry.call_args_list if 'screen' in call.kwargs)
     assert (screen['outcome'], screen['check'], screen['score'], screen['classifier']) == ('passed', None, 0.02, 'fake')
 
 
@@ -1100,7 +1130,8 @@ def test_an_account_job_may_choose_its_tools_network_hosts_and_graphs_like_an_an
         ['Read', 'Write', 'Bash'], 'restricted', ['www.ebi.ac.uk'], ['prokn'])
 
 
-def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, monkeypatch, tmp_path):
+def account_job_with_record(service, monkeypatch, tmp_path, deposit, document=None):
+    """An account job and the record its commit leaves: kept with the job unless deposited (workflow_execution)."""
     from reveal_backend import agent_account
     monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*'); monkeypatch.setenv('REVEAL_ARTIFACTS_DIR', str(tmp_path / 'kept'))
     created = post_agent(service, deliverable='scientific_account', question='Does loss of LEPR signalling cause hepatic insulin resistance?')
@@ -1108,16 +1139,95 @@ def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, mon
     job_id, headers = created.json()['id'], {'Authorization': created.request.headers['Authorization']}
     assert service.client.get(f'/v1/jobs/{job_id}/account', headers=headers).status_code == 404        # nothing accepted yet
     text = 'Glucose production rose in knockout mice.'.encode(); checksum = sha256(text)
-    document = {'scientific_accounts': [{'id': 'dapper:ScientificAccount.' + 'A' * 32}]}
-    record = {'document': {'sha256': sha256(canonical_json(document)), 'size_bytes': 10}, 'account_id': document['scientific_accounts'][0]['id'],
+    document = document or {'scientific_accounts': [{'id': 'dapper:ScientificAccount.' + 'A' * 32, 'name': 'An account'}],
+                            'claims': [{'id': 'dapper:Claim.' + 'C' * 32, 'statement': 'LEPR loss raises glucose output.'}]}
+    data = canonical_json(document)
+    record = {'document': {'sha256': sha256(data), 'size_bytes': len(data)}, 'account_id': document['scientific_accounts'][0]['id'],
               'dapper_version': '0.2.1-a1', 'objects': 5, 'edges': 2, 'claims': 1, 'value_locators': 1, 'lint_warnings': 0, 'requested_claims': [],
               'papers': [source_paper(text)]}
     retained = {checksum: agent_account.retain(job_id, checksum, text, 'text/plain')}
+    kept = None if deposit['status'] == 'deposited' else agent_account.retain(job_id, sha256(data), data, 'application/json')
     with service.repo.transaction() as tx:
-        agent_account.save(tx, service.users['registered'], job_id, record, document, retained, {'status': 'not_configured'}, 'now')
-    found = service.client.get(f'/v1/jobs/{job_id}/account', headers=headers)
+        agent_account.save(tx, service.users['registered'], job_id, record, retained, deposit, 'now', kept)
+    return SimpleNamespace(id=job_id, headers=headers, document=document, data=data, record=record, checksum=checksum, text=text)
+
+
+@pytest.fixture
+def claims(monkeypatch):
+    """The fake claims repository (test_claims_read) behind REVEAL_CLAIMS_API_URL, with an empty read cache."""
+    from reveal_backend import claims_read
+    from test_claims_read import FakeClaims
+    fake = FakeClaims()
+    monkeypatch.setenv('REVEAL_CLAIMS_API_URL', 'https://claims.test')
+    monkeypatch.setattr(claims_read, '_cache', None); monkeypatch.setattr(claims_read, 'build_opener', lambda: fake)
+    return fake
+
+
+DEPOSITED = {'status': 'deposited', 'deposit_id': 'dep_' + '1' * 32, 'objects': 2, 'stored_differs': 0, 'unresolved_references': 0}
+
+
+@pytest.mark.parametrize('deposit', [
+    {'status': 'not_configured'}, {'status': 'failed', 'reason': 'unavailable'},
+    {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_' + '1' * 32, 'objects': 2, 'stored_differs': 1, 'unresolved_references': 0},
+    {'status': 'withheld_unsafe', 'reason': 'prompt_injection', 'detail': 'The account was not stored in the claims repository.'}])
+def test_an_account_the_claims_repository_does_not_hold_is_served_from_the_job(service, monkeypatch, tmp_path, claims, deposit):
+    from reveal_backend import agent_account
+    job = account_job_with_record(service, monkeypatch, tmp_path, deposit)
+    with service.repo.read_transaction() as tx:
+        row = tx.get('agent_account', job.id)['data']
+    assert 'document' not in row and Path(row['document_artifact']['path']).read_bytes() == job.data
+    found = service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers)
     assert found.status_code == 200 and found.headers['cache-control'] == 'private, no-store'
-    assert found.json() == {'job_id': job_id, 'account': agent_account.public(record, {'status': 'not_configured'}), 'document': document}
+    assert found.json() == {'job_id': job.id, 'account': agent_account.public(job.record, deposit), 'source': 'job_artifact',
+                            'document': job.document}
+    assert claims.requests == []                    # the repository is never asked for an account it does not hold
+    # A kept copy that is not the account recorded is never served.
+    Path(row['document_artifact']['path']).write_bytes(b'{}\n')
+    changed = service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers)
+    assert changed.status_code == 503 and changed.json()['code'] == 'ARTIFACT_UNAVAILABLE'
+
+
+def test_a_deposited_account_is_served_back_from_the_claims_repository(service, monkeypatch, tmp_path, claims):
+    from reveal_backend import agent_account
+    job = account_job_with_record(service, monkeypatch, tmp_path, DEPOSITED)
+    with service.repo.read_transaction() as tx:
+        row = tx.get('agent_account', job.id)['data']
+    assert 'document' not in row and 'document_artifact' not in row      # no REVEAL table or artifact holds it
+    claims.deposit(job.data, DEPOSITED['deposit_id'])
+    found = service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers)
+    assert found.status_code == 200 and found.headers['cache-control'] == 'private, no-store'
+    body = found.json()
+    assert body == {'job_id': job.id, 'account': agent_account.public(job.record, DEPOSITED), 'source': 'claims_repository',
+                    'document': job.document}
+    assert canonical_json(body['document']) == job.data
+    fetched = len(claims.requests)
+    assert service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers).json() == body and len(claims.requests) == fetched
+
+
+def test_a_deposited_account_the_repository_holds_otherwise_or_cannot_serve_is_a_502_never_the_local_copy(service, monkeypatch, tmp_path, claims):
+    job = account_job_with_record(service, monkeypatch, tmp_path, DEPOSITED)
+    claims.deposit(job.data, DEPOSITED['deposit_id'])
+    claims.objects['dapper:Claim.' + 'C' * 32]['statement'] = 'Something else.'
+    tampered = service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers)
+    assert tampered.status_code == 502 and tampered.json()['code'] == 'CLAIMS_REPOSITORY_MISMATCH'
+    assert 'Something else' not in tampered.text
+    with service.repo.read_transaction() as tx:
+        serve = tx.get('job_metrics', job.id)['data']['serve']
+    assert (serve['outcome'], serve['reason']) == ('mismatch', 'sha256')
+    from reveal_backend import claims_read
+    monkeypatch.setattr(claims_read, '_cache', None); claims.down = True
+    down = service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers)
+    assert down.status_code == 502 and down.json()['code'] == 'CLAIMS_REPOSITORY_UNAVAILABLE'
+    with service.repo.read_transaction() as tx:
+        assert tx.get('job_metrics', job.id)['data']['serve']['outcome'] == 'unavailable'
+    monkeypatch.delenv('REVEAL_CLAIMS_API_URL'); claims.down = False
+    assert service.client.get(f'/v1/jobs/{job.id}/account', headers=job.headers).json()['code'] == 'CLAIMS_REPOSITORY_UNAVAILABLE'
+
+
+def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, monkeypatch, tmp_path):
+    job = account_job_with_record(service, monkeypatch, tmp_path, {'status': 'not_configured'})
+    job_id, headers, checksum, text = job.id, job.headers, job.checksum, job.text
+    assert service.client.get(f'/v1/jobs/{job_id}/account', headers=headers).json()['source'] == 'job_artifact'
     paper = service.client.get(f'/v1/jobs/{job_id}/account/sources/{checksum}', headers=headers)
     assert paper.status_code == 200 and paper.content == text and paper.headers['content-disposition'].startswith('attachment')
     assert service.client.get(f'/v1/jobs/{job_id}/account/sources/{"0" * 64}', headers=headers).status_code == 404

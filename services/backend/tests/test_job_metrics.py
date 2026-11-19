@@ -81,6 +81,20 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual((data['kind'], data['parent_job_id']), ('paragraph', 'research-job'))
         self.assertEqual(data['agent']['cost_usd'], 3.1378407); self.assertEqual(data['error']['error_type'], 'RuntimeError')
 
+    def test_an_account_jobs_deposit_and_serve_back_failures_are_recorded_without_the_document(self):
+        from reveal_backend.job_metrics import serve_metrics
+        with self.repo.transaction() as tx:
+            job = jobs.enqueue(tx, 'owner', 'agent')
+        receipt = {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_' + '1' * 32, 'objects': 9, 'stored_differs': 1,
+                   'unresolved_references': 0, 'document': {'claims': []}}
+        self.assertTrue(record(self.repo, job, deposit=receipt))
+        self.assertTrue(record(self.repo, {'id': job['id']}, serve=serve_metrics('mismatch', 'sha256')))
+        with self.repo.read_transaction() as tx:
+            data = tx.get('job_metrics', job['id'])['data']
+        self.assertEqual(data['deposit'], {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_' + '1' * 32, 'http_status': None,
+                                           'objects': 9, 'stored_differs': 1, 'unresolved_references': 0})
+        self.assertEqual((data['serve']['outcome'], data['serve']['reason']), ('mismatch', 'sha256'))
+
     def test_recording_never_raises_and_ignores_unknown_jobs(self):
         self.assertFalse(record(self.repo, {'id': 'missing'}, agent={}))
         with patch.object(self.repo, 'transaction', side_effect=OSError('database unavailable')):

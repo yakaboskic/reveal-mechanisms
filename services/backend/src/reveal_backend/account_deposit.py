@@ -13,13 +13,18 @@ its text, the File, and optionally the lines it sits on.
     carries the Bash command REVEAL saw run (`observed_command`). The bytes are never deposited: REVEAL keeps them;
   - everything is minted once, with DAPPER 0.2.1-a1 (the release that has ValueLocator), vendored at
     services/backend/vendor/dapper-0.2.1-a1. DAPPER ids are the same in 0.2.0 and 0.2.1-a1, so nodes this rewrite
-    does not touch keep the ids the pinned release gave them.
+    does not touch keep the ids the pinned release gave them;
+  - it is laid out one way (`layout`: nodes by id, edges in order), the way claims_read rebuilds it from the claims
+    repository, so the account served back hashes to the account that was sent.
 
 The ids of the returned document are the account's only public ids. Ids minted earlier, by the pinned release's
 gate, name the internal form and are never stored or returned.
 """
+import ast
 from copy import deepcopy
+from functools import lru_cache
 import hashlib
+import re
 import json
 import subprocess
 import sys
@@ -239,6 +244,7 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
                 used.append(edge)
 
     minted, mapping = mint(document)
+    minted = layout(minted)
     account = minted['scientific_accounts'][0]
     files = binding['files']
     summary = {'account_id': account['id'], 'dapper_version': DAPPER_VERSION,
@@ -251,6 +257,36 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
                            'evidence_items': quoted.get(identity, 0), 'file_id': mapping.get(identity, identity)}
                           for identity, entry in sorted(files.items(), key=lambda pair: pair[1]['path'])]}
     return minted, summary
+
+
+def layout(document):
+    """The deposit form's one layout: every node group ordered by id, every edge group in its own order, no empty
+    group and no null slot. The claims repository keeps a deposit's edges in order but lists its objects by id, and
+    stores a node or edge without its null slots (which identity ignores), so a document in this layout is the one
+    claims_read rebuilds from the repository, byte for byte."""
+    laid = {}
+    for key, rows in document.items():
+        rows = [{slot: value for slot, value in row.items() if value is not None} for row in rows]
+        if rows:
+            laid[key] = rows if key.endswith('_edges') else sorted(rows, key=lambda node: node['id'])
+    return laid
+
+
+@lru_cache(maxsize=1)
+def node_groups():
+    """{class name: document group} of the vendored DAPPER (its dapper_identity.DOC_GROUPS), read from the source
+    without importing it: the pinned release owns this process's DAPPER runtime."""
+    source = (VENDOR / 'schema/identity/dapper_identity.py').read_text()
+    for statement in ast.parse(source).body:
+        if isinstance(statement, ast.Assign) and any(getattr(target, 'id', None) == 'DOC_GROUPS' for target in statement.targets):
+            return {class_name: group for group, class_name in ast.literal_eval(statement.value).items()}
+    raise RuntimeError(f'Vendored DAPPER {DAPPER_VERSION} names no document groups')
+
+
+def edge_group(class_name):
+    """The document group of an edge class, as DAPPER names it: Used -> used_edges, WasGeneratedBy ->
+    was_generated_by_edges."""
+    return re.sub(r'(?<!^)(?=[A-Z])', '_', class_name).lower() + '_edges'
 
 
 def source_bytes(sources_root, papers):

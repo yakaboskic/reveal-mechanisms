@@ -1712,7 +1712,7 @@ export interface paths {
         };
         /**
          * Read the ScientificAccount an agent job returned
-         * @description Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
+         * @description Owner-only, private no-store caching. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. A deposited account is read back from the claims repository (source claims_repository; REVEAL keeps no copy of it); any other is the copy kept with the job (source job_artifact), with the deposit status in account.deposit. A deposited account the repository cannot serve, or no longer holds as sent, is a 502, never a local copy. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
          */
         get: operations["getJobAccount"];
         put?: never;
@@ -9787,7 +9787,7 @@ export interface components {
         };
         AgentAccountDeposit: {
             /**
-             * @description deposited: the claims repository stored every object of the account. not_configured: this deployment has no claims repository. failed: the attempt did not succeed; the account itself is unaffected and stays with the job. withheld_unsafe: REVEAL's prompt-injection screen found text in the account, or in what the run read, that could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry.
+             * @description deposited: the claims repository stored every object of the account as sent; GET /v1/jobs/{job_id}/account rebuilds it from there. not_configured: this deployment has no claims repository. failed: the attempt did not succeed, or (reason inconsistent) the repository took it but holds some object otherwise than sent; the account itself is unaffected and stays with the job. withheld_unsafe: REVEAL's prompt-injection screen found text in the account, or in what the run read, that could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry.
              * @enum {string}
              */
             status: "deposited" | "failed" | "not_configured" | "withheld_unsafe";
@@ -9796,12 +9796,17 @@ export interface components {
             objects?: number;
             /** @description Objects the repository already held under the same id with different unhashed content. Its stored copy stands. */
             stored_differs?: number;
+            /** @description References the deposit left unresolved in the repository. */
             unresolved_references?: number;
+            /** @description The collection the deposit went into, when it named one. Accounts name none. */
+            collection?: string;
+            /** @description The release of that collection. */
+            release?: string;
             /**
-             * @description Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable. For withheld_unsafe, the screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large (more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote).
+             * @description Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable; or inconsistent, when the receipt shows an object the repository already held with different unhashed content (stored_differs) or an unresolved reference: deposit_id and the counts are kept, and the account is served from the job. For withheld_unsafe, the screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large (more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote).
              * @enum {string}
              */
-            reason?: "too_large" | "rejected" | "unauthorized" | "unavailable" | "oversized_field" | "unsafe_text" | "unsafe_command" | "unrequested_claim" | "unknown_entity" | "screen_too_large" | "prompt_injection";
+            reason?: "too_large" | "rejected" | "unauthorized" | "unavailable" | "inconsistent" | "oversized_field" | "unsafe_text" | "unsafe_command" | "unrequested_claim" | "unknown_entity" | "screen_too_large" | "prompt_injection";
             http_status?: number;
             /** @description For rejected, the repository's own reason for refusing the document. For withheld_unsafe, one plain line saying the account was not stored in the claims repository, why, and where (a saved source file and lines, a tool call, or an account field); never the text itself. */
             detail?: string;
@@ -9865,7 +9870,12 @@ export interface components {
             /** Format: uuid */
             job_id: string;
             account: components["schemas"]["AgentAccount"];
-            /** @description The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) and edges, every id a DAPPER-ID-1 address. */
+            /**
+             * @description claims_repository: account.deposit.status is deposited, and the document was rebuilt from the claims repository (the deposit, its objects and its edges in stored order) and checked to be the account the job sent: the same account_id and the same sha256 as account.document_sha256. job_artifact: the repository does not hold the account (account.deposit.status withheld_unsafe, failed or not_configured), so this is the copy REVEAL kept with the job, checked against the same sha256.
+             * @enum {string}
+             */
+            source: "claims_repository" | "job_artifact";
+            /** @description The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) each ordered by id, and edges, every id a DAPPER-ID-1 address. Its canonical JSON (sorted keys, compact, UTF-8, final newline) hashes to account.document_sha256. */
             document: {
                 [key: string]: unknown;
             };
@@ -17262,6 +17272,24 @@ export interface operations {
                 headers: {
                     /** @example 30 */
                     "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The claims repository could not serve the deposited account as it was sent. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

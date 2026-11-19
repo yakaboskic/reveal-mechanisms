@@ -493,8 +493,9 @@ p.write_text(json.dumps(doc))
             self.assertIn((by_name['sources/jmet-2012.txt']['id'], activities[run.CONVERT]['id']), made)
             self.assertIn({'subject': by_name['sources/jmet-2012.txt']['id'], 'predicate': 'prov:wasDerivedFrom', 'object': by_name['sources/jmet-2012.pdf']['id']},
                           document['was_derived_from_edges'])
-            self.assertEqual(sorted({key: value for key, value in node.items() if key != 'id'}.items() for node in document['publications']),
-                             sorted([{'citation': 'PMCID:PMC3491803'}.items(), {'doi': 'doi:10.1234/jmet.2012.5'}.items()]))
+            # Compared as sorted lists of pairs: dict views order as sets, which would not sort them.
+            self.assertEqual(sorted(sorted((key, value) for key, value in node.items() if key != 'id') for node in document['publications']),
+                             [[('citation', 'PMCID:PMC3491803')], [('doi', 'doi:10.1234/jmet.2012.5')]])
             self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('urn:draft', json.dumps(document))
             self.assertNotIn('persons', document); self.assertNotIn('Test Requester', data.decode())   # not named unless asked
             self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id

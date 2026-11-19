@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
+import { accountSource, deliverableLabel, depositOutcome, fileSize, jobKindLabel, jobLabel, screenSummary, shortSha, type AgentJob, type AgentJobs, type AgentRun } from "../src/lib/admin-job";
 import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgentJobs";
 
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
@@ -54,6 +54,14 @@ test("a succeeded job whose deposit did not happen is called out", () => {
   assert.equal(depositOutcome(sparse), null);
   assert.equal(depositOutcome(job("c", "succeeded", { ...accountRun, result: { ...accountRun.result, deposit_status: "not_configured" } }))?.tone, "bad");
   assert.equal(depositOutcome(job("d", "running", { ...accountRun, result: noResult }))?.text, "Pending");
+  const inconsistent = job("e", "succeeded", { ...accountRun, result: { ...accountRun.result, deposit_status: "failed", deposit_reason: "inconsistent" } });
+  assert.deepEqual(depositOutcome(inconsistent), { text: "Deposit inconsistent: the claims repository holds part of the account otherwise than sent", tone: "bad" });
+});
+
+test("the job detail says where the owner's account is read from", () => {
+  assert.equal(accountSource(deposited.agent.result), "served from the claims repository");
+  assert.equal(accountSource({ account_id: "dapper:ScientificAccount.x", deposit_status: "withheld_unsafe" }), "served from the copy kept with the job");
+  assert.equal(accountSource({ account_id: null, deposit_status: null }), null);
 });
 
 test("the agent jobs view shows type, settings, usage and deposit for each job", () => {

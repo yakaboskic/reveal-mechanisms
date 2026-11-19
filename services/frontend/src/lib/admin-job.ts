@@ -57,11 +57,19 @@ export const jobKindLabel = (kind: string) => KINDS[kind] ?? kind.replaceAll("_"
 /** "agent · scientific account" for an agent job whose type is known; the bare kind otherwise. */
 export const jobLabel = (job: Pick<AdminJob, "kind" | "deliverable">) => job.kind === "agent" && job.deliverable ? `agent · ${deliverableLabel(job.deliverable).toLowerCase()}` : job.kind;
 
+/** Where the owner's GET /v1/jobs/{id}/account reads the account from: rebuilt from the claims repository when it was
+ * deposited, else the copy kept with the job. */
+export function accountSource(result: Pick<AgentJob["agent"]["result"], "account_id" | "deposit_status">): string | null {
+  if (!result.account_id) return null;
+  return result.deposit_status === "deposited" ? "served from the claims repository" : "served from the copy kept with the job";
+}
+
 /** Whether an account reached the claims repository. A job can succeed while its deposit does not. */
 export function depositOutcome(job: Pick<AgentJob, "status" | "agent">): { text: string; tone: "good" | "bad" | "" } | null {
   const { deliverable, result } = job.agent;
   if (deliverable !== "scientific_account") return null;
   if (result.deposit_status === "deposited") return { text: "Deposited", tone: "good" };
+  if (result.deposit_status === "failed" && result.deposit_reason === "inconsistent") return { text: "Deposit inconsistent: the claims repository holds part of the account otherwise than sent", tone: "bad" };
   if (result.deposit_status === "failed") return { text: `Deposit failed${result.deposit_reason ? `: ${result.deposit_reason.replaceAll("_", " ")}` : ""}${result.deposit_http_status ? ` (HTTP ${result.deposit_http_status})` : ""}`, tone: "bad" };
   if (result.deposit_status === "not_configured") return { text: "Not deposited: no claims repository is configured", tone: "bad" };
   if (result.deposit_status === "withheld_unsafe") return { text: `Withheld as unsafe${result.screen_check || result.deposit_reason ? `: ${(result.screen_check || result.deposit_reason)!.replaceAll("_", " ")}` : ""}`, tone: "bad" };

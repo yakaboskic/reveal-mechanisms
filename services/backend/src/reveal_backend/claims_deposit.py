@@ -36,21 +36,27 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def configuration():
-    """(base url, key) when deposits are configured and the address is safe to send a key to, else None. A malformed
-    address is not a configuration; it never raises."""
+def address(url):
+    """The base url when it is safe to call (https, or plain http to this machine), else None. Never raises."""
     try:
-        url, key = setting('REVEAL_CLAIMS_API_URL', '').strip().rstrip('/'), setting('REVEAL_CLAIMS_API_KEY', '').strip()
-        if not url or not key:
+        url = (url or '').strip().rstrip('/')
+        if not url:
             return None
         parsed = urllib.parse.urlsplit(url)
         parsed.port   # raises on a port that is not a number
         secure = parsed.scheme == 'https' or (parsed.scheme == 'http' and parsed.hostname in LOCAL_HOSTS)
         if not secure or not parsed.hostname or parsed.username or parsed.query or parsed.fragment:
             return None
-        return url, key
+        return url
     except ValueError:
         return None
+
+
+def configuration():
+    """(base url, key) when deposits are configured and the address is safe to send a key to, else None. A malformed
+    address is not a configuration; it never raises."""
+    url, key = address(setting('REVEAL_CLAIMS_API_URL', '')), setting('REVEAL_CLAIMS_API_KEY', '').strip()
+    return (url, key) if url and key else None
 
 
 def _detail(raw):
@@ -63,21 +69,33 @@ def _detail(raw):
 
 
 def _receipt(body):
+    """The deposit block of a receipt. The repository reports, without refusing, an object it already held with
+    different unhashed content (its stored copy stands) and a reference the deposit left unresolved. Either means the
+    repository does not hold the account as sent, so the deposit is `failed` with reason `inconsistent`: it is kept
+    with its deposit id and counts, and the account is served from the job, never rebuilt from the repository."""
     if not isinstance(body, dict) or not isinstance(body.get('deposit_id'), str) or not isinstance(body.get('deposited'), list):
         raise ValueError('The answer is not a deposit receipt')
     deposited = body['deposited']
     unresolved = body.get('unresolved_references') if isinstance(body.get('unresolved_references'), list) else []
-    return {'status': 'deposited', 'deposit_id': body['deposit_id'],
-            'objects': len(deposited),
-            # An object the repository already held under the same id with different unhashed content: its stored copy stands.
-            'stored_differs': sum(1 for item in deposited if isinstance(item, dict) and item.get('stored_differs')),
-            'unresolved_references': len(unresolved)}
+    counts = {'deposit_id': body['deposit_id'], 'objects': len(deposited),
+              # An object the repository already held under the same id with different unhashed content: its stored copy stands.
+              'stored_differs': sum(1 for item in deposited if isinstance(item, dict) and item.get('stored_differs')),
+              'unresolved_references': len(unresolved)}
+    collection = body.get('collection')
+    if isinstance(collection, dict) and isinstance(collection.get('key'), str):
+        counts['collection'] = collection['key']
+        if isinstance(collection.get('release'), str):
+            counts['release'] = collection['release']
+    if counts['stored_differs'] or counts['unresolved_references']:
+        return {'status': 'failed', 'reason': 'inconsistent', **counts}
+    return {'status': 'deposited', **counts}
 
 
 def send(document_bytes, *, opener=None, configured=None):
     """Deposit one account document (its canonical JSON bytes). Returns the outcome; never raises.
 
-    {'status': 'deposited', 'deposit_id', 'objects', 'stored_differs', 'unresolved_references'}
+    {'status': 'deposited', 'deposit_id', 'objects', 'stored_differs': 0, 'unresolved_references': 0, 'collection'?, 'release'?}
+    {'status': 'failed', 'reason': 'inconsistent', the same counts}    the repository took it but holds it otherwise
     {'status': 'not_configured'}
     {'status': 'failed', 'reason': 'too_large' | 'rejected' | 'unauthorized' | 'unavailable', 'http_status'?, 'detail'?}
     """
