@@ -24,19 +24,26 @@ def structured(**body):
                                   budget_cap=5, schema_checker=agent_output.check_schema)
 
 
-def test_an_answer_job_freezes_its_schema_and_a_job_without_one_keeps_its_exact_old_bytes():
+def test_an_answer_job_freezes_its_schema_as_an_optional_key_of_the_one_input_format():
     value = structured()
-    assert value['format'] == box_agent.STRUCTURED_INPUT_FORMAT and value['output_schema'] == SCHEMA
+    assert value['format'] == box_agent.INPUT_FORMAT == 'reveal.agent-input/4' and value['output_schema'] == SCHEMA
     assert box_agent.schema_of(value) == SCHEMA and box_agent.validate_input(value) is value
-    # Without output_schema the frozen input is format /2, byte for byte what it was before structured output existed.
+    assert set(value) == box_agent.INPUT_KEYS | {'output_schema'}
+    # Without output_schema the input is the same format with the key left out.
     plain = frozen()
     assert plain['format'] == box_agent.INPUT_FORMAT and 'output_schema' not in plain and box_agent.schema_of(plain) is None
     assert set(plain) == box_agent.INPUT_KEYS
-    # A /3 input must carry the schema, and a /2 input must not.
-    with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
-        box_agent.validate_input({k: v for k, v in value.items() if k != 'output_schema'})
-    with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
-        box_agent.validate_input({**plain, 'output_schema': SCHEMA})
+    assert box_agent.validate_input({k: v for k, v in value.items() if k != 'output_schema'})
+    assert box_agent.validate_input({**plain, 'output_schema': SCHEMA})['output_schema'] == SCHEMA
+    # The formats that split these two cases are gone.
+    for version in ('reveal.agent-input/2', 'reveal.agent-input/3'):
+        with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
+            box_agent.validate_input({**value, 'format': version})
+    # The schema is checked again on validation, and still belongs only to an answer job.
+    with pytest.raises(box_agent.AgentInputError, match='"type": "object"'):
+        box_agent.validate_input({**plain, 'output_schema': {'type': 'array'}})
+    with pytest.raises(box_agent.AgentInputError, match='belongs to deliverable "answer"'):
+        box_agent.validate_input({**account_job(), 'output_schema': SCHEMA})
 
 
 @pytest.mark.parametrize('schema, message', [
@@ -141,7 +148,7 @@ def test_the_api_queues_a_structured_job_and_refuses_an_invalid_schema(service, 
     assert created.status_code == 202, created.text
     with service.repo.read_transaction() as tx:
         inputs = tx.get('queue', created.json()['id'])['data']['inputs']
-    assert inputs['format'] == box_agent.STRUCTURED_INPUT_FORMAT and inputs['output_schema'] == SCHEMA
+    assert inputs['format'] == box_agent.INPUT_FORMAT and inputs['output_schema'] == SCHEMA
     refused = post_agent(service, output_schema={'type': 'object', 'properties': {'x': {'type': 'strng'}}})
     assert refused.status_code == 422 and 'properties/x/type' in refused.json()['detail']
     with service.repo.read_transaction() as tx:

@@ -324,7 +324,7 @@ p.write_text(json.dumps(doc))
         from types import SimpleNamespace
         from reveal_backend import acceptance, account_deposit, agent_account, box_agent, box_remote
         from reveal_backend.box_literature import LiteratureClient
-        from reveal_backend.box_mcp import Ledger
+        from reveal_backend.box_mcp import Ledger, ScopedTools
         result = 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation by 42% in liver.'
         article = ('<?xml version="1.0"?><article><front><article-meta><article-id pub-id-type="pmc">12345</article-id>'
                    '<article-id pub-id-type="pmid">99999</article-id><title-group><article-title>Leptin receptor loss and hepatic insulin '
@@ -355,8 +355,6 @@ p.write_text(json.dumps(doc))
             (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(self.release), 'evidence_package': str(package_path),
                                                                   'deliverable': 'scientific_account', 'draft_attribution': attribution}))
             ledger = Ledger(state / 'ledger', 'account-job', 1)
-            settings = {'tools': ['Read'], 'graphs': [], 'literature': True,
-                        'limits': {'tool_calls': 30, 'literature_searches': 3, 'literature_search_results': 5, 'literature_papers': 4, 'literature_characters': 48_000}}
             def draft(snippet, own=None):
                 # own: a Proposition the agent writes itself; the Claim is then about it instead of the requester's.
                 proposition_id = own['id'] if own else requested_id
@@ -373,8 +371,12 @@ p.write_text(json.dumps(doc))
                                                  'closing_remarks': 'A single mouse study; no human data were read.'}]}
             with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output), \
                     patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
-                tools = box_remote.agent_tools([], ledger, settings, literature_client=lambda **options: LiteratureClient(opener=http, **options),
-                                               lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool)
+                # Agent jobs no longer get the paper tools (box_remote.agent_tools), but the quote binding the account
+                # lint and gate still use is driven here through a read_paper capture, with the tools wired directly.
+                tools = ScopedTools([], ledger, max_calls=30, soft_budget=True, draft_files=('account-1.json',), capture_descriptor=False,
+                                    literature=LiteratureClient(opener=http, max_results=5, guidance=True),
+                                    lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool,
+                                    max_searches=3, max_papers=4, max_characters=48_000)
                 read = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})
                 self.assertFalse(read.get('isError'), read)
                 # A read shows the agent the run budget, where a client that passes on only the structured result still

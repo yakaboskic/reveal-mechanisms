@@ -51,19 +51,17 @@ def job_metrics(tx, identities):
 
 
 def deliverable_of(kind, queue):
-    """What an agent job was asked to return: 'answer' or 'scientific_account'. Inputs frozen before the choice existed
-    (reveal.agent-input/1) could only be answers. None for every other kind of job, and for an agent job whose
-    queue record is gone."""
+    """What an agent job was asked to return: 'answer' or 'scientific_account'. None for every other kind of job, and
+    for an agent job whose queue record is gone."""
     if kind != 'agent': return None
     value = queue.get('inputs.deliverable')
-    if isinstance(value, str): return value
-    return 'answer' if isinstance(queue.get('inputs.format'), str) else None
+    return value if isinstance(value, str) else None
 
 
 def job_timings(tx, identities=None):
     rows = records(tx, 'job', ('kind', 'status', 'stage', 'created_at', 'completed_at', 'updated_at', 'failure.code'), identities)
     queues = records(tx, 'queue', ('attempt', 'worker_id', 'lease_until', 'recoveries', 'remote_handle',
-                                   'inputs.format', 'inputs.deliverable'), list(rows))
+                                   'inputs.deliverable'), list(rows))
     # Durable workflow jobs keep their start, attempt and recovery state on the execution, not on legacy attempt rows.
     executions = records(tx, 'execution', ('created_at', 'authoring_attempt', 'recoveries', 'delivery_recoveries', 'handoffs'), list(rows))
     metrics = job_metrics(tx, list(rows))
@@ -109,11 +107,10 @@ AGENT_JOB_WINDOW = 100
 # the prompt, system prompt, question, claims, evidence package, lease token and (for an account) who is credited.
 # None of those is read here: text is reported as a length and lists of content as a count, both taken in SQL.
 AGENT_INPUT_FIELDS = {'inputs.format': 'input_format', 'inputs.model': 'model', 'inputs.effort': 'effort',
-                      'inputs.tools': 'tools', 'inputs.graphs': 'graphs', 'inputs.literature': 'literature',
-                      'inputs.network': 'network', 'inputs.allowed_domains': 'allowed_domains',
+                      'inputs.tools': 'tools', 'inputs.graphs': 'graphs', 'inputs.network': 'network', 'inputs.allowed_domains': 'allowed_domains',
                       'inputs.claims_repository': 'claims_repository', 'inputs.limits': 'limits',
                       'inputs.account.attribute_requester': 'attribute_requester'}
-AGENT_SWITCHES = ('literature', 'claims_repository', 'attribute_requester')
+AGENT_SWITCHES = ('claims_repository', 'attribute_requester')
 # What came back, from the job record. Never the response text, the account document or a claim.
 AGENT_RESULT_FIELDS = {'result.response_truncated': 'response_truncated', 'result.account.account_id': 'account_id',
                        'result.account.objects': 'objects', 'result.account.claims': 'claims',

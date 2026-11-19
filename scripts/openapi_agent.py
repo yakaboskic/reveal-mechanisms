@@ -8,7 +8,8 @@ COMPLETED_AT = '2026-11-09T15:03:12Z'
 
 
 def extend(b, f, e):
-    from reveal_backend.box_agent import (ACCOUNT_TOOLS, BUILTIN_TOOLS, DEFAULT_MODEL, DELIVERABLES, LIMITS, MAX_ACCOUNT_CLAIMS,
+    from reveal_backend.box_agent import (ACCOUNT_DEFAULT_NETWORK, ACCOUNT_DEFAULT_TOOLS, BUILTIN_TOOLS, DEFAULT_MODEL, DEFAULT_NETWORK,
+        DELIVERABLES, LIMITS, MAX_ACCOUNT_CLAIMS,
         MAX_ALLOWED_DOMAINS, MAX_CLAIM_CHARS, MAX_OUTPUT_SCHEMA_BYTES, MAX_STRUCTURED_OUTPUT_BYTES, DEFAULT_TOOLS, EFFORTS, MAX_PROMPT_CHARS, MAX_QUESTION_CHARS,
         MAX_RESULT_RESPONSE_CHARS, MAX_SYSTEM_PROMPT_CHARS, MAX_TERM_CHARS, NETWORKS, TERM)
     from reveal_backend.box_mcp import GRAPHS
@@ -23,12 +24,8 @@ def extend(b, f, e):
         'timeout_seconds': 'Wall-clock seconds for the run.',
         'max_turns': 'Claude Code turns.',
         'max_budget_usd': 'Provider cost of the run in US dollars.',
-        'tool_calls': 'Calls to the scoped REVEAL tools (search_papers, read_paper and the graph tools), counted together. '
-                      'When they are used up the agent is told and can still finish.',
-        'literature_searches': 'search_papers calls.',
-        'literature_search_results': 'Most records one search_papers call may return.',
-        'literature_papers': 'Distinct papers read_paper may open. Paging through one paper with offset does not open another.',
-        'literature_characters': 'Characters of abstract and full text read_paper may return across the run.'}
+        'tool_calls': 'Calls to the scoped REVEAL tools (the graph tools and query_claims), counted together. '
+                      'When they are used up the agent is told and can still finish.'}
     def limit(key):
         spec = LIMITS[key]
         if spec['type'] is int:
@@ -47,13 +44,15 @@ def extend(b, f, e):
         'system_prompt': string(minLength=1, maxLength=MAX_SYSTEM_PROMPT_CHARS,
             description="Appended to Claude Code's own system prompt, after a short note on the sandbox."),
         'tools': array(enum(*BUILTIN_TOOLS), uniqueItems=True, default=list(DEFAULT_TOOLS),
-            description='Claude Code built-in tools the agent may use. WebFetch needs network open.'),
+            description='Claude Code built-in tools the agent may use. WebFetch needs network open. The default shown is for deliverable '
+                        f'answer; deliverable scientific_account defaults to {", ".join(ACCOUNT_DEFAULT_TOOLS)} (without WebFetch when '
+                        'the request sets network restricted).'),
         'graphs': array(enum(*sorted(GRAPHS)), uniqueItems=True, default=[],
             description='OKN knowledge graphs the agent may query through the scoped graph tools.'),
-        'literature': {'type': 'boolean', 'default': False, 'description': 'Europe PMC search_papers and read_paper tools.'},
-        'network': enum(*NETWORKS, default='restricted', description=
-            'restricted reaches only the Anthropic API and the services of the selected graph and literature tools; '
-            'open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.'),
+        'network': enum(*NETWORKS, default=DEFAULT_NETWORK, description=
+            'restricted reaches only the Anthropic API, the services of the selected graph tools and query_claims, and the hosts in '
+            'allowed_domains; open reaches the internet (package installs, downloads, WebFetch). The default shown is for deliverable '
+            f'answer; deliverable scientific_account defaults to {ACCOUNT_DEFAULT_NETWORK}. Either way the agent never holds the API key.'),
         'allowed_domains': array(string(pattern='^[a-z0-9.-]{1,253}$'), uniqueItems=True, maxItems=MAX_ALLOWED_DOMAINS, default=[],
             description='Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov '
                         'or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.'),
@@ -62,9 +61,9 @@ def extend(b, f, e):
         'limits': ref('AgentJobLimits'),
         'deliverable': enum(*DELIVERABLES, default='answer', description=
             'What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors '
-            'from papers it reads through the captured literature tools; REVEAL then checks and mints it. Such a job needs '
-            f'question, has literature on, may use only the tools {", ".join(ACCOUNT_TOOLS)} (the default for it), runs on the '
-            'restricted network with no allowed_domains and no graphs, and by default gets the run-time and turn ceilings.'),
+            'from papers it fetches with its own commands and saves under output/sources/; REVEAL then checks and mints it. Such a '
+            'job needs question. It takes the same tools, network, allowed_domains and graphs as an answer job, defaults to Bash, '
+            'WebSearch and WebFetch on the open network so it can reach the papers, and by default gets the run-time and turn ceilings.'),
         'question': string(minLength=1, maxLength=MAX_QUESTION_CHARS, description=
             'Only with deliverable scientific_account, where it is required: the question the account addresses. It is recorded '
             'in the account as a requester-supplied question, not a curated knowledge gap.'),
@@ -180,10 +179,6 @@ def extend(b, f, e):
         'system_prompt': 'Be concise. Cite PMIDs.', 'tools': ['Read', 'Write', 'Bash'],
         'allowed_domains': ['api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov'],
         'limits': {'timeout_seconds': 600, 'max_turns': 30, 'max_budget_usd': 1}}
-    literature = {'kind': 'agent', 'prompt': 'Search Europe PMC for recent papers on LEPR variants and insulin resistance. Read the '
-        'open-access ones in full and save a short summary that cites each PMID as output/summary.md.',
-        'tools': ['Read', 'Write'], 'literature': True,
-        'limits': {'literature_searches': 10, 'literature_papers': 20, 'literature_characters': 400000, 'tool_calls': 120}}
     operation['requestBody']['content']['application/json']['examples']['agent'] = {'summary': 'General agent', 'value': request}
     account = {'kind': 'agent', 'deliverable': 'scientific_account',
         'prompt': 'Build the account from open-access papers. Prefer primary studies in mice and humans; say what was not read.',
@@ -191,11 +186,9 @@ def extend(b, f, e):
         'claims': ['Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver.',
                    {'statement': 'LEPR is genetically associated with type 2 diabetes.', 'subject_entity': 'HGNC.SYMBOL:LEPR',
                     'relation': 'biolink:genetically_associated_with', 'object_entity': 'MONDO:0005148'}],
-        'limits': {'literature_searches': 10, 'literature_papers': 20, 'literature_characters': 400000, 'tool_calls': 150}}
+        'limits': {'max_budget_usd': 5}}
     operation['requestBody']['content']['application/json']['examples']['agent_account'] = {
         'summary': 'General agent authoring a DAPPER ScientificAccount from literature', 'value': account}
-    operation['requestBody']['content']['application/json']['examples']['agent_literature'] = {
-        'summary': 'General agent reading literature with its own limits', 'value': literature}
     links = {'self': '/v1/jobs/' + JOB_ID, 'events': '/v1/jobs/' + JOB_ID + '/events', 'cancel': '/v1/jobs/' + JOB_ID + '/cancel'}
     queued = {'id': JOB_ID, 'kind': 'agent', 'owner_user_id': '11111111-1111-4111-8111-111111111111', 'status': 'queued',
               'stage': 'queued', 'research_request_id': None, 'input_account_id': None, 'created_at': CREATED_AT,

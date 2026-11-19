@@ -4851,28 +4851,7 @@
                       }
                     ],
                     "limits": {
-                      "literature_searches": 10,
-                      "literature_papers": 20,
-                      "literature_characters": 400000,
-                      "tool_calls": 150
-                    }
-                  }
-                },
-                "agent_literature": {
-                  "summary": "General agent reading literature with its own limits",
-                  "value": {
-                    "kind": "agent",
-                    "prompt": "Search Europe PMC for recent papers on LEPR variants and insulin resistance. Read the open-access ones in full and save a short summary that cites each PMID as output/summary.md.",
-                    "tools": [
-                      "Read",
-                      "Write"
-                    ],
-                    "literature": true,
-                    "limits": {
-                      "literature_searches": 10,
-                      "literature_papers": 20,
-                      "literature_characters": 400000,
-                      "tool_calls": 120
+                      "max_budget_usd": 5
                     }
                   }
                 }
@@ -73937,35 +73916,7 @@
             "minimum": 1,
             "maximum": 5000,
             "default": 30,
-            "description": "Calls to the scoped REVEAL tools (search_papers, read_paper and the graph tools), counted together. When they are used up the agent is told and can still finish."
-          },
-          "literature_searches": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 1000,
-            "default": 3,
-            "description": "search_papers calls."
-          },
-          "literature_search_results": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 50,
-            "default": 5,
-            "description": "Most records one search_papers call may return."
-          },
-          "literature_papers": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 1000,
-            "default": 4,
-            "description": "Distinct papers read_paper may open. Paging through one paper with offset does not open another."
-          },
-          "literature_characters": {
-            "type": "integer",
-            "minimum": 1000,
-            "maximum": 20000000,
-            "default": 48000,
-            "description": "Characters of abstract and full text read_paper may return across the run."
+            "description": "Calls to the scoped REVEAL tools (the graph tools and query_claims), counted together. When they are used up the agent is told and can still finish."
           }
         },
         "required": [],
@@ -74016,7 +73967,7 @@
               "Bash",
               "WebSearch"
             ],
-            "description": "Claude Code built-in tools the agent may use. WebFetch needs network open."
+            "description": "Claude Code built-in tools the agent may use. WebFetch needs network open. The default shown is for deliverable answer; deliverable scientific_account defaults to Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch (without WebFetch when the request sets network restricted)."
           },
           "graphs": {
             "type": "array",
@@ -74031,11 +73982,6 @@
             "default": [],
             "description": "OKN knowledge graphs the agent may query through the scoped graph tools."
           },
-          "literature": {
-            "type": "boolean",
-            "default": false,
-            "description": "Europe PMC search_papers and read_paper tools."
-          },
           "network": {
             "type": "string",
             "enum": [
@@ -74043,7 +73989,7 @@
               "open"
             ],
             "default": "restricted",
-            "description": "restricted reaches only the Anthropic API and the services of the selected graph and literature tools; open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key."
+            "description": "restricted reaches only the Anthropic API, the services of the selected graph tools and query_claims, and the hosts in allowed_domains; open reaches the internet (package installs, downloads, WebFetch). The default shown is for deliverable answer; deliverable scientific_account defaults to open. Either way the agent never holds the API key."
           },
           "allowed_domains": {
             "type": "array",
@@ -74080,7 +74026,7 @@
               "scientific_account"
             ],
             "default": "answer",
-            "description": "What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it reads through the captured literature tools; REVEAL then checks and mints it. Such a job needs question, has literature on, may use only the tools Read, Write, Edit, Glob, Grep (the default for it), runs on the restricted network with no allowed_domains and no graphs, and by default gets the run-time and turn ceilings."
+            "description": "What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it fetches with its own commands and saves under output/sources/; REVEAL then checks and mints it. Such a job needs question. It takes the same tools, network, allowed_domains and graphs as an answer job, defaults to Bash, WebSearch and WebFetch on the open network so it can reach the papers, and by default gets the run-time and turn ceilings."
           },
           "question": {
             "type": "string",

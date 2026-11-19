@@ -30,7 +30,6 @@ curl --fail-with-body "$REVEAL_API_URL/v1/jobs" \
  "prompt": "List three open questions about LEPR variants and insulin resistance, one recent paper each. Save them as output/questions.md.",
  "system_prompt": "Be concise. Cite PMIDs.",
  "tools": ["Read", "Write", "Bash", "WebSearch"],
- "literature": true,
  "limits": {"timeout_seconds": 600, "max_turns": 30, "max_budget_usd": 1}}
 EOF
 ```
@@ -39,16 +38,15 @@ EOF
 |---|---|---|
 | `prompt` | required | Up to 100,000 characters; the agent's first message. |
 | `system_prompt` | none | Appended to Claude Code's own system prompt, after a short note describing the sandbox. |
-| `tools` | Read, Write, Edit, Glob, Grep, Bash, WebSearch | Claude Code built-ins. `WebFetch` needs `network: "open"`. |
+| `tools` | Read, Write, Edit, Glob, Grep, Bash, WebSearch (a Scientific Account job adds WebFetch) | Claude Code built-ins. `WebFetch` needs `network: "open"`. |
 | `graphs` | `[]` | OKN knowledge graphs for the scoped graph tools (`get_schema`, `describe_kg`, `query_graph`). |
-| `literature` | `false` | Europe PMC `search_papers` / `read_paper`. |
-| `network` | `restricted` | `restricted`: only the Anthropic API plus the services of the chosen graph/literature tools and `allowed_domains`. `open`: the internet (package installs, downloads, `WebFetch`). |
+| `network` | `restricted` (`open` for a Scientific Account job) | `restricted`: only the Anthropic API plus the services of the chosen graph tools and `query_claims`, and `allowed_domains`. `open`: the internet (package installs, downloads, `WebFetch`). |
 | `allowed_domains` | `[]` | Up to 20 exact hostnames the restricted network may also reach, for example `eutils.ncbi.nlm.nih.gov` (PubMed E-utilities) or `api.platform.opentargets.org` (Open Targets GraphQL). No wildcards or IP addresses; not used with `open`. The agent calls them with Bash (`curl`, `python3`). |
 | `claims_repository` | `false` (`true` for a Scientific Account job) | Offer the read-only `query_claims` tool. Needs a claims repository configured on the deployment; see [Return a Scientific Account](#return-a-scientific-account). |
 | `deliverable`, `question`, `claims` | `answer` | See [Return a Scientific Account](#return-a-scientific-account). |
 | `effort` | `medium` | `low`, `medium` or `high`. |
 | `model` | `REVEAL_AGENT_JOB_MODEL` | A Claude model id. |
-| `limits` | see [Limits](#limits) | Run time, turns, budget, and the tool and literature allowances. |
+| `limits` | see [Limits](#limits) | Run time, turns, budget and the REVEAL tool-call allowance. |
 
 To let an agent search PubMed and query a GraphQL API without opening the whole network, give it Bash and
 those two hosts:
@@ -60,8 +58,9 @@ those two hosts:
  "allowed_domains": ["eutils.ncbi.nlm.nih.gov", "api.platform.opentargets.org"]}
 ```
 
-The request is frozen into the job when it is queued (`reveal.agent-input/2`), with every default filled
-in, so the stored input says exactly what ran.
+The request is frozen into the job when it is queued (`reveal.agent-input/4`), with every default filled
+in, so the stored input says exactly what ran. A request that sends `literature` or a `literature_*` limit is refused
+with `422`: agents fetch papers themselves with Bash.
 
 [`scripts/agent_job.py`](../scripts/agent_job.py) does all of this in one command with only the Python
 standard library: it submits the prompt, prints stages, the agent's text and each tool call as they happen,
@@ -84,20 +83,12 @@ and the message names the ceiling. An unknown key in `limits` is refused too.
 | `timeout_seconds` | 900 | 3,600 | 60 to 3,600 | Wall-clock time. The run is stopped at it. |
 | `max_turns` | 50 | 100 | 1 to 1,000 | Claude Code turns. |
 | `max_budget_usd` | 2 | 5 | above 0, to 1,000 | Provider cost. |
-| `tool_calls` | 30 | 300 | 1 to 5,000 | `search_papers`, `read_paper` and graph tool calls, counted together. |
-| `literature_searches` | 3 | 50 | 1 to 1,000 | `search_papers` calls. |
-| `literature_search_results` | 5 | 25 | 1 to 50 | Most records one search may return. |
-| `literature_papers` | 4 | 50 | 1 to 1,000 | Distinct papers `read_paper` may open. |
-| `literature_characters` | 48,000 | 1,000,000 | 1,000 to 20,000,000 | Abstract and full-text characters returned across the run. |
+| `tool_calls` | 30 | 300 | 1 to 5,000 | Graph tool and `query_claims` calls, counted together. |
 
 The run stops at the first of `timeout_seconds`, `max_turns` and `max_budget_usd`, and the job fails with the
-runner's reason. The other five never fail a job: when an allowance is used up, the tool call returns an error
-that says so, and the agent can still finish and write its answer. Each paper and graph tool result also
-carries a `run_budget` with what has been used and what is allowed, so the agent can pace itself.
-
-Reading is charged by paper and by character, not by call. Paging through one paper with `offset` uses
-characters only, and the PMID and PMC id of one paper count as one paper. A read that returns no text (an
-error, a missing record) uses neither.
+runner's reason. `tool_calls` never fails a job: when it is used up, the tool call returns an error that says
+so, and the agent can still finish and write its answer. Each graph and `query_claims` result also carries a
+`run_budget` with what has been used and what is allowed, so the agent can pace itself.
 
 ### Changing the defaults and ceilings
 
@@ -108,7 +99,7 @@ every API replica, with no deploy. The value in force is the first of:
 1. the admin console;
 2. the environment: `REVEAL_AGENT_JOB_DEFAULT_<NAME>` and `REVEAL_AGENT_JOB_MAX_<NAME>`, where `<NAME>` is the
    key in upper case without a leading `max_` (`REVEAL_AGENT_JOB_MAX_BUDGET_USD`, `REVEAL_AGENT_JOB_DEFAULT_TURNS`,
-   `REVEAL_AGENT_JOB_MAX_LITERATURE_PAPERS`);
+   `REVEAL_AGENT_JOB_MAX_TOOL_CALLS`);
 3. the built-in value in the table.
 
 A value outside the supported range is ignored, and the console shows that. This includes the environment: `REVEAL_AGENT_JOB_MAX_BUDGET_USD=0` or an unparseable value no longer refuses every agent job, it falls back to the built-in 5. Use `REVEAL_AGENT_JOB_USERS` to turn agent jobs off. A ceiling set below the default
@@ -120,28 +111,16 @@ ceiling when the run is dispatched. The other limits stay as frozen.
 
 These limits apply to general agent jobs only. Research runs keep their fixed allowances.
 
-An account job's frozen input now carries the CURIE prefixes its triples may use, and a claim's triple when one was
-sent. A worker from before that change refuses such an input, so the same rule applies: workers first, or both together.
+**Deploy the API and the workflow workers together.** A worker runs only `reveal.agent-input/4`; a job still
+queued in an earlier format fails at prepare.
 
-**Deploy the workflow workers before the API, or both together.** The API freezes new jobs as `reveal.agent-input/2`. A worker from before this change accepts only `/1` and fails such a job at prepare. The newer worker runs both: a `/1` job already queued keeps the built-in tool and literature allowances. Rolling a worker back while `/2` jobs are queued fails them.
-
-Not adjustable, because they bound a single response or the sandbox, not how much work a run may do: 12,000
-characters per `read_paper` call (continue with `offset`), the 100,000-character prompt, the 50,000-character
-answer kept on the job row, and the output-file sizes below.
-
-### Reading papers
-
-`search_papers` and `read_paper` use Europe PMC. `read_paper` returns the **abstract** unless asked for more.
-For full text, call it with `source: "PMC"`, the paper's PMC id and `section: "full_text"`. That works only
-for open-access papers in Europe PMC; a PMID alone cannot fetch full text. Search results list each record's
-`pmcid` and `isOpenAccess`, and an abstract read returns a `full_text` entry that either gives the exact
-`read_paper` arguments or says why full text is unavailable. Full text is the title and paragraph text of the
-article XML; tables, figures and supplements are not included.
+Not adjustable, because they bound a single response or the sandbox, not how much work a run may do: the
+100,000-character prompt, the 50,000-character answer kept on the job row, and the output-file sizes below.
 
 ## Return a Scientific Account
 
-Set `deliverable` to `scientific_account` and give a `question`. The agent reads papers through the captured
-literature tools, writes one DAPPER ScientificAccount that addresses the question, and REVEAL checks it and
+Set `deliverable` to `scientific_account` and give a `question`. The agent fetches the papers it needs with its
+own commands, writes one DAPPER ScientificAccount that addresses the question, and REVEAL checks it and
 deposits it in the claims repository.
 
 ```json
@@ -149,7 +128,7 @@ deposits it in the claims repository.
  "prompt": "Prefer primary studies in mice and humans. Say what you did not read.",
  "question": "Does loss of leptin receptor signalling in hepatocytes cause hepatic insulin resistance?",
  "claims": ["Hepatocyte-specific deletion of LEPR reduces insulin-stimulated AKT phosphorylation in liver."],
- "limits": {"literature_searches": 10, "literature_papers": 20, "literature_characters": 400000, "tool_calls": 150}}
+ "limits": {"max_budget_usd": 5}}
 ```
 
 | Field | Notes |
@@ -199,11 +178,14 @@ map. The claims repository's own PIGEAN Propositions name a gene by bare symbol 
 
 What is different about such a job:
 
-- **The sandbox is closed.** Tools are limited to Read, Write, Edit, Glob and Grep, the network is restricted, and
-  `allowed_domains` and `graphs` are not accepted. Only text returned by `read_paper` during the run can be cited,
-  so there is no shell and no other way to fetch a paper. `literature` is on.
+- **It has Bash and the open network by default.** It takes the same `tools`, `network`, `allowed_domains` and
+  `graphs` as an answer job. Its tools default to Read, Write, Edit, Glob, Grep, Bash, WebSearch and WebFetch, and
+  its network to `open`. On a network you restrict, the default leaves out WebFetch, and GitHub stays reachable
+  for the pinned DAPPER release the account tools lint against. The agent fetches each paper with a command and
+  saves it under `output/sources/`; the routine is in its skill
+  ([`construct-literature-account`](../services/backend/agent-skills/construct-literature-account/SKILL.md)).
 - **It gets the time and turn ceilings by default**, because a run stopped at a limit returns no account. Ask for
-  less in `limits` if you want. Raise the literature allowances for a real review; the built-in defaults are small.
+  less in `limits` if you want.
 - **Every piece of evidence is a verbatim quote from one paper.** The agent's `lint_account` tool refuses a quote
   that is not word for word in the text it was served, occurs more than once in the paper, or runs across
   paragraphs, and says what to change. A quote is 20 to 400 characters. An account may quote at most 4,000
@@ -309,7 +291,7 @@ Schema, with an answer job:
 
 ```json
 {"kind": "agent", "prompt": "Grade the evidence that each gene has a role in IBD: NKX2-3, JARID2, EMSY.",
- "literature": true,
+ "network": "open",
  "output_schema": {"type": "object", "required": ["genes"], "additionalProperties": false,
    "properties": {"genes": {"type": "array", "items": {"type": "object", "required": ["symbol", "evidence"],
      "properties": {"symbol": {"type": "string"}, "evidence": {"enum": ["strong", "weak", "none"]},
@@ -330,8 +312,7 @@ Schema, with an answer job:
 - **When it fails.** A run that returns no object, or one that does not satisfy the schema, fails with
   `VALIDATION_FAILED`. A run in which Claude Code gave up after its retries fails with
   `AGENT_EXECUTION_FAILED` and says so.
-- **The input format.** A job with `output_schema` is frozen as `reveal.agent-input/3`. A job without one is
-  still frozen as `reveal.agent-input/2`, byte for byte as before.
+- **The input format.** `output_schema` is an optional key of the one input format, `reveal.agent-input/4`.
 
 `scripts/agent_job.py --output-schema schema.json --structured-out result.json` sends a schema from a file and
 saves the object.
@@ -373,7 +354,7 @@ Validation checks only that the capture is the run's own (job, attempt, input ha
 ledger is complete; then the answer is saved as the job result. A Scientific Account job is also checked,
 minted and deposited as described [above](#return-a-scientific-account). A failed run, or one stopped at its time, turn
 or budget limit, fails the job with the runner's reason (`AGENT_EXECUTION_FAILED`, or `AUTHORING_BUDGET_EXCEEDED`
-at the budget). Using up a tool or literature allowance does not.
+at the budget). Using up the tool-call allowance does not.
 
 Inside the Box the agent runs as the unprivileged `reveal-agent` user, in a read-only working directory with
 the frozen input, and writes deliverables to `output/` (regular files, each under 8 MB, 40 MB in all). It

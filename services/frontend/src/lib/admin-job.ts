@@ -9,7 +9,7 @@ export type AdminJobMetrics = { cost_usd?: number | null; estimated_cost_usd?: n
  * question, claims and response never reach the console. null means the input or result has no such value. */
 export type AgentRun = {
   deliverable: string | null; input_format: string | null; model: string | null; effort: string | null;
-  tools: string[] | null; graphs: string[] | null; literature: boolean | null; network: string | null;
+  tools: string[] | null; graphs: string[] | null; network: string | null;
   allowed_domains: string[] | null; claims_repository: boolean | null; limits: Record<string, number> | null;
   attribute_requester: boolean | null; prompt_characters: number | null; system_prompt_characters: number | null;
   question_characters: number | null; claims_requested: number | null; claims_with_triple: number | null;

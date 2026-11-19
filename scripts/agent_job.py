@@ -7,7 +7,7 @@ REVEAL_API_URL and REVEAL_API_KEY environment variables.
   python3 agent_job.py --handoff my-key.json --prompt "Summarize ..." \\
       --tool Read --tool Write --tool Bash --allow-host eutils.ncbi.nlm.nih.gov
 
-To get a DAPPER Scientific Account built from papers the agent reads, give it a question (and any claims to assess):
+To get a DAPPER Scientific Account built from papers the agent fetches, give it a question (and any claims to assess):
 
   python3 agent_job.py --handoff my-key.json --prompt "Prefer primary studies." \\
       --question "Does loss of LEPR signalling cause hepatic insulin resistance?" \\
@@ -73,7 +73,6 @@ def request_body(args):
     if args.tool: body['tools'] = args.tool
     if args.allow_host: body['allowed_domains'] = args.allow_host
     if args.graph: body['graphs'] = args.graph
-    if args.literature: body['literature'] = True
     if args.question:
         body.update(deliverable='scientific_account', question=args.question)
         claims = list(args.claim or [])
@@ -94,9 +93,7 @@ def request_body(args):
     for name in ('network', 'effort', 'model'):
         if getattr(args, name): body[name] = getattr(args, name)
     limits = {key: value for key, value in (('timeout_seconds', args.timeout), ('max_turns', args.turns),
-                                            ('max_budget_usd', args.budget), ('tool_calls', args.tool_calls),
-                                            ('literature_searches', args.searches), ('literature_search_results', args.search_results),
-                                            ('literature_papers', args.papers), ('literature_characters', args.paper_characters))
+                                            ('max_budget_usd', args.budget), ('tool_calls', args.tool_calls))
               if value is not None}
     if limits: body['limits'] = limits
     return body
@@ -145,9 +142,9 @@ def main():
     parser.add_argument('--tool', action='append', help='Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch (repeat)')
     parser.add_argument('--allow-host', action='append', help='Extra host the restricted network may reach (repeat)')
     parser.add_argument('--graph', action='append', help='OKN knowledge graph for the graph tools (repeat)')
-    parser.add_argument('--literature', action='store_true', help='Europe PMC search_papers / read_paper tools')
     parser.add_argument('--question', help='Return a DAPPER Scientific Account that addresses this question, built from papers '
-                                           'the agent reads (sets deliverable scientific_account)')
+                                           'the agent fetches itself (sets deliverable scientific_account; by default Bash, '
+                                           'WebSearch and WebFetch on the open network)')
     parser.add_argument('--claim', action='append', help='With --question: a statement to assess from the literature (repeat)')
     parser.add_argument('--claims-file', help='With --question: a JSON list of claims. Each is a statement, or an object with '
                                               'statement and, together, subject_entity, relation and object_entity (CURIEs such '
@@ -167,11 +164,7 @@ def main():
     parser.add_argument('--timeout', type=int, help='Seconds, 60-3600 (built-in default 900)')
     parser.add_argument('--turns', type=int, help='Max turns (built-in default 50, ceiling 100)')
     parser.add_argument('--budget', type=float, help='Max dollars (built-in default 2, ceiling 5)')
-    parser.add_argument('--tool-calls', type=int, help='Paper and graph tool calls in all (built-in default 30)')
-    parser.add_argument('--searches', type=int, help='Paper searches (built-in default 3)')
-    parser.add_argument('--search-results', type=int, help='Most results per paper search (built-in default 5)')
-    parser.add_argument('--papers', type=int, help='Distinct papers to read (built-in default 4)')
-    parser.add_argument('--paper-characters', type=int, help='Characters of paper text across all reads (built-in default 48000)')
+    parser.add_argument('--tool-calls', type=int, help='Graph and claims-repository tool calls in all (built-in default 30)')
     parser.add_argument('--job', help='Watch an existing job instead of submitting')
     parser.add_argument('--cancel', metavar='JOB_ID', help='Ask a running job to stop')
     parser.add_argument('--out', help='Also save the final answer to this file')

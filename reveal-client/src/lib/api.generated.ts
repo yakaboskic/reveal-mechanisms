@@ -9702,30 +9702,10 @@ export interface components {
              */
             max_budget_usd: number;
             /**
-             * @description Calls to the scoped REVEAL tools (search_papers, read_paper and the graph tools), counted together. When they are used up the agent is told and can still finish.
+             * @description Calls to the scoped REVEAL tools (the graph tools and query_claims), counted together. When they are used up the agent is told and can still finish.
              * @default 30
              */
             tool_calls: number;
-            /**
-             * @description search_papers calls.
-             * @default 3
-             */
-            literature_searches: number;
-            /**
-             * @description Most records one search_papers call may return.
-             * @default 5
-             */
-            literature_search_results: number;
-            /**
-             * @description Distinct papers read_paper may open. Paging through one paper with offset does not open another.
-             * @default 4
-             */
-            literature_papers: number;
-            /**
-             * @description Characters of abstract and full text read_paper may return across the run.
-             * @default 48000
-             */
-            literature_characters: number;
         };
         /** @description Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream. */
         AgentJobInput: {
@@ -9739,7 +9719,7 @@ export interface components {
             /** @description Appended to Claude Code's own system prompt, after a short note on the sandbox. */
             system_prompt?: string;
             /**
-             * @description Claude Code built-in tools the agent may use. WebFetch needs network open.
+             * @description Claude Code built-in tools the agent may use. WebFetch needs network open. The default shown is for deliverable answer; deliverable scientific_account defaults to Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch (without WebFetch when the request sets network restricted).
              * @default [
              *       "Read",
              *       "Write",
@@ -9757,12 +9737,7 @@ export interface components {
              */
             graphs: ("biomarkerkg" | "prokn")[];
             /**
-             * @description Europe PMC search_papers and read_paper tools.
-             * @default false
-             */
-            literature: boolean;
-            /**
-             * @description restricted reaches only the Anthropic API and the services of the selected graph and literature tools; open reaches the internet (package installs, downloads, WebFetch). Either way the agent never holds the API key.
+             * @description restricted reaches only the Anthropic API, the services of the selected graph tools and query_claims, and the hosts in allowed_domains; open reaches the internet (package installs, downloads, WebFetch). The default shown is for deliverable answer; deliverable scientific_account defaults to open. Either way the agent never holds the API key.
              * @default restricted
              * @enum {string}
              */
@@ -9781,7 +9756,7 @@ export interface components {
             model?: string;
             limits?: components["schemas"]["AgentJobLimits"];
             /**
-             * @description What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it reads through the captured literature tools; REVEAL then checks and mints it. Such a job needs question, has literature on, may use only the tools Read, Write, Edit, Glob, Grep (the default for it), runs on the restricted network with no allowed_domains and no graphs, and by default gets the run-time and turn ceilings.
+             * @description What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it fetches with its own commands and saves under output/sources/; REVEAL then checks and mints it. Such a job needs question. It takes the same tools, network, allowed_domains and graphs as an answer job, defaults to Bash, WebSearch and WebFetch on the open network so it can reach the papers, and by default gets the run-time and turn ceilings.
              * @default answer
              * @enum {string}
              */

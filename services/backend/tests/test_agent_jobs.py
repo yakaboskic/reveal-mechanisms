@@ -32,12 +32,6 @@ from reveal_backend.workflow_execution import WorkflowExecution
 ROOT = Path(__file__).resolve().parents[3]
 
 
-def legacy_input(value):
-    """The same job as it was frozen before per-run limits and deliverables existed."""
-    return {**{key: value[key] for key in box_agent.LEGACY_INPUT_KEYS}, 'format': 'reveal.agent-input/1',
-            'limits': {key: value['limits'][key] for key in box_agent.LEGACY_LIMIT_KEYS}}
-
-
 TRIPLE = {'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:genetically_associated_with', 'object_entity': 'MONDO:0005148'}
 
 
@@ -68,19 +62,17 @@ def frozen(**body):
 
 def test_freeze_fills_every_default_so_the_frozen_bytes_say_what_runs():
     value = frozen()
-    assert value == {'format': 'reveal.agent-input/2', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
-                     'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'literature': False, 'network': 'restricted', 'allowed_domains': [],
+    assert value == {'format': 'reveal.agent-input/4', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
+                     'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'network': 'restricted', 'allowed_domains': [],
                      'effort': 'medium', 'model': box_agent.DEFAULT_MODEL,
-                     'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30,
-                                'literature_searches': 3, 'literature_search_results': 5, 'literature_papers': 4,
-                                'literature_characters': 48_000},
+                     'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30},
                      'deliverable': 'answer', 'account': None, 'claims_repository': False}
     # The default budget never exceeds a lower server cap.
     assert box_agent.freeze_input({'kind': 'agent', 'prompt': 'x'}, budget_cap=0.5)['limits']['max_budget_usd'] == 0.5
 
 
 def test_freeze_orders_tools_and_graphs_canonically():
-    value = frozen(tools=['Bash', 'Read'], graphs=['prokn', 'biomarkerkg'], literature=True, effort='high', model='claude-sonnet-5-5')
+    value = frozen(tools=['Bash', 'Read'], graphs=['prokn', 'biomarkerkg'], effort='high', model='claude-sonnet-5-5')
     assert value['tools'] == ['Read', 'Bash'] and value['graphs'] == ['biomarkerkg', 'prokn']
     assert box_agent.validate_input(json.loads(canonical_json(value))) == value
 
@@ -95,8 +87,8 @@ def test_freeze_orders_tools_and_graphs_canonically():
     ({'limits': {'timeout_seconds': 30}}, 'timeout_seconds'),
     ({'limits': {'max_turns': 0}}, 'max_turns'),
     ({'limits': {'max_turns': 101}}, 'max_turns must be a whole number from 1 to 100'),
-    ({'limits': {'literature_papers': 51}}, 'literature_papers must be a whole number from 1 to 50'),
-    ({'limits': {'literature_searches': 2.5}}, 'literature_searches'),
+    ({'limits': {'tool_calls': 301}}, 'tool_calls must be a whole number from 1 to 300'),
+    ({'limits': {'tool_calls': 2.5}}, 'tool_calls'),
     ({'limits': {'tool_calls': True}}, 'tool_calls'),
     ({'limits': {'max_reads': 9}}, 'limits has no max_reads'),
     ({'prompt': '   '}, 'prompt must be nonblank'),
@@ -117,43 +109,59 @@ def test_freeze_rejects_invalid_requests(body, message):
 
 
 def test_a_request_may_raise_a_limit_up_to_its_ceiling_and_the_policy_sets_both():
-    value = frozen(literature=True, limits={'literature_papers': 50, 'literature_searches': 20, 'tool_calls': 300})
-    assert (value['limits']['literature_papers'], value['limits']['literature_searches'], value['limits']['tool_calls']) == (50, 20, 300)
+    value = frozen(limits={'tool_calls': 300, 'max_turns': 100})
+    assert (value['limits']['tool_calls'], value['limits']['max_turns']) == (300, 100)
     policy = box_agent.default_policy()
-    policy['literature_papers'] = {'default': 40, 'ceiling': 200}
+    policy['tool_calls'] = {'default': 40, 'ceiling': 200}
     policy['max_turns'] = {'default': 80, 'ceiling': 400}
-    body = {'kind': 'agent', 'prompt': 'x', 'literature': True}
-    # A client that sends only literature: true gets the operator's defaults.
+    body = {'kind': 'agent', 'prompt': 'x'}
+    # A client that sends no limits gets the operator's defaults.
     limits = box_agent.freeze_input(body, policy=policy)['limits']
-    assert (limits['literature_papers'], limits['max_turns'], limits['literature_searches']) == (40, 80, 3)
-    assert box_agent.freeze_input({**body, 'limits': {'literature_papers': 200, 'max_turns': 400}}, policy=policy)['limits']['max_turns'] == 400
-    with pytest.raises(box_agent.AgentInputError, match='literature_papers must be a whole number from 1 to 200'):
-        box_agent.freeze_input({**body, 'limits': {'literature_papers': 201}}, policy=policy)
+    assert (limits['tool_calls'], limits['max_turns'], limits['timeout_seconds']) == (40, 80, 900)
+    assert box_agent.freeze_input({**body, 'limits': {'tool_calls': 200, 'max_turns': 400}}, policy=policy)['limits']['max_turns'] == 400
+    with pytest.raises(box_agent.AgentInputError, match='tool_calls must be a whole number from 1 to 200'):
+        box_agent.freeze_input({**body, 'limits': {'tool_calls': 201}}, policy=policy)
     for broken in ({**policy, 'max_turns': {'default': 80, 'ceiling': 50}}, {**policy, 'max_turns': {'default': 80, 'ceiling': 5000}},
                    {key: value for key, value in policy.items() if key != 'tool_calls'}):
         with pytest.raises(box_agent.AgentInputError, match='not configured'):
             box_agent.freeze_input(body, policy=broken)
 
 
-def test_a_job_frozen_before_the_new_limits_still_validates_and_keeps_its_old_allowances():
+def test_the_literature_switch_and_its_limits_are_refused_and_earlier_formats_do_not_validate():
+    for literature in (True, False):
+        with pytest.raises(box_agent.AgentInputError, match='literature is not an agent job setting'):
+            frozen(literature=literature)
+        with pytest.raises(box_agent.AgentInputError, match='literature is not an agent job setting'):
+            account_job(literature=literature)
+    for key in ('literature_searches', 'literature_search_results', 'literature_papers', 'literature_characters'):
+        assert key not in box_agent.LIMITS
+        with pytest.raises(box_agent.AgentInputError, match=f'limits has no {key}; it accepts timeout_seconds, max_turns, max_budget_usd, tool_calls'):
+            frozen(limits={key: 4})
+        with pytest.raises(box_agent.AgentInputError, match=f'limits has no {key}'):
+            account_job(limits={key: 4})
     value = frozen()
-    legacy = legacy_input(value)
-    assert box_agent.validate_input(json.loads(canonical_json(legacy))) == legacy
-    assert box_agent.run_limits(legacy) == value['limits']
+    # An input frozen in an earlier format, or carrying the removed key or limits, does not run.
+    for change in ({'format': 'reveal.agent-input/1'}, {'format': 'reveal.agent-input/2'}, {'format': 'reveal.agent-input/3'},
+                   {'literature': False}, {'limits': {**value['limits'], 'literature_papers': 4}}):
+        with pytest.raises(box_agent.AgentInputError):
+            box_agent.validate_input({**value, **change})
+    # Every key of the one format is required, deliverable included.
+    for key in box_agent.INPUT_KEYS - {'format'}:
+        with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
+            box_agent.validate_input({name: item for name, item in value.items() if name != key})
     with pytest.raises(box_agent.AgentInputError, match='limits'):
-        box_agent.validate_input({**legacy, 'limits': value['limits']})
-    with pytest.raises(box_agent.AgentInputError, match='limits'):
-        box_agent.validate_input({**value, 'limits': legacy['limits']})
+        box_agent.validate_input({**value, 'limits': {key: value['limits'][key] for key in ('timeout_seconds', 'max_turns', 'max_budget_usd')}})
     # Bounds the Box enforces follow the registry: 1,000 turns pass, 1,001 do not.
     assert box_agent.validate_input({**value, 'limits': {**value['limits'], 'max_turns': 1000}})
     with pytest.raises(box_agent.AgentInputError, match='max_turns'):
         box_agent.validate_input({**value, 'limits': {**value['limits'], 'max_turns': 1001}})
 
 
-def test_an_account_job_freezes_the_question_claims_and_package_and_a_closed_sandbox():
+def test_an_account_job_freezes_the_question_claims_and_package_and_the_answer_job_sandbox_with_bash_and_the_open_network():
     value = account_job(claims=['  LEPR loss reduces hepatic AKT signalling. ', 'Leptin suppresses hepatic glucose production.'])
-    assert value['deliverable'] == 'scientific_account' and value['tools'] == list(box_agent.ACCOUNT_TOOLS)
-    assert (value['literature'], value['network'], value['allowed_domains']) == (True, 'restricted', [])
+    assert value['deliverable'] == 'scientific_account'
+    assert value['tools'] == ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch'] == list(box_agent.ACCOUNT_DEFAULT_TOOLS)
+    assert (value['network'], value['allowed_domains'], value['graphs']) == ('open', [], [])
     account = value['account']
     assert account['question'] == 'Does loss of LEPR signalling cause hepatic insulin resistance?'
     assert [claim['statement'] for claim in account['claims']] == ['LEPR loss reduces hepatic AKT signalling.', 'Leptin suppresses hepatic glucose production.']
@@ -164,24 +172,41 @@ def test_an_account_job_freezes_the_question_claims_and_package_and_a_closed_san
     assert (value['limits']['timeout_seconds'], value['limits']['max_turns'], value['limits']['max_budget_usd']) == (3600, 100, 2.0)
     assert account_job(limits={'timeout_seconds': 600, 'max_turns': 20})['limits']['max_turns'] == 20
     assert account_job()['account']['claims'] == [] and 'propositions' not in account_job()['account']['package']['dapper_context']
-    # The Box clones the pinned DAPPER release for the account tools, so its egress also reaches GitHub.
     settings = box_agent.bootstrap_settings(value)
-    assert settings == {'network': 'restricted', 'literature': True, 'allowed_domains': [], 'deliverable': 'scientific_account'}
-    assert box_agent.network_policy([], 'restricted', True, [], 'scientific_account') == {
-        'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'www.ebi.ac.uk', 'github.com']}
+    assert settings == {'network': 'open', 'allowed_domains': [], 'deliverable': 'scientific_account'}
     assert box_agent.validate_bootstrap_settings(settings) == settings
-    assert box_agent.validate_bootstrap_settings({'network': 'restricted', 'literature': False, 'allowed_domains': []})   # frozen earlier
-    assert box_agent.deliverable_of(legacy_input(frozen())) == 'answer'
+    assert box_agent.network_policy([], 'open', [], 'scientific_account') == {'mode': 'allow-all'}
+    assert box_agent.deliverable_of(value) == 'scientific_account' and box_agent.deliverable_of(frozen()) == 'answer'
+    # Bootstrap settings carry a deliverable and no literature switch.
+    for broken in ({'network': 'restricted', 'allowed_domains': []}, {**settings, 'literature': True}):
+        with pytest.raises(box_agent.AgentInputError, match='Invalid agent bootstrap settings'):
+            box_agent.validate_bootstrap_settings(broken)
+
+
+def test_an_account_job_takes_the_same_tools_network_hosts_and_graphs_as_an_answer_job():
+    # On a network it restricts, the default leaves out WebFetch, which needs the open network.
+    restricted = account_job(network='restricted', allowed_domains=['www.ebi.ac.uk', 'eutils.ncbi.nlm.nih.gov'], graphs=['prokn'])
+    assert restricted['tools'] == ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch']
+    assert (restricted['network'], restricted['allowed_domains'], restricted['graphs']) == (
+        'restricted', ['eutils.ncbi.nlm.nih.gov', 'www.ebi.ac.uk'], ['prokn'])
+    assert box_agent.validate_input(json.loads(canonical_json(restricted))) == restricted
+    # The Box clones the pinned DAPPER release for the account tools, so a restricted account job's egress also reaches
+    # GitHub; Europe PMC is reached only when the request names it.
+    assert box_agent.network_policy(['prokn'], 'restricted', restricted['allowed_domains'], 'scientific_account') == {
+        'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'github.com', 'eutils.ncbi.nlm.nih.gov', 'www.ebi.ac.uk']}
+    assert box_agent.network_policy([], 'restricted', [], 'scientific_account') == {
+        'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'github.com']}
+    assert account_job(tools=['Read', 'Write', 'Bash'])['tools'] == ['Read', 'Write', 'Bash']
+    assert account_job(tools=['Read', 'WebFetch'], network='open')['tools'] == ['Read', 'WebFetch']
+    for body, message in (({'tools': ['WebFetch'], 'network': 'restricted'}, 'needs network "open"'),
+                          ({'allowed_domains': ['eutils.ncbi.nlm.nih.gov']}, 'already reaches every host')):
+        with pytest.raises(box_agent.AgentInputError, match=message):
+            account_job(**body)
 
 
 @pytest.mark.parametrize('body, message', [
     ({'question': None}, 'question must be nonblank'),
     ({'question': 'x' * 2001}, 'question must be nonblank'),
-    ({'tools': ['Read', 'Bash']}, 'tools may only be Read, Write, Edit, Glob, Grep'),
-    ({'tools': ['WebSearch']}, 'tools may only be'),
-    ({'network': 'open'}, 'restricted network'),
-    ({'allowed_domains': ['eutils.ncbi.nlm.nih.gov']}, 'restricted network'),
-    ({'literature': False}, 'needs literature: true'),
     ({'claims': 'one claim'}, 'claims must be a list'),
     ({'claims': ['x'] * 21}, 'at most 20 claims'),
     ({'claims': ['same', ' same ']}, 'claims must be distinct'),
@@ -197,7 +222,7 @@ def test_an_account_job_freezes_the_question_claims_and_package_and_a_closed_san
     ({'claims': [{'statement': 'c', **TRIPLE, 'relation': 'biolink:' + 'x' * 300}]}, 'relation must be a CURIE or an absolute URI'),
     ({'deliverable': 'report'}, 'deliverable must be'),
 ])
-def test_account_jobs_reject_what_would_break_the_closed_sandbox_or_the_account(body, message):
+def test_account_jobs_reject_what_would_break_the_account(body, message):
     with pytest.raises(box_agent.AgentInputError, match=message):
         account_job(**body)
 
@@ -216,7 +241,7 @@ def test_account_fields_are_refused_on_an_answer_job_and_frozen_accounts_are_che
                    {'account': {**account, 'package': {**account['package'], 'source_artifacts': {'x': {}}}}},
                    {'account': {**account, 'claims': [{'statement': 'A caller claim.', 'proposition_id': 'urn:not-minted'}]}},
                    {'account': {**account, 'attribute_requester': 'yes'}}, {'account': {**account, 'requester': 'someone'}},
-                   {'tools': ['Read', 'Bash']}, {'network': 'open'}, {'literature': False}, {'deliverable': 'answer'}):
+                   {'literature': True}, {'deliverable': 'answer'}):
         with pytest.raises(box_agent.AgentInputError):
             box_agent.validate_input({**value, **change})
     # The requester is named only on request, and all that is frozen is that yes or no.
@@ -242,17 +267,16 @@ def test_validate_rejects_changed_frozen_bytes():
 def test_allowed_domains_are_normalized_and_added_to_the_restricted_egress():
     value = frozen(allowed_domains=['EUTILS.ncbi.nlm.nih.gov.', 'api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov'])
     assert value['allowed_domains'] == ['api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov']
-    assert box_agent.network_policy([], 'restricted', True, value['allowed_domains']) == {'mode': 'custom', 'allowed_domains': [
-        'api.anthropic.com', 'www.ebi.ac.uk', 'api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov']}
+    assert box_agent.network_policy([], 'restricted', value['allowed_domains']) == {'mode': 'custom', 'allowed_domains': [
+        'api.anthropic.com', 'api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov']}
     note = box_remote.agent_system_prompt(value)
     assert 'these hosts over HTTPS: api.platform.opentargets.org, eutils.ncbi.nlm.nih.gov' in note
 
 
 def test_network_policy_opens_only_what_the_chosen_tools_call():
-    assert box_agent.network_policy([], 'restricted', False) == {'mode': 'custom', 'allowed_domains': ['api.anthropic.com']}
-    assert box_agent.network_policy(['prokn'], 'restricted', True) == {
-        'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us', 'www.ebi.ac.uk']}
-    assert box_agent.network_policy(['prokn'], 'open', True) == {'mode': 'allow-all'}
+    assert box_agent.network_policy([], 'restricted') == {'mode': 'custom', 'allowed_domains': ['api.anthropic.com']}
+    assert box_agent.network_policy(['prokn'], 'restricted') == {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us']}
+    assert box_agent.network_policy(['prokn'], 'open') == {'mode': 'allow-all'}
 
 
 # Response record and job result ---------------------------------------------------------------------------
@@ -341,7 +365,7 @@ def test_agent_environment_never_carries_the_real_key():
 # Box bundle and bootstrap configuration ------------------------------------------------------------------
 
 def agent_request(tmp_path, value=None, **overrides):
-    value = value or frozen(graphs=['prokn'], literature=True)
+    value = value or frozen(graphs=['prokn'])
     path = tmp_path / 'agent-input.json'; path.write_bytes(canonical_json(value))
     limits = value['limits']
     fields = dict(job_id='agent-job', attempt=1, kind='agent', input_path=path, output_dir=tmp_path / 'out',
@@ -370,13 +394,13 @@ def test_bundle_carries_the_frozen_input_and_the_shared_module(tmp_path):
 def test_bootstrap_config_freezes_model_and_egress_from_the_input(tmp_path):
     request = agent_request(tmp_path, frozen(graphs=['prokn'], model='claude-sonnet-5-5'))
     config = BoxExecutionAdapter(ROOT, environ={'REVEAL_CLAUDE_MODEL': 'claude-sonnet-4-6'}).request_config(request)
-    assert config['model'] == 'claude-sonnet-5-5' and config['agent'] == {'network': 'restricted', 'literature': False, 'allowed_domains': [],
-                                                                          'deliverable': 'answer'}
+    assert config['model'] == 'claude-sonnet-5-5' and config['agent'] == {'network': 'restricted', 'allowed_domains': [], 'deliverable': 'answer'}
     validate_config(config)
     assert egress_policy(config) == {'mode': 'custom', 'allowed_domains': ['api.anthropic.com', 'apps.okn.us']}
     for changed in ({**config, 'kind': 'paragraph', 'selected_graphs': []}, {k: v for k, v in config.items() if k != 'agent'},
-                    {**config, 'agent': {'network': 'everything', 'literature': False, 'allowed_domains': []}},
-                    {**config, 'agent': {'network': 'restricted', 'literature': False, 'allowed_domains': ['1.2.3.4']}}):
+                    {**config, 'agent': {'network': 'everything', 'allowed_domains': [], 'deliverable': 'answer'}},
+                    {**config, 'agent': {'network': 'restricted', 'allowed_domains': ['1.2.3.4'], 'deliverable': 'answer'}},
+                    {**config, 'agent': {**config['agent'], 'literature': True}}):
         with pytest.raises(BoxTransportError):
             validate_config(changed)
 
@@ -414,7 +438,7 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
         work, runtime, prompt = runner_setup(tmp_path, value)
     assert prompt == 'Summarize the sandbox.'
     assert runtime['runtime_version'] == 'reveal.agent-runtime/1' and 'dapper' not in runtime
-    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'literature': False, 'network': 'restricted',
+    assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'network': 'restricted',
                                 'allowed_domains': [], 'effort': 'medium', 'limits': value['limits'], 'claims_url': None}
     assert (work / 'agent-input.json').read_bytes() == canonical_json(value)
     # The repository address reaches the runner from the frozen bootstrap alone, and with it the tool.
@@ -426,7 +450,7 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
     assert offered == ['query_claims'] and box_remote.agent_tools([], ledger, runtime['agent']).definitions() == []
     system = box_remote.agent_system_prompt(value)
     assert system.endswith('\n\nAnswer in French.') and 'output/' in system and 'restricted' in system
-    assert 'WebSearch still works' not in system
+    assert 'WebSearch still works' not in system and 'literature' not in system
 
 
 def test_runner_setup_refuses_a_request_that_differs_from_the_frozen_input(tmp_path):
@@ -438,20 +462,59 @@ def test_runner_setup_refuses_a_request_that_differs_from_the_frozen_input(tmp_p
         runner_setup(tmp_path / 'c', frozen(), max_budget_usd=4.0)
 
 
-def test_runner_gives_the_scoped_tools_the_jobs_own_frozen_limits(tmp_path):
+def test_runner_gives_the_scoped_tools_the_jobs_own_frozen_limits_and_no_paper_tools(tmp_path):
     from reveal_backend.box_mcp import Ledger
-    value = frozen(literature=True, limits={'tool_calls': 120, 'literature_searches': 10, 'literature_search_results': 20,
-                                            'literature_papers': 25, 'literature_characters': 400_000})
+    value = frozen(graphs=['prokn'], limits={'tool_calls': 120})
     _, runtime, _ = runner_setup(tmp_path / 'run', value)
-    tools = box_remote.agent_tools([], Ledger(tmp_path / 'ledger', 'agent-job', 1), runtime['agent'])
-    assert (tools.max_calls, tools.max_searches, tools.max_papers, tools.max_characters, tools.soft_budget) == (120, 10, 25, 400_000, True)
-    assert (tools.literature.max_results, tools.literature.guidance) == (20, True)
-    described = {tool['name']: tool['description'] for tool in tools.definitions()}
-    assert 'up to 10 searches this run, up to 20 results each' in described['search_papers']
-    assert '25 distinct papers' in described['read_paper'] and '400,000 characters' in described['read_paper']
-    # Without literature the paper tools are absent and only the call budget applies.
-    _, quiet, _ = runner_setup(tmp_path / 'quiet', frozen())
-    assert box_remote.agent_tools([], Ledger(tmp_path / 'quiet-ledger', 'agent-job', 1), quiet['agent']).definitions() == []
+    assert 'literature' not in runtime['agent'] and runtime['agent']['limits'] == value['limits']
+    tools = box_remote.agent_tools(['prokn'], Ledger(tmp_path / 'ledger', 'agent-job', 1), runtime['agent'])
+    assert (tools.max_calls, tools.soft_budget, tools.literature) == (120, True, None)
+    names = {tool['name'] for tool in tools.definitions()}
+    assert names and not {'search_papers', 'read_paper'} & names
+    refused = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC3491803'})
+    assert refused['isError']
+    # Nor does an account job: it fetches papers with its own commands.
+    account = account_job()
+    settings = {'tools': account['tools'], 'graphs': [], 'limits': account['limits']}
+    account_tools = box_remote.agent_tools([], Ledger(tmp_path / 'account-ledger', 'agent-job', 1), settings,
+                                           lint=lambda filename: {'content': []}, write_draft=lambda filename, document: {'content': []})
+    assert account_tools.literature is None
+    assert {tool['name'] for tool in account_tools.definitions()} == {'lint_account', 'write_account_draft'}
+
+
+def run_main(tmp_path, request, runtime):
+    """box_remote.main up to the MCP server, with the scoped tools it would serve. Nothing runs past serve()."""
+    root = tmp_path / 'reveal'; state = root / 'state'; output = root / 'output'
+    root.mkdir(parents=True)
+    (root / 'request.json').write_text(json.dumps(request))
+    (root / 'credentials.json').write_text('{"ANTHROPIC_API_KEY":"offline-placeholder"}')
+    served = []
+    def serve(tools):
+        served.append(tools)
+        raise RuntimeError('stop after serving')
+    user = SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid(), pw_dir=str(root))
+    with patch.multiple(box_remote, BASE=root, STATE=state, OUTPUT=output, SECRETS=(), RESEARCH=None), \
+            patch.object(box_remote.os, 'getuid', return_value=0), patch.object(box_remote.pwd, 'getpwnam', return_value=user), \
+            patch.object(box_remote, 'setup', return_value=(root, runtime, 'prompt')), patch.object(box_remote, 'serve', side_effect=serve), \
+            patch.object(box_remote.subprocess, 'run', return_value=SimpleNamespace(stdout='test version')):
+        box_remote.main()
+    assert len(served) == 1
+    return served[0]
+
+
+def test_agent_jobs_are_served_no_paper_tools_while_research_runs_still_are(tmp_path):
+    from reveal_backend.box_literature import LiteratureClient
+    base = {'job_id': 'job', 'attempt': 1, 'selected_graphs': [], 'claude_version': 'test', 'model': 'test',
+            'max_turns': 3, 'max_budget_usd': .1, 'timeout_seconds': 900}
+    research = run_main(tmp_path / 'research', {**base, 'kind': 'research'}, {'dapper_root': str(tmp_path)})
+    assert isinstance(research.literature, LiteratureClient)
+    assert {'search_papers', 'read_paper'} <= {tool['name'] for tool in research.definitions()}
+    for deliverable, value in (('answer', frozen()), ('scientific_account', account_job())):
+        runtime = {'dapper_root': str(tmp_path), 'agent': {'tools': value['tools'], 'graphs': [], 'limits': value['limits']},
+                   **({'deliverable': deliverable} if deliverable == 'scientific_account' else {})}
+        agent = run_main(tmp_path / deliverable, {**base, 'kind': 'agent'}, runtime)
+        assert agent.literature is None, deliverable
+        assert not {'search_papers', 'read_paper'} & {tool['name'] for tool in agent.definitions()}, deliverable
 
 
 def test_a_job_over_the_old_hundred_turn_bound_passes_bootstrap_and_adapter_validation(tmp_path):
@@ -467,13 +530,10 @@ def test_a_job_over_the_old_hundred_turn_bound_passes_bootstrap_and_adapter_vali
         validate_config({**config, 'max_turns': 1001})
 
 
-def test_a_legacy_input_runs_through_runner_setup_with_its_old_allowances(tmp_path):
-    from reveal_backend.box_mcp import Ledger
-    value = frozen(literature=True)
-    legacy = legacy_input(value)
-    _, runtime, _ = runner_setup(tmp_path / 'run', legacy)
-    tools = box_remote.agent_tools([], Ledger(tmp_path / 'ledger', 'agent-job', 1), runtime['agent'])
-    assert (tools.max_calls, tools.max_searches, tools.max_papers, tools.max_characters, tools.literature.max_results) == (30, 3, 4, 48_000, 5)
+def test_an_input_frozen_in_an_earlier_format_fails_at_runner_setup(tmp_path):
+    for index, version in enumerate((1, 2, 3)):
+        with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
+            runner_setup(tmp_path / str(index), {**frozen(), 'format': f'reveal.agent-input/{version}'})
 
 
 def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and_request(tmp_path):
@@ -516,19 +576,27 @@ def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and
     system = box_remote.agent_system_prompt(value)
     assert 'account/SKILL.md' in system and 'output/account-1.json' in system and 'account-request.json' in system
     assert 'account/SKILL.md' not in box_remote.agent_system_prompt(frozen())
+    # The open network is stated as open, and the agent is told to fetch papers itself into output/sources/.
+    assert 'The network is open' in system and 'restricted' not in system and 'literature' not in system
+    assert 'with a Bash command and save it under output/sources/' in system and 'package installs' not in system
+    restricted = box_remote.agent_system_prompt(account_job(network='restricted', allowed_domains=['www.ebi.ac.uk']))
+    assert 'restricted to the Anthropic API and these hosts over HTTPS: www.ebi.ac.uk' in restricted
+    assert 'output/sources/; only the hosts named above can be reached' in restricted
+    shell_less = box_remote.agent_system_prompt(account_job(tools=['Read', 'Write']))
+    assert 'output/sources/' not in shell_less and 'no Bash tool, so it cannot fetch papers' in shell_less
     # The requester is nowhere the agent can read.
     assert 'attribution' not in (work / 'agent-input.json').read_text()
 
 
-def test_account_tools_do_not_spend_the_paper_budget_and_an_answer_job_has_none(tmp_path):
+def test_account_tools_do_not_spend_the_call_budget_and_an_answer_job_has_none(tmp_path):
     from reveal_backend.box_mcp import Ledger
     saved, linted = [], []
-    settings = {'tools': ['Read'], 'graphs': [], 'literature': True, 'limits': account_job(limits={'tool_calls': 2})['limits']}
+    settings = {'tools': ['Read'], 'graphs': [], 'limits': account_job(limits={'tool_calls': 2})['limits']}
     ledger = Ledger(tmp_path / 'ledger', 'agent-job', 1)
     tools = box_remote.agent_tools([], ledger, settings, lint=lambda filename: linted.append(filename) or {'content': []},
                                    write_draft=lambda filename, document: saved.append(filename) or {'content': []})
     names = {tool['name'] for tool in tools.definitions()}
-    assert {'lint_account', 'write_account_draft', 'search_papers', 'read_paper'} <= names
+    assert names == {'lint_account', 'write_account_draft'}
     for _ in range(5):
         assert not tools.call('write_account_draft', {'filename': 'account-1.json', 'document': {'scientific_accounts': [{}]}}).get('isError')
         assert not tools.call('lint_account', {'filename': 'account-1.json'}).get('isError')
@@ -933,11 +1001,23 @@ def test_an_account_job_is_queued_with_minted_nodes_and_its_requester_beside_the
     # Who asked is frozen beside the input, never in it: the input is what the Box, and so the agent, can read.
     assert queue['attribution']['user_id'] == service.users['registered'] and queue['attribution']['principal_kind'] == 'registered'
     assert 'attribution' not in inputs and service.users['registered'] not in canonical_json(inputs).decode()
-    refused = post_agent(service, deliverable='scientific_account', question='q', tools=['Bash'])
-    assert refused.status_code == 422 and 'tools may only be' in refused.json()['detail']
+    # An account job gets the answer-job sandbox plus Bash, WebSearch and WebFetch on the open network by default.
+    assert inputs['tools'] == ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch']
+    assert (inputs['network'], inputs['allowed_domains'], inputs['graphs']) == ('open', [], [])
     plain = post_agent(service)
     with service.repo.read_transaction() as tx:
         assert 'attribution' not in tx.get('queue', plain.json()['id'])['data']
+
+
+def test_an_account_job_may_choose_its_tools_network_hosts_and_graphs_like_an_answer_job(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
+    shell = post_agent(service, deliverable='scientific_account', question='q', tools=['Read', 'Write', 'Bash'], network='restricted',
+                       allowed_domains=['www.ebi.ac.uk'], graphs=['prokn'])
+    assert shell.status_code == 202, shell.text
+    with service.repo.read_transaction() as tx:
+        asked = tx.get('queue', shell.json()['id'])['data']['inputs']
+    assert (asked['tools'], asked['network'], asked['allowed_domains'], asked['graphs']) == (
+        ['Read', 'Write', 'Bash'], 'restricted', ['www.ebi.ac.uk'], ['prokn'])
 
 
 def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, monkeypatch, tmp_path):
@@ -975,9 +1055,15 @@ def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, mon
 def test_invalid_agent_requests_are_rejected_before_queueing(service, monkeypatch):
     monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
     for body, status in (({'tools': ['WebFetch']}, 422), ({'limits': {'max_budget_usd': 99}}, 422),
-                         ({'surprise': True}, 422), ({'prompt': ''}, 422)):
+                         ({'surprise': True}, 422), ({'prompt': ''}, 422),
+                         # The literature switch and its limits are gone: a request that still sends them is invalid.
+                         ({'literature': True}, 422), ({'literature': False}, 422),
+                         ({'deliverable': 'scientific_account', 'question': 'q', 'literature': True}, 422),
+                         *(({'limits': {key: 4}}, 422) for key in ('literature_searches', 'literature_search_results',
+                                                                   'literature_papers', 'literature_characters'))):
         response = post_agent(service, **body)
         assert response.status_code == status, (body, response.text)
+        assert response.json()['code'] == 'INVALID_REQUEST', response.text
     with service.repo.read_transaction() as tx:
         assert tx.list('job') == []
 
@@ -997,38 +1083,39 @@ def test_admin_reads_and_changes_limits_and_the_next_job_is_frozen_with_them(ser
     assert view.status_code == 200 and view.headers['cache-control'] == 'private, no-store'
     body = view.json()
     assert body['version'] is None and [limit['key'] for limit in body['limits']] == list(box_agent.LIMITS)
-    papers = next(limit for limit in body['limits'] if limit['key'] == 'literature_papers')
-    assert papers['default'] == {'value': 4, 'source': 'code', 'environment': 'REVEAL_AGENT_JOB_DEFAULT_LITERATURE_PAPERS'}
-    assert (papers['minimum'], papers['maximum'], papers['console']) == (1, 1000, {'default': None, 'ceiling': None})
+    calls = next(limit for limit in body['limits'] if limit['key'] == 'tool_calls')
+    assert calls['default'] == {'value': 30, 'source': 'code', 'environment': 'REVEAL_AGENT_JOB_DEFAULT_TOOL_CALLS'}
+    assert (calls['minimum'], calls['maximum'], calls['console']) == (1, 5000, {'default': None, 'ceiling': None})
 
-    change = {'expected_version': None, 'values': {'literature_papers': {'default': 40, 'ceiling': 200},
-                                                   'literature_searches': {'default': 25}, 'tool_calls': {'default': 250}}}
+    change = {'expected_version': None, 'values': {'tool_calls': {'default': 250, 'ceiling': 2000},
+                                                   'timeout_seconds': {'default': 1200}}}
     saved = service.client.put(path, json=change, headers=admin_headers(admin_email='admin@example.org'))
     assert saved.status_code == 200, saved.text
     assert saved.json()['version'] == 1 and saved.json()['updated_by'] == 'admin@example.org'
-    assert saved.json()['history'][0]['changes']['literature_papers'] == {'default': [None, 40], 'ceiling': [None, 200]}
+    assert saved.json()['history'][0]['changes']['tool_calls'] == {'default': [None, 250], 'ceiling': [None, 2000]}
 
-    # The client that sends only literature: true now gets the console's defaults, with no change on its side.
-    created = post_agent(service, literature=True)
+    # The client that sends no limits now gets the console's defaults, with no change on its side.
+    created = post_agent(service)
     assert created.status_code == 202, created.text
     with service.repo.read_transaction() as tx:
         limits = tx.get('queue', created.json()['id'])['data']['inputs']['limits']
-    assert (limits['literature_papers'], limits['literature_searches'], limits['tool_calls'], limits['max_turns']) == (40, 25, 250, 50)
-    refused = post_agent(service, literature=True, limits={'literature_papers': 201})
-    assert refused.status_code == 422 and 'from 1 to 200' in refused.json()['detail']
+    assert (limits['tool_calls'], limits['timeout_seconds'], limits['max_turns']) == (250, 1200, 50)
+    refused = post_agent(service, limits={'tool_calls': 2001})
+    assert refused.status_code == 422 and 'from 1 to 2000' in refused.json()['detail']
     # JSON has one number type: 30.0 passes the API schema and is the whole number 30.
     assert frozen(limits={'tool_calls': 30.0, 'max_turns': 7.0})['limits']['tool_calls'] == 30
-    assert post_agent(service, literature=True, limits={'literature_papers': 200}).status_code == 202
+    assert post_agent(service, limits={'tool_calls': 2000}).status_code == 202
 
 
 def test_admin_limit_changes_are_validated_fenced_and_need_their_own_authority(service):
     path = '/internal/v1/admin/agent-limits'
     headers = lambda: admin_headers(admin_email='admin@example.org')
-    for values, message in (({'literature_papers': {'default': 80}}, 'above its ceiling 50'),
+    for values, message in (({'tool_calls': {'default': 301}}, 'above its ceiling 300'),
                             ({'max_turns': {'ceiling': 1001}}, 'from 1 to 1000'),
                             ({'max_budget_usd': {'ceiling': 0}}, 'above 0'),
-                            ({'literature_papers': {'default': 4.5}}, 'whole number'),
+                            ({'tool_calls': {'default': 4.5}}, 'whole number'),
                             ({'reads': {'default': 4}}, 'not an agent job limit'),
+                            ({'literature_papers': {'default': 4}}, 'not an agent job limit'),
                             ({'max_turns': {'floor': 4}}, 'default and ceiling only')):
         refused = service.client.put(path, json={'expected_version': None, 'values': values}, headers=headers())
         assert refused.status_code == 422 and refused.json()['code'] == 'INVALID_LIMITS' and message in refused.json()['detail'], refused.text

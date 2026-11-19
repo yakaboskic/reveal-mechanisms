@@ -22,11 +22,7 @@ LABELS = {
     'timeout_seconds': ('Run time', 'seconds', 'Wall-clock time for one run. The Box adapter supports at most one hour.'),
     'max_turns': ('Turns', 'turns', 'Claude Code turns in one run.'),
     'max_budget_usd': ('Budget', 'USD', 'Provider cost of one run.'),
-    'tool_calls': ('REVEAL tool calls', 'calls', 'Paper search, paper read and graph tool calls, counted together.'),
-    'literature_searches': ('Paper searches', 'searches', 'Europe PMC searches in one run.'),
-    'literature_search_results': ('Results per search', 'results', 'Most records one paper search may return.'),
-    'literature_papers': ('Papers read', 'papers', 'Distinct papers. Paging through one paper does not use another.'),
-    'literature_characters': ('Paper text', 'characters', 'Abstract and full-text characters returned across all reads.'),
+    'tool_calls': ('REVEAL tool calls', 'calls', 'Graph and claims-repository tool calls, counted together.'),
 }
 
 

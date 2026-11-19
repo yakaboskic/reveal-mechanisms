@@ -9,11 +9,11 @@ import {
 import { adminActor, adminEmail } from "../src/lib/admin-policy";
 import { AdminLimits, LimitsHistory, LimitsTable } from "../src/components/AdminLimits";
 
-const papers: AgentLimit = {
-  key: "literature_papers", label: "Papers read", unit: "papers", description: "Distinct papers.", type: "integer",
-  minimum: 1, exclusive_minimum: false, maximum: 1000, code: { default: 4, ceiling: 50 }, console: { default: 40, ceiling: null },
-  default: { value: 40, source: "console", environment: "REVEAL_AGENT_JOB_DEFAULT_LITERATURE_PAPERS" },
-  ceiling: { value: 50, source: "code", environment: "REVEAL_AGENT_JOB_MAX_LITERATURE_PAPERS" },
+const calls: AgentLimit = {
+  key: "tool_calls", label: "REVEAL tool calls", unit: "calls", description: "Graph and claims-repository tool calls.", type: "integer",
+  minimum: 1, exclusive_minimum: false, maximum: 5000, code: { default: 30, ceiling: 300 }, console: { default: 40, ceiling: null },
+  default: { value: 40, source: "console", environment: "REVEAL_AGENT_JOB_DEFAULT_TOOL_CALLS" },
+  ceiling: { value: 300, source: "code", environment: "REVEAL_AGENT_JOB_MAX_TOOL_CALLS" },
 };
 const budget: AgentLimit = {
   key: "max_budget_usd", label: "Budget", unit: "USD", description: "Provider cost of one run.", type: "number",
@@ -28,8 +28,9 @@ const turns: AgentLimit = {
   ceiling: { value: 80, source: "environment", environment: "REVEAL_AGENT_JOB_MAX_TURNS" },
 };
 const view: AgentLimitsView = {
-  format: "reveal.agent-limits/1", version: 3, updated_at: "2026-11-12T20:29:03.303472Z", updated_by: "a@b.org", limits: [turns, budget, papers],
-  history: [{ at: "2026-11-12T20:29:03.303472Z", by: "a@b.org", changes: { literature_papers: { default: [null, 40] }, max_budget_usd: { ceiling: [5.5, 20] } } }],
+  format: "reveal.agent-limits/1", version: 3, updated_at: "2026-11-12T20:29:03.303472Z", updated_by: "a@b.org", limits: [turns, budget, calls],
+  history: [{ at: "2026-11-12T20:29:03.303472Z", by: "a@b.org", changes: { tool_calls: { default: [null, 40] }, max_budget_usd: { ceiling: [5.5, 20] } } },
+    { at: "2026-11-10T09:00:00Z", by: "a@b.org", changes: { literature_papers: { default: [4, 12] } } }],
 };
 const edited = (changes: Record<string, Partial<Record<"default" | "ceiling", string>>>): LimitFields => {
   const fields = limitFields(view);
@@ -39,60 +40,60 @@ const edited = (changes: Record<string, Partial<Record<"default" | "ceiling", st
 
 test("the form starts from what the console set, never from effective values, and is unchanged", () => {
   const fields = limitFields(view);
-  assert.deepEqual(fields, { max_turns: { default: "", ceiling: "" }, max_budget_usd: { default: "", ceiling: "20" }, literature_papers: { default: "40", ceiling: "" } });
+  assert.deepEqual(fields, { max_turns: { default: "", ceiling: "" }, max_budget_usd: { default: "", ceiling: "20" }, tool_calls: { default: "40", ceiling: "" } });
   const form = limitsForm(view, fields);
   assert.deepEqual(form.changed, []);
   assert.deepEqual(form.errors, {});
   // The PUT replaces everything, so every console-set field is sent and nothing else.
-  assert.deepEqual(form.values, { max_budget_usd: { ceiling: 20 }, literature_papers: { default: 40 } });
+  assert.deepEqual(form.values, { max_budget_usd: { ceiling: 20 }, tool_calls: { default: 40 } });
 });
 
 test("an edit sends all console-set values; another spelling of the saved number is not a change", () => {
   const form = limitsForm(view, edited({ max_turns: { ceiling: " 60 " } }));
   assert.deepEqual(form.changed, ["max_turns.ceiling"]);
-  assert.deepEqual(form.values, { max_turns: { ceiling: 60 }, max_budget_usd: { ceiling: 20 }, literature_papers: { default: 40 } });
-  assert.deepEqual(limitsForm(view, edited({ max_budget_usd: { ceiling: "20.0" }, literature_papers: { default: " 40" } })).changed, []);
+  assert.deepEqual(form.values, { max_turns: { ceiling: 60 }, max_budget_usd: { ceiling: 20 }, tool_calls: { default: 40 } });
+  assert.deepEqual(limitsForm(view, edited({ max_budget_usd: { ceiling: "20.0" }, tool_calls: { default: " 40" } })).changed, []);
   assert.deepEqual(limitsForm(view, edited({ max_budget_usd: { default: "0.5" } })).values.max_budget_usd, { default: 0.5, ceiling: 20 });
 });
 
 test("clearing a field removes it from the values, and a limit with nothing set is left out", () => {
-  const form = limitsForm(view, edited({ literature_papers: { default: "" } }));
-  assert.deepEqual(form.changed, ["literature_papers.default"]);
+  const form = limitsForm(view, edited({ tool_calls: { default: "" } }));
+  assert.deepEqual(form.changed, ["tool_calls.default"]);
   assert.deepEqual(form.errors, {});
   assert.deepEqual(form.values, { max_budget_usd: { ceiling: 20 } });
-  assert.deepEqual(limitsForm(view, edited({ literature_papers: { default: "   " }, max_budget_usd: { ceiling: "" } })).values, {});
+  assert.deepEqual(limitsForm(view, edited({ tool_calls: { default: "   " }, max_budget_usd: { ceiling: "" } })).values, {});
   // A key the form has no entry for is read as not set.
   assert.deepEqual(limitsForm(view, {}).values, {});
-  assert.deepEqual(limitsForm(view, {}).changed, ["max_budget_usd.ceiling", "literature_papers.default"]);
+  assert.deepEqual(limitsForm(view, {}).changed, ["max_budget_usd.ceiling", "tool_calls.default"]);
 });
 
 test("integer limits take whole numbers only; number limits take decimals; neither takes other text", () => {
-  assert.deepEqual(parseLimit(papers, ""), { value: null });
-  assert.deepEqual(parseLimit(papers, " 12 "), { value: 12 });
-  for (const text of ["4.5", "4.0", "1e2", "1,000", "0x10", "abc", "4 0", "+4", "Infinity", "٤"]) assert.deepEqual(parseLimit(papers, text), { error: "Enter a whole number, digits only." }, text);
+  assert.deepEqual(parseLimit(calls, ""), { value: null });
+  assert.deepEqual(parseLimit(calls, " 12 "), { value: 12 });
+  for (const text of ["4.5", "4.0", "1e2", "1,000", "0x10", "abc", "4 0", "+4", "Infinity", "٤"]) assert.deepEqual(parseLimit(calls, text), { error: "Enter a whole number, digits only." }, text);
   assert.deepEqual(parseLimit(budget, "2.5"), { value: 2.5 });
   assert.deepEqual(parseLimit(budget, ".5"), { value: 0.5 });
   assert.deepEqual(parseLimit(budget, "20"), { value: 20 });
   for (const text of ["1e2", "1,5", "NaN", "Infinity", "2.5.1", ".", "-", "$5"]) assert.deepEqual(parseLimit(budget, text), { error: "Enter a number, such as 2 or 2.5." }, text);
-  const form = limitsForm(view, edited({ literature_papers: { default: "4.5" } }));
-  assert.deepEqual(form.errors, { "literature_papers.default": "Enter a whole number, digits only." });
-  assert.deepEqual(form.changed, ["literature_papers.default"]);
-  assert.equal("literature_papers" in form.values, false);
+  const form = limitsForm(view, edited({ tool_calls: { default: "4.5" } }));
+  assert.deepEqual(form.errors, { "tool_calls.default": "Enter a whole number, digits only." });
+  assert.deepEqual(form.changed, ["tool_calls.default"]);
+  assert.equal("tool_calls" in form.values, false);
 });
 
 test("values must lie in the supported range, and an exclusive minimum excludes the minimum itself", () => {
-  const whole = { error: "Enter a whole number from 1 to 1,000." };
-  assert.deepEqual(parseLimit(papers, "1"), { value: 1 });
-  assert.deepEqual(parseLimit(papers, "1000"), { value: 1000 });
-  for (const text of ["0", "-3", "1001", "999999999999999999999999"]) assert.deepEqual(parseLimit(papers, text), whole, text);
+  const whole = { error: "Enter a whole number from 1 to 5,000." };
+  assert.deepEqual(parseLimit(calls, "1"), { value: 1 });
+  assert.deepEqual(parseLimit(calls, "5000"), { value: 5000 });
+  for (const text of ["0", "-3", "5001", "999999999999999999999999"]) assert.deepEqual(parseLimit(calls, text), whole, text);
   const decimal = { error: "Enter a number above 0, up to 1,000." };
   assert.deepEqual(parseLimit(budget, "0.01"), { value: 0.01 });
   assert.deepEqual(parseLimit(budget, "1000"), { value: 1000 });
   for (const text of ["0", "0.0", "-0", "-1", "1000.01"]) assert.deepEqual(parseLimit(budget, text), decimal, text);
   // The two flags are independent of the type.
-  assert.deepEqual(parseLimit({ ...papers, exclusive_minimum: true }, "1"), { error: "Enter a whole number above 1, up to 1,000." });
+  assert.deepEqual(parseLimit({ ...calls, exclusive_minimum: true }, "1"), { error: "Enter a whole number above 1, up to 5,000." });
   assert.deepEqual(parseLimit({ ...budget, exclusive_minimum: false }, "0"), { value: 0 });
-  assert.equal(supportedRange(papers), "1 to 1,000");
+  assert.equal(supportedRange(calls), "1 to 5,000");
   assert.equal(supportedRange(budget), "above 0, up to 1,000");
 });
 
@@ -104,10 +105,10 @@ test("a default set here may not exceed the ceiling set here, or the fallback ce
   assert.deepEqual(fallbackLimit(turns, "ceiling"), { value: 80, known: true });
   assert.deepEqual(limitsForm(view, edited({ max_turns: { default: "81" } })).errors, { "max_turns.default": "The default 81 is above the ceiling 80." });
   assert.deepEqual(limitsForm(view, edited({ max_turns: { default: "80" } })).errors, {});
-  assert.deepEqual(limitsForm(view, edited({ literature_papers: { default: "51" } })).errors, { "literature_papers.default": "The default 51 is above the ceiling 50." });
+  assert.deepEqual(limitsForm(view, edited({ tool_calls: { default: "301" } })).errors, { "tool_calls.default": "The default 301 is above the ceiling 300." });
   // An empty default under a lower ceiling is legal: the server lowers the default to the ceiling.
   assert.deepEqual(limitsForm(view, edited({ max_turns: { ceiling: "10" } })).errors, {});
-  assert.deepEqual(limitsForm(view, edited({ literature_papers: { default: "", ceiling: "2" } })).errors, {});
+  assert.deepEqual(limitsForm(view, edited({ tool_calls: { default: "", ceiling: "2" } })).errors, {});
   // An unusable ceiling is reported on the ceiling alone.
   assert.deepEqual(Object.keys(limitsForm(view, edited({ max_turns: { default: "70", ceiling: "x" } })).errors), ["max_turns.ceiling"]);
 });
@@ -128,8 +129,8 @@ test("only the current limits format is treated as a view", () => {
 
 const put = (body: BodyInit, headers: Record<string, string> = {}) => new Request("http://localhost/api/admin/agent-limits", { method: "PUT", body, headers, duplex: "half" } as RequestInit);
 test("a limits change is parsed JSON reduced to expected_version and values", async () => {
-  const sent = { expected_version: 3, values: { literature_papers: { default: 40 } }, admin_email: "attacker@example.org" };
-  assert.deepEqual(await readLimitsChange(put(JSON.stringify(sent))), { ok: true, change: { expected_version: 3, values: { literature_papers: { default: 40 } } } });
+  const sent = { expected_version: 3, values: { tool_calls: { default: 40 } }, admin_email: "attacker@example.org" };
+  assert.deepEqual(await readLimitsChange(put(JSON.stringify(sent))), { ok: true, change: { expected_version: 3, values: { tool_calls: { default: 40 } } } });
   assert.deepEqual(await readLimitsChange(put('{"expected_version":null,"values":{}}')), { ok: true, change: { expected_version: null, values: {} } });
   for (const body of ["", "not json", "[]", "null", '"text"', '{"values":{}}', '{"expected_version":"3","values":{}}', '{"expected_version":1.5,"values":{}}', '{"expected_version":3}', '{"expected_version":3,"values":[]}', '{"expected_version":3,"values":null}']) {
     const result = await readLimitsChange(put(body));
@@ -171,9 +172,9 @@ test("each limit input is labelled, shows its fallback and is tied to its error 
   const inputs = [...html.matchAll(/<input[^>]*>/g)].map(match => match[0]);
   assert.equal(inputs.length, 6);
   const attribute = (tag: string, name: string) => new RegExp(` ${name}="([^"]*)"`).exec(tag)?.[1];
-  assert.deepEqual(inputs.map(tag => attribute(tag, "aria-label")), ["Turns default, in turns", "Turns ceiling, in turns", "Budget default, in USD", "Budget ceiling, in USD", "Papers read default, in papers", "Papers read ceiling, in papers"]);
+  assert.deepEqual(inputs.map(tag => attribute(tag, "aria-label")), ["Turns default, in turns", "Turns ceiling, in turns", "Budget default, in USD", "Budget ceiling, in USD", "REVEAL tool calls default, in calls", "REVEAL tool calls ceiling, in calls"]);
   // Empty fields show what applies instead. Under a console value (saved or just cleared) the view does not reveal it.
-  assert.deepEqual(inputs.map(tag => attribute(tag, "placeholder")), ["50", "80", "2", "Not set", "Not set", "50"]);
+  assert.deepEqual(inputs.map(tag => attribute(tag, "placeholder")), ["50", "80", "2", "Not set", "Not set", "300"]);
   assert.deepEqual(inputs.map(tag => attribute(tag, "value")), ["81", "", "", "", "40", ""]);
   assert.deepEqual(inputs.map(tag => attribute(tag, "inputMode") ?? attribute(tag, "inputmode")), ["numeric", "numeric", "decimal", "decimal", "numeric", "numeric"]);
   assert.deepEqual(inputs.map(tag => attribute(tag, "aria-invalid")), ["true", undefined, undefined, undefined, undefined, undefined]);
@@ -186,8 +187,8 @@ test("each limit input is labelled, shows its fallback and is tied to its error 
   assert.match(html, /Not set here: the environment variable REVEAL_AGENT_JOB_MAX_TURNS applies\./);
   // Effective values name their source.
   assert.match(html, /<strong class="admin-limit-value">80<\/strong> turns<small>Environment <span class="admin-mono">REVEAL_AGENT_JOB_MAX_TURNS<\/span><\/small>/);
-  assert.match(html, /<strong class="admin-limit-value">40<\/strong> papers<small>Set in this console<\/small>/);
-  assert.match(html, /<strong class="admin-limit-value">50<\/strong> papers<small>Built-in<\/small>/);
+  assert.match(html, /<strong class="admin-limit-value">40<\/strong> calls<small>Set in this console<\/small>/);
+  assert.match(html, /<strong class="admin-limit-value">300<\/strong> calls<small>Built-in<\/small>/);
   assert.match(html, /Number<small>above 0, up to 1,000<\/small>/);
   assert.equal((html.match(/>Clear<\/button>/g) || []).length, 6);
 });
@@ -201,7 +202,9 @@ test("flags from the server and the change history are spelled out", () => {
   assert.equal((table.match(/<input[^>]* disabled=""/g) || []).length, 2);
   const history = renderToStaticMarkup(React.createElement(LimitsHistory, { view }));
   assert.match(history, /<td>a@b\.org<\/td>/);
-  assert.match(history, /<div>Papers read default: not set → 40<\/div><div>Budget ceiling: 5\.5 → 20<\/div>/);
+  assert.match(history, /<div>REVEAL tool calls default: not set → 40<\/div><div>Budget ceiling: 5\.5 → 20<\/div>/);
+  // A saved change to a limit that no longer exists still reads, under its key.
+  assert.match(history, /<div>literature_papers default: 4 → 12<\/div>/);
   assert.match(renderToStaticMarkup(React.createElement(LimitsHistory, { view: { ...view, history: [] } })), /No change has been saved from this console yet\./);
 });
 

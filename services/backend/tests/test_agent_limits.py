@@ -24,26 +24,26 @@ def test_code_values_apply_when_nothing_is_set(repo):
 def test_environment_names_follow_the_existing_budget_cap():
     assert agent_limits.environment_name('max_budget_usd', 'ceiling') == 'REVEAL_AGENT_JOB_MAX_BUDGET_USD'
     assert agent_limits.environment_name('max_budget_usd', 'default') == 'REVEAL_AGENT_JOB_DEFAULT_BUDGET_USD'
-    assert agent_limits.environment_name('literature_papers', 'ceiling') == 'REVEAL_AGENT_JOB_MAX_LITERATURE_PAPERS'
+    assert agent_limits.environment_name('tool_calls', 'ceiling') == 'REVEAL_AGENT_JOB_MAX_TOOL_CALLS'
     assert agent_limits.environment_name('max_turns', 'default') == 'REVEAL_AGENT_JOB_DEFAULT_TURNS'
 
 
 def test_console_beats_environment_which_beats_code(repo):
-    environ = {'REVEAL_AGENT_JOB_MAX_BUDGET_USD': '7.5', 'REVEAL_AGENT_JOB_DEFAULT_LITERATURE_PAPERS': '12',
+    environ = {'REVEAL_AGENT_JOB_MAX_BUDGET_USD': '7.5', 'REVEAL_AGENT_JOB_DEFAULT_TIMEOUT_SECONDS': '1200',
                'REVEAL_AGENT_JOB_MAX_TOOL_CALLS': 'plenty', 'REVEAL_AGENT_JOB_MAX_TURNS': '99999'}
     with repo.transaction() as tx:
         policy = agent_limits.policy(tx, environ)
-        assert policy['max_budget_usd'] == {'default': 2.0, 'ceiling': 7.5} and policy['literature_papers']['default'] == 12
+        assert policy['max_budget_usd'] == {'default': 2.0, 'ceiling': 7.5} and policy['timeout_seconds']['default'] == 1200
         # An unusable environment value is ignored and reported, never applied.
         assert policy['tool_calls'] == {'default': 30, 'ceiling': 300} and policy['max_turns']['ceiling'] == 100
         by_key = {limit['key']: limit for limit in agent_limits.view(tx, environ)['limits']}
         assert by_key['tool_calls']['ceiling'] == {'value': 300, 'source': 'code', 'environment': 'REVEAL_AGENT_JOB_MAX_TOOL_CALLS',
                                                    'ignored_environment_value': True}
-        assert by_key['literature_papers']['default']['source'] == 'environment'
-        agent_limits.change(tx, {'expected_version': None, 'values': {'literature_papers': {'default': 30}, 'max_budget_usd': {'ceiling': 20}}},
+        assert by_key['timeout_seconds']['default']['source'] == 'environment'
+        agent_limits.change(tx, {'expected_version': None, 'values': {'timeout_seconds': {'default': 1800}, 'max_budget_usd': {'ceiling': 20}}},
                             'admin@example.org', environ)
         policy = agent_limits.policy(tx, environ)
-    assert policy['literature_papers'] == {'default': 30, 'ceiling': 50} and policy['max_budget_usd'] == {'default': 2.0, 'ceiling': 20.0}
+    assert policy['timeout_seconds'] == {'default': 1800, 'ceiling': 3600} and policy['max_budget_usd'] == {'default': 2.0, 'ceiling': 20.0}
     assert agent_limits.budget_ceiling(repo, environ) == 20.0
     box_agent.validate_policy(policy)
 
@@ -94,3 +94,26 @@ def test_history_is_bounded_and_a_damaged_record_is_never_applied(repo):
         assert damaged['history'] == []
         repaired = agent_limits.change(tx, {'expected_version': damaged['version'], 'values': {'max_turns': {'default': 60}}}, 'admin@example.org', {})
         assert len(repaired['history']) == 1 and agent_limits.policy(tx, {})['max_turns']['default'] == 60
+
+
+def test_a_saved_record_naming_a_removed_limit_is_ignored_and_its_history_kept(repo):
+    # The console saved literature_papers before the paper limits were removed; the record is read, not rewritten.
+    with repo.transaction() as tx:
+        tx.put(agent_limits.KIND, agent_limits.IDENTITY, agent_limits.OWNER, {
+            'format': agent_limits.FORMAT, 'updated_at': '2026-11-12T20:29:03Z', 'updated_by': 'a@b.org',
+            'values': {'literature_papers': {'default': 12}, 'max_turns': {'ceiling': 400}},
+            'history': [{'at': '2026-11-12T20:29:03Z', 'by': 'a@b.org',
+                         'changes': {'literature_papers': {'default': [None, 12]}, 'max_turns': {'ceiling': [None, 400]}}}]})
+    with repo.transaction() as tx:
+        policy = agent_limits.policy(tx, {})
+        assert set(policy) == set(box_agent.LIMITS) and policy['max_turns']['ceiling'] == 400
+        box_agent.validate_policy(policy)
+        view = agent_limits.view(tx, {})
+        assert [limit['key'] for limit in view['limits']] == list(box_agent.LIMITS)
+        assert view['history'][0]['changes']['literature_papers'] == {'default': [None, 12]}
+        changed = agent_limits.change(tx, {'expected_version': view['version'], 'values': {'max_turns': {'ceiling': 400}, 'tool_calls': {'default': 40}}},
+                                      'b@b.org', {})
+    # The next change records only what it changed, and the removed limit's value is no longer kept.
+    assert changed['history'][0]['changes'] == {'tool_calls': {'default': [None, 40]}}
+    with repo.read_transaction() as tx:
+        assert set(tx.get(agent_limits.KIND, agent_limits.IDENTITY)['data']['values']) == {'max_turns', 'tool_calls'}

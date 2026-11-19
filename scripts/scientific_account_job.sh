@@ -26,7 +26,7 @@
 # stopped. Use a new run directory for a new job.
 #
 # Change what is asked with environment variables (defaults below):
-#   PHENOTYPE, DISEASE, TOP_GENES, PRIOR_MAX, LEAVE_TO_AGENT, BUDGET_USD, SEARCHES, PAPERS, PAPER_CHARACTERS, TOOL_CALLS,
+#   PHENOTYPE, DISEASE, TOP_GENES, PRIOR_MAX, LEAVE_TO_AGENT, BUDGET_USD, TOOL_CALLS,
 #   CLAIMS_API_URL
 set -euo pipefail
 
@@ -44,12 +44,9 @@ PRIOR_MAX=${PRIOR_MAX:-0.5}                        # keep genes whose gene-set p
 # Limits. A run stopped at its budget, timeout or turn limit returns no account, so the budget is generous: a
 # three-gene run has cost $1.30 to $2.10. The operator sets each limit's ceiling; a value above one is refused
 # with 422 and the message names the ceiling.
-# The literature allowances grow with TOP_GENES. The first run (three genes, 8 searches) used every search
-# before it could look for each gene's primary studies, so the default is now 4 searches and 3 papers a gene.
+# The agent fetches papers itself with Bash on the open network (the job's defaults), so no paper allowance is
+# sent. TOOL_CALLS counts its claims-repository lookups and grows with TOP_GENES.
 BUDGET_USD=${BUDGET_USD:-5}
-SEARCHES=${SEARCHES:-$((4 * TOP_GENES))}
-PAPERS=${PAPERS:-$((3 * TOP_GENES))}
-PAPER_CHARACTERS=${PAPER_CHARACTERS:-$((60000 * TOP_GENES))}
 TOOL_CALLS=${TOOL_CALLS:-$((30 * TOP_GENES))}
 
 # The claims repository REVEAL deposits in on QA. Reading it needs no key.
@@ -107,8 +104,7 @@ else
   # attribute_requester is left out, so the account does not name you: it is attributed to the
   # "REVEAL Mechanisms agent service" organization. Add "attribute_requester": true to be named as a Person.
   jq --arg disease "$DISEASE" --arg phenotype "$PHENOTYPE" --arg collection "$COLLECTION" --arg priorMax "$PRIOR_MAX" --argjson leave "$LEAVE_TO_AGENT" \
-    --argjson budget "$BUDGET_USD" --argjson searches "$SEARCHES" --argjson papers "$PAPERS" \
-    --argjson characters "$PAPER_CHARACTERS" --argjson tool_calls "$TOOL_CALLS" 'length as $length_all | def length_all: $length_all; {
+    --argjson budget "$BUDGET_USD" --argjson tool_calls "$TOOL_CALLS" 'length as $length_all | def length_all: $length_all; {
       kind: "agent",
       deliverable: "scientific_account",
       question: ("Which of the top PIGEAN candidate genes for \($disease) (\(map(.gene) | join(", "))) "
@@ -134,8 +130,7 @@ else
                + "from what you read. Prefer primary studies. Say plainly when you found nothing for a gene, and "
                + "say what you did not read. You can look the repository claims up with query_claims; they are "
                + "the reason these genes were chosen, not evidence to cite."),
-      limits: {max_budget_usd: $budget, literature_searches: $searches, literature_papers: $papers,
-               literature_characters: $characters, tool_calls: $tool_calls}
+      limits: {max_budget_usd: $budget, tool_calls: $tool_calls}
     }' "$RUN/candidates.json" > "$RUN/request.json"
 fi
 jq -r '.[] | "  \(.gene)\tcombined \(.combined)\tdirect \(.direct)\tprior \(.prior)\t\(.claim_id)"' "$RUN/candidates.json"

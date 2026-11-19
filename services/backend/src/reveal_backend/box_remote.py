@@ -21,7 +21,7 @@ import threading
 import time
 
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
-                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, run_limits as agent_run_limits, schema_of,
+                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, schema_of,
                         validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
@@ -211,8 +211,8 @@ def setup(request):
         runtime = {'runtime_version': 'reveal.agent-runtime/1', 'working_directory': str(work),
                    'evidence_package_sha256': hashlib.sha256((work / AGENT_INPUT_FILENAME).read_bytes()).hexdigest(),
                    'derived_input_views': {},
-                   'agent': {**{key: agent_input[key] for key in ('tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort')},
-                             'limits': agent_run_limits(agent_input),
+                   'agent': {**{key: agent_input[key] for key in ('tools', 'graphs', 'network', 'allowed_domains', 'effort')},
+                             'limits': dict(agent_input['limits']),
                              # Frozen with the bootstrap: the one repository address this sandbox may read, or None.
                              'claims_url': (request.get('agent') or {}).get('claims_url')}}
         if agent_deliverable(agent_input) == 'scientific_account':
@@ -524,21 +524,19 @@ def quote_findings(document, ledger_root, calls):
     return quote_problems(problems)
 
 
-def agent_tools(selected_graphs, ledger, settings, literature_client=LiteratureClient, lint=None, write_draft=None, claims_client=None):
+def agent_tools(selected_graphs, ledger, settings, lint=None, write_draft=None, claims_client=None):
     """The scoped REVEAL tools of a general agent job, bounded by the job's own frozen limits. A spent allowance
     is a tool error the agent can finish after, never a failed job. A scientific_account job also gets the draft and
-    lint tools a research run authors with."""
+    lint tools a research run authors with. No agent job gets paper tools: the agent fetches papers with its own
+    commands."""
     limits = settings['limits']
-    literature = literature_client(max_results=limits['literature_search_results'], guidance=True) if settings['literature'] else None
     claims = None
     if settings.get('claims_url'):
         from .box_claims import ClaimsClient
         claims = (claims_client or ClaimsClient)(settings['claims_url'])
-    return ScopedTools(selected_graphs, ledger, max_calls=limits['tool_calls'], soft_budget=True, literature=literature, claims=claims,
+    return ScopedTools(selected_graphs, ledger, max_calls=limits['tool_calls'], soft_budget=True, claims=claims,
                        draft_files=('account-1.json',), capture_descriptor=False,
-                       lint=lint, write_draft=write_draft,
-                       max_searches=limits['literature_searches'], max_papers=limits['literature_papers'],
-                       max_characters=limits['literature_characters'])
+                       lint=lint, write_draft=write_draft)
 
 
 def structured_output_arguments(agent_input):
@@ -557,18 +555,28 @@ def agent_system_prompt(agent_input):
             '8 MB and 40 MB in all. Use /tmp or your home directory for scratch work. Everything else is discarded '
             'when the run ends. Your final message is returned to the requester as the result, so make it complete '
             'on its own.')
-    if agent_input['network'] == 'restricted':
-        reachable = (['the selected knowledge-graph and literature services'] if agent_input['graphs'] or agent_input['literature'] else []) \
+    restricted = agent_input['network'] == 'restricted'
+    if restricted:
+        reachable = (['the selected knowledge-graph services'] if agent_input['graphs'] else []) \
             + (['these hosts over HTTPS: ' + ', '.join(agent_input['allowed_domains'])] if agent_input['allowed_domains'] else [])
         note += (' The network is restricted to the Anthropic API' + ''.join(' and ' + item for item in reachable) +
-                 '; other hosts, package installs and arbitrary downloads will fail.' +
+                 '; requests to any other host fail, including package installs and downloads from it.' +
                  (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
-    if agent_input.get('deliverable') == 'scientific_account':
+    else:
+        note += ' The network is open: your commands and tools can reach any host.'
+    if agent_input['deliverable'] == 'scientific_account':
         note += (' This run\'s deliverable is one DAPPER ScientificAccount, saved as output/account-1.json with '
                  'mcp__reveal__write_account_draft and checked with mcp__reveal__lint_account. Read and follow '
                  f'{ACCOUNT_SKILL_PATH} before anything else; the question and the requester\'s claims are in '
-                 f'{ACCOUNT_REQUEST_FILENAME}. A run that ends without a saved account returns nothing. Your final message is a '
-                 'short report to the requester: what the account concludes, which of their claims you assessed, and what you did not read.')
+                 f'{ACCOUNT_REQUEST_FILENAME}.')
+        if 'Bash' in agent_input['tools']:
+            note += (' Fetch each paper you cite yourself with a Bash command and save it under output/sources/'
+                     + ('; only the hosts named above can be reached' if restricted else '') +
+                     f'. {ACCOUNT_SKILL_PATH} says how to record each fetch and cite the saved file.')
+        else:
+            note += ' This run has no Bash tool, so it cannot fetch papers; say so in your report.'
+        note += (' A run that ends without a saved account returns nothing. Your final message is a short report to the '
+                 'requester: what the account concludes, which of their claims you assessed, and what you did not read.')
     if schema_of(agent_input) is not None:
         note += (' The requester asked for structured output: finish by returning your result as one object that satisfies '
                  'the JSON Schema you were given. That object is the result; your final message is kept beside it.')
@@ -803,7 +811,8 @@ def main():
         OUTPUT.mkdir(exist_ok=True)
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
-        literature = request['kind'] == 'research' or agent and runtime['agent']['literature']
+        # Research runs keep the Europe PMC paper tools; agent jobs fetch papers with their own commands.
+        literature = request['kind'] == 'research'
         if agent:
             accounting = runtime.get('deliverable') == 'scientific_account'
             tools = agent_tools(request['selected_graphs'], ledger, runtime['agent'],

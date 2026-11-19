@@ -18,12 +18,8 @@ import threading
 from .box_claims import base_url as claims_base_url, host as claims_host_of
 from .box_mcp import GRAPHS
 
-INPUT_FORMAT = 'reveal.agent-input/2'
-# An answer job that asked for structured output: format /2 plus output_schema. A job without one is still frozen as /2,
-# byte for byte as before, so a worker that predates structured output still runs it.
-STRUCTURED_INPUT_FORMAT = 'reveal.agent-input/3'
-# Jobs frozen before per-run tool and literature limits existed. They run with the allowances they were queued under.
-LEGACY_INPUT_FORMAT = 'reveal.agent-input/1'
+# The one agent input format. An earlier one is refused: a job queued under it fails at prepare.
+INPUT_FORMAT = 'reveal.agent-input/4'
 INPUT_FILENAME = 'agent-input.json'
 RESPONSE_FORMAT = 'reveal.agent-response/1'
 # The runner writes the response into the root-owned tool ledger, never into the agent-writable output.
@@ -35,6 +31,11 @@ DEFAULT_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch')
 # WebFetch downloads pages from inside the Box, so it needs the open network.
 OPEN_NETWORK_TOOLS = frozenset({'WebFetch'})
 NETWORKS = ('restricted', 'open')
+DEFAULT_NETWORK = 'restricted'
+# A scientific_account job fetches the papers it cites with its own commands, so by default it gets every built-in
+# tool and the open network. On a network it restricts, its default leaves out WebFetch, which needs the open one.
+ACCOUNT_DEFAULT_TOOLS = DEFAULT_TOOLS + ('WebFetch',)
+ACCOUNT_DEFAULT_NETWORK = 'open'
 EFFORTS = ('low', 'medium', 'high')
 DEFAULT_MODEL = 'claude-opus-5-5'
 MODEL_PATTERN = re.compile(r'claude-[a-z0-9-]{1,60}')
@@ -50,24 +51,19 @@ LIMITS = {
     'timeout_seconds': {'type': int, 'minimum': 60, 'maximum': 3600, 'default': 900, 'ceiling': 3600},
     'max_turns': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 50, 'ceiling': 100},
     'max_budget_usd': {'type': float, 'minimum': 0, 'maximum': 1000, 'default': 2.0, 'ceiling': 5.0},
-    # Calls to the scoped REVEAL tools (paper search, paper read, graph schema and query), counted together.
+    # Calls to the scoped REVEAL tools (graph schema and query, claims-repository lookups), counted together.
     'tool_calls': {'type': int, 'minimum': 1, 'maximum': 5000, 'default': 30, 'ceiling': 300},
-    'literature_searches': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 3, 'ceiling': 50},
-    'literature_search_results': {'type': int, 'minimum': 1, 'maximum': 50, 'default': 5, 'ceiling': 25},
-    # Distinct papers. Paging through one paper uses characters, never another paper.
-    'literature_papers': {'type': int, 'minimum': 1, 'maximum': 1000, 'default': 4, 'ceiling': 50},
-    'literature_characters': {'type': int, 'minimum': 1000, 'maximum': 20_000_000, 'default': 48_000, 'ceiling': 1_000_000},
 }
-LEGACY_LIMIT_KEYS = ('timeout_seconds', 'max_turns', 'max_budget_usd')
 TIMEOUT_RANGE = (LIMITS['timeout_seconds']['minimum'], LIMITS['timeout_seconds']['maximum'])
 DEFAULT_TIMEOUT_SECONDS = LIMITS['timeout_seconds']['default']
 DEFAULT_MAX_TURNS = LIMITS['max_turns']['default']
 DEFAULT_MAX_BUDGET_USD = LIMITS['max_budget_usd']['default']
 # Job rows are listed in full, so a long answer is cut there; the captured record keeps all of it.
 MAX_RESULT_RESPONSE_CHARS = 50_000
-LEGACY_INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'literature', 'network', 'allowed_domains', 'effort', 'model', 'limits'}
-INPUT_KEYS = LEGACY_INPUT_KEYS | {'deliverable', 'account', 'claims_repository'}
-STRUCTURED_INPUT_KEYS = INPUT_KEYS | {'output_schema'}
+INPUT_KEYS = {'format', 'prompt', 'system_prompt', 'tools', 'graphs', 'network', 'allowed_domains', 'effort', 'model', 'limits',
+              'deliverable', 'account', 'claims_repository'}
+# Present only on an answer job that asked for structured output.
+OPTIONAL_INPUT_KEYS = {'output_schema'}
 # Structured output (output_schema): a JSON Schema the final answer must satisfy. Claude Code enforces it during the run
 # (--json-schema, the mechanism Upstash Box's response_schema drives), and the backend checks the result against it again.
 MAX_OUTPUT_SCHEMA_BYTES = 32_000
@@ -75,11 +71,9 @@ MAX_OUTPUT_SCHEMA_DEPTH = 32
 # Job rows are listed whole, so the structured result has a cap like the answer text's; a larger result fails the job.
 MAX_STRUCTURED_OUTPUT_BYTES = 100_000
 # What a job returns. 'answer': the agent's final message. 'scientific_account': a DAPPER ScientificAccount the agent
-# authors from papers it reads through the captured literature tools, which the backend then attributes, mints and
-# deposits. An account job has no shell and no network beyond its tools, like a research run: everything the
-# account cites must be a captured read.
+# authors from papers it fetches and saves itself, which the backend then attributes, mints and deposits. Both run in
+# the same sandbox and take the same tools, network, allowed_domains and graphs.
 DELIVERABLES = ('answer', 'scientific_account')
-ACCOUNT_TOOLS = ('Read', 'Write', 'Edit', 'Glob', 'Grep')
 MAX_QUESTION_CHARS = 2000
 MAX_ACCOUNT_CLAIMS = 20
 MAX_CLAIM_CHARS = 1000
@@ -211,14 +205,20 @@ def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=N
         output_schema(schema)
         require(callable(schema_checker), 'Structured output is not available on this deployment')
         schema_checker(schema)
-    tools = body.get('tools', list(ACCOUNT_TOOLS if accounting else DEFAULT_TOOLS))
+    require('literature' not in body, 'literature is not an agent job setting: the agent fetches papers itself with Bash, '
+            'on network "open" or from the hosts in allowed_domains')
+    network = body.get('network', ACCOUNT_DEFAULT_NETWORK if accounting else DEFAULT_NETWORK)
+    require(network in NETWORKS, 'network must be restricted or open')
+    if accounting:
+        default_tools = [tool for tool in ACCOUNT_DEFAULT_TOOLS if network == 'open' or tool not in OPEN_NETWORK_TOOLS]
+    else:
+        default_tools = list(DEFAULT_TOOLS)
+    tools = body.get('tools', default_tools)
     require(isinstance(tools, list) and all(tool in BUILTIN_TOOLS for tool in tools) and len(set(tools)) == len(tools),
             'tools must be distinct names from ' + ', '.join(BUILTIN_TOOLS))
     graphs = body.get('graphs', [])
     require(isinstance(graphs, list) and all(graph in GRAPHS for graph in graphs) and len(set(graphs)) == len(graphs),
             'graphs must be distinct names from ' + ', '.join(sorted(GRAPHS)))
-    network = body.get('network', 'restricted')
-    require(network in NETWORKS, 'network must be restricted or open')
     domains = body.get('allowed_domains', [])
     require(isinstance(domains, list) and all(isinstance(domain, str) for domain in domains), 'allowed_domains must be a list of hostnames')
     domains = sorted({domain.strip().lower().rstrip('.') for domain in domains})
@@ -227,12 +227,6 @@ def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=N
             'WebFetch downloads pages from inside the sandbox and needs network "open"; WebSearch works on the restricted network')
     account = None
     if accounting:
-        require(isinstance(tools, list) and set(tools) <= set(ACCOUNT_TOOLS), 'A scientific_account job reads papers through the captured '
-                'literature tools and writes its account as a file: tools may only be ' + ', '.join(ACCOUNT_TOOLS))
-        require(network == 'restricted' and not domains, 'A scientific_account job runs on the restricted network with no extra hosts: '
-                'only captured reads can be cited')
-        require(body.get('literature', True) is True, 'A scientific_account job needs literature: true')
-        require(not graphs, 'A scientific_account job is built from papers the agent reads: graphs are not available for it')
         question = text(body.get('question'), 'question', MAX_QUESTION_CHARS, required=True).strip()
         claims = body.get('claims', [])
         require(isinstance(claims, list) and len(claims) <= MAX_ACCOUNT_CLAIMS, f'claims must be a list of at most {MAX_ACCOUNT_CLAIMS} claims')
@@ -273,40 +267,35 @@ def freeze_input(body, *, budget_cap=None, default_model=DEFAULT_MODEL, policy=N
               'prompt': text(body.get('prompt'), 'prompt', MAX_PROMPT_CHARS, required=True),
               'system_prompt': text(body.get('system_prompt'), 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False),
               'tools': [tool for tool in BUILTIN_TOOLS if tool in tools], 'graphs': sorted(graphs),
-              'literature': True if accounting else body.get('literature', False), 'network': network, 'allowed_domains': domains,
+              'network': network, 'allowed_domains': domains,
               'effort': body.get('effort', 'medium'), 'model': model, 'limits': frozen_limits,
-              'deliverable': deliverable, 'account': account, 'claims_repository': claims_repository}
-    if schema is not None:
-        frozen = {**frozen, 'format': STRUCTURED_INPUT_FORMAT, 'output_schema': schema}
+              'deliverable': deliverable, 'account': account, 'claims_repository': claims_repository,
+              **({'output_schema': schema} if schema is not None else {})}
     return validate_input(frozen)
 
 
 def validate_input(value):
     """Strict check of frozen input bytes, repeated in the bundle and inside the Box."""
-    require(isinstance(value, dict) and (value.get('format') == INPUT_FORMAT and set(value) == INPUT_KEYS
-                                         or value.get('format') == STRUCTURED_INPUT_FORMAT and set(value) == STRUCTURED_INPUT_KEYS
-                                         or value.get('format') == LEGACY_INPUT_FORMAT and set(value) == LEGACY_INPUT_KEYS),
+    require(isinstance(value, dict) and value.get('format') == INPUT_FORMAT and INPUT_KEYS <= set(value) <= INPUT_KEYS | OPTIONAL_INPUT_KEYS,
             'Invalid agent input format')
-    if value['format'] == STRUCTURED_INPUT_FORMAT:
+    if 'output_schema' in value:
         output_schema(value['output_schema'])
-        require(deliverable_of(value) == 'answer', 'output_schema belongs to deliverable "answer"')
+        require(value['deliverable'] == 'answer', 'output_schema belongs to deliverable "answer"')
     text(value['prompt'], 'prompt', MAX_PROMPT_CHARS, required=True)
     text(value['system_prompt'], 'system_prompt', MAX_SYSTEM_PROMPT_CHARS, required=False)
     tools, graphs = value['tools'], value['graphs']
     require(isinstance(tools, list) and tools == [tool for tool in BUILTIN_TOOLS if tool in tools] and len(set(tools)) == len(tools),
             'Invalid frozen agent tools')
     require(isinstance(graphs, list) and graphs == sorted(set(graphs)) and set(graphs) <= set(GRAPHS), 'Invalid frozen agent graphs')
-    require(type(value['literature']) is bool, 'literature must be true or false')
-    require(type(value.get('claims_repository', False)) is bool, 'claims_repository must be true or false')
+    require(type(value['claims_repository']) is bool, 'claims_repository must be true or false')
     require(value['network'] in NETWORKS and (value['network'] == 'open' or not OPEN_NETWORK_TOOLS & set(tools)),
             'Invalid frozen agent network')
     validate_domains(value['allowed_domains'], value['network'])
     require(value['effort'] in EFFORTS, 'effort must be low, medium or high')
     require(isinstance(value['model'], str) and MODEL_PATTERN.fullmatch(value['model']), 'model must be a Claude model id')
     limits = value['limits']
-    keys = set(LEGACY_LIMIT_KEYS) if value['format'] == LEGACY_INPUT_FORMAT else set(LIMITS)
-    require(isinstance(limits, dict) and set(limits) == keys, 'Invalid agent limits')
-    for key in keys:
+    require(isinstance(limits, dict) and set(limits) == set(LIMITS), 'Invalid agent limits')
+    for key in LIMITS:
         if key == 'max_budget_usd':
             # An operator may have raised the budget ceiling; only the type and sign are fixed.
             require(type(limits[key]) in (int, float) and math.isfinite(limits[key]) and limits[key] > 0, 'Invalid agent budget')
@@ -317,26 +306,24 @@ def validate_input(value):
 
 
 def deliverable_of(value):
-    """What a frozen input returns. Inputs frozen before deliverables existed return an answer."""
-    return value.get('deliverable', 'answer')
+    """What a frozen input returns: 'answer' or 'scientific_account'."""
+    return value['deliverable']
 
 
 def schema_of(value):
     """The output_schema a frozen input asked the answer to satisfy, or None."""
-    return value.get('output_schema') if value.get('format') == STRUCTURED_INPUT_FORMAT else None
+    return value.get('output_schema')
 
 
 def validate_account(value):
     """The account block of a frozen input: absent for an answer job; for an account job, the question, the
     caller's claims as fixed Propositions, and the minimal evidence package the account tools lint against. Checked
     for shape and internal agreement only; the ids were minted when the job was created."""
-    deliverable, account = deliverable_of(value), value.get('account')
+    deliverable, account = value['deliverable'], value['account']
     require(deliverable in DELIVERABLES, 'Invalid agent deliverable')
     if deliverable == 'answer':
         require(account is None, 'Only a scientific_account job carries an account')
         return
-    require(set(value['tools']) <= set(ACCOUNT_TOOLS) and value['network'] == 'restricted' and not value['allowed_domains']
-            and value['literature'] is True and not value['graphs'], 'Invalid scientific_account sandbox')
     require(isinstance(account, dict) and set(account) - {'attribute_requester'} == {'question', 'claims', 'package'}
             and type(account.get('attribute_requester', False)) is bool, 'Invalid account block')
     question, claims, package = account['question'], account['claims'], account['package']
@@ -366,11 +353,6 @@ def validate_account(value):
             'The account package does not carry the claims')
 
 
-def run_limits(value):
-    """Every limit of a frozen input. A legacy input names three; the rest are what such a job always had."""
-    return {key: value['limits'].get(key, spec['default']) for key, spec in LIMITS.items()}
-
-
 def validate_domains(domains, network):
     require(isinstance(domains, list) and len(domains) <= MAX_ALLOWED_DOMAINS and domains == sorted(set(domains))
             and all(isinstance(domain, str) and HOSTNAME.fullmatch(domain) for domain in domains),
@@ -379,14 +361,13 @@ def validate_domains(domains, network):
     return domains
 
 
-def network_policy(selected_graphs, network, literature, allowed_domains=(), deliverable='answer', claims_host=None):
+def network_policy(selected_graphs, network, allowed_domains=(), deliverable='answer', claims_host=None):
     """Box egress for one agent run: the Anthropic API, the services its chosen tools call and the hosts the
     caller allowed; or everything."""
     if network == 'open': return {'mode': 'allow-all'}
     require(network == 'restricted', 'Invalid agent network')
     domains = [ANTHROPIC_HOST]
     if selected_graphs: domains.append('apps.okn.us')
-    if literature: domains.append('www.ebi.ac.uk')
     if deliverable == 'scientific_account': domains.append(GITHUB_HOST)
     if claims_host and claims_host not in domains: domains.append(claims_host)
     domains += [domain for domain in allowed_domains if domain not in domains]
@@ -399,18 +380,16 @@ def bootstrap_settings(value, claims_url=None):
     claims_url is this deployment's claims repository (REVEAL_CLAIMS_API_URL on the worker). It is frozen here, for a
     job that asked to read the repository, so the address the sandbox may reach and the query_claims tool it is
     offered are fixed with the bootstrap. A deployment with no repository offers no such tool."""
-    settings = {'network': value['network'], 'literature': value['literature'], 'allowed_domains': list(value['allowed_domains']),
-                'deliverable': deliverable_of(value)}
+    settings = {'network': value['network'], 'allowed_domains': list(value['allowed_domains']), 'deliverable': value['deliverable']}
     claims_url = claims_base_url(claims_url)
     if value.get('claims_repository') and claims_url: settings['claims_url'] = claims_url
     return settings
 
 
 def validate_bootstrap_settings(settings):
-    # Bootstraps frozen before deliverables existed carry no deliverable: they are answer jobs.
-    base = {'network', 'literature', 'allowed_domains'}
-    require(isinstance(settings, dict) and base <= set(settings) <= base | {'deliverable', 'claims_url'} and settings['network'] in NETWORKS
-            and type(settings['literature']) is bool and settings.get('deliverable', 'answer') in DELIVERABLES
+    base = {'network', 'allowed_domains', 'deliverable'}
+    require(isinstance(settings, dict) and base <= set(settings) <= base | {'claims_url'} and settings['network'] in NETWORKS
+            and settings['deliverable'] in DELIVERABLES
             and ('claims_url' not in settings or claims_base_url(settings['claims_url']) == settings['claims_url']),
             'Invalid agent bootstrap settings')
     validate_domains(settings['allowed_domains'], settings['network'])

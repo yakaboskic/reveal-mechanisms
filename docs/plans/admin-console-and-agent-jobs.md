@@ -147,6 +147,48 @@ REVEAL's part is deterministic checking, offline:
 - it confirms the quote is at that span;
 - it confirms the transcript shows the recorded command actually ran.
 
+### Implementation notes (2026-11-19, from mapping the code)
+
+These correct the steps below where they differ.
+
+- **The agent authors in DAPPER 0.2.0, the release the Box pins.** 0.2.0 has `Activity` (`command`,
+  `software_name`, `software_version`, `generated_at_time`) and `File` (`filename`, `location`, `mime_type`), with
+  provenance as edges (`WasGeneratedBy`, `WasDerivedFrom`, `Used`). It has no `ValueLocator`.
+  - The agent cites a quote as an `EvidenceItem` with `snippet` (the verbatim quote), `was_derived_from` the saved
+    `File`, and optionally a line range in `context` (`line=212-213`).
+  - REVEAL finds the quote in that file, and it must occur exactly once in the given lines (or in the whole file).
+    REVEAL computes the byte span and mints the `ValueLocator` at deposit with 0.2.1-a1, as `account_deposit`
+    already does today.
+  - The Box's DAPPER pin does not move.
+- **Code shared with research jobs.** Today `write_draft_tool`, `acceptance.replace_authored_attribution`,
+  `source_validation.new_file_findings` and the empty-`source_artifacts` check erase or refuse agent-authored
+  Activities and Files. Each change is gated on the agent `scientific_account` deliverable. REVEAL's own run
+  Activity still replaces any attribution the agent writes. Only the source Activities and Files survive.
+- **Step 5 uses the ledger, not the transcript.** Every Bash call is already ledgered with its full command and a
+  success flag (`box_remote.py:882-891`).
+  - Rule: an Activity's `command` must appear verbatim in a successful ledgered Bash call, and that call must name
+    the file's path.
+  - This removes Phase 1's dependency on step 2.1, which can move back to Phase 2.
+  - Not yet verified: whether a process the agent starts could forge lines in Claude Code's stream. This needs a
+    real Box.
+- **Network.** Account jobs default to `network: "open"` and the answer-job tool set plus Bash, WebSearch and
+  WebFetch. Dropping `literature` would otherwise remove Europe PMC from a restricted job's hosts.
+- **Kit pin.** Account jobs have no versioned kit today. The new `construct-literature-account/SKILL.md` and the
+  schema excerpt are pinned by sha256 in a test.
+- **Step 11 deletes only agent-job-only code.** `cites_by_quotation`, `capture_descriptor` and
+  `source_validation.bind_sources` also serve research jobs, so they stay until Phase 5. `literature_locator` and
+  `literature_feedback` are agent-only and go.
+- **Capture limits are per prefix.** `MAX_FILE` also bounds bootstrap files. Only `output/sources/` gets 25 MB per
+  file. The run total stays well under the 256 MiB workspace cap.
+- **New in-Box modules** use the standard library only, and join the bundle allowlist (`box_adapter.py:198-202`).
+- **Left for you, because each needs an environment or an account:**
+  - rebuilding the toolchain snapshot per environment (any recipe change makes existing snapshots stale);
+  - exact apt version pins, which need the Box image's distro;
+  - fetching the gated classifier model;
+  - running the audit in a real Box.
+
+  A deployment image without the model fails its build. It never skips the screen.
+
 ### Steps
 
 1. **Remove the reading tools and open up the sandbox.**
