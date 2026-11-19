@@ -198,12 +198,13 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                  'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_research.py', 'box_literature.py', 'research_outcome.py',
                  'dispatch_view.py', 'evidence_files.py', 'evidence_reader.py', 'authoring_contract.py', 'authoring_structure.py',
                  'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py', 'box_agent.py',
-                 'literature_locator.py', 'box_claims.py'):
+                 'source_evidence.py', 'box_claims.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-runtime/authoring-schema-dependencies.json',
                 'services/backend/agent-runtime/linkml-types-1.11.1.yaml',
                 'services/backend/agent-runtime/authoring-schema-excerpt.yaml',
+                'services/backend/agent-runtime/account-schema-excerpt.yaml',
                 'services/backend/agent-runtime/authoring-examples.json', 'docs/authoring-contract.md', 'docs/local-agent-mcp.md', 'docs/local-workspaces-and-authentication.md',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                 'services/backend/agent-skills/read-evidence-package/SKILL.md',

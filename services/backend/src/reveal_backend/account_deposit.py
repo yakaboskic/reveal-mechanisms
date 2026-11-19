@@ -1,16 +1,16 @@
 """The Scientific Account a general agent job returns and deposits.
 
-An agent authors its account with the pinned DAPPER release, citing each paper read by the tool response it
-received and a verbatim snippet. That form is right for REVEAL's own gate (the linter checks every snippet against
-the captured response) and wrong for anyone else: the cited File is a REVEAL-internal JSON capture.
+An agent authors its account with the pinned DAPPER release (0.2.0). It quotes files it saved itself under
+output/sources/, and records in the account how it got each one: an Activity per command, a File per saved file,
+and provenance edges between them (source_evidence). That release has no ValueLocator, so the agent cites a quote by
+its text, the File, and optionally the lines it sits on.
 
 `deposit_document` rewrites the accepted account into the form that leaves REVEAL:
 
-  - each literature EvidenceItem points, through a DAPPER ValueLocator, at the exact byte span of its quote in the
-    paper's text (literature_locator), and references a Publication;
-  - the paper's text is a File identified by checksum with no location (REVEAL keeps the bytes and does not
-    redistribute them), derived from a File for the upstream Europe PMC document, whose location is public;
-  - REVEAL's capture Files are dropped;
+  - each quoting EvidenceItem points, through a DAPPER ValueLocator, at the exact byte span of its quote in the saved
+    file (source_evidence finds it), and references a Publication when the file's URL names the paper;
+  - each saved file is a File with REVEAL's sha256, size and media type and the URL it came from, and its Activity
+    carries the Bash command REVEAL saw run (`observed_command`). The bytes are never deposited: REVEAL keeps them;
   - everything is minted once, with DAPPER 0.2.1-a1 (the release that has ValueLocator), vendored at
     services/backend/vendor/dapper-0.2.1-a1. DAPPER ids are the same in 0.2.0 and 0.2.1-a1, so nodes this rewrite
     does not touch keep the ids the pinned release gave them.
@@ -21,17 +21,15 @@ gate, name the internal form and are never stored or returned.
 from copy import deepcopy
 import hashlib
 import json
-import re
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
-from . import literature_locator as locator
+from . import source_evidence
 
 VENDOR = Path(__file__).resolve().parents[2] / 'vendor/dapper-0.2.1-a1'
 DAPPER_VERSION = '0.2.1-a1'
-INTERNAL_LOCATOR = re.compile(r'ledger_sequence=\d+;pointer=[^\s.,;)]+')
 # Keys an accepted account document carries that are not DAPPER groups.
 NON_GROUPS = frozenset({'prefixes'})
 
@@ -135,16 +133,6 @@ def mint(document):
     return document, mapping
 
 
-def _references(value, identity):
-    if isinstance(value, str):
-        return value == identity
-    if isinstance(value, list):
-        return any(_references(item, identity) for item in value)
-    if isinstance(value, dict):
-        return any(_references(item, identity) for item in value.values())
-    return False
-
-
 # Who an account is attributed to when its requester is not named. DAPPER requires an agent on every Claim; this one
 # is the service, the same Organization (one id) in every such deposit, and says nothing about who asked.
 SERVICE_AGENT = {'name': 'REVEAL Mechanisms agent service'}
@@ -168,24 +156,28 @@ def _reattribute(document, identities, agent):
     document['organizations'] = [*document.get('organizations', []), agent]
 
 
-def deposit_document(account_document, ledger_root, calls, *, attribute_requester=False):
-    """(the account in its deposit form, a summary) from an accepted account document and the run's tool ledger.
+def deposit_document(account_document, sources_root, calls, ledger_root, *, attribute_requester=False):
+    """(the account in its deposit form, a summary) from an accepted account document, the folder its sources were
+    saved in (the run's output/) and the run's tool ledger (`calls`, request paths relative to `ledger_root`).
 
     The accepted document is attributed to its requester (assemble_account always does that). The deposit form names
     them only when `attribute_requester` is true; otherwise the requester's Person is left out and the account and
     its Claims are attributed to the service (SERVICE_AGENT): what made it, not who asked.
 
     `account_document` is what acceptance.assemble_account returned: valid against the pinned release, attributed,
-    its sources checked. `calls` is the ledger manifest's `calls`. Raises DepositError when a literature
-    EvidenceItem cannot be located (literature_locator.LocatorError explains how to fix it) or the result is not
-    self-contained.
+    its Files measured. Its record of sources is checked again here, by the rule the gate applied
+    (source_evidence.check); raises DepositError when it does not hold or the result is not self-contained.
 
-    The summary lists, for each paper cited, its text file (checksum, bytes) so the caller can keep those bytes."""
+    The summary lists every saved source file (`papers`) with what the job result says about it, so the caller can
+    keep its bytes."""
     document = {key: deepcopy(rows) for key, rows in account_document.items() if key not in NON_GROUPS}
-    papers = locator.paper_texts(ledger_root, calls)
-    files = {node['id']: node for node in document.get('files', []) if isinstance(node, dict)}
-    captures = {identity: locator.paper_for_capture(papers, node.get('sha256')) for identity, node in files.items()}
-    captures = {identity: paper for identity, paper in captures.items() if paper is not None}
+    try:
+        problems, binding = source_evidence.check(document, sources_root, calls, ledger_root)
+    except source_evidence.SourceError as exc:
+        problems = [('ledger', str(exc))]
+    if problems:
+        where, message = problems[0]
+        raise DepositError(f'{where}: {message}')
     accounts = document.get('scientific_accounts', [])
     if len(accounts) != 1:
         raise DepositError('An account document holds exactly one ScientificAccount')
@@ -194,104 +186,83 @@ def deposit_document(account_document, ledger_root, calls, *, attribute_requeste
         _reattribute(document, set(accounts[0].get('was_attributed_to') or []),
                      {'id': 'urn:reveal:deposit:organizations:service', **SERVICE_AGENT})
 
-    new = {'files': {}, 'value_locators': {}}
-    text_ids, derived_edges, cited = {}, [], {}
-    publications = []  # one per paper, however it was read: the abstract by PMID and the full text by PMC id are one paper
+    for node in document.get('files', []):
+        entry = binding['files'][node['id']]
+        if (node.get('sha256'), node.get('size_in_bytes'), node.get('mime_type')) != (entry['sha256'], entry['size_in_bytes'], entry['mime_type']):
+            raise DepositError(f"{node['id']}: the File does not carry what REVEAL measured of output/{entry['path']}")
+    # The command REVEAL saw run, beside the command the agent recorded.
+    for node in document.get('activities', []):
+        if node['id'] in binding['activities']:
+            node['observed_command'] = binding['activities'][node['id']]['observed_command']
 
-    def publication_for(paper):
-        described = locator.publication(paper)
-        names = {described.get(key) for key in ('pmid', 'doi', 'citation')} - {None}
-        if not described:
-            return None
-        known = next((entry for entry in publications if entry['names'] & names), None) if names else None
-        if known is None:
-            known = {'names': set(), 'node': {}, 'id': f'urn:reveal:deposit:publications:{len(publications) + 1}'}
-            publications.append(known)
-        known['names'] |= names
-        for key, value in described.items():
-            known['node'].setdefault(key, value)
-        return known
+    new = {'value_locators': {}}
+    publications = {}   # one per paper, from the identifiers the URL it was fetched from carries
 
     def node_id(group, key, content):
         """One temporary id per distinct new node; mint() replaces it with the node's DAPPER id."""
-        identity = new[group].setdefault(key, {'id': f'urn:reveal:deposit:{group}:{len(new[group]) + 1}', **content})['id']
-        return identity
+        return new[group].setdefault(key, {'id': f'urn:reveal:deposit:{group}:{len(new[group]) + 1}', **content})['id']
 
-    quotes, problems = locator.document_quotes(document, papers, locator.captures(calls))
-    if problems:
-        where, message = problems[0]
-        raise DepositError(f'{where}: {message}')
-    for index, paper, span in quotes:
-        item = document['evidence_items'][index]
-        sources = item['was_derived_from']
-        text_file = locator.text_file(paper)
-        text_id = node_id('files', ('text', text_file['sha256']), text_file)
-        if paper['key'] not in text_ids:
-            text_ids[paper['key']] = text_id
-            upstream_id = node_id('files', ('upstream', paper['upstream']['sha256']), locator.upstream_file(paper))
-            derived_edges.append({'subject': text_id, 'predicate': 'prov:wasDerivedFrom', 'object': upstream_id})
-        located = node_id('value_locators', (text_file['sha256'], span['byte_start'], span['byte_length']), {
-            'file': text_id, 'byte_start': span['byte_start'], 'byte_length': span['byte_length'], 'value_text': span['value_text'],
-            'selector': span['selector'], 'media_type': span['media_type']})
-        published = publication_for(paper)
-        item['snippet'] = span['value_text']
+    def publication_for(url):
+        described = source_evidence.publication(url)
+        if not described:
+            return None
+        names = set(described.values())
+        known = next((entry for entry in publications.values() if entry['names'] & names), None)
+        if known is None:
+            known = publications[url] = {'names': set(), 'node': {}, 'id': f'urn:reveal:deposit:publications:{len(publications) + 1}'}
+        known['names'] |= names
+        for key, value in described.items():
+            known['node'].setdefault(key, value)
+        return known['id']
+
+    quoted = {}
+    for quote in binding['quotes']:
+        item = document['evidence_items'][quote['index']]
+        located = node_id('value_locators', (quote['sha256'], quote['byte_start'], quote['byte_length']), {
+            'file': quote['file'], 'byte_start': quote['byte_start'], 'byte_length': quote['byte_length'],
+            'value_text': quote['value_text'], 'selector': quote['selector'], 'media_type': quote['media_type']})
+        item['snippet'] = quote['value_text']
         item['value_locators'] = [located]
-        item['was_derived_from'] = [source for source in sources if source not in captures] + [text_id]
+        published = publication_for(binding['files'][quote['file']]['url'])
         if published:
-            item['reference'] = published['id']
-            item['_publication'] = published['id']
-        if isinstance(item.get('context'), str):
-            # The draft's locator names REVEAL's ledger; the deposit's names the place in the paper.
-            item['context'] = INTERNAL_LOCATOR.sub(span['selector'], item['context'])
-        entry = cited.setdefault(paper['key'], {'reference': locator.reference(paper), 'text_sha256': text_file['sha256'],
-                                                'text_bytes': text_file['size_in_bytes'], 'media_type': text_file['mime_type'],
-                                                'filename': text_file['filename'], 'evidence_items': 0})
-        entry['evidence_items'] += 1
+            item['reference'] = published
+        quoted[quote['file']] = quoted.get(quote['file'], 0) + 1
 
-    # REVEAL's capture Files leave once nothing cites them; a capture some object still cites stays. An Activity that
-    # used a capture is not a citation: below, it is recorded as having used the paper text instead.
-    remaining = {key: rows for key, rows in document.items() if key not in ('files', 'used_edges')}
-    internal = {identity for identity, node in files.items() if node.get('sha256') in locator.captures(calls)}
-    kept = sorted(identity for identity in internal if _references(remaining, identity))
-    if kept:
-        # Nothing a lint-clean literature account cites is left pointing at a capture; this is a document that was not.
-        raise DepositError('The account still cites REVEAL tool captures, which are not deposited: ' + ', '.join(kept[:3]))
-    document['files'] = [node for node in document.get('files', []) if node['id'] not in internal]
-    dropped = internal
-    document['used_edges'] = [edge for edge in document.get('used_edges', []) if edge.get('object') not in dropped]
-    document['files'] += list(new['files'].values())
-    titles = {entry['id']: entry['node'].get('title') for entry in publications}
-    for item in document.get('evidence_items', []):
-        cited_publication = item.pop('_publication', None)
-        if titles.get(cited_publication):
-            item['reference_title'] = titles[cited_publication]
-    document['publications'] = [*document.get('publications', []), *({'id': entry['id'], **entry['node']} for entry in publications)]
+    document['publications'] = [*document.get('publications', []), *({'id': entry['id'], **entry['node']} for entry in publications.values())]
     document['value_locators'] = [*document.get('value_locators', []), *new['value_locators'].values()]
-    document['was_derived_from_edges'] = [*document.get('was_derived_from_edges', []), *derived_edges]
     if activity:
-        document['used_edges'] += [{'subject': activity, 'predicate': 'prov:used', 'object': text_id} for text_id in text_ids.values()]
+        # The run that wrote the account used the files it quotes.
+        used = document.setdefault('used_edges', [])
+        for identity in sorted(quoted):
+            edge = {'subject': activity, 'predicate': 'prov:used', 'object': identity}
+            if edge not in used:
+                used.append(edge)
 
     minted, mapping = mint(document)
     account = minted['scientific_accounts'][0]
+    files = binding['files']
     summary = {'account_id': account['id'], 'dapper_version': DAPPER_VERSION,
                'objects': sum(len(rows) for key, rows in minted.items() if not key.endswith('_edges')),
                'edges': sum(len(rows) for key, rows in minted.items() if key.endswith('_edges')),
                'claims': len(minted.get('claims', [])), 'value_locators': len(minted.get('value_locators', [])),
-               'papers': [{'source': key[0], 'id': key[1], 'section': key[2], **entry, 'file_id': mapping[text_ids[key]]}
-                          for key, entry in sorted(cited.items())]}
+               'papers': [{'path': entry['path'], 'url': entry['url'], 'sha256': entry['sha256'], 'size_bytes': entry['size_in_bytes'],
+                           'media_type': entry['mime_type'], 'command': entry['command'], 'observed_command': entry['observed_command'],
+                           'derived_from': files[entry['derived_from']]['path'] if entry['derived_from'] else None,
+                           'evidence_items': quoted.get(identity, 0), 'file_id': mapping.get(identity, identity)}
+                          for identity, entry in sorted(files.items(), key=lambda pair: pair[1]['path'])]}
     return minted, summary
 
 
-def paper_text_bytes(ledger_root, calls, sha256):
-    """The bytes of one cited paper text, by checksum, for the caller to keep. None when the run read no such text."""
-    for paper in locator.paper_texts(ledger_root, calls).values():
-        if paper['text_sha256'] == sha256:
-            return locator.text_bytes(paper)
-    return None
-
-
-def paper_text_files(ledger_root, calls, checksums):
-    """{sha256: bytes} of the cited paper texts, rebuilt in one pass over the ledger."""
-    wanted = set(checksums)
-    return {paper['text_sha256']: locator.text_bytes(paper) for paper in locator.paper_texts(ledger_root, calls).values()
-            if paper['text_sha256'] in wanted}
+def source_bytes(sources_root, papers):
+    """{sha256: bytes} of the saved source files a summary lists, read from the run's output/ and checked against what
+    was measured, for the caller to keep. REVEAL never deposits them."""
+    kept = {}
+    for paper in papers:
+        try:
+            data = source_evidence.read_source(sources_root, paper['path'])
+        except source_evidence.SourceError as exc:
+            raise DepositError(str(exc)) from None
+        if hashlib.sha256(data).hexdigest() != paper['sha256']:
+            raise DepositError(f"output/{paper['path']} changed after it was checked")
+        kept[paper['sha256']] = data
+    return kept

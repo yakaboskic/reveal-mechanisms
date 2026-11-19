@@ -42,14 +42,14 @@
             ],
             "papers": [
               {
-                "source": "PMC",
-                "id": "PMC0000000",
-                "section": "full_text",
-                "reference": "PMID:00000000",
-                "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
-                "text_bytes": 48211,
-                "media_type": "text/plain",
-                "filename": "PMC0000000.fulltext.txt",
+                "path": "sources/PMC0000000.xml",
+                "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                "sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                "size_bytes": 48211,
+                "media_type": "application/xml",
+                "command": "curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                "observed_command": "mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                "derived_from": null,
                 "evidence_items": 1,
                 "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
               }

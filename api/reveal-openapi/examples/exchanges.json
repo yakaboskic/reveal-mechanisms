@@ -25436,14 +25436,14 @@
               ],
               "papers": [
                 {
-                  "source": "PMC",
-                  "id": "PMC0000000",
-                  "section": "full_text",
-                  "reference": "PMID:00000000",
-                  "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
-                  "text_bytes": 48211,
-                  "media_type": "text/plain",
-                  "filename": "PMC0000000.fulltext.txt",
+                  "path": "sources/PMC0000000.xml",
+                  "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                  "sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                  "size_bytes": 48211,
+                  "media_type": "application/xml",
+                  "command": "curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                  "observed_command": "mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                  "derived_from": null,
                   "evidence_items": 1,
                   "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
                 }
@@ -25471,12 +25471,12 @@
     "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
-    "operation_id": "downloadJobAccountText",
+    "operation_id": "downloadJobAccountSource",
     "case": "request",
     "method": "GET",
-    "path_template": "/v1/jobs/{job_id}/account/texts/{sha256}",
+    "path_template": "/v1/jobs/{job_id}/account/sources/{sha256}",
     "request": {
-      "url": "https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002",
+      "url": "https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/sources/0000000000000000000000000000000000000000000000000000000000000002",
       "path": {
         "job_id": "77777777-7777-4777-8777-777777777777",
         "sha256": "0000000000000000000000000000000000000000000000000000000000000002"
@@ -25492,11 +25492,11 @@
       "200": {
         "content_type": "*/*",
         "examples": {
-          "paper_text": "Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation."
+          "source_file": "Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation."
         }
       }
     },
-    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+    "curl": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/sources/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
   },
   {
     "operation_id": "getJob",

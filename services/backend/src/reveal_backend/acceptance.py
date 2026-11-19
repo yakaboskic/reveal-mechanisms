@@ -119,13 +119,18 @@ path.write_text(json.dumps(document,sort_keys=True,ensure_ascii=False,separators
     require(result.returncode==0,'Trusted DAPPER identity assembly failed: '+result.stderr[-1500:])
     return decode(path.read_bytes())
 
-def replace_authored_attribution(document,trusted,person,activity):
-    """Replace guessed runtime/actor declarations, preserving exact source nodes."""
+def replace_authored_attribution(document,trusted,person,activity,kept=()):
+    """Replace guessed runtime/actor declarations, preserving exact source nodes.
+
+    `kept`: ids of authored Activities that are a record of the account's sources, not of who made it (an account
+    job's fetch and conversion commands, source_evidence.source_activities). Only an account job passes any."""
     replacements={}
+    keep=set(trusted)|{identity for identity in kept if isinstance(identity,str) and not identity.startswith('urn:reveal:')}
     for group,target in (('persons',person['id']),('organizations',person['id']),('activities',activity['id'])):
+        retained=trusted if group!='activities' else keep
         for node in document.get(group,[]):
-            if node['id'] not in trusted: replacements[node['id']]=target
-        document[group]=[node for node in document.get(group,[]) if node['id'] in trusted]
+            if node['id'] not in retained: replacements[node['id']]=target
+        document[group]=[node for node in document.get(group,[]) if node['id'] in retained]
     def rewrite(value):
         if isinstance(value,dict): return {key:rewrite(child) for key,child in value.items()}
         if isinstance(value,list): return [rewrite(child) for child in value]
@@ -187,7 +192,10 @@ def hydrate_inputs(document,trusted,edges=(),prefixes=None):
     return declare_trusted_prefixes(document,prefixes) if prefixes else document
 
 
-def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,execution,ledger_path=None):
+def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,execution,ledger_path=None,*,source_record=False):
+    """(the minted, attributed account, its final lint report). source_record=True is an account job's: the authored
+    Activities that wrote its saved source files stay, with the Files and provenance edges the document already keeps;
+    every other authored Activity is replaced by REVEAL's record of the run, as for a research account."""
     raw=Path(raw_path).read_bytes(); require(len(raw)<=4_000_000,'Account output exceeds byte limit')
     doc=decode(raw,'yaml' if Path(raw_path).suffix in ('.yaml','.yml') else 'json'); package=decode(Path(package_path).read_bytes())
     require(len(doc.get('scientific_accounts',[]))==1,'Each output must contain exactly one ScientificAccount')
@@ -219,7 +227,12 @@ def assemble_account(raw_path,package_path,output_path,attribution,job,attempt,e
         'command':('reveal-local-submit' if local else 'reveal-worker '+execution)+' '+job['id']+' --attempt '+str(attempt),
         'software_name':'REVEAL acceptance service' if local else 'REVEAL Mechanisms worker','software_version':'0.2.0',
         'generated_at_time':now()}
-    doc=replace_authored_attribution(doc,trusted,person,activity)
+    if source_record:
+        from .source_evidence import source_activities
+        kept=source_activities(doc)
+    else:
+        kept=()
+    doc=replace_authored_attribution(doc,trusted,person,activity,kept)
     for group in ('claims','scientific_accounts'):
         for node in doc.get(group,[]):
             if node['id'] not in trusted: node['was_generated_by']=activity_id; node['was_attributed_to']=[actor_id]

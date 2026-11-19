@@ -45,12 +45,17 @@ def finding(check, where, message, repair=None):
 
 
 def ledger_sources(ledger_path):
-    """Read completed response captures, including a live trusted lint snapshot."""
+    """Read completed response captures, including a live trusted lint snapshot.
+
+    An account job's lint view of the ledger (written by REVEAL, never by the agent) also lists `source_files`: the
+    files the agent saved under output/sources/ that source_evidence checked against its record and the Bash calls
+    that wrote them. They count as captured sources by checksum and size. They carry no bytes here: they are papers,
+    not tool responses, and nothing in this module reads them as JSON."""
     if ledger_path is None:
         return {}
     ledger_path = Path(ledger_path).resolve()
     ledger = decode(ledger_path.read_bytes())
-    sources = {}
+    sources = {entry['sha256']: {'size_bytes': entry['size_bytes'], 'tool': 'source-file'} for entry in ledger.get('source_files', [])}
     for call in ledger['calls']:
         if call.get('tool') not in ('query_graph', 'read_paper') or call.get('status') not in ('completed', 'empty') or not call.get('response'):
             continue
@@ -280,6 +285,8 @@ def bind_sources(document, package, package_path, ledger_path=None):
         for call in decode(Path(ledger_path).read_bytes())['calls']:
             if isinstance(call.get('response'), dict): sequences.setdefault(call['response'].get('sha256'), call.get('sequence'))
     for checksum, source in sorted(captured.items()):
+        if 'bytes' not in source:
+            continue   # an account job's saved paper: cited by its own File, never bound by quotation
         node = {'id': 'urn:reveal:tool-response:sha256:' + checksum, 'filename': checksum + '.json', 'mime_type': 'application/json',
                 'sha256': checksum, 'size_in_bytes': source['size_bytes']}
         sources.append((node['id'], parse(source['bytes']), _compact(source['bytes'].decode('utf-8', 'replace')), node,
@@ -365,7 +372,7 @@ def source_findings(document, package, package_path, ledger_path=None, *, author
     trusted = {node['id'] for group in package['dapper_context'] for node in records(package['dapper_context'], group) if 'id' in node}
     findings = new_file_findings(document, trusted, captured)
     for file in records(document, 'files'):
-        if file.get('id') not in trusted and file.get('sha256') in captured:
+        if file.get('id') not in trusted and 'bytes' in captured.get(file.get('sha256'), {}):
             observed[file['id']] = decode(captured[file['sha256']]['bytes'])
             exact_observed[file['id']] = parse(captured[file['sha256']]['bytes'])
     return findings + observation_findings(document, observed, exact_observed=exact_observed, authored_exact=authored_exact)

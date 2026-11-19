@@ -540,7 +540,7 @@ def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and
     value = account_job(claims=['Hepatocyte LEPR loss reduces insulin-stimulated AKT phosphorylation.'])
     bundle = tmp_path / 'reveal/bundle'
     for relative in ('services/backend/agent-skills/construct-literature-account/SKILL.md',
-                     'services/backend/agent-runtime/authoring-schema-excerpt.yaml', 'services/backend/agent-runtime/dapper-release.json',
+                     'services/backend/agent-runtime/account-schema-excerpt.yaml', 'services/backend/agent-runtime/dapper-release.json',
                      'services/backend/agent-runtime/authoring-schema-dependencies.json', 'services/backend/agent-runtime/linkml-types-1.11.1.yaml'):
         (bundle / relative).parent.mkdir(parents=True, exist_ok=True)
         (bundle / relative).write_bytes((ROOT / relative).read_bytes())
@@ -569,7 +569,8 @@ def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and
     assert request_view['question_id'] == value['account']['package']['selection']['knowledge_gap_id']
     assert request_view['limits'] == value['limits']
     assert (work / 'account/SKILL.md').read_text().startswith('# Construct a literature Scientific Account')
-    assert (work / 'account/authoring-schema-excerpt.yaml').stat().st_size > 10_000
+    # The account excerpt: the research classes plus the Activity and provenance edges of the record of sources.
+    assert (work / 'account/authoring-schema-excerpt.yaml').read_bytes() == (ROOT / 'services/backend/agent-runtime/account-schema-excerpt.yaml').read_bytes()
     assert set(runtime['derived_input_views']) == {'account/SKILL.md', 'account/authoring-schema-excerpt.yaml', 'account-request.json'}
     # Drafts are attributed to the runtime inside the Box; the backend replaces that with the requester afterwards.
     assert runtime['draft_attribution']['activities'][0]['software_name'] == 'Claude Code'
@@ -581,7 +582,8 @@ def test_runner_sets_up_an_account_job_with_the_pinned_release_package_skill_and
     assert 'with a Bash command and save it under output/sources/' in system and 'package installs' not in system
     restricted = box_remote.agent_system_prompt(account_job(network='restricted', allowed_domains=['www.ebi.ac.uk']))
     assert 'restricted to the Anthropic API and these hosts over HTTPS: www.ebi.ac.uk' in restricted
-    assert 'output/sources/; only the hosts named above can be reached' in restricted
+    assert 'output/sources/ (up to 25 MB a file); only the hosts named above can be reached' in restricted
+    assert '8 MB and 100 MB in all' in system and 'Only text saved there by a command you record can be quoted' in system
     shell_less = box_remote.agent_system_prompt(account_job(tools=['Read', 'Write']))
     assert 'output/sources/' not in shell_less and 'no Bash tool, so it cannot fetch papers' in shell_less
     # The requester is nowhere the agent can read.
@@ -738,8 +740,8 @@ def test_agent_commit_saves_the_answer_as_the_job_result(workflow):
 # A scientific_account job: gate in validate, deposit and storage in commit ------------------------------------
 
 def checked_account(workflow):
-    """What agent_account.accept leaves behind: the deposit-form document and one paper text under validated/."""
-    directory = workflow.root / 'validated/papers'; directory.mkdir(parents=True)
+    """What agent_account.accept leaves behind: the deposit-form document and one saved source under validated/."""
+    directory = workflow.root / 'validated/sources'; directory.mkdir(parents=True)
     document = {'scientific_accounts': [{'id': 'dapper:ScientificAccount.' + 'A' * 32}], 'claims': [{'id': 'dapper:Claim.' + 'C' * 32}]}
     data = canonical_json(document); (workflow.root / 'validated/account.dapper.json').write_bytes(data)
     text = 'Glucose production rose in knockout mice.'.encode(); (directory / sha256(text)).write_bytes(text)
@@ -747,9 +749,16 @@ def checked_account(workflow):
             'account_id': document['scientific_accounts'][0]['id'], 'dapper_version': '0.2.1-a1', 'objects': 9, 'edges': 3, 'claims': 1,
             'value_locators': 1, 'lint_warnings': 1,
             'requested_claims': [{'statement': 'A claim.', 'assessed': True, 'claim_ids': [document['claims'][0]['id']]}],
-            'papers': [{'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text', 'reference': 'PMID:99999', 'text_sha256': sha256(text),
-                        'text_bytes': len(text), 'media_type': 'text/plain', 'filename': 'PMC12345.fulltext.txt', 'evidence_items': 1,
-                        'file_id': 'dapper:File.' + 'F' * 32, 'path': 'validated/papers/' + sha256(text)}]}
+            'papers': [source_paper(text, stored_path='validated/sources/' + sha256(text))]}
+
+
+def source_paper(text, **extra):
+    """One saved source as the job result describes it (agent_account.PAPER_FIELDS)."""
+    return {'path': 'sources/PMC12345.txt', 'url': 'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC12345/fullTextXML',
+            'sha256': sha256(text), 'size_bytes': len(text), 'media_type': 'text/plain',
+            'command': 'xmllint --xpath "string(//body)" output/sources/PMC12345.xml > output/sources/PMC12345.txt',
+            'observed_command': 'xmllint --xpath "string(//body)" output/sources/PMC12345.xml > output/sources/PMC12345.txt',
+            'derived_from': 'sources/PMC12345.xml', 'evidence_items': 1, 'file_id': 'dapper:File.' + 'F' * 32, **extra}
 
 
 def commit_account_job(workflow, deposit, *, status='running', monkeypatch=None):
@@ -812,12 +821,13 @@ def test_account_commit_deposits_the_checked_bytes_once_then_stores_and_reports(
     kind, identity, owner, stored = puts[1].args
     assert (kind, identity, owner) == ('agent_account', 'agent-job', 'owner')
     assert stored['document']['scientific_accounts'][0]['id'] == record['account_id'] and stored['account']['deposit'] == receipt
-    text = stored['texts'][record['papers'][0]['text_sha256']]
+    text = stored['sources'][record['papers'][0]['sha256']]
     assert Path(text['path']).read_bytes() == b'Glucose production rose in knockout mice.' and Path(text['path']).is_relative_to(workflow.root / 'kept')
     outcome = finish.call_args.kwargs['result']
     assert finish.call_args.args[3] == 'succeeded' and outcome['response'] == 'Done. See notes.md.'
     assert outcome['account'] == stored['account'] and outcome['account']['requested_claims'][0]['assessed'] is True
-    assert 'path' not in outcome['account']['papers'][0]
+    assert 'stored_path' not in outcome['account']['papers'][0] and outcome['account']['papers'][0]['path'] == 'sources/PMC12345.txt'
+    assert (text['filename'], text['media_type'], text['size_bytes']) == ('PMC12345.txt', 'text/plain', len(b'Glucose production rose in knockout mice.'))
     again, _, _ = commit_account_job(AgentWorkflowRetry(workflow), receipt)
     again.assert_not_called()
 
@@ -1031,23 +1041,21 @@ def test_only_its_owner_reads_a_jobs_account_and_the_text_it_quotes(service, mon
     document = {'scientific_accounts': [{'id': 'dapper:ScientificAccount.' + 'A' * 32}]}
     record = {'document': {'sha256': sha256(canonical_json(document)), 'size_bytes': 10}, 'account_id': document['scientific_accounts'][0]['id'],
               'dapper_version': '0.2.1-a1', 'objects': 5, 'edges': 2, 'claims': 1, 'value_locators': 1, 'lint_warnings': 0, 'requested_claims': [],
-              'papers': [{'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text', 'reference': 'PMID:99999', 'text_sha256': checksum,
-                          'text_bytes': len(text), 'media_type': 'text/plain', 'filename': 'PMC12345.fulltext.txt', 'evidence_items': 1,
-                          'file_id': 'dapper:File.' + 'F' * 32}]}
+              'papers': [source_paper(text)]}
     retained = {checksum: agent_account.retain(job_id, checksum, text, 'text/plain')}
     with service.repo.transaction() as tx:
         agent_account.save(tx, service.users['registered'], job_id, record, document, retained, {'status': 'not_configured'}, 'now')
     found = service.client.get(f'/v1/jobs/{job_id}/account', headers=headers)
     assert found.status_code == 200 and found.headers['cache-control'] == 'private, no-store'
     assert found.json() == {'job_id': job_id, 'account': agent_account.public(record, {'status': 'not_configured'}), 'document': document}
-    paper = service.client.get(f'/v1/jobs/{job_id}/account/texts/{checksum}', headers=headers)
+    paper = service.client.get(f'/v1/jobs/{job_id}/account/sources/{checksum}', headers=headers)
     assert paper.status_code == 200 and paper.content == text and paper.headers['content-disposition'].startswith('attachment')
-    assert service.client.get(f'/v1/jobs/{job_id}/account/texts/{"0" * 64}', headers=headers).status_code == 404
+    assert service.client.get(f'/v1/jobs/{job_id}/account/sources/{"0" * 64}', headers=headers).status_code == 404
     # Another workspace sees neither, and neither is public.
     claims = {'sub': service.users['anonymous'], 'principal_kind': 'anonymous', 'iss': 'reveal-nextjs', 'aud': 'reveal-api',
               'iat': int(time.time()), 'exp': int(time.time()) + 120, 'jti': uid()}
     other = {'Authorization': 'Bearer ' + jwt.encode(claims, 's' * 40, algorithm='HS256')}
-    for path in (f'/v1/jobs/{job_id}/account', f'/v1/jobs/{job_id}/account/texts/{checksum}'):
+    for path in (f'/v1/jobs/{job_id}/account', f'/v1/jobs/{job_id}/account/sources/{checksum}'):
         assert service.client.get(path, headers=other).status_code == 404
         assert service.client.get(path).status_code in (401, 403, 404)
 

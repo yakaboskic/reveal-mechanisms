@@ -1,62 +1,160 @@
 # Construct a literature Scientific Account
 
 You are building one DAPPER ScientificAccount that addresses the question in `account-request.json`, from papers you
-read in this run. REVEAL checks the account, records what made it, and deposits it. Nobody can answer
-questions while you work; decide and finish.
+fetch and save in this run. Work like a scientist keeping a lab notebook: save each paper with a command, write down
+the command, and quote the saved file. REVEAL checks the record against the files and the commands it saw run, then
+deposits the account. Nobody can answer questions while you work; decide and finish.
 
 ## What you have
 
 - `account-request.json`: the question (`question_id` is its fixed DAPPER id), the requester's claims as fixed
   Propositions (`claims[].proposition_id`, with `subject_entity`, `relation` and `object_entity` when the requester
   gave them), and this run's limits.
-- `mcp__reveal__search_papers` and `mcp__reveal__read_paper`: Europe PMC. A read returns the abstract unless you pass
-  `source: "PMC"`, the paper's PMC id and `section: "full_text"` (open-access papers only). Page with `offset` /
-  `next_offset`. Each result carries a `run_budget`: what you have used of your searches, papers and characters.
-  Watch it.
-- `mcp__reveal__write_account_draft` and `mcp__reveal__lint_account`: save the account and check it. They do not use
-  up your paper budget.
-- `account/authoring-schema-excerpt.yaml`: the DAPPER classes and fields you may write.
+- Bash, to fetch and convert papers. `curl -fsSL` fetches; `pdftotext -layout` turns a PDF into text; `grep -n`
+  shows the line numbers you cite. Always pass `-f` to curl: without it an HTTP error (404, 403, a paywall's error
+  page) is saved as if it were the paper and the command still succeeds; with it the command fails and nothing
+  false is recorded.
+- WebSearch and WebFetch, when they are among your tools: for finding papers only. A quote can come only from a file
+  you saved under `output/sources/` with a Bash command you record. What WebFetch shows you cannot be quoted.
+- `mcp__reveal__write_account_draft` and `mcp__reveal__lint_account`: save the account and check it.
+- `account/authoring-schema-excerpt.yaml`: the DAPPER classes and fields you may write, including `Activity`, `File`
+  and the edges `WasGeneratedBy`, `WasDerivedFrom` and `Used`.
 - `mcp__reveal__query_claims`, when it is among your tools: what the claims repository already holds on your
   question. Look once before drafting. If a Proposition you would write already exists, copy its statement exactly:
   your Claim is then about the same Proposition. A repository record is an earlier claim, not evidence. Do not cite
   it, and do not treat its absence as a finding.
 
-You have no shell and no other network. Only text returned by `read_paper` in this run can be cited. You cite a
-paper by its identifier and a quote; REVEAL links each quote to the paper and records where in it the quote sits.
-
-Quotes are short on purpose. A snippet is 20 to 400 characters from one paragraph and must occur only once in the
-paper; all your snippets from one paper text together may not exceed 4,000 characters, or 40% of a short text such
-as an abstract. Quote the sentence that carries the finding and explain the rest in your own words.
+Good sources of full text: Europe PMC
+(`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`, open-access papers), the NCBI E-utilities,
+bioRxiv and medRxiv, and publishers' open-access PDFs.
 
 ## Work in this order
 
 1. Read `account-request.json`. Plan a few focused searches.
-2. Search, then read. Prefer primary studies. Read the full text when it is open access; an abstract supports only what
-   the abstract says.
-3. As soon as you have two or three usable passages, write a first draft and lint it. Repair what the linter reports,
-   then extend. A run stopped at its time or turn limit returns nothing, so keep a linted draft saved at all times.
+2. For each paper you will use:
+   1. **Fetch it with a Bash command and save the bytes under `output/sources/`.** Use `curl -fsSL -o
+      output/sources/<name> <url>`, a file name you will recognise, such as the PMC id, and the exact URL you will
+      write as the File's `location`.
+   2. **Convert it to text if you need to, with another Bash command.** A PDF must be converted before you can quote
+      it: `pdftotext -layout output/sources/x.pdf output/sources/x.txt`. Full-text XML can be quoted as it is.
+   3. **Read the saved file** (Read, or `grep -n` for the passage) and choose the sentences that carry each finding.
+      Keep reading separate from saving: run each fetch and each conversion as its own command, and read with
+      Read, `grep`, `head`, `tail`, `sed -n`, `wc` or `cat` without a redirect into the file. Never edit a saved file.
+   4. **Record and cite it in the draft**: an Activity per command, a File per saved file, the edges between them,
+      and an EvidenceItem per quote (below). Then save the draft and run `lint_account`.
+3. Repair what the linter reports, then go on to the next paper. A run stopped at its time or turn limit returns
+   nothing, so keep a linted draft saved at all times.
 4. Finish with a short final message: what the account concludes, which requester claims you assessed and which you
    could not, and what you did not read.
 
-## The document
+## The record of a source
 
-Call `write_account_draft` with `filename: "account-1.json"` and a `document` of plural arrays. Use ids of your own
-for new objects (for example `urn:draft:claim-1`); REVEAL assigns the real ids. Do not write `was_generated_by`,
-`was_attributed_to`, people or activities: REVEAL supplies them.
+Each step is one object. Use ids of your own for new objects (for example `urn:draft:file-1`); REVEAL assigns the
+real ids. Do not write `sha256`, `size_in_bytes`, `mime_type` or byte offsets: REVEAL measures the saved files itself.
+
+**Step 1: the fetch.** You ran:
+
+```bash
+mkdir -p output/sources && curl -fsSL -o output/sources/PMC3491803.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3491803/fullTextXML
+```
+
+Record the command that wrote the file as an Activity, the saved file as a File, and a `was_generated_by_edges` row
+from the File to the Activity:
+
+```json
+{
+  "activities": [ { "id": "urn:draft:activity-1", "name": "Fetch PMC3491803 full text from Europe PMC",
+                    "command": "curl -fsSL -o output/sources/PMC3491803.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3491803/fullTextXML",
+                    "software_name": "curl", "software_version": "8.5.0",
+                    "generated_at_time": "2026-11-19T10:00:00Z" } ],
+  "files": [ { "id": "urn:draft:file-1", "filename": "sources/PMC3491803.xml",
+               "location": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC3491803/fullTextXML",
+               "description": "Europe PMC open-access full text of PMC3491803, as fetched." } ],
+  "was_generated_by_edges": [ { "subject": "urn:draft:file-1", "predicate": "prov:wasGeneratedBy",
+                                "object": "urn:draft:activity-1" } ]
+}
+```
+
+**Step 2: the conversion.** For a PDF you ran
+`curl -fsSL -o output/sources/smith-2012.pdf https://journals.example.org/doi/pdf/10.1234/jmet.2012.5` and recorded it
+as in step 1 (here as `urn:draft:activity-2` and `urn:draft:file-2`). Then you ran:
+
+```bash
+pdftotext -layout output/sources/smith-2012.pdf output/sources/smith-2012.txt
+```
+
+The text file gets its own Activity and File, a `was_generated_by_edges` row to that Activity, a
+`was_derived_from_edges` row to the PDF's File, and a `used_edges` row from the conversion to the PDF. A converted file
+has no `location`:
+
+```json
+{
+  "activities": [ { "id": "urn:draft:activity-3", "name": "Convert the PDF of Smith 2012 to text",
+                    "command": "pdftotext -layout output/sources/smith-2012.pdf output/sources/smith-2012.txt",
+                    "software_name": "pdftotext", "software_version": "24.02.0",
+                    "generated_at_time": "2026-11-19T10:04:00Z" } ],
+  "files": [ { "id": "urn:draft:file-3", "filename": "sources/smith-2012.txt" } ],
+  "was_generated_by_edges": [ { "subject": "urn:draft:file-3", "predicate": "prov:wasGeneratedBy",
+                                "object": "urn:draft:activity-3" } ],
+  "was_derived_from_edges": [ { "subject": "urn:draft:file-3", "predicate": "prov:wasDerivedFrom",
+                                "object": "urn:draft:file-2" } ],
+  "used_edges": [ { "subject": "urn:draft:activity-3", "predicate": "prov:used", "object": "urn:draft:file-2" } ]
+}
+```
+
+**Step 3: the quote.** `grep -n 'fasting glucose production' output/sources/smith-2012.txt` printed line 212; the
+sentence wraps onto line 213. Quote it in an EvidenceItem that names the text file in `was_derived_from` and the
+lines in `context`:
+
+```json
+{
+  "evidence_items": [ { "id": "urn:draft:evidence-1", "target_proposition": "urn:draft:prop-1",
+                        "direction": "SUPPORTS",
+                        "snippet": "In knockout mice, fasting glucose production was 35% higher than in littermate controls after a hyperinsulinaemic clamp.",
+                        "was_derived_from": [ "urn:draft:file-3" ],
+                        "context": "Mouse liver, hyperinsulinaemic clamp; Results, line=212-213",
+                        "explanation": "Raised fasting glucose output is what impaired hepatic insulin action predicts.",
+                        "reference": "PMID:23154982" } ]
+}
+```
+
+Rules REVEAL enforces on this record:
+
+- **Files.** `filename` is the saved file's path relative to `output/`, under `sources/`. The file must be there when
+  the run ends: do not move, edit or delete it after recording it.
+- **Commands.** An Activity's `command` is the exact command you ran, copied from your Bash call (it may be one part
+  of a longer call joined by `&&`, `||`, `;`, `|` or a new line, as in step 1, where `mkdir -p output/sources &&`
+  came first; it must be the whole of that part). It names the file it wrote, as `output/sources/…` or
+  `/reveal/output/sources/…`; a conversion names the file it read too. The Bash call must have succeeded. A file
+  written any other way (by the Write tool, by hand, by `echo`, or by a command you did not run) is refused.
+- **Nothing writes the file afterwards.** A later command that names the file and could change it (`sed -i`, a `>`
+  or `>>` redirect into it, `mv`, another download over it) makes the record stale, and the file is refused. Only
+  reading commands (`grep`, `head`, `tail`, `wc`, `cat`, `sed` without `-i`, `xmllint --xpath`, `pdftotext … -` to
+  the screen) and the recorded conversion of the file may name it later. To fix a bad download, save it again
+  under a new name and record that command.
+- **Location.** A fetched file's `location` is the URL its command fetched, written exactly as in the command.
+- **One Activity per step.** A converted file is made by its own Activity, not by the one that fetched the original.
+- **Snippet.** A verbatim passage of the saved file the EvidenceItem cites, 20 to 400 characters, from one paragraph.
+  Only whitespace may differ: a line break in the file may be a space in the snippet. In an XML file the snippet
+  must match the file's bytes, markup and entities included; quote a sentence with no tags inside it, or convert
+  the file to text first. Quote the sentence that carries the finding and explain the rest in your own words.
+- **Where it is.** The snippet must occur exactly once in the file, or exactly once on the lines `context` names as
+  `line=N` or `line=N-M` (what `grep -n` prints). Give the lines whenever the passage could occur twice.
+- **Quotes are short on purpose.** All your snippets from one paper, its original and its converted text together,
+  may not exceed 4,000 characters, or 40% of a short text such as an abstract.
+- **One file per EvidenceItem.** Use several EvidenceItems for several passages or papers.
+
+## The account
+
+The rest of the document is as in any account. Call `write_account_draft` with `filename: "account-1.json"` and a
+`document` of plural arrays holding the record above and:
 
 ```json
 {
   "propositions": [ { "id": "urn:draft:prop-1", "statement": "One checkable statement.",
                       "proposition_kind": "BIOLOGICAL_INTERPRETATION",
                       "subject_entity": "HGNC.SYMBOL:LEPR", "relation": "biolink:affects",
-                      "object_entity": "<an identifier you were given or read>" } ],
-  "evidence_items": [ { "id": "urn:draft:evidence-1", "target_proposition": "urn:draft:prop-1",
-                        "direction": "SUPPORTS",
-                        "reference": "PMID:…",
-                        "snippet": "A verbatim quote from the text read_paper returned for that paper.",
-                        "explanation": "In your words: what the passage shows and why it bears on the proposition.",
-                        "context": "Species, tissue, study design, and which part of the paper (abstract, Results).",
-                        "evidence_source": "Europe PMC open-access full text (PMC…)" } ],
+                      "object_entity": "HGNC.SYMBOL:AKT1" } ],
   "claims": [ { "id": "urn:draft:claim-1", "proposition": "urn:draft:prop-1", "direction": "SUPPORTS",
                 "status": "proposed", "statement": "What the evidence, taken together, supports.",
                 "has_evidence": [ "urn:draft:evidence-1" ] } ],
@@ -67,18 +165,12 @@ for new objects (for example `urn:draft:claim-1`); REVEAL assigns the real ids. 
 }
 ```
 
-Rules the linter and REVEAL enforce:
-
-- **Reference.** The paper the quote is from: its `PMID:…`, its PMC id (`PMC…`) or its DOI, as `read_paper` returned
-  it. It must be a paper you read in this run. Search results and failed reads are not evidence.
-- **Snippet.** A verbatim quote from one paragraph of the text `read_paper` returned for that paper, 20 to 400
-  characters, that occurs once in the paper. Quote the sentence that carries the finding. Only whitespace may
-  differ. Put everything else in `explanation`, in your own words. For an abstract the text includes any markup
-  shown.
-- **One paper per EvidenceItem.** Use several EvidenceItems for several passages or papers.
+- **Do not write** `was_generated_by` or `was_attributed_to` on Claims or the account, people, or an Activity for
+  the run itself: REVEAL supplies them. The only Activities you write are the commands that saved your files.
 - **Every Claim needs evidence**, and each EvidenceItem's `target_proposition` must be its Claim's `proposition`.
   `direction` is `SUPPORTS`, `DISPUTES`, `MIXED` or `NEUTRAL`. Report contradicting evidence as `DISPUTES`; an empty
   search is a coverage limit, not evidence of absence.
+- **Reference.** When you know the paper's PubMed id, put it in `reference` as `PMID:…`.
 - **Give each Proposition its triple when you can.** `subject_entity`, `relation` and `object_entity` say the same
   thing as the statement in a form others can search and join: all three or none, each a CURIE or an absolute URI.
   A human gene is `HGNC.SYMBOL:<symbol>`. A relation is a biolink predicate, for example `biolink:associated_with`,
@@ -98,5 +190,7 @@ Rules the linter and REVEAL enforce:
 - **Do not invent** bibliographic details, numbers or passages. If the papers do not answer the question, say so in
   `closing_remarks` and keep the claims you can support.
 
-When `lint_account` reports findings, edit the saved `output/account-1.json` in place for the fields it names and lint
-again. A `literature-quote` finding tells you exactly what to change in a snippet.
+Run `lint_account` after each paper's evidence is drafted. When it reports findings, edit the saved
+`output/account-1.json` in place for the fields it names and lint again. A `source-evidence` finding tells you
+exactly what to change: a command to copy from your Bash call, a file to save, or where in the file the quote
+actually is.

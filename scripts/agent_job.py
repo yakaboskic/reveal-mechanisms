@@ -204,7 +204,7 @@ def main():
             outcome = {'deposited': f"deposited as {deposit.get('deposit_id')}", 'not_configured': 'not deposited (no claims repository configured)'}.get(
                 deposit['status'], f"deposit failed ({deposit.get('reason')}); the account is kept with the job")
             print(f"\nScientific Account {account['account_id']} (DAPPER {account['dapper_version']}): {account['claims']} claims, "
-                  f"{account['value_locators']} located quotes from {len(account['papers'])} paper texts; {outcome}.")
+                  f"{account['value_locators']} located quotes in {len(account['papers'])} saved source files; {outcome}.")
             for claim in account['requested_claims']:
                 print(f"  {'assessed    ' if claim['assessed'] else 'not assessed'}  {claim['statement']}")
             if args.account_out:

@@ -317,22 +317,16 @@ p.write_text(json.dumps(doc))
                 if expected:
                     self.assertIn(expected, {item['check'] for item in draft['findings']})
 
-    def test_literature_account_job_drafts_lints_assembles_and_takes_its_deposit_form(self):
-        """A scientific_account agent job end to end, offline: the agent's tools (draft, lint, with the quote check),
-        the backend's gate on the pinned release, and the deposit form minted with DAPPER 0.2.1-a1."""
-        import io, os
+    def test_account_job_saves_its_sources_lints_assembles_and_deposits_located_quotes(self):
+        """A scientific_account agent job end to end, offline: the agent fetched one paper as XML and one as a PDF it
+        converted with pdftotext, recorded each step as an Activity and each saved file as a File, and quotes the files.
+        Its draft and lint tools check that record against the files and the tool ledger; the backend's gate checks it
+        again on the pinned release, and the deposit form, minted with DAPPER 0.2.1-a1, locates every quote by byte span."""
+        import os
         from types import SimpleNamespace
         from reveal_backend import acceptance, account_deposit, agent_account, box_agent, box_remote
-        from reveal_backend.box_literature import LiteratureClient
-        from reveal_backend.box_mcp import Ledger, ScopedTools
-        result = 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation by 42% in liver.'
-        article = ('<?xml version="1.0"?><article><front><article-meta><article-id pub-id-type="pmc">12345</article-id>'
-                   '<article-id pub-id-type="pmid">99999</article-id><title-group><article-title>Leptin receptor loss and hepatic insulin '
-                   'signalling</article-title></title-group></article-meta></front><body><sec><title>Results</title><p>' + result + '</p>'
-                   '<p>Glucose production rose. Later, glucose production rose again in knockout mice.</p></sec></body></article>').encode()
-        class Response(io.BytesIO):
-            status = 200
-        http = SimpleNamespace(open=lambda request, timeout: Response(article))
+        from reveal_backend.box_mcp import Ledger
+        import test_source_evidence as run
         claim_text = 'Loss of hepatocyte LEPR reduces hepatic insulin signalling.'
         # The requester gives the claim's structured form; it is minted into the trusted Proposition.
         triple = {'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects', 'object_entity': 'obo:GO_0008286'}
@@ -342,7 +336,6 @@ p.write_text(json.dumps(doc))
                                       [box_agent.claim_entry({'statement': claim_text, **triple}), box_agent.claim_entry(plain_text)])
         plain_id = account['claims'][1]['proposition_id']
         gap_id, proposition_id = account['package']['selection']['knowledge_gap_id'], account['claims'][0]['proposition_id']
-        requested_id = proposition_id
         with tempfile.TemporaryDirectory() as directory:
             base = Path(directory); state = base / 'state'; output = base / 'output'
             state.mkdir(); output.mkdir()
@@ -355,216 +348,199 @@ p.write_text(json.dumps(doc))
             (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(self.release), 'evidence_package': str(package_path),
                                                                   'deliverable': 'scientific_account', 'draft_attribution': attribution}))
             ledger = Ledger(state / 'ledger', 'account-job', 1)
-            def draft(snippet, own=None):
-                # own: a Proposition the agent writes itself; the Claim is then about it instead of the requester's.
-                proposition_id = own['id'] if own else requested_id
-                # The agent names the paper and quotes it. It writes no File, no was_derived_from and no locator.
-                return {**({'propositions': [own]} if own else {}),
-                        'evidence_items': [{'id': 'urn:draft:evidence-1', 'target_proposition': proposition_id, 'direction': 'SUPPORTS',
-                                            'snippet': snippet, 'explanation': 'The paper reports this directly in mouse liver.',
-                                            'context': 'Mouse liver, hepatocyte-specific knockout',
-                                            'evidence_source': 'Europe PMC open-access full text (PMC12345)', 'reference': 'PMID:99999'}],
-                        'claims': [{'id': 'urn:draft:claim-1', 'proposition': proposition_id, 'direction': 'SUPPORTS', 'status': 'proposed',
-                                    'statement': 'One mouse study supports the requester\'s claim.', 'has_evidence': ['urn:draft:evidence-1']}],
-                        'scientific_accounts': [{'id': 'urn:draft:account-1', 'name': 'LEPR and hepatic insulin signalling', 'question': gap_id,
-                                                 'context': 'One open-access paper found through Europe PMC.', 'component_claims': ['urn:draft:claim-1'],
-                                                 'closing_remarks': 'A single mouse study; no human data were read.'}]}
+            run.save_sources(output, ledger)
+            draft = lambda **change: run.draft(proposition_id, gap_id, **change)
             with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output), \
                     patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
-                # Agent jobs no longer get the paper tools (box_remote.agent_tools), but the quote binding the account
-                # lint and gate still use is driven here through a read_paper capture, with the tools wired directly.
-                tools = ScopedTools([], ledger, max_calls=30, soft_budget=True, draft_files=('account-1.json',), capture_descriptor=False,
-                                    literature=LiteratureClient(opener=http, max_results=5, guidance=True),
-                                    lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool,
-                                    max_searches=3, max_papers=4, max_characters=48_000)
-                read = tools.call('read_paper', {'source': 'PMC', 'id': 'PMC12345', 'section': 'full_text'})
-                self.assertFalse(read.get('isError'), read)
-                # A read shows the agent the run budget, where a client that passes on only the structured result still
-                # shows it, and nothing about REVEAL's capture of the read.
-                self.assertEqual(json.loads(read['content'][-1]['text']), {'run_budget': read['structuredContent']['run_budget']})
-                self.assertEqual(read['structuredContent']['run_budget']['papers'], {'used': 1, 'allowed': 4})
-                for internal in ('reveal.tool-capture', 'urn:reveal:tool-response', 'ledger_sequence', 'source_locator', 'sha256'):
-                    self.assertNotIn(internal, json.dumps({key: read[key] for key in ('content', 'structuredContent')}).replace('upstream_sha256', ''))
+                tools = box_remote.agent_tools([], ledger, {'limits': {'tool_calls': 30}},
+                                               lint=lambda filename: box_remote.lint_tool(filename, ledger), write_draft=box_remote.write_draft_tool)
                 offered = json.dumps(tools.definitions())
-                for internal in ('was_derived_from', 'File', 'locator', 'pointer', 'checksum'):
-                    self.assertNotIn(internal, offered)
-                # A quote that is verbatim (so the pinned linter accepts it) but occurs twice in the paper: only the quote
-                # check can tell the agent, and it does so during the run.
-                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft('lucose production rose')})
-                self.assertFalse(saved.get('isError'), saved)
-                feedback = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
-                errors = [(item['check'], item['where']) for item in feedback['findings'] if item['severity'] == 'error']
-                self.assertEqual(errors, [('literature-quote', 'urn:draft:evidence-1')])
-                self.assertFalse(feedback['valid'])
-                self.assertIn('occurs 2 times', next(item['message'] for item in feedback['findings'] if item['check'] == 'literature-quote'))
-                # The trusted Proposition and KnowledgeGap were hydrated from the package; the agent wrote neither.
-                stored = json.loads((output / 'account-1.json').read_bytes())
-                self.assertEqual([node['id'] for node in stored['knowledge_gaps']], [gap_id])
-                self.assertEqual(stored['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])
-                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
-                clean = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertNotIn('read_paper', offered); self.assertIn('output/sources/', offered)
+
+                def lint(document):
+                    saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': document})
+                    self.assertFalse(saved.get('isError'), saved)
+                    return json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                clean = lint(draft())
                 self.assertTrue(clean['valid'], clean.get('findings'))
-                self.assertEqual(clean['findings'], [])              # nothing about REVEAL's own run records is shown
-                # REVEAL tied the quote to the read in its own lint copy; the agent's saved draft is as the agent wrote it.
+                self.assertEqual([finding for finding in clean['findings'] if finding['severity'] == 'error'], [])
+                # The saved draft keeps the agent's record of its sources; REVEAL's run Activity is the only other one.
                 saved_draft = json.loads((output / 'account-1.json').read_bytes())
-                self.assertNotIn('files', saved_draft); self.assertNotIn('was_derived_from', saved_draft['evidence_items'][0])
-                self.assertEqual(saved_draft['evidence_items'][0]['context'], 'Mouse liver, hepatocyte-specific knockout')
+                self.assertEqual(sorted(node['id'] for node in saved_draft['activities']),
+                                 ['urn:draft:activity-pdf', 'urn:draft:activity-txt', 'urn:draft:activity-xml', 'urn:reveal:runtime:execution:job:1'])
+                self.assertEqual(len(saved_draft['was_generated_by_edges']), 3); self.assertEqual(len(saved_draft['was_derived_from_edges']), 1)
+                self.assertEqual(saved_draft['claims'][0]['was_generated_by'], 'urn:reveal:runtime:execution:job:1')
+                self.assertNotIn('sha256', json.dumps(saved_draft['files']))            # the agent never writes a checksum
+                # REVEAL measured the files in its own lint copy.
                 checked = json.loads((state / 'lint-account-1.json').read_bytes())
-                self.assertEqual(checked['evidence_items'][0]['was_derived_from'], [checked['files'][0]['id']])
-                # A quote from a paper the run did not read, a quote that is in no paper read, and a Claim left with no
-                # usable evidence are each reported once, at the quote, with what to change.
-                for change, expected in (({'reference': 'PMID:11111'}, 'reference names a paper that read_paper did not return'),
-                                         ({'snippet': 'Hepatic insulin signalling was entirely abolished in every animal.'}, 'not verbatim text of this paper'),
-                                         ({'reference': 'Smith 2019', 'snippet': 'Hepatic insulin signalling was entirely abolished.'}, 'not verbatim text of this paper')):
-                    wrong = draft(result); wrong['evidence_items'][0].update(change)
-                    tools.call('write_account_draft', {'filename': 'account-1.json', 'document': wrong})
-                    refused = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertEqual({node['filename']: node['sha256'] for node in checked['files']},
+                                 {path: sha256(data) for path, data in run.FILES.values()})
+                # The trusted Proposition and KnowledgeGap were hydrated from the package; the agent wrote neither.
+                self.assertEqual([node['id'] for node in saved_draft['knowledge_gaps']], [gap_id])
+                self.assertEqual(saved_draft['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])
+                # A file written by hand with an invented download, a quote not on the lines the evidence names, one that
+                # is not in the file, one that occurs twice, a file outside output/sources/ and an Activity named like
+                # REVEAL's own are each reported once, where they are, with what to change.
+                def handwritten(document):
+                    (output / 'sources/notes.txt').write_text('Hepatic insulin signalling was entirely abolished in every knockout animal.\n')
+                    document['activities'].append({'id': 'urn:draft:activity-notes', 'name': 'Fetch notes', 'software_name': 'curl',
+                                                   'command': 'curl -sSL -o output/sources/notes.txt https://example.org/notes.txt',
+                                                   'software_version': '8.5.0', 'generated_at_time': '2026-11-19T10:05:00Z'})
+                    document['files'].append({'id': 'urn:draft:file-notes', 'filename': 'sources/notes.txt', 'location': 'https://example.org/notes.txt'})
+                    document['was_generated_by_edges'].append({'subject': 'urn:draft:file-notes', 'predicate': 'prov:wasGeneratedBy',
+                                                               'object': 'urn:draft:activity-notes'})
+                    document['evidence_items'].append({**document['evidence_items'][0], 'id': 'urn:draft:evidence-3', 'was_derived_from': ['urn:draft:file-notes'],
+                                                       'snippet': 'Hepatic insulin signalling was entirely abolished in every knockout animal.'})
+                    document['claims'][0]['has_evidence'].append('urn:draft:evidence-3')
+                    return document
+                def outside(document):
+                    (output / 'notes.md').write_text(run.XML.decode())
+                    document['files'][0]['filename'] = 'notes.md'
+                    return document
+                for document, where, expected in (
+                        (handwritten(draft()), 'urn:draft:file-notes', 'No Bash command run in this run is the command of its Activity'),
+                        (draft(text_context='Mouse liver; line=1-2'), 'urn:draft:evidence-2',
+                         'The quote is not on lines 1-2 of sources/jmet-2012.txt; it occurs on lines 3-4'),
+                        (draft(text_snippet='Hepatic glucose output was entirely abolished in every animal.'), 'urn:draft:evidence-2',
+                         'not verbatim text of sources/jmet-2012.txt'),
+                        (draft(text_snippet=run.REPEATED, text_context='Mouse liver'), 'urn:draft:evidence-2',
+                         'The quote occurs 2 times in sources/jmet-2012.txt, on line 6'),
+                        (outside(draft()), 'urn:draft:file-xml', 'under sources/')):
+                    refused = lint(document)
                     errors = [(item['check'], item['where']) for item in refused['findings'] if item['severity'] == 'error']
-                    self.assertEqual(errors, [('literature-quote', 'urn:draft:evidence-1')], refused['findings'])
+                    self.assertEqual(errors, [('source-evidence', where)], refused['findings'])
                     self.assertIn(expected, refused['findings'][-1]['message'])
-                    self.assertEqual(refused['counts']['errors'], 1)
-                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
+                    self.assertFalse(refused['valid']); self.assertEqual(refused['counts']['errors'], 1)
+                (output / 'sources/notes.txt').unlink(); (output / 'notes.md').unlink()
+                # The Proposition-triple advisories, as before.
+                lint(draft())
                 asked = lambda feedback: [(item['where'], item['message']) for item in feedback['advisories'] if item['check'] == 'proposition-triple']
-                self.assertEqual(asked(clean), [])                    # every Proposition in the draft has its triple
-                # A Proposition the agent writes as text only is valid, and the lint asks for its triple.
-                own = {'id': 'urn:draft:prop-own', 'statement': 'Hepatocyte LEPR loss lowers insulin-stimulated AKT phosphorylation.',
-                       'proposition_kind': 'RESULT'}
-                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, own)})
-                text_only = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
-                self.assertTrue(text_only['valid'], text_only.get('findings'))
-                self.assertEqual(asked(text_only), [('propositions[0]', box_remote.TRIPLE_OWN)])
-                # With the triple it is still valid and the reminder is gone. The draft writer declares the prefixes.
-                structured = {**own, 'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects', 'object_entity': 'HGNC.SYMBOL:AKT1'}
-                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, structured)})
-                self.assertFalse(saved.get('isError'), saved)
-                with_triple = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
-                self.assertTrue(with_triple['valid'], with_triple.get('findings'))
-                self.assertEqual(asked(with_triple), [])
-                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['prefixes'], agent_account.PREFIXES)
-                # The requester's plain claim: a Claim on it as it stands is valid, and the lint says how to give it a triple.
-                on_plain = draft(result); on_plain['claims'][0]['proposition'] = on_plain['evidence_items'][0]['target_proposition'] = plain_id
-                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': on_plain})
-                as_sent = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                self.assertEqual(asked(clean), [])
+                on_plain = draft(); on_plain['claims'][0]['proposition'] = plain_id
+                for item in on_plain['evidence_items']: item['target_proposition'] = plain_id
+                as_sent = lint(on_plain)
                 self.assertTrue(as_sent['valid'], as_sent.get('findings'))
                 self.assertEqual(asked(as_sent), [('claims[0].proposition', box_remote.TRIPLE_REQUESTED)])
-                # Restated word for word with a triple, it is accepted, and it still counts as the requester's claim.
-                restated = {'id': 'urn:draft:prop-restated', 'statement': plain_text, 'subject_entity': 'HGNC.SYMBOL:LEPR',
-                            'relation': 'biolink:affects', 'object_entity': 'HGNC.SYMBOL:AKT1'}
-                saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, restated)})
-                self.assertFalse(saved.get('isError'), saved)
-                again = json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
-                self.assertTrue(again['valid'], again.get('findings'))
-                self.assertEqual(asked(again), [])
-                kept = json.loads((output / 'account-1.json').read_bytes())
-                self.assertEqual([c['assessed'] for c in agent_account.requested_claims(account['claims'], kept)], [False, True])
-                # A triple with an end missing, or a prefix nobody declared, is refused when the draft is saved, with
-                # diagnostics the agent can repair from.
+                # A Proposition the agent writes as text only is valid, and the lint asks for its triple; with the triple
+                # it is still valid and the reminder is gone. The draft writer declares the prefixes.
+                def own(proposition):
+                    document = draft(); document['propositions'] = [proposition]
+                    document['claims'][0]['proposition'] = proposition['id']
+                    for item in document['evidence_items']: item['target_proposition'] = proposition['id']
+                    return document
+                text_only = {'id': 'urn:draft:prop-own', 'statement': 'Hepatocyte LEPR loss lowers insulin-stimulated AKT phosphorylation.',
+                             'proposition_kind': 'RESULT'}
+                plain_own = lint(own(text_only))
+                self.assertTrue(plain_own['valid'], plain_own.get('findings'))
+                self.assertEqual(asked(plain_own), [('propositions[0]', box_remote.TRIPLE_OWN)])
+                structured = {**text_only, 'subject_entity': 'HGNC.SYMBOL:LEPR', 'relation': 'biolink:affects', 'object_entity': 'HGNC.SYMBOL:AKT1'}
+                with_triple = lint(own(structured))
+                self.assertTrue(with_triple['valid'], with_triple.get('findings')); self.assertEqual(asked(with_triple), [])
+                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['prefixes'], agent_account.PREFIXES)
+                # The requester's plain claim restated word for word with a triple still counts as the requester's.
+                restated = lint(own({**structured, 'id': 'urn:draft:prop-restated', 'statement': plain_text}))
+                self.assertTrue(restated['valid'], restated.get('findings')); self.assertEqual(asked(restated), [])
+                self.assertEqual([c['assessed'] for c in agent_account.requested_claims(account['claims'], json.loads((output / 'account-1.json').read_bytes()))],
+                                 [False, True])
+                # A triple with an end missing, or a prefix nobody declared, is refused when the draft is saved.
                 for broken in ({k: v for k, v in structured.items() if k != 'relation'}, {**structured, 'object_entity': 'T2D:1'}):
-                    refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result, broken)})
+                    refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': own(broken)})
                     self.assertTrue(refused.get('isError'))
                     self.assertFalse(json.loads(refused['content'][0]['text'])['valid'])
-                tools.call('write_account_draft', {'filename': 'account-1.json', 'document': draft(result)})
                 # Trying to reword the requester's claim is refused.
-                reworded = draft(result); reworded['propositions'] = [{'id': proposition_id, 'statement': 'A reworded claim.'}]
+                reworded = draft(); reworded['propositions'] = [{'id': proposition_id, 'statement': 'A reworded claim.'}]
                 refused = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': reworded})
                 self.assertTrue(refused.get('isError')); self.assertIn('trusted source object was changed', refused['content'][0]['text'])
-                self.assertEqual(json.loads((output / 'account-1.json').read_bytes())['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])
+                self.assertTrue(lint(draft())['valid'])
             ledger.freeze()
             manifest = state / 'ledger/manifest.json'
             requester = {'user_id': '11111111-1111-4111-8111-111111111111', 'principal_kind': 'registered', 'display_name': 'Test Requester',
                          'orcid': None, 'orcid_authenticated': False}
-            calls = json.loads(manifest.read_bytes())['calls']
-            # The gate ties the quote to its read exactly as the lint did, then assembles and checks that copy.
-            bound_path = base / 'bound.json'
-            bound_path.write_bytes(canonical_json(agent_account.bind(json.loads((output / 'account-1.json').read_bytes()), state / 'ledger', calls)))
-            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
-                assembled, report = acceptance.assemble_account(bound_path, package_path, base / 'assembled.json',
-                                                                requester, {'id': 'account-job'}, 1, 'box', manifest)
-                # Trusted assembly ties a quote to its source itself, so the agent's own file passes the same gate.
-                _, direct = acceptance.assemble_account(output / 'account-1.json', package_path, base / 'direct.json',
-                                                        requester, {'id': 'account-job'}, 1, 'box', manifest)
-            self.assertTrue(direct['valid'], direct.get('findings'))
-            self.assertTrue(report['valid'], report.get('findings'))
-            self.assertEqual([node['name'] for node in assembled['persons']], [assembled['persons'][0]['name']])
-            self.assertIn('Test Requester', assembled['persons'][0]['name'])
-            document, summary = account_deposit.deposit_document(assembled, state / 'ledger', calls)
-            self.assertNotIn('persons', document); self.assertNotIn('Test Requester', json.dumps(document))   # not named unless asked
-            located = document['value_locators'][0]
-            text = account_deposit.paper_text_bytes(state / 'ledger', calls, summary['papers'][0]['text_sha256'])
-            self.assertEqual(text[located['byte_start']:located['byte_start'] + located['byte_length']].decode(), result)
-            self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id
-            self.assertEqual(document['claims'][0]['proposition'], proposition_id)                   # and so does the requester's claim
-            self.assertEqual(document['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])   # with its triple
-            self.assertEqual(summary['account_id'], document['scientific_accounts'][0]['id'])
-            self.assertNotEqual(summary['account_id'], assembled['scientific_accounts'][0]['id'])    # the deposit id is the only public one
-            self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('Later, glucose', json.dumps(document))
-            # The deposit says where in the paper the quote sits, in words, after what the agent wrote.
-            self.assertEqual(document['evidence_items'][0]['context'],
-                             'Mouse liver, hepatocyte-specific knockout. Quote location: ' + located['selector'] + '.')
-            self.assertNotIn('ledger_sequence', json.dumps(document))
-            # The workflow's gate is those two steps taken once, leaving under the workspace all that commit reads back.
+            # The workflow's gate: the record checked again against the frozen ledger and the captured files, assembled
+            # on the pinned release, then put in its deposit form, leaving under the workspace all that commit reads back.
             from reveal_backend.evidence_package import EvidenceBuildError
             work = base / 'work'; work.mkdir()
             captured = SimpleNamespace(account_paths=(output / 'account-1.json',), ledger_manifest_path=manifest)
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
                 record = agent_account.accept(work, {'id': 'account-job'}, 1, account, requester, captured, output)
-            data, texts = agent_account.stored(work, record)
-            kept = json.loads(data)
-            self.assertEqual(record['account_id'], kept['scientific_accounts'][0]['id'])
-            self.assertEqual(record['requested_claims'], [{'statement': claim_text, 'assessed': True, 'claim_ids': [kept['claims'][0]['id']]},
-                                                          {'statement': plain_text, 'assessed': False, 'claim_ids': []}])
-            self.assertEqual(list(texts), [kept['files'][[node['id'] for node in kept['files']].index(kept['value_locators'][0]['file'])]['sha256']])
             self.assertTrue((work / 'attempt-1/validation-1.json').is_file())
+            data, kept_sources = agent_account.stored(work, record)
+            document = json.loads(data)
+            self.assertEqual(record['account_id'], document['scientific_accounts'][0]['id'])
+            self.assertEqual((record['claims'], record['value_locators']), (1, 2))
+            # Every quote is a ValueLocator whose byte span addresses exactly the quoted bytes of a saved file.
+            files = {node['id']: node for node in document['files']}
+            located = {}
+            for locator in document['value_locators']:
+                node = files[locator['file']]
+                raw = (output / node['filename']).read_bytes()
+                self.assertEqual((node['sha256'], node['size_in_bytes']), (sha256(raw), len(raw)))
+                self.assertEqual(raw[locator['byte_start']:locator['byte_start'] + locator['byte_length']].decode(), locator['value_text'])
+                located[node['filename']] = locator
+            self.assertEqual(located['sources/PMC3491803.xml']['value_text'], run.XML_QUOTE)
+            self.assertEqual(located['sources/jmet-2012.txt']['selector'], 'line=3-4')
+            self.assertIn('littermate   controls', located['sources/jmet-2012.txt']['value_text'])   # the file's own whitespace
+            self.assertEqual(sorted(item['snippet'] for item in document['evidence_items']), sorted(l['value_text'] for l in located.values()))
+            # The Files say where the bytes came from; the Activities say how, with the command REVEAL saw run.
+            by_name = {node['filename']: node for node in document['files']}
+            self.assertEqual((by_name['sources/PMC3491803.xml']['location'], by_name['sources/jmet-2012.pdf']['location']), (run.XML_URL, run.PDF_URL))
+            self.assertEqual({node['filename']: node['mime_type'] for node in document['files']},
+                             {'sources/PMC3491803.xml': 'application/xml', 'sources/jmet-2012.pdf': 'application/pdf', 'sources/jmet-2012.txt': 'text/plain'})
+            activities = {node.get('command'): node for node in document['activities']}
+            self.assertEqual(activities[run.FETCH_XML]['observed_command'], run.RAN['xml'])
+            self.assertEqual(activities[run.CONVERT]['observed_command'], run.CONVERT)
+            made = {(edge['subject'], edge['object']) for edge in document['was_generated_by_edges']}
+            self.assertIn((by_name['sources/jmet-2012.txt']['id'], activities[run.CONVERT]['id']), made)
+            self.assertIn({'subject': by_name['sources/jmet-2012.txt']['id'], 'predicate': 'prov:wasDerivedFrom', 'object': by_name['sources/jmet-2012.pdf']['id']},
+                          document['was_derived_from_edges'])
+            self.assertEqual(sorted({key: value for key, value in node.items() if key != 'id'}.items() for node in document['publications']),
+                             sorted([{'citation': 'PMCID:PMC3491803'}.items(), {'doi': 'doi:10.1234/jmet.2012.5'}.items()]))
+            self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('urn:draft', json.dumps(document))
+            self.assertNotIn('persons', document); self.assertNotIn('Test Requester', data.decode())   # not named unless asked
+            self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id
+            self.assertEqual(document['claims'][0]['proposition'], proposition_id)                   # and so does the requester's claim
+            self.assertEqual(document['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])   # with its triple
+            # REVEAL keeps a private copy of every saved source; the job result describes them and never carries the bytes.
+            self.assertEqual(kept_sources, {sha256(data): data for _, data in run.FILES.values()})
             shown = agent_account.public(record, {'status': 'not_configured'})
-            self.assertEqual((shown['claims'], shown['value_locators'], shown['deposit']), (1, 1, {'status': 'not_configured'}))
-            self.assertNotIn('path', shown['papers'][0]); self.assertNotIn('Test Requester', json.dumps(shown))
+            self.assertEqual(sorted((paper['path'], paper['evidence_items']) for paper in shown['papers']),
+                             [('sources/PMC3491803.xml', 1), ('sources/jmet-2012.pdf', 0), ('sources/jmet-2012.txt', 1)])
+            text = next(paper for paper in shown['papers'] if paper['path'] == 'sources/jmet-2012.txt')
+            self.assertEqual({key: text[key] for key in ('url', 'command', 'observed_command', 'derived_from', 'media_type', 'size_bytes')},
+                             {'url': run.PDF_URL, 'command': run.CONVERT, 'observed_command': run.CONVERT, 'derived_from': 'sources/jmet-2012.pdf',
+                              'media_type': 'text/plain', 'size_bytes': len(run.TEXT)})
+            self.assertEqual(text['file_id'], by_name['sources/jmet-2012.txt']['id'])
+            self.assertNotIn('stored_path', json.dumps(shown)); self.assertNotIn('Test Requester', json.dumps(shown))
+            self.assertEqual(record['requested_claims'], [{'statement': claim_text, 'assessed': True, 'claim_ids': [document['claims'][0]['id']]},
+                                                          {'statement': plain_text, 'assessed': False, 'claim_ids': []}])
             # The requester is in the stored account only when the job asked to be named.
-            self.assertNotIn('Test Requester', data.decode()); self.assertNotIn(requester['user_id'], data.decode())
             named_work = base / 'named'; named_work.mkdir()
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
                 named = agent_account.accept(named_work, {'id': 'account-job'}, 1, {**account, 'attribute_requester': True}, requester, captured, output)
             named_document = json.loads(agent_account.stored(named_work, named)[0])
             self.assertIn('Test Requester', named_document['persons'][0]['name']); self.assertEqual(named['objects'], record['objects'])
-            self.assertEqual(kept['scientific_accounts'][0]['was_attributed_to'], [kept['organizations'][0]['id']])
-            self.assertEqual(named_document['scientific_accounts'][0]['was_attributed_to'], [named_document['persons'][0]['id']])
-            # A claim the requester asked about and the agent did not assess is reported, not invented.
-            other = agent_account.requested_claims([*account['claims'], {'statement': 'An unassessed claim.', 'proposition_id': 'dapper:Proposition.x'}], kept)
-            self.assertEqual(other[-1], {'statement': 'An unassessed claim.', 'assessed': False, 'claim_ids': []})
+            self.assertEqual(document['scientific_accounts'][0]['was_attributed_to'], [document['organizations'][0]['id']])
             # Bytes that changed after the check are refused at commit.
             saved_bytes = (work / record['document']['path']).read_bytes()
             (work / record['document']['path']).write_bytes(b'{}')
             with self.assertRaisesRegex(EvidenceBuildError, 'changed after validation'): agent_account.stored(work, record)
             (work / record['document']['path']).write_bytes(saved_bytes)
-            # An account whose quote has no single place in the paper fails the gate as a validation failure, with the
-            # finding recorded for operators (it could only get here past the in-sandbox lint by defect or tampering).
-            tampered = json.loads((output / 'account-1.json').read_bytes())
-            tampered['evidence_items'][0]['snippet'] = 'lucose production rose'
+            # A draft that reaches the gate with a hand-written file (it could only get past the in-sandbox lint by
+            # tampering) fails as a validation failure, with the finding recorded for operators.
+            tampered = handwritten(json.loads((output / 'account-1.json').read_bytes()))
             (output / 'account-1.json').write_bytes(canonical_json(tampered))
             with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock), \
                     self.assertRaises(AccountValidationError) as refused:
                 agent_account.accept(base / 'work', {'id': 'account-job'}, 1, account, requester, captured, output)
-            self.assertEqual([(item['check'], item['where']) for item in refused.exception.report['findings']], [('literature-quote', 'urn:draft:evidence-1')])
-            self.assertIn('occurs 2 times', refused.exception.report['findings'][0]['message'])
-            self.assertIn('occurs 2 times', (base / 'work/attempt-1/validation-1.json').read_text())
-            # A draft written the earlier way, naming REVEAL's capture File itself, is still accepted as written; one
-            # whose quote is not in the read it names is still refused when it takes its deposit form.
-            entry = next(call for call in calls if call['tool'] == 'read_paper')
-            named_file = {'id': 'urn:reveal:tool-response:sha256:' + entry['response']['sha256'], 'filename': entry['response']['sha256'] + '.json',
-                          'mime_type': 'application/json', 'sha256': entry['response']['sha256'], 'size_in_bytes': entry['response']['size_bytes']}
-            for snippet, outcome in ((result, None), ('lucose production rose', 'could not be put in its deposit form.*occurs 2 times')):
-                earlier = json.loads((output / 'account-1.json').read_bytes())
-                earlier['files'] = [named_file]
-                earlier['evidence_items'][0].update(snippet=snippet, was_derived_from=[named_file['id']],
-                    context=f"Source locator: ledger_sequence={entry['sequence']};pointer=/structuredContent/data/text. Mouse liver.")
-                (output / 'account-1.json').write_bytes(canonical_json(earlier))
-                explicit = base / ('explicit-' + str(len(snippet))); explicit.mkdir()
-                with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
-                    if outcome:
-                        with self.assertRaisesRegex(EvidenceBuildError, outcome):
-                            agent_account.accept(explicit, {'id': 'account-job'}, 1, account, requester, captured, output)
-                    else:
-                        kept_record = agent_account.accept(explicit, {'id': 'account-job'}, 1, account, requester, captured, output)
-                        self.assertEqual((kept_record['claims'], kept_record['value_locators']), (1, 1))
+            self.assertEqual([(item['check'], item['where']) for item in refused.exception.report['findings']], [('source-evidence', 'urn:draft:file-notes')])
+            self.assertIn('No Bash command run in this run is the command', (base / 'work/attempt-1/validation-1.json').read_text())
+            # And a file changed after the run ended no longer matches what the checks measured: it is refused too.
+            (output / 'account-1.json').write_bytes(canonical_json(json.loads(json.dumps(saved_draft))))
+            (output / 'sources/jmet-2012.txt').write_bytes(run.TEXT.replace(b'35%', b'53%'))
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock), \
+                    self.assertRaises(AccountValidationError) as changed:
+                agent_account.accept(base / 'changed', {'id': 'account-job'}, 1, account, requester, captured, output)
+            self.assertEqual([item['where'] for item in changed.exception.report['findings']], ['urn:draft:evidence-2'])
 
     def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
         from reveal_backend import acceptance, box_remote

@@ -109,13 +109,20 @@ def extend(b, f, e):
         'http_status': integer(100, 599),
         'detail': string(maxLength=500, description="The repository's own reason for refusing the document.")}, ['status']))
     b.add('AgentAccountPaper', obj({
-        'source': enum('MED', 'PMC'), 'id': string(), 'section': enum('abstract', 'full_text'),
-        'reference': null(string(description='PMID, PMCID or DOI of the paper.')),
-        'text_sha256': digest, 'text_bytes': integer(0), 'media_type': string(), 'filename': string(),
-        'evidence_items': integer(1, description='EvidenceItems that quote this text.'),
+        'path': string(description='Where the agent saved the file, relative to output/ (for example sources/PMC3491803.xml).'),
+        'url': null(string(description='The URL the bytes were fetched from; for a converted file, the URL of the file it was '
+                                       'converted from.')),
+        'sha256': digest, 'size_bytes': integer(0, description='Size of the saved file, measured by REVEAL.'),
+        'media_type': string(description='Media type REVEAL read from the bytes.'),
+        'command': string(description='The command the agent recorded on the Activity that saved the file.'),
+        'observed_command': string(description='The successful Bash call REVEAL saw run, which contains the recorded command '
+                                               'and names the file.'),
+        'derived_from': null(string(description='path of the saved file this one was converted from, or null for a fetched file.')),
+        'evidence_items': integer(0, description='EvidenceItems that quote this file.'),
         'file_id': dapper_id('File')}, description=
-        'One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the '
-        'exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}.'))
+        'One file the agent saved under output/sources/ and recorded in the account. The account names it by checksum and URL '
+        'and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from '
+        '/v1/jobs/{job_id}/account/sources/{sha256}.'))
     term = lambda what: string(minLength=3, maxLength=MAX_TERM_CHARS, pattern='^' + TERM.pattern + '$', description=what)
     b.add('AgentAccountClaim', obj({
         'statement': string(minLength=1, maxLength=MAX_CLAIM_CHARS, description='The claim in words.'),
@@ -137,10 +144,10 @@ def extend(b, f, e):
         'dapper_version': string(description='DAPPER version the returned and deposited document is minted with.'),
         'document_sha256': digest, 'document_bytes': integer(0),
         'objects': integer(0), 'edges': integer(0), 'claims': integer(0),
-        'value_locators': integer(0, description='Quoted passages located by exact byte span in a paper text.'),
+        'value_locators': integer(0, description='Quoted passages located by exact byte span in a saved source file.'),
         'lint_warnings': integer(0),
         'requested_claims': array(ref('AgentAccountRequestedClaim'), description='What became of each claim in the request.'),
-        'papers': array(ref('AgentAccountPaper')),
+        'papers': array(ref('AgentAccountPaper'), description='Every source file the account records, fetched or converted.'),
         'deposit': ref('AgentAccountDeposit')}, description=
         'The ScientificAccount a deliverable scientific_account job returned. Fetch the document itself from '
         '/v1/jobs/{job_id}/account.'))
@@ -209,9 +216,12 @@ def extend(b, f, e):
     account_block = {'account_id': account_id, 'dapper_version': '0.2.1-a1', 'document_sha256': '0' * 63 + '3', 'document_bytes': 9120,
         'objects': 11, 'edges': 4, 'claims': 1, 'value_locators': 1, 'lint_warnings': 1,
         'requested_claims': [{'statement': account['claims'][0], 'assessed': True, 'claim_ids': ['dapper:Claim.' + 'C' * 32]}],
-        'papers': [{'source': 'PMC', 'id': 'PMC0000000', 'section': 'full_text', 'reference': 'PMID:00000000', 'text_sha256': text_sha,
-                    'text_bytes': 48211, 'media_type': 'text/plain', 'filename': 'PMC0000000.fulltext.txt', 'evidence_items': 1,
-                    'file_id': 'dapper:File.' + 'F' * 32}],
+        'papers': [{'path': 'sources/PMC0000000.xml', 'url': 'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML',
+                    'sha256': text_sha, 'size_bytes': 48211, 'media_type': 'application/xml',
+                    'command': 'curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML',
+                    'observed_command': 'mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml '
+                                        'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML',
+                    'derived_from': None, 'evidence_items': 1, 'file_id': 'dapper:File.' + 'F' * 32}],
         'deposit': {'status': 'deposited', 'deposit_id': 'dep_' + '0' * 32, 'objects': 11, 'stored_differs': 0, 'unresolved_references': 0}}
     account_complete = deepcopy(complete)
     account_complete['result'].update(files=[{'path': 'account-1.json', 'size_bytes': 5210, 'sha256': '0' * 63 + '4'}], account=account_block)
@@ -220,18 +230,20 @@ def extend(b, f, e):
     job_parameter = b.parameter('job_id', 'path', string(format='uuid'), JOB_ID, True)
     b.operation('/v1/jobs/{job_id}/account', 'get', 'getJobAccount', 'Jobs', 'Read the ScientificAccount an agent job returned',
         'Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document '
-        'with every object the account needs, quoted passages as ValueLocators over paper texts named by checksum. Returns 404 '
+        'with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum '
+        'and URL, and the commands that saved them. Returns 404 '
         'until the job has succeeded, and for any other job. The document names the requester as the Person the account is '
         'attributed to only when the job asked for that with attribute_requester.',
         'AgentAccountDocument', {'account': {'job_id': JOB_ID, 'account': account_block, 'document': {
             'scientific_accounts': [{'id': account_id, 'name': 'LEPR and hepatic insulin signalling'}]}}},
         parameters=[job_parameter], errors=('401', '404', '429'))
-    text = b.operation('/v1/jobs/{job_id}/account/texts/{sha256}', 'get', 'downloadJobAccountText', 'Jobs',
-        'Download a paper text an agent job account quotes',
-        'Owner-only. The exact bytes a ValueLocator of the account addresses: the text of one paper as the agent read it '
-        '(text_sha256 in the account block). REVEAL keeps it for the owner and does not publish it. Attachment disposition, '
-        'private no-store caching and nosniff, like a captured source.',
-        string(format='binary'), {'paper_text': 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation.'},
+    text = b.operation('/v1/jobs/{job_id}/account/sources/{sha256}', 'get', 'downloadJobAccountSource', 'Jobs',
+        'Download a source file an agent job account records',
+        'Owner-only. One file the agent saved under output/sources/ (sha256 in the account block papers), exactly as saved: '
+        'the bytes a ValueLocator of the account addresses, or the file a quoted text was converted from. REVEAL keeps it '
+        'for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a '
+        'captured source.',
+        string(format='binary'), {'source_file': 'Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation.'},
         parameters=[job_parameter, b.parameter('sha256', 'path', string(pattern='^[a-f0-9]{64}$'), text_sha, True)],
         errors=('401', '404', '503'))
     text['responses']['200']['content'] = {'*/*': text['responses']['200']['content']['application/json']}
@@ -239,7 +251,7 @@ def extend(b, f, e):
         'headers': {'Location': {'description': 'Short-lived download URL. Never cache or persist as an identifier.',
                                  'schema': {'type': 'string', 'format': 'uri'}}}}
     for exchange in b.EXCHANGES:
-        if exchange['operation_id'] == 'downloadJobAccountText':
+        if exchange['operation_id'] == 'downloadJobAccountSource':
             exchange['request']['headers']['Accept'] = '*/*'
             exchange['responses']['200']['content_type'] = '*/*'
     for parameter in b.PATHS['/v1/jobs']['get'].get('parameters', []):

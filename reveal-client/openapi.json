@@ -5039,14 +5039,14 @@
                           ],
                           "papers": [
                             {
-                              "source": "PMC",
-                              "id": "PMC0000000",
-                              "section": "full_text",
-                              "reference": "PMID:00000000",
-                              "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
-                              "text_bytes": 48211,
-                              "media_type": "text/plain",
-                              "filename": "PMC0000000.fulltext.txt",
+                              "path": "sources/PMC0000000.xml",
+                              "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                              "sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                              "size_bytes": 48211,
+                              "media_type": "application/xml",
+                              "command": "curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                              "observed_command": "mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                              "derived_from": null,
                               "evidence_items": 1,
                               "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
                             }
@@ -43202,7 +43202,7 @@
           "Jobs"
         ],
         "summary": "Read the ScientificAccount an agent job returned",
-        "description": "Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over paper texts named by checksum. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.",
+        "description": "Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.",
         "parameters": [
           {
             "name": "job_id",
@@ -43250,14 +43250,14 @@
                         ],
                         "papers": [
                           {
-                            "source": "PMC",
-                            "id": "PMC0000000",
-                            "section": "full_text",
-                            "reference": "PMID:00000000",
-                            "text_sha256": "0000000000000000000000000000000000000000000000000000000000000002",
-                            "text_bytes": 48211,
-                            "media_type": "text/plain",
-                            "filename": "PMC0000000.fulltext.txt",
+                            "path": "sources/PMC0000000.xml",
+                            "url": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "sha256": "0000000000000000000000000000000000000000000000000000000000000002",
+                            "size_bytes": 48211,
+                            "media_type": "application/xml",
+                            "command": "curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "observed_command": "mkdir -p output/sources && curl -sSL -o output/sources/PMC0000000.xml https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML",
+                            "derived_from": null,
                             "evidence_items": 1,
                             "file_id": "dapper:File.FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
                           }
@@ -43389,14 +43389,14 @@
         ]
       }
     },
-    "/v1/jobs/{job_id}/account/texts/{sha256}": {
+    "/v1/jobs/{job_id}/account/sources/{sha256}": {
       "get": {
-        "operationId": "downloadJobAccountText",
+        "operationId": "downloadJobAccountSource",
         "tags": [
           "Jobs"
         ],
-        "summary": "Download a paper text an agent job account quotes",
-        "description": "Owner-only. The exact bytes a ValueLocator of the account addresses: the text of one paper as the agent read it (text_sha256 in the account block). REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.",
+        "summary": "Download a source file an agent job account records",
+        "description": "Owner-only. One file the agent saved under output/sources/ (sha256 in the account block papers), exactly as saved: the bytes a ValueLocator of the account addresses, or the file a quoted text was converted from. REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.",
         "parameters": [
           {
             "name": "job_id",
@@ -43431,8 +43431,8 @@
                   "format": "binary"
                 },
                 "examples": {
-                  "paper_text": {
-                    "summary": "Paper text",
+                  "source_file": {
+                    "summary": "Source file",
                     "value": "Hepatocyte-specific deletion of Lepr reduced insulin-stimulated AKT phosphorylation."
                   }
                 }
@@ -43542,7 +43542,7 @@
           {
             "lang": "Shell",
             "label": "request",
-            "source": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/texts/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
+            "source": "curl -X GET https://api.reveal.example.org/v1/jobs/77777777-7777-4777-8777-777777777777/account/sources/0000000000000000000000000000000000000000000000000000000000000002 -H 'Authorization: Bearer <api-key-or-gateway-assertion>' -H 'Accept: application/json'"
           }
         ]
       }
@@ -74162,52 +74162,57 @@
       "AgentAccountPaper": {
         "type": "object",
         "properties": {
-          "source": {
+          "path": {
             "type": "string",
-            "enum": [
-              "MED",
-              "PMC"
-            ]
+            "description": "Where the agent saved the file, relative to output/ (for example sources/PMC3491803.xml)."
           },
-          "id": {
-            "type": "string"
-          },
-          "section": {
-            "type": "string",
-            "enum": [
-              "abstract",
-              "full_text"
-            ]
-          },
-          "reference": {
+          "url": {
             "anyOf": [
               {
                 "type": "string",
-                "description": "PMID, PMCID or DOI of the paper."
+                "description": "The URL the bytes were fetched from; for a converted file, the URL of the file it was converted from."
               },
               {
                 "type": "null"
               }
             ]
           },
-          "text_sha256": {
+          "sha256": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$"
           },
-          "text_bytes": {
+          "size_bytes": {
             "type": "integer",
-            "minimum": 0
+            "minimum": 0,
+            "description": "Size of the saved file, measured by REVEAL."
           },
           "media_type": {
-            "type": "string"
+            "type": "string",
+            "description": "Media type REVEAL read from the bytes."
           },
-          "filename": {
-            "type": "string"
+          "command": {
+            "type": "string",
+            "description": "The command the agent recorded on the Activity that saved the file."
+          },
+          "observed_command": {
+            "type": "string",
+            "description": "The successful Bash call REVEAL saw run, which contains the recorded command and names the file."
+          },
+          "derived_from": {
+            "anyOf": [
+              {
+                "type": "string",
+                "description": "path of the saved file this one was converted from, or null for a fetched file."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "evidence_items": {
             "type": "integer",
-            "minimum": 1,
-            "description": "EvidenceItems that quote this text."
+            "minimum": 0,
+            "description": "EvidenceItems that quote this file."
           },
           "file_id": {
             "type": "string",
@@ -74215,19 +74220,19 @@
           }
         },
         "required": [
-          "source",
-          "id",
-          "section",
-          "reference",
-          "text_sha256",
-          "text_bytes",
+          "path",
+          "url",
+          "sha256",
+          "size_bytes",
           "media_type",
-          "filename",
+          "command",
+          "observed_command",
+          "derived_from",
           "evidence_items",
           "file_id"
         ],
         "additionalProperties": false,
-        "description": "One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}."
+        "description": "One file the agent saved under output/sources/ and recorded in the account. The account names it by checksum and URL and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/sources/{sha256}."
       },
       "AgentAccountClaim": {
         "type": "object",
@@ -74339,7 +74344,7 @@
           "value_locators": {
             "type": "integer",
             "minimum": 0,
-            "description": "Quoted passages located by exact byte span in a paper text."
+            "description": "Quoted passages located by exact byte span in a saved source file."
           },
           "lint_warnings": {
             "type": "integer",
@@ -74356,7 +74361,8 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/AgentAccountPaper"
-            }
+            },
+            "description": "Every source file the account records, fetched or converted."
           },
           "deposit": {
             "$ref": "#/components/schemas/AgentAccountDeposit"

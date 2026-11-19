@@ -81,7 +81,7 @@ def test_authored_and_ledger_files_do_not_inherit_runtime_allowance(tmp_path, na
     assert not (remote / 'state/direct-capture-v1').exists()
 
 
-def test_runtime_still_has_20mb_limit_and_counts_toward_40mb_total(tmp_path):
+def test_runtime_still_has_20mb_limit_and_counts_toward_100mb_total(tmp_path):
     remote = remote_tree(tmp_path, fixture_bytes())
     with (remote / 'state/runtime.json').open('wb') as stream: stream.truncate(20_000_001)
     with pytest.raises(ValueError, match='bounded regular files'): upload.inventory(remote, BINDING)
@@ -89,10 +89,42 @@ def test_runtime_still_has_20mb_limit_and_counts_toward_40mb_total(tmp_path):
     with pytest.raises(BoxTransportError, match='size or checksum'):
         capture.validate_inventory(inventory([descriptor('ledger/manifest.json', b'{}'), runtime]), BINDING, STATE)
     runtime['size_bytes'] = 20_000_000
-    ordinary = [{'path': f'output/part-{index}', 'size_bytes': 8_000_000, 'sha256': 'b' * 64} for index in range(3)]
+    sources = [{'path': f'output/sources/paper-{index}.pdf', 'size_bytes': 25_000_000, 'sha256': 'b' * 64} for index in range(3)]
+    capture.validate_inventory(inventory([descriptor('ledger/manifest.json', b'{}'), runtime, *sources]), BINDING, STATE)
     with pytest.raises(BoxTransportError, match='byte budget'):
-        capture.validate_inventory(inventory([descriptor('ledger/manifest.json', b'{}'), runtime, *ordinary]), BINDING, STATE)
-    assert upload.MAX_TOTAL == capture.MAX_TOTAL == 40_000_000
+        capture.validate_inventory(inventory([descriptor('ledger/manifest.json', b'{}'), runtime, *sources,
+                                              {'path': 'output/sources/one-more.pdf', 'size_bytes': 25_000_000, 'sha256': 'c' * 64}]), BINDING, STATE)
+    assert upload.MAX_TOTAL == capture.MAX_TOTAL == 100_000_000
+
+
+def test_saved_sources_may_be_25mb_and_every_other_file_keeps_8mb():
+    assert [upload.capture_file_limit(name) for name in ('output/sources/paper.pdf', 'output/sources/deep/paper.xml', 'output/paper.pdf',
+                                                         'output/sourcesx/paper.pdf', 'ledger/sources/x', 'runtime.json')] == \
+        [25_000_000, 25_000_000, 8_000_000, 8_000_000, 8_000_000, 20_000_000]
+    for name, size, accepted in (('output/sources/paper.pdf', 25_000_000, True), ('output/sources/paper.pdf', 25_000_001, False),
+                                 ('output/notes.pdf', 8_000_000, True), ('output/notes.pdf', 8_000_001, False)):
+        value = inventory([descriptor('ledger/manifest.json', b'{}'), {'path': name, 'size_bytes': size, 'sha256': 'b' * 64}])
+        if accepted:
+            capture.validate_inventory(value, BINDING, STATE)
+        else:
+            with pytest.raises(BoxTransportError, match='size or checksum'): capture.validate_inventory(value, BINDING, STATE)
+
+
+def test_the_box_freezes_a_large_saved_source_but_not_a_large_file_elsewhere(tmp_path, monkeypatch):
+    monkeypatch.setattr(upload, 'MAX_FILE', 1000); monkeypatch.setattr(upload, 'MAX_SOURCE_FILE', 2000)
+    remote = remote_tree(tmp_path / 'box', fixture_bytes())
+    (remote / 'output/sources').mkdir(parents=True, exist_ok=True)
+    (remote / 'output/sources/paper.pdf').write_bytes(b'x' * 2000)
+    frozen = upload.inventory(remote, BINDING)
+    assert {'path': 'output/sources/paper.pdf', 'size_bytes': 2000, 'sha256': hashlib.sha256(b'x' * 2000).hexdigest()} in frozen['files']
+    other = remote_tree(tmp_path / 'other', fixture_bytes())
+    (other / 'output/notes.pdf').write_bytes(b'x' * 1001)
+    with pytest.raises(ValueError, match='bounded regular files'): upload.inventory(other, BINDING)
+    collected = tmp_path / 'collected'; remote_tree(collected, fixture_bytes())
+    (collected / 'output/sources').mkdir(parents=True, exist_ok=True); (collected / 'output/sources/paper.pdf').write_bytes(b'x' * 2000)
+    monkeypatch.setattr(box_remote, 'STATE', collected / 'state'); monkeypatch.setattr(box_remote, 'OUTPUT', collected / 'output')
+    monkeypatch.setattr(box_remote, 'capture_file_limit', upload.capture_file_limit)
+    assert base64.b64decode(box_remote.collect()['files']['output/sources/paper.pdf']) == b'x' * 2000
 
 
 @pytest.mark.parametrize('unsafe', ['writable', 'owner', 'symlink'])

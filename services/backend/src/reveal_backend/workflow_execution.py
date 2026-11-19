@@ -736,7 +736,7 @@ class WorkflowExecution:
                 # the time, so the ids differ on a second run, and commit only reads back what this step saved.
                 from . import agent_account
                 await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating',
-                    'message': 'Checking the account against the papers it cites.'})
+                    'message': 'Checking the account against the sources it saved and cites.'})
                 checked['account'] = await run_sync(agent_account.accept, root, job, request.attempt, inputs['account'],
                                                     queue['attribution'], result, request.output_dir)
             # validated_paths[0] stays the response record: commit reads it by position.
@@ -849,8 +849,8 @@ class WorkflowExecution:
                 await run_sync(remember)
         retained = {}
         for paper in record['papers']:
-            retained[paper['text_sha256']] = await run_sync(agent_account.retain, job['id'], paper['text_sha256'],
-                                                            texts[paper['text_sha256']], paper['media_type'])
+            retained[paper['sha256']] = await run_sync(agent_account.retain, job['id'], paper['sha256'],
+                                                       texts[paper['sha256']], paper['media_type'])
         document = decode(data)
         def save():
             with self.repository.transaction() as tx:

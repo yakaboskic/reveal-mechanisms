@@ -155,7 +155,7 @@ step '5. Read the result'
 show 'curl "$REVEAL_API_URL/v1/jobs/'"$JOB"'" -H "Authorization: Bearer $REVEAL_API_KEY"'
 reveal GET "/v1/jobs/$JOB" > "$RUN/job.json"
 jq '.result.account | {account_id, dapper_version, objects, claims, value_locators, requested_claims,
-                       papers: [.papers[] | {reference, section, evidence_items}], deposit}' "$RUN/job.json"
+                       papers: [.papers[] | {path, url, evidence_items}], deposit}' "$RUN/job.json"
 DEPOSIT_STATUS=$(jq -r '.result.account.deposit.status' "$RUN/job.json")
 if [ "$DEPOSIT_STATUS" != deposited ]; then
   echo "The account was built but not deposited: $(jq -c '.result.account.deposit' "$RUN/job.json")" >&2

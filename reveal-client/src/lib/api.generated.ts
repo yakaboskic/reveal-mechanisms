@@ -1712,7 +1712,7 @@ export interface paths {
         };
         /**
          * Read the ScientificAccount an agent job returned
-         * @description Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over paper texts named by checksum. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
+         * @description Owner-only. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
          */
         get: operations["getJobAccount"];
         put?: never;
@@ -1723,7 +1723,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/jobs/{job_id}/account/texts/{sha256}": {
+    "/v1/jobs/{job_id}/account/sources/{sha256}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1731,10 +1731,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Download a paper text an agent job account quotes
-         * @description Owner-only. The exact bytes a ValueLocator of the account addresses: the text of one paper as the agent read it (text_sha256 in the account block). REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.
+         * Download a source file an agent job account records
+         * @description Owner-only. One file the agent saved under output/sources/ (sha256 in the account block papers), exactly as saved: the bytes a ValueLocator of the account addresses, or the file a quoted text was converted from. REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.
          */
-        get: operations["downloadJobAccountText"];
+        get: operations["downloadJobAccountSource"];
         put?: never;
         post?: never;
         delete?: never;
@@ -9803,19 +9803,22 @@ export interface components {
             /** @description The repository's own reason for refusing the document. */
             detail?: string;
         };
-        /** @description One paper text the account quotes. The account names it by checksum and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/texts/{text_sha256}. */
+        /** @description One file the agent saved under output/sources/ and recorded in the account. The account names it by checksum and URL and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/sources/{sha256}. */
         AgentAccountPaper: {
-            /** @enum {string} */
-            source: "MED" | "PMC";
-            id: string;
-            /** @enum {string} */
-            section: "abstract" | "full_text";
-            reference: string | null;
-            text_sha256: string;
-            text_bytes: number;
+            /** @description Where the agent saved the file, relative to output/ (for example sources/PMC3491803.xml). */
+            path: string;
+            url: string | null;
+            sha256: string;
+            /** @description Size of the saved file, measured by REVEAL. */
+            size_bytes: number;
+            /** @description Media type REVEAL read from the bytes. */
             media_type: string;
-            filename: string;
-            /** @description EvidenceItems that quote this text. */
+            /** @description The command the agent recorded on the Activity that saved the file. */
+            command: string;
+            /** @description The successful Bash call REVEAL saw run, which contains the recorded command and names the file. */
+            observed_command: string;
+            derived_from: string | null;
+            /** @description EvidenceItems that quote this file. */
             evidence_items: number;
             file_id: string;
         };
@@ -9846,11 +9849,12 @@ export interface components {
             objects: number;
             edges: number;
             claims: number;
-            /** @description Quoted passages located by exact byte span in a paper text. */
+            /** @description Quoted passages located by exact byte span in a saved source file. */
             value_locators: number;
             lint_warnings: number;
             /** @description What became of each claim in the request. */
             requested_claims: components["schemas"]["AgentAccountRequestedClaim"][];
+            /** @description Every source file the account records, fetched or converted. */
             papers: components["schemas"]["AgentAccountPaper"][];
             deposit: components["schemas"]["AgentAccountDeposit"];
         };
@@ -17263,7 +17267,7 @@ export interface operations {
             };
         };
     };
-    downloadJobAccountText: {
+    downloadJobAccountSource: {
         parameters: {
             query?: never;
             header?: never;

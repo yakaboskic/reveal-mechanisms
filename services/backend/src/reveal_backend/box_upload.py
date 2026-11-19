@@ -19,8 +19,13 @@ import tarfile
 from urllib.parse import parse_qs, unquote, urlsplit
 
 MAX_FILE = 8_000_000
+# An account job saves the papers it cites under output/sources/ (source_evidence): a PDF or full-text XML can be large.
+MAX_SOURCE_FILE = 25_000_000
+SOURCES_PREFIX = 'output/sources/'
 MAX_RUNTIME = 20_000_000
-MAX_TOTAL = 40_000_000
+# The capture and the account gate's copy of its saved sources (agent_account.accept) share one workspace checkpoint
+# of 256 MiB (REVEAL_WORKSPACE_MAX_BYTES), so a run captures at most 100 MB.
+MAX_TOTAL = 100_000_000
 MAX_FILES = 10000
 MAX_PLAN = 16_000_000
 MAX_BUNDLE = 25_000_000
@@ -37,13 +42,17 @@ def safe_name(name):
 
 
 def capture_file_limit(name):
+    """The most bytes one captured file may have, by its capture name (output/..., ledger/..., runtime.json)."""
     # The trusted runtime manifest retains every derived input path/checksum.
     # Authored output/runtime.json and ledger/runtime.json remain ordinary files.
-    return MAX_RUNTIME if name == 'runtime.json' else MAX_FILE
+    if name == 'runtime.json':
+        return MAX_RUNTIME
+    return MAX_SOURCE_FILE if name.startswith(SOURCES_PREFIX) else MAX_FILE
 
 
-def source_file(root, relative, *, runtime_metadata=False):
-    """Open without following links, including any intermediate directory."""
+def source_file(root, relative, *, runtime_metadata=False, limit=None):
+    """Open without following links, including any intermediate directory. `limit` is the most bytes the file may
+    have (capture_file_limit of its capture name); MAX_FILE when not given."""
     if not safe_name(relative): raise ValueError('Unsafe capture path')
     descriptor = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
@@ -53,7 +62,7 @@ def source_file(root, relative, *, runtime_metadata=False):
             os.close(descriptor); descriptor = child
         target = os.open(parts[-1], os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=descriptor)
         metadata = os.fstat(target)
-        limit = capture_file_limit('runtime.json') if runtime_metadata else MAX_FILE
+        limit = capture_file_limit('runtime.json') if runtime_metadata else MAX_FILE if limit is None else limit
         if (not stat.S_ISREG(metadata.st_mode) or metadata.st_size > limit
                 or (runtime_metadata and (relative != 'runtime.json' or metadata.st_uid != os.geteuid() or metadata.st_mode & 0o022))):
             os.close(target); raise ValueError('Capture requires bounded regular files')
@@ -96,7 +105,7 @@ def inventory(base, binding):
         if runtime.exists() or runtime.is_symlink(): candidates.append((base / 'state', 'runtime.json', 'runtime.json'))
         for root, relative, name in sorted(candidates, key=lambda value: value[2]):
             if not safe_name(name) or len(entries) >= MAX_FILES: raise ValueError('Invalid capture inventory')
-            source, before = source_file(root, relative, runtime_metadata=name == 'runtime.json')
+            source, before = source_file(root, relative, runtime_metadata=name == 'runtime.json', limit=capture_file_limit(name))
             total += before.st_size
             if total > MAX_TOTAL: source.close(); raise ValueError('Capture exceeds byte budget')
             target = temporary / 'files' / name; target.parent.mkdir(parents=True, exist_ok=True)
@@ -129,7 +138,7 @@ def upload_one(root, item, host):
         raise ValueError('Unexpected upload headers')
     if headers['Content-Length'] != str(item['size_bytes']) or headers['If-None-Match'] != '*':
         raise ValueError('Upload constraints changed')
-    source, metadata = source_file(root, item['path'], runtime_metadata=item['path'] == 'runtime.json')
+    source, metadata = source_file(root, item['path'], runtime_metadata=item['path'] == 'runtime.json', limit=capture_file_limit(item['path']))
     with source:
         digest = hashlib.sha256(); count = 0
         while chunk := source.read(65536): digest.update(chunk); count += len(chunk)

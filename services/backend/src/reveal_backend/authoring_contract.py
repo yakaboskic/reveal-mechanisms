@@ -9,10 +9,15 @@ SCHEMA_PATH = 'input/package-sections/authoring-schema-excerpt.yaml'
 EXAMPLE_PATH = 'input/package-sections/authoring-examples.json'
 SKELETON_PATH = 'input/package-sections/authoring-skeleton.json'
 WANTED = {'ScientificAccount','Proposition','Claim','EvidenceItem','ClaimScore','Mechanism','GeneSet','File','KnowledgeGap'}
+# An account job also records how it got each source: the Activity that ran each command and the provenance edges
+# between Files and Activities (source_evidence). Research kits keep their own excerpt, unchanged.
+ACCOUNT_WANTED = WANTED | {'Activity','WasGeneratedBy','WasDerivedFrom','Used'}
+EXCERPT = 'services/backend/agent-runtime/authoring-schema-excerpt.yaml'
+ACCOUNT_EXCERPT = 'services/backend/agent-runtime/account-schema-excerpt.yaml'
 DEPENDENCY_PIN = 'services/backend/agent-runtime/authoring-schema-dependencies.json'
 
 
-def schema_excerpt(release_root, lock_path):
+def schema_excerpt(release_root, lock_path, wanted=WANTED):
     release_root=Path(release_root); lock_raw=Path(lock_path).read_bytes(); lock=decode(lock_raw)
     definitions={k:{} for k in ('classes','slots','enums','types','prefixes')}
     sources={}
@@ -49,18 +54,20 @@ def schema_excerpt(release_root, lock_path):
                 walk(child)
         elif isinstance(value,list):
             for child in value: walk(child)
-    for name in sorted(WANTED): visit(name)
+    for name in sorted(wanted): visit(name)
     visit(defaults['default_range'])
-    require(WANTED<=set(result['classes']), 'Missing authoring classes')
+    require(set(wanted)<=set(result['classes']), 'Missing authoring classes')
     return yaml.safe_dump({'format':CONTRACT_VERSION,'note':'Exact transitive definitions from the locked release, including inherited classes, slots, mixins, ranges, enums and reference semantics. This excerpt is not an installed validator.',
         'release':{'tag':lock['tag'],'commit':lock['commit'],'lock_sha256':sha256(lock_raw),'source_sha256':sources},
         'external_dependencies':dependencies['dependencies'],**defaults,
         'prefixes':definitions['prefixes'],**result},sort_keys=True).encode()
 
 
-def pinned_schema(project_root):
+def pinned_schema(project_root, name=EXCERPT):
+    """The shipped excerpt's bytes (`name`: EXCERPT for research kits, ACCOUNT_EXCERPT for account jobs), checked
+    against the release lock and dependency pins."""
     root=Path(project_root)
-    raw=(root/'services/backend/agent-runtime/authoring-schema-excerpt.yaml').read_bytes()
+    raw=(root/name).read_bytes()
     value=yaml.safe_load(raw); lock_raw=(root/'services/backend/agent-runtime/dapper-release.json').read_bytes(); lock=decode(lock_raw)
     require(value['release']['lock_sha256']==sha256(lock_raw) and value['release']['commit']==lock['commit'], 'Shipped authoring excerpt release pin changed; regenerate it')
     require(all(lock['files'].get(k)==v for k,v in value['release']['source_sha256'].items()),'Shipped schema source hashes changed')

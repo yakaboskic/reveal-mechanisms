@@ -36,6 +36,7 @@ from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
 from .box_upload import MAX_TOTAL, capture_file_limit, source_file
+from .source_evidence import CHECK as SOURCE_CHECK
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -339,16 +340,24 @@ def lint_tool(filename, ledger):
         # without freezing or interrupting the agent's remaining tool calls.
         ledger_path = ledger.root / 'lint-sources.json'
         with ledger.lock:
-            write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
+            calls = json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0])['calls']
         evidence_path = RESEARCH.materialize(deadline=deadline, progress=timing.phase) if RESEARCH else runtime['evidence_package']
-        literature_account = runtime.get('deliverable') == 'scientific_account'
-        unbound = []
-        if literature_account:
-            # The agent names a paper and quotes it; REVEAL attaches its own record of the read that served the quote.
-            # Only this lint copy carries that record: the agent's saved draft is left as it wrote it.
-            calls = json.loads(ledger_path.read_bytes())['calls']
-            document, unbound = bound_sources(document, ledger.root, calls)
+        account_job = runtime.get('deliverable') == 'scientific_account'
+        problems = []
+        if account_job:
+            # The agent's record of its saved sources, checked against the files under output/sources/ and the Bash
+            # calls in the live ledger. Only this lint copy carries what REVEAL measured; the saved draft is as the
+            # agent wrote it. The linter counts the accepted files, and nothing else, as captured sources.
+            from . import source_evidence
+            try:
+                problems, binding = source_evidence.check(document, OUTPUT, calls, ledger.root)
+            except source_evidence.SourceError as exc:
+                problems, binding = [('ledger', str(exc))], {'files': {}, 'activities': {}, 'quotes': []}
+            document = source_evidence.bind(document, binding)
             frozen.write_bytes(canonical(document))
+            write_json(ledger_path, source_evidence.ledger_view(binding))
+        else:
+            write_json(ledger_path, {'calls': calls})
         timing.phase('full_lint')
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -357,30 +366,12 @@ def lint_tool(filename, ledger):
                                          release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
                                          evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
         checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
-        if literature_account:
-            report = literature_feedback(report)
-        elif checks & {'source-ancestry', 'claim-evidence'}:
-            report['repair_guidance'] = 'Each component Claim needs target-matched EvidenceItems that quote an eligible scientific source this run retrieved. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
-        if literature_account:
-            # The pinned linter checked each snippet against the read it was bound to. The deposit also needs the
-            # quote's exact place in the paper, so that is checked here too, while the agent can still fix it. A quote
-            # that could not be bound to a read is reported the same way.
-            located = [*quote_problems(unbound), *quote_findings(document, ledger.root, calls)]
-            if located:
-                # A Claim whose evidence has a quote to repair is reported once, at the quote: the pinned linter's
-                # finding that the Claim has no source says the same thing less usefully.
-                broken = {finding['where'] for finding in located}
-                waiting = {claim.get('id') for claim in document.get('claims', []) if isinstance(claim, dict)
-                           and isinstance(claim.get('has_evidence'), list) and broken & set(map(str, claim['has_evidence']))}
-                kept = [finding for finding in report.get('findings', [])
-                        if not (finding.get('check') == 'source-ancestry' and finding.get('where') in waiting)
-                        and not (finding.get('check') == 'source-binding' and finding.get('where') in broken)]
-                report['findings'] = [*kept, *located]
-                report['valid'] = False
-                if isinstance(report.get('counts'), dict):
-                    report['counts'] = {**report['counts'], 'errors': sum(1 for finding in report['findings'] if finding.get('severity') == 'error')}
+        if account_job:
+            report = source_feedback(report, document, problems)
             # A Proposition without a triple is valid. The agent is asked for one where it can give it (advisory only).
             report['advisories'] = [*report.get('advisories', []), *triple_findings(document, decode(Path(evidence_path).read_bytes()))]
+        elif checks & {'source-ancestry', 'claim-evidence'}:
+            report['repair_guidance'] = 'Each component Claim needs target-matched EvidenceItems that quote an eligible scientific source this run retrieved. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
         timing.phase('diagnostic_report')
         return timing.feedback(diagnostic_response(report, output=OUTPUT, filename=filename,
             capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
@@ -394,9 +385,10 @@ ACCOUNT_REQUEST_FILENAME = 'account-request.json'
 def account_workspace(work, project, lock, agent_input, runtime):
     """What a scientific_account job needs beyond a general agent job, the way a research run has it: the pinned
     DAPPER release the draft and lint tools check against, the account's evidence package (the requester's question
-    and claims as trusted nodes, no source artifacts), and the authoring skill and schema for the agent to read.
+    and claims as trusted nodes, no source artifacts), and the authoring skill and schema for the agent to read (the
+    account excerpt: the research classes plus Activity and the provenance edges its record of sources uses).
     The package comes from the frozen input, so the run lints against exactly what was frozen when the job was queued."""
-    from .authoring_contract import pinned_schema
+    from .authoring_contract import ACCOUNT_EXCERPT, pinned_schema
     from .dapper_release import clone_release
     root = BASE / 'workspace'
     root.mkdir()
@@ -407,7 +399,7 @@ def account_workspace(work, project, lock, agent_input, runtime):
     folder = work / 'account'
     folder.mkdir()
     shutil.copyfile(project / ACCOUNT_SKILL, work / ACCOUNT_SKILL_PATH)
-    (folder / 'authoring-schema-excerpt.yaml').write_bytes(pinned_schema(project))
+    (folder / 'authoring-schema-excerpt.yaml').write_bytes(pinned_schema(project, ACCOUNT_EXCERPT))
     request_view = {'question': account['question'], 'question_id': account['package']['selection']['knowledge_gap_id'],
                     'claims': account['claims'], 'limits': runtime['agent']['limits'],
                     'deliverable': 'One DAPPER ScientificAccount saved as output/account-1.json. Follow ' + ACCOUNT_SKILL_PATH + '.'}
@@ -455,73 +447,54 @@ def triple_findings(document, package):
 
 
 # Lint feedback drops a finding's message unless the finding names a `rule` (authoring_structure._normalized_finding):
-# ordinary lint messages may quote private text. A quote finding's message is the repair instruction and never repeats
-# the snippet or the paper (literature_locator.LocatorError), so it carries a rule and reaches the agent as written.
-QUOTE_CHECK = 'literature-quote'
+# ordinary lint messages may quote private text. A source-evidence message is the repair instruction and never repeats
+# a file's text (source_evidence.SourceError), so it carries a rule and reaches the agent as written.
+SOURCE_REPAIR = ('Each Claim needs at least one EvidenceItem that quotes a file you saved under output/sources/ with a recorded '
+                 'command: snippet is the verbatim passage, was_derived_from the File, and target_proposition the Claim\'s '
+                 'proposition. Repair the source-evidence findings listed for its evidence and files. Remove a Claim you have '
+                 'no evidence for and say so in your final message.')
 
 
-def literature_feedback(report):
-    """The pinned linter's report as an agent that cites papers should read it. Its own wording for these checks is
-    about captures and Files, which this agent never handles: each is restated as what to change in the draft, in
-    fixed text that quotes nothing. The run's own Activity having no inputs is REVEAL's business and is not shown."""
-    findings = []
+def source_feedback(report, document, problems):
+    """The pinned linter's report for an account job, with source_evidence's findings in place of the linter's own
+    about the same Files and Claims.
+
+    A File REVEAL could not accept is not among the captured sources the linter knows, so the linter also reports it
+    (source-file) and every Claim whose evidence rests on it (source-ancestry); the source-evidence finding says what
+    to change, and is the one shown. An Activity that fetched a file has no inputs by nature, and the run's own
+    Activity is REVEAL's business: activity-inputs warnings are not shown."""
+    located = [{'severity': 'error', 'check': SOURCE_CHECK, 'rule': SOURCE_CHECK, 'where': where, 'message': message, 'why': ''}
+               for where, message in problems]
+    broken = {finding['where'] for finding in located}
+    files = {node.get('id') for node in document.get('files', []) if isinstance(node, dict)}
+    items = {node.get('id'): node for node in document.get('evidence_items', []) if isinstance(node, dict)}
+    waiting = set()
+    for claim in document.get('claims', []):
+        if not isinstance(claim, dict) or not isinstance(claim.get('has_evidence'), list):
+            continue
+        for evidence in claim['has_evidence']:
+            cited = items.get(evidence, {}).get('was_derived_from')
+            if evidence in broken or (isinstance(cited, list) and broken & set(map(str, cited))):
+                waiting.add(claim.get('id'))
+    kept = []
     for finding in report.get('findings', []):
         check = finding.get('check')
         if check == 'activity-inputs' and finding.get('severity') == 'warning':
             continue
-        if check in LITERATURE_MESSAGES and finding.get('severity') == 'error':
-            finding = {**finding, 'rule': check, 'message': LITERATURE_MESSAGES[check]}
-        findings.append(finding)
+        if check == 'source-file' and finding.get('where') in files:
+            continue   # every File is checked by source_evidence: one it refused is reported there
+        if check == 'source-ancestry' and finding.get('where') in waiting:
+            continue
+        if check in ('source-ancestry', 'claim-evidence') and finding.get('severity') == 'error':
+            finding = {**finding, 'rule': check, 'message': SOURCE_REPAIR}
+        kept.append(finding)
+    findings = [*kept, *located]
+    errors = sum(1 for finding in findings if finding.get('severity') == 'error')
     counts = report.get('counts')
     if isinstance(counts, dict):
-        counts = {**counts, 'warnings': sum(1 for finding in findings if finding.get('severity') == 'warning')}
-    return {**report, 'findings': findings, **({'counts': counts} if isinstance(counts, dict) else {})}
-
-
-LITERATURE_REPAIR = ('Each Claim needs at least one EvidenceItem that quotes a paper read in this run: reference is the '
-                     "paper's PMID, PMC id or DOI, snippet is a verbatim passage read_paper returned, and target_proposition is "
-                     "the Claim's proposition. Repair the literature-quote findings listed for its evidence; REVEAL links each "
-                     'quote to its paper. Remove a Claim you have no evidence for and say so in your final message.')
-
-
-LITERATURE_MESSAGES = {
-    'source-ancestry': LITERATURE_REPAIR, 'claim-evidence': LITERATURE_REPAIR,
-    'source-file': ('This draft holds a files entry REVEAL did not create. Remove it and every reference to it: name the paper in '
-                    'reference and quote it in snippet.'),
-    'source-locator': ('context holds text that reads as a data path (such as /content/… or /data/…). Describe the study in words '
-                       'and remove the path.'),
-    'evidence-snippet': ('The snippet is not verbatim text of the paper it was matched to. Copy the passage exactly as read_paper '
-                         'returned it; put summaries in explanation.'),
-}
-
-
-def quote_problems(problems):
-    return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': where, 'message': message, 'why': ''}
-            for where, message in problems]
-
-
-def bound_sources(document, ledger_root, calls):
-    """(the draft with REVEAL's record of each quoted read attached, [(where, what to change)] for quotes that could
-    not be tied to a read). literature_locator.bind_sources does the work; agent_account.accept calls it too."""
-    from . import literature_locator as locator
-    try:
-        papers = locator.paper_texts(ledger_root, calls)
-    except locator.LocatorError as exc:
-        return document, [('ledger', str(exc))]
-    return locator.bind_sources(document, papers, locator.captures(calls))
-
-
-def quote_findings(document, ledger_root, calls):
-    """Lint findings for snippets that cannot be located in the paper they quote. The backend puts every literature
-    EvidenceItem into its deposit form after the run (account_deposit), which needs the quote's exact place in the
-    paper; the same check here lets the agent repair a quote while it is still drafting."""
-    from . import literature_locator as locator
-    try:
-        papers = locator.paper_texts(ledger_root, calls)
-    except locator.LocatorError as exc:
-        return [{'severity': 'error', 'check': QUOTE_CHECK, 'rule': QUOTE_CHECK, 'where': 'ledger', 'message': str(exc), 'why': ''}]
-    _, problems = locator.document_quotes(document, papers, locator.captures(calls))
-    return quote_problems(problems)
+        counts = {**counts, 'errors': errors, 'warnings': sum(1 for finding in findings if finding.get('severity') == 'warning')}
+    return {**report, 'findings': findings, 'valid': errors == 0 and not report.get('operational_error'),
+            **({'counts': counts} if isinstance(counts, dict) else {})}
 
 
 def agent_tools(selected_graphs, ledger, settings, lint=None, write_draft=None, claims_client=None):
@@ -552,7 +525,7 @@ def agent_system_prompt(agent_input):
     note = ('You are running unattended in an isolated, disposable sandbox. Nobody can answer questions mid-run, so '
             'make reasonable assumptions and finish the task. Your working directory is read-only. Write any files '
             'you want returned to the output/ directory (/reveal/output): regular files only, no symlinks, each under '
-            '8 MB and 40 MB in all. Use /tmp or your home directory for scratch work. Everything else is discarded '
+            '8 MB and 100 MB in all. Use /tmp or your home directory for scratch work. Everything else is discarded '
             'when the run ends. Your final message is returned to the requester as the result, so make it complete '
             'on its own.')
     restricted = agent_input['network'] == 'restricted'
@@ -570,9 +543,10 @@ def agent_system_prompt(agent_input):
                  f'{ACCOUNT_SKILL_PATH} before anything else; the question and the requester\'s claims are in '
                  f'{ACCOUNT_REQUEST_FILENAME}.')
         if 'Bash' in agent_input['tools']:
-            note += (' Fetch each paper you cite yourself with a Bash command and save it under output/sources/'
+            note += (' Fetch each paper you cite yourself with a Bash command and save it under output/sources/ (up to 25 MB a file)'
                      + ('; only the hosts named above can be reached' if restricted else '') +
-                     f'. {ACCOUNT_SKILL_PATH} says how to record each fetch and cite the saved file.')
+                     f'. Only text saved there by a command you record can be quoted. {ACCOUNT_SKILL_PATH} says how to record '
+                     'each fetch and cite the saved file.')
         else:
             note += ' This run has no Bash tool, so it cannot fetch papers; say so in your report.'
         note += (' A run that ends without a saved account returns nothing. Your final message is a short report to the '
@@ -726,8 +700,17 @@ def write_draft_tool(filename, document):
         declare_trusted_prefixes(document, trusted_prefixes(package))
         context = runtime.get('draft_attribution')
         if context:
+            # An account job's Activities that wrote its saved source files are its record of how it got them, and
+            # stay. Every other authored Activity, Person or Organization is replaced by REVEAL's record of the run.
+            reserved = {node['id'] for group in ('persons', 'organizations', 'activities') for node in context.get(group, [])}
+            sources = set()
+            if runtime.get('deliverable') == 'scientific_account':
+                from .source_evidence import source_activities
+                sources = {identity for identity in source_activities(document)
+                           if identity not in reserved and not identity.startswith('urn:reveal:')}
             for group in ('persons', 'organizations', 'activities'):
-                document[group] = [node for node in document.get(group, []) if node.get('id') in trusted]
+                document[group] = [node for node in document.get(group, []) if isinstance(node, dict)
+                                   and (node.get('id') in trusted or (group == 'activities' and node.get('id') in sources))]
                 document[group].extend(context.get(group, []))
             for group in ('claims', 'scientific_accounts'):
                 for node in document.get(group, []):

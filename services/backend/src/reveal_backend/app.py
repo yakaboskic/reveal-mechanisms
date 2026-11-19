@@ -1484,18 +1484,19 @@ def job_account(job_id:str,request:Request):
         row=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']
     return JSONResponse({'job_id':job_id,'account':row['account'],'document':row['document']},headers={'Cache-Control':'private, no-store'})
 
-@app.get('/v1/jobs/{job_id}/account/texts/{sha256}')
-def job_account_text(job_id:str,sha256:str,request:Request):
-    """The text of one paper the account quotes, as the agent read it: the file a ValueLocator's byte span addresses.
-    REVEAL keeps it for the job's owner and does not publish it; the account names it by checksum only."""
+@app.get('/v1/jobs/{job_id}/account/sources/{sha256}')
+def job_account_source(job_id:str,sha256:str,request:Request):
+    """One file the agent saved under output/sources/ and the account cites, exactly as saved: the bytes a
+    ValueLocator's byte span addresses, or the file a cited text was converted from. REVEAL keeps it for the job's
+    owner and does not publish it; the account names it by checksum and URL only."""
     from . import agent_account
     if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
     with repo.read_transaction() as tx:
         user=principal(tx,request.headers.get('authorization'))['user_id']
         owned(tx,'job',job_id,user)
-        text=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']['texts'].get(sha256)
-    if not text: raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
-    return serve_retained({**text,'file':{'filename':text['filename'],'mime_type':text['media_type']}},sha256)
+        source=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data'].get('sources',{}).get(sha256)
+    if not source: raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
+    return serve_retained({**source,'file':{'filename':source['filename'],'mime_type':source['media_type']}},sha256)
 
 @app.get('/v1/paragraphs/{dapper_id}/export')
 def export_paragraph(dapper_id:str,request:Request,format:str='markdown'):

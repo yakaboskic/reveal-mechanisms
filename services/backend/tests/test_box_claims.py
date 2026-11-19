@@ -70,14 +70,17 @@ class ClaimsToolTests(unittest.TestCase):
         # Every call is in the ledger, and none of them yields a capture File: a lookup is not a source an account can cite.
         self.assertEqual([(entry['tool'], entry['status']) for entry in self.ledger.entries], [('query_claims', 'completed')] * 3)
         self.assertEqual(len(result['content']), 1); self.assertNotIn('reveal.tool-capture', json.dumps(result))
-        # An account that tried to cite one is told so by the same rule the deposit applies.
-        from reveal_backend import literature_locator as locator
-        captured = locator.captures(self.ledger.entries)
-        self.assertEqual(set(captured.values()), {'query_claims'})
-        sha256 = self.ledger.entries[0]['response']['sha256']
-        item = {'id': 'urn:draft:e1', 'was_derived_from': ['urn:file:lookup'], 'snippet': 'x' * 30, 'target_proposition': 'p', 'explanation': 'e'}
-        with self.assertRaisesRegex(locator.LocatorError, 'cites the result of query_claims'):
-            locator.evidence_quote(item, {'urn:file:lookup': {'id': 'urn:file:lookup', 'sha256': sha256}}, {}, captured)
+        # An account that tried to cite one is told so by the same rule the gate and the deposit apply: an account
+        # cites only files the agent saved under output/sources/ with a recorded command.
+        from reveal_backend import source_evidence
+        response = self.ledger.entries[0]['response']
+        document = {'files': [{'id': 'urn:file:lookup', 'filename': response['path'], 'sha256': response['sha256']}],
+                    'evidence_items': [{'id': 'urn:draft:e1', 'was_derived_from': ['urn:file:lookup'], 'snippet': 'x' * 30,
+                                        'target_proposition': 'p', 'explanation': 'e'}]}
+        problems, binding = source_evidence.check(document, self.ledger.root, self.ledger.entries, self.ledger.root)
+        self.assertEqual([where for where, _ in problems], ['urn:file:lookup'])
+        self.assertIn('under sources/', problems[0][1])
+        self.assertEqual((binding['files'], binding['quotes']), ({}, []))
 
     def test_nothing_found_is_empty_not_an_error_and_a_spent_budget_ends_lookups(self):
         none, _ = self.data(q='nothing here')
