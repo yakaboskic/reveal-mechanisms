@@ -2977,6 +2977,7 @@ paths:
                     timeout_seconds: 600
                     max_turns: 30
                     max_budget_usd: 1
+                    max_output_tokens: 64000
               agent_account:
                 summary: General agent authoring a DAPPER ScientificAccount from literature
                 value:
@@ -50859,10 +50860,21 @@ components:
           description: Calls to the scoped REVEAL tools (the graph tools and query_claims),
             counted together. When they are used up the agent is told and can still
             finish.
+        max_output_tokens:
+          type: integer
+          minimum: 4096
+          maximum: 128000
+          default: 128000
+          description: The most Claude Code may generate in one model response, thinking
+            included; passed to Claude Code as CLAUDE_CODE_MAX_OUTPUT_TOKENS. A response
+            that reaches it (after Claude Code's own attempts to continue) fails the
+            job, and the failure names this limit and the ceiling. For long output,
+            raise it or have the agent write files under output/.
       required: []
       additionalProperties: false
       description: Per-run limits. The run stops at the first of timeout_seconds,
-        max_turns and max_budget_usd. Each limit has a default, used when the request
+        max_turns and max_budget_usd, or when one response exceeds max_output_tokens
+        (CLAUDE_CODE_MAX_OUTPUT_TOKENS). Each limit has a default, used when the request
         leaves it out, and a ceiling, the most a request may ask for; a value above
         the ceiling is refused with 422 and the message names the ceiling. Operators
         set both per deployment, so the defaults and maximums shown here are the built-in

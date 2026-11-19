@@ -26,7 +26,7 @@ def structured(**body):
 
 def test_an_answer_job_freezes_its_schema_as_an_optional_key_of_the_one_input_format():
     value = structured()
-    assert value['format'] == box_agent.INPUT_FORMAT == 'reveal.agent-input/4' and value['output_schema'] == SCHEMA
+    assert value['format'] == box_agent.INPUT_FORMAT == 'reveal.agent-input/5' and value['output_schema'] == SCHEMA
     assert box_agent.schema_of(value) == SCHEMA and box_agent.validate_input(value) is value
     assert set(value) == box_agent.INPUT_KEYS | {'output_schema'}
     # Without output_schema the input is the same format with the key left out.
@@ -36,7 +36,7 @@ def test_an_answer_job_freezes_its_schema_as_an_optional_key_of_the_one_input_fo
     assert box_agent.validate_input({k: v for k, v in value.items() if k != 'output_schema'})
     assert box_agent.validate_input({**plain, 'output_schema': SCHEMA})['output_schema'] == SCHEMA
     # The formats that split these two cases are gone.
-    for version in ('reveal.agent-input/2', 'reveal.agent-input/3'):
+    for version in ('reveal.agent-input/2', 'reveal.agent-input/3', 'reveal.agent-input/4'):
         with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
             box_agent.validate_input({**value, 'format': version})
     # The schema is checked again on validation, and still belongs only to an answer job.

@@ -62,10 +62,11 @@ def frozen(**body):
 
 def test_freeze_fills_every_default_so_the_frozen_bytes_say_what_runs():
     value = frozen()
-    assert value == {'format': 'reveal.agent-input/4', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
+    assert value == {'format': 'reveal.agent-input/5', 'prompt': 'Summarize the sandbox.', 'system_prompt': None,
                      'tools': list(box_agent.DEFAULT_TOOLS), 'graphs': [], 'network': 'restricted', 'allowed_domains': [],
                      'effort': 'medium', 'model': box_agent.DEFAULT_MODEL,
-                     'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30},
+                     'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30,
+                                'max_output_tokens': 128000},
                      'deliverable': 'answer', 'account': None, 'claims_repository': False}
     # The default budget never exceeds a lower server cap.
     assert box_agent.freeze_input({'kind': 'agent', 'prompt': 'x'}, budget_cap=0.5)['limits']['max_budget_usd'] == 0.5
@@ -91,6 +92,9 @@ def test_freeze_orders_tools_and_graphs_canonically():
     ({'limits': {'tool_calls': 2.5}}, 'tool_calls'),
     ({'limits': {'tool_calls': True}}, 'tool_calls'),
     ({'limits': {'max_reads': 9}}, 'limits has no max_reads'),
+    ({'limits': {'max_output_tokens': 128001}}, 'max_output_tokens must be a whole number from 4096 to 128000'),
+    ({'limits': {'max_output_tokens': 4095}}, 'max_output_tokens must be a whole number from 4096 to 128000'),
+    ({'limits': {'max_output_tokens': 32000.5}}, 'max_output_tokens'),
     ({'prompt': '   '}, 'prompt must be nonblank'),
     ({'system_prompt': ''}, 'system_prompt must be nonblank'),
     ({'network': 'lan'}, 'network must be'),
@@ -135,13 +139,14 @@ def test_the_literature_switch_and_its_limits_are_refused_and_earlier_formats_do
             account_job(literature=literature)
     for key in ('literature_searches', 'literature_search_results', 'literature_papers', 'literature_characters'):
         assert key not in box_agent.LIMITS
-        with pytest.raises(box_agent.AgentInputError, match=f'limits has no {key}; it accepts timeout_seconds, max_turns, max_budget_usd, tool_calls'):
+        with pytest.raises(box_agent.AgentInputError, match=f'limits has no {key}; it accepts timeout_seconds, max_turns, max_budget_usd, tool_calls, max_output_tokens'):
             frozen(limits={key: 4})
         with pytest.raises(box_agent.AgentInputError, match=f'limits has no {key}'):
             account_job(limits={key: 4})
     value = frozen()
     # An input frozen in an earlier format, or carrying the removed key or limits, does not run.
     for change in ({'format': 'reveal.agent-input/1'}, {'format': 'reveal.agent-input/2'}, {'format': 'reveal.agent-input/3'},
+                   {'format': 'reveal.agent-input/4'},
                    {'literature': False}, {'limits': {**value['limits'], 'literature_papers': 4}}):
         with pytest.raises(box_agent.AgentInputError):
             box_agent.validate_input({**value, **change})
@@ -151,6 +156,11 @@ def test_the_literature_switch_and_its_limits_are_refused_and_earlier_formats_do
             box_agent.validate_input({name: item for name, item in value.items() if name != key})
     with pytest.raises(box_agent.AgentInputError, match='limits'):
         box_agent.validate_input({**value, 'limits': {key: value['limits'][key] for key in ('timeout_seconds', 'max_turns', 'max_budget_usd')}})
+    # The limits of a /4 input, which had no max_output_tokens, do not validate under /5 either.
+    with pytest.raises(box_agent.AgentInputError, match='Invalid agent limits'):
+        box_agent.validate_input({**value, 'limits': {key: item for key, item in value['limits'].items() if key != 'max_output_tokens'}})
+    with pytest.raises(box_agent.AgentInputError, match='max_output_tokens'):
+        box_agent.validate_input({**value, 'limits': {**value['limits'], 'max_output_tokens': 128_001}})
     # Bounds the Box enforces follow the registry: 1,000 turns pass, 1,001 do not.
     assert box_agent.validate_input({**value, 'limits': {**value['limits'], 'max_turns': 1000}})
     with pytest.raises(box_agent.AgentInputError, match='max_turns'):
@@ -358,8 +368,19 @@ def test_key_proxy_swaps_in_the_real_key_and_streams_responses(upstream):
 
 def test_agent_environment_never_carries_the_real_key():
     proxy = SimpleNamespace(base_url='http://127.0.0.1:8766')
-    env = box_agent.agent_environment('/home/agent', '/usr/bin', proxy)
+    env = box_agent.agent_environment('/home/agent', '/usr/bin', proxy, 32000)
     assert env['ANTHROPIC_API_KEY'] == box_agent.KEY_PROXY_PLACEHOLDER and env['ANTHROPIC_BASE_URL'] == proxy.base_url
+
+
+def test_agent_environment_sets_claude_codes_output_cap_from_the_frozen_limit():
+    proxy = SimpleNamespace(base_url='http://127.0.0.1:8766')
+    env = box_agent.agent_environment('/home/agent', '/usr/bin', proxy, 64000)
+    assert box_agent.MAX_OUTPUT_TOKENS_ENV == 'CLAUDE_CODE_MAX_OUTPUT_TOKENS' and env['CLAUDE_CODE_MAX_OUTPUT_TOKENS'] == '64000'
+    # No thinking setting is added: Claude Code keeps a thinking budget below max_tokens itself.
+    assert not {name for name in env if 'THINKING' in name}
+    for bad in (None, 4095, 128_001, '64000', 64000.0, True):
+        with pytest.raises(box_agent.AgentInputError, match='output token limit'):
+            box_agent.agent_environment('/home/agent', '/usr/bin', proxy, bad)
 
 
 # Box bundle and bootstrap configuration ------------------------------------------------------------------
@@ -440,6 +461,9 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
     assert runtime['runtime_version'] == 'reveal.agent-runtime/1' and 'dapper' not in runtime
     assert runtime['agent'] == {'tools': ['Read', 'Write'], 'graphs': [], 'network': 'restricted',
                                 'allowed_domains': [], 'effort': 'medium', 'limits': value['limits'], 'claims_url': None}
+    # The output-token limit is what the runner sets as CLAUDE_CODE_MAX_OUTPUT_TOKENS, recorded in runtime.json.
+    assert runtime['execution_limits']['max_output_tokens'] == value['limits']['max_output_tokens'] == 128000
+    assert json.loads((tmp_path / 'reveal/state/runtime.json').read_bytes())['execution_limits']['max_output_tokens'] == 128000
     assert (work / 'agent-input.json').read_bytes() == canonical_json(value)
     # The repository address reaches the runner from the frozen bootstrap alone, and with it the tool.
     asked = frozen(claims_repository=True)
@@ -531,7 +555,7 @@ def test_a_job_over_the_old_hundred_turn_bound_passes_bootstrap_and_adapter_vali
 
 
 def test_an_input_frozen_in_an_earlier_format_fails_at_runner_setup(tmp_path):
-    for index, version in enumerate((1, 2, 3)):
+    for index, version in enumerate((1, 2, 3, 4)):
         with pytest.raises(box_agent.AgentInputError, match='Invalid agent input format'):
             runner_setup(tmp_path / str(index), {**frozen(), 'format': f'reveal.agent-input/{version}'})
 
@@ -631,6 +655,105 @@ def test_runner_failure_messages_name_the_agent_limits():
     assert 'while working on the prompt' in box_remote.deadline_reason(request)
 
 
+# What Claude Code 2.1.282 ends a run with when a response hit CLAUDE_CODE_MAX_OUTPUT_TOKENS and its continuations ran out.
+CAPPED = {'type': 'result', 'subtype': 'success', 'is_error': True, 'stop_reason': 'max_tokens', 'num_turns': 4, 'total_cost_usd': 0.42,
+          'result': "API Error: Claude's response exceeded the 32000 output token maximum. To configure this behavior, set the "
+                    'CLAUDE_CODE_MAX_OUTPUT_TOKENS environment variable.'}
+
+
+def test_a_response_over_the_output_token_limit_fails_with_a_reason_naming_the_limit_and_ceiling():
+    request = {'kind': 'agent', 'max_turns': 7, 'max_budget_usd': 1.5, 'timeout_seconds': 60}
+    reason = box_remote.provider_failure_reason(request, CAPPED, 32000)
+    assert reason == ('One response from the agent exceeded limits.max_output_tokens (32000 tokens). Ask for a higher limit, up to 128000, '
+                      'or ask for a shorter answer / have the agent write long output to output/ files.')
+    # Found in the result's errors too, or from the stop reason alone; a cap Claude Code lowered is named beside the limit.
+    assert box_remote.output_cap_reached({'is_error': True, 'errors': ['exceeded the 8192 output token maximum']}) == 8192
+    assert box_remote.output_cap_reached({'is_error': True, 'result': 'API Error', 'stop_reason': 'max_tokens'}) is True
+    assert box_remote.output_cap_reached({'is_error': True, 'result': 'API Error: overloaded', 'stop_reason': None}) is None
+    # A cap Claude Code held below the limit (the model's own maximum) is named, and a higher limit is not offered.
+    assert box_remote.provider_failure_reason(request, {**CAPPED, 'result': CAPPED['result'].replace('32000', '8192')}, 32000) == (
+        'One response from the agent exceeded limits.max_output_tokens (32000 tokens; Claude Code applied 8192). '
+        'Ask for a shorter answer / have the agent write long output to output/ files.')
+    # At the ceiling there is nothing higher to ask for.
+    assert box_agent.output_cap_reason(128000, 128000) == ('One response from the agent exceeded limits.max_output_tokens (128000 tokens). That is '
+                                                          'the most a request may ask for: ask for a shorter answer / have the agent write long '
+                                                          'output to output/ files.')
+    # Any other failure still names the configured value, in case a capped response is reported in an unrecognized form.
+    assert box_remote.provider_failure_reason(request, {'subtype': 'error_during_execution', 'is_error': True}, 32000) == (
+        'Claude execution failed: error_during_execution (limits.max_output_tokens was 32000 tokens per response)')
+    # The turn and budget limits keep their own messages; research runs are unchanged.
+    assert '7-turn limit' in box_remote.provider_failure_reason(request, {**CAPPED, 'subtype': 'error_max_turns'}, 32000)
+    assert 'max_output_tokens' not in box_remote.provider_failure_reason({**request, 'kind': 'research'}, CAPPED)
+
+
+def test_runtime_completion_records_the_output_token_limit_and_whether_a_response_exceeded_it():
+    request = {'kind': 'agent', 'max_turns': 7, 'max_budget_usd': 1.5, 'timeout_seconds': 60}
+    capped = box_remote.runtime_completion(request, time.monotonic(), 'failed', 'x', parser=SimpleNamespace(result=CAPPED, timing=None),
+                                           max_output_tokens=32000)
+    assert (capped['max_output_tokens'], capped['output_token_limit_reached'], capped['output_token_limit_applied']) == (32000, True, 32000)
+    other = box_remote.runtime_completion(request, time.monotonic(), 'failed', 'x',
+                                          parser=SimpleNamespace(result={'is_error': True, 'subtype': 'error_max_turns'}, timing=None),
+                                          max_output_tokens=32000)
+    assert (other['max_output_tokens'], other['output_token_limit_reached'], other['output_token_limit_applied']) == (32000, False, None)
+    done = box_remote.runtime_completion(request, time.monotonic(), 'succeeded', None,
+                                         parser=SimpleNamespace(result={'is_error': False, 'stop_reason': 'end_turn'}, timing=None),
+                                         max_output_tokens=64000)
+    assert (done['max_output_tokens'], done['output_token_limit_reached']) == (64000, False)
+    assert 'max_output_tokens' not in box_remote.runtime_completion({**request, 'kind': 'research'}, time.monotonic(), 'failed', 'x')
+
+
+def test_the_job_failure_names_the_operators_current_output_token_ceiling(tmp_path):
+    from reveal_backend.job_failures import authoring_failure
+    path = tmp_path / 'runtime.json'
+    path.write_text(json.dumps({'completion': {'max_output_tokens': 32000, 'output_token_limit_reached': True, 'output_token_limit_applied': 32000}}))
+    result = SimpleNamespace(runtime_manifest_path=path, reason='runner reason')
+    agent = SimpleNamespace(kind='agent', max_budget_usd=2)
+    failure = authoring_failure(result, agent, 64000)
+    assert failure == {'code': 'AGENT_OUTPUT_TOKENS_EXCEEDED', 'retryable': True, 'message':
+                       'One response from the agent exceeded limits.max_output_tokens (32000 tokens). Ask for a higher limit, up to 64000, '
+                       'or ask for a shorter answer / have the agent write long output to output/ files.'}
+    assert 'That is the most a request may ask for' in authoring_failure(result, agent, 32000)['message']
+    # Without the current ceiling the runner's own reason stands.
+    assert authoring_failure(result, agent)['message'] == 'runner reason'
+    path.write_text(json.dumps({'completion': {'max_output_tokens': 32000, 'output_token_limit_reached': False}}))
+    assert authoring_failure(result, agent, 64000) == {'code': 'AGENT_EXECUTION_FAILED', 'message': 'runner reason', 'retryable': True}
+
+
+def test_the_runner_starts_claude_with_the_frozen_output_token_limit_and_records_a_capped_response(tmp_path):
+    root = tmp_path / 'reveal'; state = root / 'state'; output = root / 'output'
+    root.mkdir(parents=True)
+    value = frozen(limits={'max_output_tokens': 32000})
+    (root / 'agent-input.json').write_bytes(canonical_json(value))
+    request = {'job_id': 'agent-job', 'attempt': 1, 'kind': 'agent', 'selected_graphs': [], 'claude_version': 'test', 'model': value['model'],
+               'max_turns': 50, 'max_budget_usd': 2.0, 'timeout_seconds': 900}
+    (root / 'request.json').write_text(json.dumps(request))
+    (root / 'credentials.json').write_text('{"ANTHROPIC_API_KEY":"offline-placeholder"}')
+    runtime = {'agent': {'tools': value['tools'], 'graphs': [], 'effort': 'medium', 'limits': value['limits']},
+               'execution_limits': {'timeout_seconds': 900, 'max_budget_usd': 2.0, 'max_turns': 50, 'max_output_tokens': 32000}}
+    process = SimpleNamespace(stdin=io.BytesIO(), stdout=object(), stderr=object(), pid=999999, returncode=1, poll=lambda: 1)
+    parser = SimpleNamespace(result=CAPPED, runtime={}, timing=None, finish=lambda: [])
+    selector = Mock(); selector.get_map.return_value = {}
+    proxy = SimpleNamespace(base_url='http://127.0.0.1:8766', shutdown=lambda: None)
+    user = SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid(), pw_dir=str(root))
+    popen = Mock(return_value=process)
+    with patch.multiple(box_remote, BASE=root, STATE=state, OUTPUT=output, SECRETS=(), RESEARCH=None), \
+            patch.object(box_remote.os, 'getuid', return_value=0), patch.object(box_remote.pwd, 'getpwnam', return_value=user), \
+            patch.object(box_remote, 'setup', return_value=(root, runtime, 'prompt')), patch.object(box_remote, 'serve', return_value=Mock()), \
+            patch.object(box_remote, 'KeyProxy', return_value=SimpleNamespace(start=lambda: proxy)), \
+            patch.object(box_remote, 'ClaudeStream', return_value=parser), \
+            patch.object(box_remote.subprocess, 'run', return_value=SimpleNamespace(stdout='test version')), \
+            patch.object(box_remote.subprocess, 'Popen', popen), \
+            patch.object(box_remote.selectors, 'DefaultSelector', return_value=selector):
+        box_remote.main()
+    env = popen.call_args.kwargs['env']
+    assert env['CLAUDE_CODE_MAX_OUTPUT_TOKENS'] == '32000' and env['ANTHROPIC_API_KEY'] == box_agent.KEY_PROXY_PLACEHOLDER
+    status = json.loads((state / 'status.json').read_text())
+    assert status['status'] == 'failed' and status['reason'].startswith('One response from the agent exceeded limits.max_output_tokens (32000 tokens).')
+    recorded = json.loads((state / 'runtime.json').read_text())
+    assert recorded['execution_limits']['max_output_tokens'] == 32000 and recorded['agent']['limits']['max_output_tokens'] == 32000
+    assert (recorded['completion']['max_output_tokens'], recorded['completion']['output_token_limit_reached']) == (32000, True)
+
+
 # Workflow ------------------------------------------------------------------------------------------------
 
 def test_job_kind_mapping():
@@ -649,7 +772,7 @@ class AgentWorkflow:
         self.queue = {'attempt': 1, 'inputs': self.value, 'dispatch_input': {'model': self.value['model']}}
         self.execution = {'box': {'box_id': 'box-1'}, 'capture_complete': True, 'cleanup_complete': True, 'authoring_attempt': 1}
 
-    def capture(self, *, response=True, status='succeeded', dapper=None):
+    def capture(self, *, response=True, status='succeeded', dapper=None, completion=None):
         source = self.root / 'agent-input.json'; source.write_bytes(canonical_json(self.value))
         output = self.root / 'attempt-1/output'
         (output / 'output').mkdir(parents=True); (output / 'ledger').mkdir()
@@ -657,6 +780,7 @@ class AgentWorkflow:
         self.request = ExecutionRequest(job_id='agent-job', attempt=1, kind='agent', input_path=source, output_dir=output)
         runtime = {'job_id': 'agent-job', 'attempt': 1, 'input_sha256': sha256(source.read_bytes()), 'model': self.value['model']}
         if dapper: runtime['dapper'] = dapper
+        if completion: runtime['completion'] = completion
         (output / 'runtime.json').write_bytes(canonical_json(runtime))
         (output / 'ledger/manifest.json').write_bytes(canonical_json(
             {'format': 'reveal.tool-ledger/1', 'job_id': 'agent-job', 'attempt': 1, 'complete': True, 'calls': []}))
@@ -692,6 +816,24 @@ def test_agent_validation_fails_without_a_response_record(workflow):
         asyncio.run(workflow.engine.validate(workflow.payload, 'fence', workflow.job, workflow.queue,
                                              workflow.execution, workflow.root, workflow.request, workflow.value))
     workflow.engine.checkpoint.assert_not_called()
+
+
+def test_a_failed_run_over_the_output_token_limit_names_the_consoles_current_ceiling(workflow, tmp_path):
+    repository = Repository(str(tmp_path / 'limits.sqlite')); repository.migrate()
+    with repository.transaction() as tx:
+        agent_limits.change(tx, {'expected_version': None, 'values': {'max_output_tokens': {'ceiling': 64000}}}, 'admin@example.org', {})
+    workflow.engine.repository = repository
+    workflow.capture(status='failed', completion={'status': 'failed', 'max_output_tokens': 32000, 'output_token_limit_reached': True,
+                                                  'output_token_limit_applied': 32000})
+    with patch('reveal_backend.workflow_execution.WorkflowExecution.record_agent_metrics'), \
+            patch.object(workflow_execution.jobs, 'finish') as finish:
+        result = asyncio.run(workflow.engine.validate(workflow.payload, 'fence', workflow.job, workflow.queue,
+                                                      workflow.execution, workflow.root, workflow.request, workflow.value))
+    assert result == {'next_phase': 'complete', 'done': True}
+    assert finish.call_args.args[3] == 'failed' and finish.call_args.kwargs['failure'] == {
+        'code': 'AGENT_OUTPUT_TOKENS_EXCEEDED', 'retryable': True,
+        'message': 'One response from the agent exceeded limits.max_output_tokens (32000 tokens). Ask for a higher limit, up to 64000, '
+                   'or ask for a shorter answer / have the agent write long output to output/ files.'}
 
 
 def test_agent_ledger_check_skips_only_the_dapper_release(workflow):
@@ -1311,6 +1453,27 @@ def test_admin_reads_and_changes_limits_and_the_next_job_is_frozen_with_them(ser
     # JSON has one number type: 30.0 passes the API schema and is the whole number 30.
     assert frozen(limits={'tool_calls': 30.0, 'max_turns': 7.0})['limits']['tool_calls'] == 30
     assert post_agent(service, limits={'tool_calls': 2000}).status_code == 202
+
+
+def test_a_request_sets_max_output_tokens_up_to_the_console_ceiling(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', '*')
+    monkeypatch.setenv('REVEAL_MAX_ACTIVE_JOBS', '10')
+    def frozen_limit(response):
+        assert response.status_code == 202, response.text
+        with service.repo.read_transaction() as tx:
+            return tx.get('queue', response.json()['id'])['data']['inputs']['limits']['max_output_tokens']
+    assert frozen_limit(post_agent(service)) == 128000
+    assert frozen_limit(post_agent(service, limits={'max_output_tokens': 32000})) == 32000
+    for value in (128001, 4095):
+        refused = post_agent(service, limits={'max_output_tokens': value})
+        assert refused.status_code == 422 and refused.json()['code'] == 'INVALID_REQUEST', refused.text
+    path = '/internal/v1/admin/agent-limits'
+    change = {'expected_version': None, 'values': {'max_output_tokens': {'default': 16000, 'ceiling': 64000}}}
+    assert service.client.put(path, json=change, headers=admin_headers(admin_email='admin@example.org')).status_code == 200
+    assert frozen_limit(post_agent(service)) == 16000
+    assert frozen_limit(post_agent(service, limits={'max_output_tokens': 64000})) == 64000
+    refused = post_agent(service, limits={'max_output_tokens': 64001})
+    assert refused.status_code == 422 and 'limits.max_output_tokens must be a whole number from 4096 to 64000' in refused.json()['detail']
 
 
 def test_admin_limit_changes_are_validated_fenced_and_need_their_own_authority(service):

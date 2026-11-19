@@ -93,7 +93,8 @@ def request_body(args):
     for name in ('network', 'effort', 'model'):
         if getattr(args, name): body[name] = getattr(args, name)
     limits = {key: value for key, value in (('timeout_seconds', args.timeout), ('max_turns', args.turns),
-                                            ('max_budget_usd', args.budget), ('tool_calls', args.tool_calls))
+                                            ('max_budget_usd', args.budget), ('tool_calls', args.tool_calls),
+                                            ('max_output_tokens', args.max_output_tokens))
               if value is not None}
     if limits: body['limits'] = limits
     return body
@@ -165,6 +166,8 @@ def main():
     parser.add_argument('--turns', type=int, help='Max turns (built-in default 50, ceiling 100)')
     parser.add_argument('--budget', type=float, help='Max dollars (built-in default 2, ceiling 5)')
     parser.add_argument('--tool-calls', type=int, help='Graph and claims-repository tool calls in all (built-in default 30)')
+    parser.add_argument('--max-output-tokens', type=int, help='Tokens Claude Code may generate in one response, '
+                        'CLAUDE_CODE_MAX_OUTPUT_TOKENS (built-in default 32000, ceiling 128000)')
     parser.add_argument('--job', help='Watch an existing job instead of submitting')
     parser.add_argument('--cancel', metavar='JOB_ID', help='Ask a running job to stop')
     parser.add_argument('--out', help='Also save the final answer to this file')

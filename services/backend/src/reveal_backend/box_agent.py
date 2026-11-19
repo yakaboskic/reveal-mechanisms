@@ -19,7 +19,7 @@ from .box_claims import base_url as claims_base_url, host as claims_host_of
 from .box_mcp import GRAPHS
 
 # The one agent input format. An earlier one is refused: a job queued under it fails at prepare.
-INPUT_FORMAT = 'reveal.agent-input/4'
+INPUT_FORMAT = 'reveal.agent-input/5'
 INPUT_FILENAME = 'agent-input.json'
 RESPONSE_FORMAT = 'reveal.agent-response/1'
 # The runner writes the response into the root-owned tool ledger, never into the agent-writable output.
@@ -53,7 +53,11 @@ LIMITS = {
     'max_budget_usd': {'type': float, 'minimum': 0, 'maximum': 1000, 'default': 2.0, 'ceiling': 5.0},
     # Calls to the scoped REVEAL tools (graph schema and query, claims-repository lookups), counted together.
     'tool_calls': {'type': int, 'minimum': 1, 'maximum': 5000, 'default': 30, 'ceiling': 300},
+    # The most Claude Code may generate in one model response, thinking included (CLAUDE_CODE_MAX_OUTPUT_TOKENS).
+    'max_output_tokens': {'type': int, 'minimum': 4096, 'maximum': 128_000, 'default': 128_000, 'ceiling': 128_000},
 }
+# The Claude Code environment variable that carries limits.max_output_tokens into the run.
+MAX_OUTPUT_TOKENS_ENV = 'CLAUDE_CODE_MAX_OUTPUT_TOKENS'
 TIMEOUT_RANGE = (LIMITS['timeout_seconds']['minimum'], LIMITS['timeout_seconds']['maximum'])
 DEFAULT_TIMEOUT_SECONDS = LIMITS['timeout_seconds']['default']
 DEFAULT_MAX_TURNS = LIMITS['max_turns']['default']
@@ -396,6 +400,20 @@ def validate_bootstrap_settings(settings):
     return settings
 
 
+def output_cap_reason(limit, ceiling, applied=None):
+    """Why an agent job failed when one response exceeded limits.max_output_tokens. ceiling is the most a request may
+    ask for, or None when unknown; applied is the cap Claude Code reported, when it differs from the limit."""
+    reason = f'One response from the agent exceeded limits.max_output_tokens ({limit} tokens'
+    reason += f'; Claude Code applied {applied}).' if type(applied) is int and applied != limit else ').'
+    # Claude Code held the run below its limit (the model's own maximum): a higher limit would not apply either.
+    if type(applied) is int and applied < limit:
+        return reason + ' Ask for a shorter answer / have the agent write long output to output/ files.'
+    if type(ceiling) is int and limit >= ceiling:
+        return reason + ' That is the most a request may ask for: ask for a shorter answer / have the agent write long output to output/ files.'
+    return reason + (f' Ask for a higher limit, up to {ceiling},' if type(ceiling) is int else ' Ask for a higher limit,') \
+        + ' or ask for a shorter answer / have the agent write long output to output/ files.'
+
+
 def response_record(job_id, attempt, status, result, secrets=()):
     """The trusted record of the agent's final answer, from Claude Code's terminal stream result."""
     answer = result.get('result') if isinstance(result, dict) else None
@@ -516,7 +534,10 @@ class KeyProxy:
             self.server.shutdown(); self.server.server_close(); self.server = None
 
 
-def agent_environment(home, path, proxy):
-    """The Claude Code process environment: the proxy address and a placeholder key, never the real key."""
+def agent_environment(home, path, proxy, max_output_tokens):
+    """The Claude Code process environment: the proxy address and a placeholder key, never the real key, and the
+    job's limits.max_output_tokens as Claude Code's per-response output cap."""
+    require(limit_value('max_output_tokens', max_output_tokens), 'Invalid agent output token limit')
     return {'PATH': path, 'HOME': home, 'ANTHROPIC_BASE_URL': proxy.base_url, 'ANTHROPIC_API_KEY': KEY_PROXY_PLACEHOLDER,
-            'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1', 'DISABLE_AUTOUPDATER': '1'}
+            'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1', 'DISABLE_AUTOUPDATER': '1',
+            MAX_OUTPUT_TOKENS_ENV: str(max_output_tokens)}

@@ -58,7 +58,7 @@ No new tables or required migrations are introduced. Optional migration `007_adm
 ## Agent job limits
 
 The **Limits** tab sets the per-run limits of [general agent jobs](agent-jobs.md#limits): run time, turns,
-budget, tool calls, paper searches, results per search, papers read and paper text. Each has a default (what a
+budget, REVEAL tool calls and output per response (Claude Code's `CLAUDE_CODE_MAX_OUTPUT_TOKENS`). Each has a default (what a
 request gets when it names none) and a ceiling (the most a request may ask for).
 
 - Each row shows the value in force and where it comes from: the console, a named environment variable, or the

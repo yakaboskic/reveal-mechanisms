@@ -8,9 +8,9 @@ import { AdminAgentJobsView, AgentRunDetail } from "../src/components/AdminAgent
 const noResult: AgentRun["result"] = { response_truncated: null, response_characters: null, files: null, account_id: null, objects: null, claims: null,
   quotes: null, papers: null, lint_warnings: null, dapper_version: null, deposit_status: null, deposit_id: null, deposit_reason: null, deposit_http_status: null };
 const accountRun: AgentRun = {
-  deliverable: "scientific_account", input_format: "reveal.agent-input/4", model: "claude-opus-5-5", effort: "medium",
+  deliverable: "scientific_account", input_format: "reveal.agent-input/5", model: "claude-opus-5-5", effort: "medium",
   tools: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"], graphs: [], network: "open", allowed_domains: [], claims_repository: true,
-  limits: { timeout_seconds: 3600, max_turns: 999, max_budget_usd: 5, tool_calls: 90 },
+  limits: { timeout_seconds: 3600, max_turns: 999, max_budget_usd: 5, tool_calls: 90, max_output_tokens: 64000 },
   attribute_requester: false, prompt_characters: 1344, system_prompt_characters: null, question_characters: 143, claims_requested: 3, claims_with_triple: 3,
   result: { ...noResult, response_truncated: false, response_characters: 3111, files: 5, account_id: "dapper:ScientificAccount.wF3k", objects: 37, claims: 3, quotes: 6, papers: 5,
     lint_warnings: 1, dapper_version: "0.2.1-a1", deposit_status: "deposited", deposit_id: "dep_01a1e52fa3c2b989bcafce5d37f4feb4" },
@@ -67,13 +67,13 @@ test("the job detail says where the owner's account is read from", () => {
 test("the agent jobs view shows type, settings, usage and deposit for each job", () => {
   const html = renderToStaticMarkup(React.createElement(AdminAgentJobsView, { agents, kinds: [{ kind: "analysis", count: 46 }, { kind: "agent", count: 4 }], onSelect() {} }));
   for (const text of ["Scientific account", "Answer", "46 research runs · 4 agent jobs", "1 deposited", "1 succeeded without a deposit", "Deposit failed: rejected (HTTP 422)",
-    "3 claims to assess, 3 with a triple", "49 of 999 turns", "48 tool calls, 7 failed", "90 REVEAL tool calls", "37 objects",
+    "3 claims to assess, 3 with a triple", "49 of 999 turns", "48 tool calls, 7 failed", "90 REVEAL tool calls", "64,000 output tokens per response", "37 objects",
     "VALIDATION_FAILED", "No built-in tools", "12,161 characters", "Not applicable", "claims repository · open network",
     "No claims repository, graphs or extra hosts"]) assert.ok(html.includes(text), text);
   assert.ok(!/literature|Paper search|searches ×|before job types existed/.test(html));
   // The sparse job never recorded these, so the view does not print a value for them.
   const row = html.slice(html.indexOf("09f4db0c"), html.indexOf("</tr>", html.indexOf("09f4db0c")));
-  assert.ok(!/searches|REVEAL tool calls|claims? to assess|lint checks/.test(row), row);
+  assert.ok(!/searches|REVEAL tool calls|output tokens|claims? to assess|lint checks/.test(row), row);
 });
 
 test("an empty window says so", () => {
@@ -85,11 +85,13 @@ test("the job detail lists how the job was run and never a value the input lacks
   const html = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: accountRun, job: deposited }));
   for (const text of ["How this agent job was run · Scientific account", "Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch", "1,344 characters · no system prompt", "3 claims to assess, 3 with a triple",
     "Deposited", "dep_01a1e52fa3c2b989bcafce5d37f4feb4", "dapper:ScientificAccount.wF3k", "37 objects · 3 claims · 6 quotes · 5 papers · 1 lint warning · DAPPER 0.2.1-a1",
-    "$5.00", "1.0h", "<dt>REVEAL tool calls</dt><dd>90</dd>", "open"]) assert.ok(html.includes(text), text);
+    "$5.00", "1.0h", "<dt>REVEAL tool calls</dt><dd>90</dd>", "<dt>Output per response</dt><dd>64,000 tokens</dd>", "open"]) assert.ok(html.includes(text), text);
   assert.ok(!html.includes("Paper search") && !html.includes("Papers read"));
   const old = renderToStaticMarkup(React.createElement(AgentRunDetail, { run: sparseRun, job: sparse }));
   assert.ok(old.includes("How this agent job was run · Answer"));
-  assert.equal(old.match(/Not part of this input/g)?.length, 1);
+  // An input frozen before these limits existed lacks tool_calls and max_output_tokens.
+  assert.equal(old.match(/Not part of this input/g)?.length, 2);
+  assert.ok(old.includes("<dt>Output per response</dt><dd>Not part of this input</dd>"));
   assert.ok(old.includes("<dt>Claims repository lookups</dt><dd>—</dd>"));
   assert.ok(!old.includes("Deposit"));
 });

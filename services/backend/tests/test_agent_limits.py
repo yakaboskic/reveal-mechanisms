@@ -117,3 +117,42 @@ def test_a_saved_record_naming_a_removed_limit_is_ignored_and_its_history_kept(r
     assert changed['history'][0]['changes'] == {'tool_calls': {'default': [None, 40]}}
     with repo.read_transaction() as tx:
         assert set(tx.get(agent_limits.KIND, agent_limits.IDENTITY)['data']['values']) == {'max_turns', 'tool_calls'}
+
+
+def test_output_tokens_per_response_is_a_limit_with_its_own_default_ceiling_and_range(repo):
+    spec = box_agent.LIMITS['max_output_tokens']
+    assert (spec['type'], spec['minimum'], spec['maximum'], spec['default'], spec['ceiling']) == (int, 4096, 128_000, 128_000, 128_000)
+    assert agent_limits.environment_name('max_output_tokens', 'default') == 'REVEAL_AGENT_JOB_DEFAULT_OUTPUT_TOKENS'
+    assert agent_limits.environment_name('max_output_tokens', 'ceiling') == 'REVEAL_AGENT_JOB_MAX_OUTPUT_TOKENS'
+    with repo.read_transaction() as tx:
+        row = next(limit for limit in agent_limits.view(tx, {})['limits'] if limit['key'] == 'max_output_tokens')
+    assert (row['label'], row['unit'], row['type'], row['minimum'], row['maximum']) == ('Output per response', 'tokens', 'integer', 4096, 128_000)
+    assert 'CLAUDE_CODE_MAX_OUTPUT_TOKENS' in row['description']
+    assert row['default']['value'] == 128_000 and row['ceiling']['value'] == 128_000
+    # The environment sets it as it does the others, and an out-of-range value is ignored.
+    with repo.read_transaction() as tx:
+        assert agent_limits.policy(tx, {'REVEAL_AGENT_JOB_DEFAULT_OUTPUT_TOKENS': '16000', 'REVEAL_AGENT_JOB_MAX_OUTPUT_TOKENS': '200000'}
+                                   )['max_output_tokens'] == {'default': 16_000, 'ceiling': 128_000}
+    with repo.transaction() as tx:
+        for value in (4095, 128_001, 64_000.5):
+            with pytest.raises(agent_limits.LimitsError, match='Output per response ceiling must be a whole number from 4096 to 128000'):
+                agent_limits.change(tx, {'expected_version': None, 'values': {'max_output_tokens': {'ceiling': value}}}, 'admin@example.org', {})
+
+
+def test_a_console_change_to_output_tokens_reaches_the_frozen_input_and_bounds_a_request(repo):
+    body = {'kind': 'agent', 'prompt': 'x'}
+    with repo.transaction() as tx:
+        agent_limits.change(tx, {'expected_version': None, 'values': {'max_output_tokens': {'default': 48_000, 'ceiling': 64_000}}},
+                            'admin@example.org', {})
+    with repo.read_transaction() as tx:
+        policy = agent_limits.policy(tx, {})
+    assert agent_limits.ceiling(repo, 'max_output_tokens', {}) == 64_000
+    assert box_agent.freeze_input(body, policy=policy)['limits']['max_output_tokens'] == 48_000
+    assert box_agent.freeze_input({**body, 'limits': {'max_output_tokens': 64_000}}, policy=policy)['limits']['max_output_tokens'] == 64_000
+    assert box_agent.freeze_input({**body, 'limits': {'max_output_tokens': 8000}}, policy=policy)['limits']['max_output_tokens'] == 8000
+    with pytest.raises(box_agent.AgentInputError, match='limits.max_output_tokens must be a whole number from 4096 to 64000'):
+        box_agent.freeze_input({**body, 'limits': {'max_output_tokens': 64_001}}, policy=policy)
+    # An account job gets the default too: only run time and turns default to their ceiling there.
+    from test_agent_jobs import fake_account
+    account = box_agent.freeze_input({**body, 'deliverable': 'scientific_account', 'question': 'Why?'}, policy=policy, account_builder=fake_account)
+    assert account['limits']['max_output_tokens'] == 48_000

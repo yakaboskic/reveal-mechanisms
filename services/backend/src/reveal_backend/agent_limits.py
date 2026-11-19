@@ -23,6 +23,8 @@ LABELS = {
     'max_turns': ('Turns', 'turns', 'Claude Code turns in one run.'),
     'max_budget_usd': ('Budget', 'USD', 'Provider cost of one run.'),
     'tool_calls': ('REVEAL tool calls', 'calls', 'Graph and claims-repository tool calls, counted together.'),
+    'max_output_tokens': ('Output per response', 'tokens', 'The most Claude Code may generate in one model response, thinking '
+                          'included (CLAUDE_CODE_MAX_OUTPUT_TOKENS). A response that reaches it fails the job.'),
 }
 
 
@@ -98,10 +100,15 @@ def policy(tx, environ=None):
     return {key: {field: entry[field]['value'] for field in FIELDS} for key, entry in resolve(console_values(data), environ).items()}
 
 
+def ceiling(repository, key, environ=None):
+    """One limit's current ceiling."""
+    with repository.read_transaction() as tx:
+        return policy(tx, environ)[key]['ceiling']
+
+
 def budget_ceiling(repository, environ=None):
     """The current budget ceiling, for the dispatch-time clamp of a queued job's frozen budget."""
-    with repository.read_transaction() as tx:
-        return policy(tx, environ)['max_budget_usd']['ceiling']
+    return ceiling(repository, 'max_budget_usd', environ)
 
 
 def view(tx, environ=None):

@@ -208,6 +208,36 @@ test("flags from the server and the change history are spelled out", () => {
   assert.match(renderToStaticMarkup(React.createElement(LimitsHistory, { view: { ...view, history: [] } })), /No change has been saved from this console yet\./);
 });
 
+// As agent_limits.view sends it: Claude Code's per-response output cap, CLAUDE_CODE_MAX_OUTPUT_TOKENS.
+const output: AgentLimit = {
+  key: "max_output_tokens", label: "Output per response", unit: "tokens",
+  description: "The most Claude Code may generate in one model response, thinking included (CLAUDE_CODE_MAX_OUTPUT_TOKENS). A response that reaches it fails the job.",
+  type: "integer", minimum: 4096, exclusive_minimum: false, maximum: 128000, code: { default: 32000, ceiling: 128000 }, console: { default: null, ceiling: 64000 },
+  default: { value: 32000, source: "code", environment: "REVEAL_AGENT_JOB_DEFAULT_OUTPUT_TOKENS" },
+  ceiling: { value: 64000, source: "console", environment: "REVEAL_AGENT_JOB_MAX_OUTPUT_TOKENS" },
+};
+
+test("the output-per-response limit is a row like the others, bounded by its supported range", () => {
+  const withOutput = { ...view, limits: [...view.limits, output] };
+  const fields = limitFields(withOutput);
+  assert.deepEqual(fields.max_output_tokens, { default: "", ceiling: "64000" });
+  const html = renderToStaticMarkup(React.createElement(LimitsTable, { view: withOutput, fields, errors: {}, changed: [], disabled: false, onChange() {} }));
+  assert.match(html, /<strong>Output per response<\/strong><small>The most Claude Code may generate in one model response, thinking included \(CLAUDE_CODE_MAX_OUTPUT_TOKENS\)\./);
+  assert.match(html, /<strong class="admin-limit-value">32,000<\/strong> tokens<small>Built-in<\/small>/);
+  assert.match(html, /<strong class="admin-limit-value">64,000<\/strong> tokens<small>Set in this console<\/small>/);
+  assert.match(html, /Whole number<small>4,096 to 128,000<\/small>/);
+  assert.ok(html.includes('aria-label="Output per response ceiling, in tokens"'));
+  assert.deepEqual(parseLimit(output, "4096"), { value: 4096 });
+  assert.deepEqual(parseLimit(output, "128000"), { value: 128000 });
+  for (const text of ["4095", "128001", "0"]) assert.deepEqual(parseLimit(output, text), { error: "Enter a whole number from 4,096 to 128,000." }, text);
+  // The default may not pass the ceiling set here, and saving sends the new value with the others.
+  const form = limitsForm(withOutput, { ...fields, max_output_tokens: { default: "96000", ceiling: "64000" } });
+  assert.deepEqual(form.errors, { "max_output_tokens.default": "The default 96,000 is above the ceiling 64,000." });
+  const raised = limitsForm(withOutput, { ...fields, max_output_tokens: { default: "48000", ceiling: "64000" } });
+  assert.deepEqual(raised.changed, ["max_output_tokens.default"]);
+  assert.deepEqual(raised.values.max_output_tokens, { default: 48000, ceiling: 64000 });
+});
+
 test("the tab announces loading before its own request returns and is hidden while another tab is open", () => {
   const open = renderToStaticMarkup(React.createElement(AdminLimits, { active: true }));
   assert.match(open, /^<section class="admin-limits" aria-label="General agent job limits">/);

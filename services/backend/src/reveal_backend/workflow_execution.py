@@ -714,8 +714,11 @@ class WorkflowExecution:
                 await run_sync(self.activity, payload, token, 'stage', {
                     'stage': authoring_stage(job['kind']),
                     'state': 'failed', 'message': 'Agent execution did not finish. Its partial output and diagnostics have been preserved.'})
+            # A response over limits.max_output_tokens is reported with the ceiling a new request may ask for now.
+            ceiling = (await run_sync(agent_limits.ceiling, self.repository, 'max_output_tokens')
+                       if job['kind'] == 'agent' and result.status == 'failed' else None)
             await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
-                                   failure=authoring_failure(result, request) if result.status == 'failed' else None)
+                                   failure=authoring_failure(result, request, ceiling) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}
         if job['kind'] == 'agent':
             await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking the captured run and its tool ledger.'})

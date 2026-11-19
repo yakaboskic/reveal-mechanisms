@@ -25,7 +25,11 @@ def extend(b, f, e):
         'max_turns': 'Claude Code turns.',
         'max_budget_usd': 'Provider cost of the run in US dollars.',
         'tool_calls': 'Calls to the scoped REVEAL tools (the graph tools and query_claims), counted together. '
-                      'When they are used up the agent is told and can still finish.'}
+                      'When they are used up the agent is told and can still finish.',
+        'max_output_tokens': 'The most Claude Code may generate in one model response, thinking included; passed to Claude Code '
+                             'as CLAUDE_CODE_MAX_OUTPUT_TOKENS. A response that reaches it (after Claude Code\'s own attempts to '
+                             'continue) fails the job, and the failure names this limit and the ceiling. For long output, raise it '
+                             'or have the agent write files under output/.'}
     def limit(key):
         spec = LIMITS[key]
         if spec['type'] is int:
@@ -34,7 +38,8 @@ def extend(b, f, e):
             schema = {'type': 'number', 'exclusiveMinimum': spec['minimum'], 'maximum': spec['maximum'], 'default': spec['default']}
         return {**schema, 'description': meaning[key]}
     b.add('AgentJobLimits', obj({key: limit(key) for key in LIMITS}, [], description=
-        'Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd. Each limit has a default, used '
+        'Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd, or when one response exceeds '
+        'max_output_tokens (CLAUDE_CODE_MAX_OUTPUT_TOKENS). Each limit has a default, used '
         'when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 '
         'and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the '
         'built-in ones and the range the service supports.'))
@@ -210,7 +215,7 @@ def extend(b, f, e):
         'E-utilities, look up LEPR\'s known drugs in the Open Targets GraphQL API, and save a short summary as output/summary.md.',
         'system_prompt': 'Be concise. Cite PMIDs.', 'tools': ['Read', 'Write', 'Bash'],
         'allowed_domains': ['api.platform.opentargets.org', 'eutils.ncbi.nlm.nih.gov'],
-        'limits': {'timeout_seconds': 600, 'max_turns': 30, 'max_budget_usd': 1}}
+        'limits': {'timeout_seconds': 600, 'max_turns': 30, 'max_budget_usd': 1, 'max_output_tokens': 64000}}
     operation['requestBody']['content']['application/json']['examples']['agent'] = {'summary': 'General agent', 'value': request}
     account = {'kind': 'agent', 'deliverable': 'scientific_account',
         'prompt': 'Build the account from open-access papers. Prefer primary studies in mice and humans; say what was not read.',

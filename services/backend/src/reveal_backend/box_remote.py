@@ -21,8 +21,8 @@ import threading
 import time
 
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
-                        KeyProxy, agent_environment, deliverable_of as agent_deliverable, response_record, schema_of,
-                        validate_input as validate_agent_input)
+                        LIMITS as AGENT_LIMITS, KeyProxy, agent_environment, deliverable_of as agent_deliverable,
+                        output_cap_reason, response_record, schema_of, validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
 from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
 from .box_timing import RuntimeTiming, provider_metrics
@@ -242,6 +242,9 @@ def setup(request):
                     'job_id': request['job_id'], 'attempt': request['attempt'],
                     'execution_limits': {k: request[k] for k in ['timeout_seconds', 'max_budget_usd', 'max_turns']},
                     'input_sha256': request['input_sha256']})
+    if request['kind'] == 'agent':
+        # Set as CLAUDE_CODE_MAX_OUTPUT_TOKENS for the Claude process (box_agent.agent_environment).
+        runtime['execution_limits']['max_output_tokens'] = runtime['agent']['limits']['max_output_tokens']
     runtime['validation_feedback_sha256'] = hashlib.sha256(canonical(request.get('validation_feedback', []))).hexdigest()
     if request['kind'] == 'research' or runtime.get('deliverable') == 'scientific_account':
         executor_id = 'urn:reveal:runtime:executor'
@@ -597,7 +600,24 @@ def observable_activity(kind, payload, call, previous=None):
     return value
 
 
-def provider_failure_reason(request, result):
+# Claude Code (2.1.282) ends a run whose response hit CLAUDE_CODE_MAX_OUTPUT_TOKENS, after its own continuation retries,
+# with an API error result: no result subtype of its own, the text below in `result` and `stop_reason` "max_tokens".
+OUTPUT_CAP = re.compile(r"exceeded the (\d+) output token maximum")
+
+
+def output_cap_reached(result):
+    """Whether a failed Claude result says one response hit the output-token cap: the cap Claude Code reports, True
+    when it names none, or None."""
+    if not isinstance(result, dict): return None
+    texts = [result.get('result'), *(result.get('errors') if isinstance(result.get('errors'), list) else [])]
+    for text in texts:
+        found = OUTPUT_CAP.search(text) if isinstance(text, str) else None
+        if found: return int(found.group(1))
+    return True if result.get('stop_reason') == 'max_tokens' else None
+
+
+def provider_failure_reason(request, result, max_output_tokens=None):
+    """max_output_tokens: an agent job's frozen limits.max_output_tokens, named when a response exceeded it."""
     if request['kind'] == 'agent':
         if result.get('subtype') == 'error_max_turns':
             return f"The agent reached its {request['max_turns']}-turn limit before finishing."
@@ -605,7 +625,12 @@ def provider_failure_reason(request, result):
             return f"The agent reached its ${request['max_budget_usd']:g} budget before finishing."
         if result.get('subtype') == 'error_max_structured_output_retries':
             return 'The agent could not produce an answer that satisfies output_schema, after the retries Claude Code allows.'
-        return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
+        reached = output_cap_reached(result)
+        if reached is not None and max_output_tokens is not None:
+            return output_cap_reason(max_output_tokens, AGENT_LIMITS['max_output_tokens']['maximum'], reached)
+        reason = 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
+        # Named in case Claude Code reports a capped response in a form output_cap_reached does not recognize.
+        return reason + (f' (limits.max_output_tokens was {max_output_tokens} tokens per response)' if max_output_tokens is not None else '')
     if result.get('subtype') == 'error_max_turns':
         return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
                 'No scientific result was accepted. Retry the analysis to start a new attempt with the current execution limits.')
@@ -614,8 +639,10 @@ def provider_failure_reason(request, result):
     return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
 
 
-def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None, timing=None):
-    """Safe terminal metrics, including deadline exits without provider usage."""
+def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None, timing=None,
+                       max_output_tokens=None):
+    """Safe terminal metrics, including deadline exits without provider usage. max_output_tokens: an agent job's
+    limits.max_output_tokens, recorded with whether a failed run's response exceeded it."""
     result = parser.result if parser else None
     reported = provider_metrics(result)
     summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
@@ -629,6 +656,11 @@ def runtime_completion(request, started, status, reason, process=None, parser=No
                'cost_usd': reported['cost_usd'],
                'provider_reported': reported,
                'last_observable_activity': last_activity}
+    if max_output_tokens is not None:
+        reached = output_cap_reached(result) if status == 'failed' and isinstance(result, dict) and result.get('is_error') is True else None
+        summary.update({'max_output_tokens': max_output_tokens, 'output_token_limit_reached': reached is not None,
+                        # The cap Claude Code said it applied, when it named one.
+                        'output_token_limit_applied': reached if type(reached) is int else None})
     timing = timing if timing is not None else getattr(parser, 'timing', None)
     if timing is not None:
         summary['timing'] = timing.snapshot()
@@ -818,7 +850,8 @@ def main():
         if agent:
             # The agent may run shell commands and reach the open network, so it never holds the API key.
             proxy = KeyProxy(credentials['ANTHROPIC_API_KEY']).start()
-            env = agent_environment(user.pw_dir, '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', proxy)
+            env = agent_environment(user.pw_dir, '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', proxy,
+                                    runtime['agent']['limits']['max_output_tokens'])
         else:
             env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
                    'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
@@ -901,7 +934,7 @@ def main():
             for kind, payload in parser.finish():
                 emit(kind, payload)
             if process.returncode != 0 or parser.result.get('is_error'):
-                reason = provider_failure_reason(request, parser.result)
+                reason = provider_failure_reason(request, parser.result, runtime['agent']['limits']['max_output_tokens'] if agent else None)
             else:
                 status = 'succeeded'
                 # A general agent's output/ is its own; only research writes a structured outcome there.
@@ -940,7 +973,8 @@ def main():
             RESEARCH.freeze()
         ledger.freeze()
         if runtime is not None:
-            completion = runtime_completion(request, started, status, reason, process, parser, last_activity, timing)
+            completion = runtime_completion(request, started, status, reason, process, parser, last_activity, timing,
+                                            runtime['agent']['limits']['max_output_tokens'] if agent else None)
             runtime['completed_at'], runtime['cost_usd'] = completion['completed_at'], completion['cost_usd']
             runtime['completion'] = completion
             runtime['timing_checkpoint'] = {'recorded_at': completion['completed_at'], 'timing': completion['timing'],

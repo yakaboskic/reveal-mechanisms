@@ -31,11 +31,21 @@ def review_failure(exc):
                        'Generated output is retained; you can retry review without rerunning research.'}
 
 
-def authoring_failure(result, request):
+def authoring_failure(result, request, output_tokens_ceiling=None):
+    """output_tokens_ceiling: for an agent job, the current ceiling of limits.max_output_tokens (agent_limits), named
+    when one response exceeded the job's limit."""
     from .evidence_package import decode
     try:
         runtime = decode(result.runtime_manifest_path.read_bytes()) if result.runtime_manifest_path else {}
         completion = runtime.get('completion', {})
+        limit = completion.get('max_output_tokens')
+        if getattr(request, 'kind', None) == 'agent' and completion.get('output_token_limit_reached') is True and type(limit) is int:
+            from .box_agent import output_cap_reason
+            # The runner named the code's ceiling; the operator's current one is what a new request may ask for.
+            message = (output_cap_reason(limit, output_tokens_ceiling, completion.get('output_token_limit_applied'))
+                       if type(output_tokens_ceiling) is int else result.reason)
+            return {'code': 'AGENT_OUTPUT_TOKENS_EXCEEDED', 'retryable': True,
+                    'message': message or output_cap_reason(limit, None)}
         if completion.get('provider_result_subtype') == 'error_max_budget_usd':
             limit = amount(completion.get('max_budget_usd')) or request.max_budget_usd
             spent = amount(completion.get('cost_usd'))

@@ -118,12 +118,12 @@ class AdminTelemetryTests(unittest.TestCase):
 
 SENTINELS = ('PROMPT-TEXT', 'SYSTEM-TEXT', 'QUESTION-TEXT', 'CLAIM-TEXT', 'PACKAGE-TEXT', 'REQUESTER-NAME', '0000-0002-1825-0097',
              'RESPONSE-TEXT', 'DOCUMENT-TEXT', 'REQUESTED-TEXT', 'DEPOSIT-DETAIL', 'STORED-PATH')
-LIMITS = {'timeout_seconds': 3600, 'max_turns': 999, 'max_budget_usd': 5.0, 'tool_calls': 90}
+LIMITS = {'timeout_seconds': 3600, 'max_turns': 999, 'max_budget_usd': 5.0, 'tool_calls': 90, 'max_output_tokens': 64000}
 ACCOUNT_TOOLS = ['Read', 'Write', 'Edit', 'Glob', 'Grep', 'Bash', 'WebSearch', 'WebFetch']
 
 
 def account_inputs(claims=3, triples=2):
-    return {'format': 'reveal.agent-input/4', 'prompt': 'PROMPT-TEXT ' + 'x' * 88, 'system_prompt': 'SYSTEM-TEXT',
+    return {'format': 'reveal.agent-input/5', 'prompt': 'PROMPT-TEXT ' + 'x' * 88, 'system_prompt': 'SYSTEM-TEXT',
             'tools': list(ACCOUNT_TOOLS), 'graphs': [], 'network': 'open',
             'allowed_domains': [], 'effort': 'medium', 'model': 'claude-opus-5-5', 'limits': dict(LIMITS),
             'deliverable': 'scientific_account', 'claims_repository': True,
@@ -134,9 +134,9 @@ def account_inputs(claims=3, triples=2):
 
 
 def answer_inputs():
-    return {'format': 'reveal.agent-input/4', 'prompt': 'PROMPT-TEXT', 'system_prompt': None, 'tools': ['Read', 'Bash'],
+    return {'format': 'reveal.agent-input/5', 'prompt': 'PROMPT-TEXT', 'system_prompt': None, 'tools': ['Read', 'Bash'],
             'graphs': ['kg-one'], 'network': 'open', 'allowed_domains': ['example.org'], 'effort': 'high',
-            'model': 'claude-opus-5-5', 'limits': {'timeout_seconds': 600, 'max_turns': 20, 'max_budget_usd': 1.0, 'tool_calls': 30},
+            'model': 'claude-opus-5-5', 'limits': {'timeout_seconds': 600, 'max_turns': 20, 'max_budget_usd': 1.0, 'tool_calls': 30, 'max_output_tokens': 32000},
             'deliverable': 'answer', 'account': None, 'claims_repository': False}
 
 
@@ -196,7 +196,8 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
                                                'response_truncated': True, 'files': []})
         # A queued answer job with no built-in tools on the restricted network.
         ids['plain'] = self.agent_job({**answer_inputs(), 'tools': [], 'graphs': [], 'network': 'restricted', 'allowed_domains': [],
-                                       'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30}})
+                                       'limits': {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30,
+                                                  'max_output_tokens': 32000}})
         with self.repo.transaction() as tx:
             ids['analysis'] = jobs.enqueue(tx, 'owner', 'analysis', inputs={'note': 'PACKAGE-TEXT'})['id']
         return ids
@@ -221,11 +222,13 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
         run = rows[ids['deposited']]['agent']
         self.assertEqual({key: run[key] for key in ('deliverable', 'input_format', 'model', 'effort', 'tools', 'graphs',
                                                     'network', 'allowed_domains', 'claims_repository', 'attribute_requester')},
-                         {'deliverable': 'scientific_account', 'input_format': 'reveal.agent-input/4', 'model': 'claude-opus-5-5',
+                         {'deliverable': 'scientific_account', 'input_format': 'reveal.agent-input/5', 'model': 'claude-opus-5-5',
                           'effort': 'medium', 'tools': ACCOUNT_TOOLS, 'graphs': [],
                           'network': 'open', 'allowed_domains': [], 'claims_repository': True, 'attribute_requester': False})
         self.assertNotIn('literature', run)
+        # Every limit the job was given, the output-token cap included.
         self.assertEqual(run['limits'], LIMITS)
+        self.assertEqual(run['limits']['max_output_tokens'], 64000)
         self.assertEqual([run[key] for key in ('prompt_characters', 'system_prompt_characters', 'question_characters',
                                                'claims_requested', 'claims_with_triple')], [100, 11, 14, 3, 2])
         self.assertIsNone(run['output_schema_characters'])                # an account job never asks for structured output
@@ -257,8 +260,8 @@ class AgentJobTelemetryTests(AdminTelemetryTests):
                          [True, 13, 0, None, None])
         plain = rows[ids['plain']]['agent']
         self.assertEqual([plain[key] for key in ('deliverable', 'input_format', 'tools', 'network', 'claims_repository', 'limits')],
-                         ['answer', 'reveal.agent-input/4', [], 'restricted', False,
-                          {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30}])
+                         ['answer', 'reveal.agent-input/5', [], 'restricted', False,
+                          {'timeout_seconds': 900, 'max_turns': 50, 'max_budget_usd': 2.0, 'tool_calls': 30, 'max_output_tokens': 32000}])
 
     def test_claims_frozen_as_plain_statements_count_as_claims_without_a_triple(self):
         inputs = account_inputs()

@@ -46,7 +46,7 @@ EOF
 | `deliverable`, `question`, `claims` | `answer` | See [Return a Scientific Account](#return-a-scientific-account). |
 | `effort` | `medium` | `low`, `medium` or `high`. |
 | `model` | `REVEAL_AGENT_JOB_MODEL` | A Claude model id. |
-| `limits` | see [Limits](#limits) | Run time, turns, budget and the REVEAL tool-call allowance. |
+| `limits` | see [Limits](#limits) | Run time, turns, budget, the REVEAL tool-call allowance and output per response. |
 
 To let an agent search PubMed and query a GraphQL API without opening the whole network, give it Bash and
 those two hosts:
@@ -58,7 +58,7 @@ those two hosts:
  "allowed_domains": ["eutils.ncbi.nlm.nih.gov", "api.platform.opentargets.org"]}
 ```
 
-The request is frozen into the job when it is queued (`reveal.agent-input/4`), with every default filled
+The request is frozen into the job when it is queued (`reveal.agent-input/5`), with every default filled
 in, so the stored input says exactly what ran. A request that sends `literature` or a `literature_*` limit is refused
 with `422`: agents fetch papers themselves with Bash.
 
@@ -84,10 +84,19 @@ and the message names the ceiling. An unknown key in `limits` is refused too.
 | `max_turns` | 50 | 100 | 1 to 1,000 | Claude Code turns. |
 | `max_budget_usd` | 2 | 5 | above 0, to 1,000 | Provider cost. |
 | `tool_calls` | 30 | 300 | 1 to 5,000 | Graph tool and `query_claims` calls, counted together. |
+| `max_output_tokens` | 128,000 | 128,000 | 4,096 to 128,000 | Tokens Claude Code may generate in one model response, thinking included. Set as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` for the Claude process. |
 
 The run stops at the first of `timeout_seconds`, `max_turns` and `max_budget_usd`, and the job fails with the
 runner's reason. `tool_calls` never fails a job: when it is used up, the tool call returns an error that says
-so, and the agent can still finish and write its answer. Each graph and `query_claims` result also carries a
+so, and the agent can still finish and write its answer.
+
+`max_output_tokens` bounds one model response, not the run. When a response reaches it, Claude Code first asks
+the model to continue; if it still cannot finish, the job fails with `AGENT_OUTPUT_TOKENS_EXCEEDED` and a message
+naming the limit and the ceiling: *One response from the agent exceeded limits.max_output_tokens (32000 tokens).
+Ask for a higher limit, up to 128000, or ask for a shorter answer / have the agent write long output to output/
+files.* Reasoning counts toward the limit, so a high `effort` leaves less room for the answer. Claude Code also
+holds the value to the model's own maximum. The value is recorded in the run's `runtime.json`
+(`execution_limits.max_output_tokens`, and `completion.output_token_limit_reached`). Each graph and `query_claims` result also carries a
 `run_budget` with what has been used and what is allowed, so the agent can pace itself.
 
 ### Changing the defaults and ceilings
@@ -99,7 +108,7 @@ every API replica, with no deploy. The value in force is the first of:
 1. the admin console;
 2. the environment: `REVEAL_AGENT_JOB_DEFAULT_<NAME>` and `REVEAL_AGENT_JOB_MAX_<NAME>`, where `<NAME>` is the
    key in upper case without a leading `max_` (`REVEAL_AGENT_JOB_MAX_BUDGET_USD`, `REVEAL_AGENT_JOB_DEFAULT_TURNS`,
-   `REVEAL_AGENT_JOB_MAX_TOOL_CALLS`);
+   `REVEAL_AGENT_JOB_MAX_TOOL_CALLS`, `REVEAL_AGENT_JOB_DEFAULT_OUTPUT_TOKENS`, `REVEAL_AGENT_JOB_MAX_OUTPUT_TOKENS`);
 3. the built-in value in the table.
 
 A value outside the supported range is ignored, and the console shows that. This includes the environment: `REVEAL_AGENT_JOB_MAX_BUDGET_USD=0` or an unparseable value no longer refuses every agent job, it falls back to the built-in 5. Use `REVEAL_AGENT_JOB_USERS` to turn agent jobs off. A ceiling set below the default
@@ -111,7 +120,7 @@ ceiling when the run is dispatched. The other limits stay as frozen.
 
 These limits apply to general agent jobs only. Research runs keep their fixed allowances.
 
-**Deploy the API and the workflow workers together.** A worker runs only `reveal.agent-input/4`; a job still
+**Deploy the API and the workflow workers together.** A worker runs only `reveal.agent-input/5`; a job still
 queued in an earlier format fails at prepare.
 
 Not adjustable, because they bound a single response or the sandbox, not how much work a run may do: the
@@ -415,7 +424,7 @@ Schema, with an answer job:
 - **When it fails.** A run that returns no object, or one that does not satisfy the schema, fails with
   `VALIDATION_FAILED`. A run in which Claude Code gave up after its retries fails with
   `AGENT_EXECUTION_FAILED` and says so.
-- **The input format.** `output_schema` is an optional key of the one input format, `reveal.agent-input/4`.
+- **The input format.** `output_schema` is an optional key of the one input format, `reveal.agent-input/5`.
 
 `scripts/agent_job.py --output-schema schema.json --structured-out result.json` sends a schema from a file and
 saves the object.
@@ -461,8 +470,8 @@ bundle, launch the trusted runner, observe events, capture output and the tool l
 Validation checks only that the capture is the run's own (job, attempt, input hash, model) and that the tool
 ledger is complete; then the answer is saved as the job result. A Scientific Account job is also checked,
 minted and deposited as described [above](#return-a-scientific-account). A failed run, or one stopped at its time, turn
-or budget limit, fails the job with the runner's reason (`AGENT_EXECUTION_FAILED`, or `AUTHORING_BUDGET_EXCEEDED`
-at the budget). Using up the tool-call allowance does not.
+or budget limit, fails the job with the runner's reason (`AGENT_EXECUTION_FAILED`, `AUTHORING_BUDGET_EXCEEDED` at the budget, or
+`AGENT_OUTPUT_TOKENS_EXCEEDED` when one response exceeded `max_output_tokens`). Using up the tool-call allowance does not.
 
 Inside the Box the agent runs as the unprivileged `reveal-agent` user, in a read-only working directory with
 the frozen input, and writes deliverables to `output/` (regular files, each under 8 MB, or 25 MB under

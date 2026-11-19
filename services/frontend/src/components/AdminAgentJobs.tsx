@@ -10,8 +10,8 @@ const plural = (value: number, noun: string) => `${value.toLocaleString()} ${nou
 const of = (used: number | null | undefined, limit: number | null | undefined) => limit == null ? count(used) : `${count(used)} of ${count(limit)}`;
 const yesNo = (value: boolean | null) => value == null ? "—" : value ? "Yes" : "No";
 const terminal = new Set(["succeeded", "failed", "cancelled", "insufficient_evidence"]);
-const LIMIT_LABELS: [string, string][] = [["timeout_seconds", "Run time"], ["max_turns", "Turns"], ["max_budget_usd", "Budget"], ["tool_calls", "REVEAL tool calls"]];
-const limitValue = (key: string, value: number) => key === "max_budget_usd" ? usd(value) : key === "timeout_seconds" ? duration(value) : value.toLocaleString();
+const LIMIT_LABELS: [string, string][] = [["timeout_seconds", "Run time"], ["max_turns", "Turns"], ["max_budget_usd", "Budget"], ["tool_calls", "REVEAL tool calls"], ["max_output_tokens", "Output per response"]];
+const limitValue = (key: string, value: number) => key === "max_budget_usd" ? usd(value) : key === "timeout_seconds" ? duration(value) : key === "max_output_tokens" ? `${value.toLocaleString()} tokens` : value.toLocaleString();
 
 /** What the agent could read: the claims repository, graphs and the network. Unknown parts are left out. */
 function sources(run: AgentRun) {
@@ -113,7 +113,7 @@ export function AdminAgentJobsView({ agents, kinds, onSelect }: { agents: AgentJ
         <td>{deliverableLabel(run.deliverable)}</td>
         <td><span className={`admin-status ${j.status === "failed" ? "bad" : j.status === "succeeded" ? "good" : ""}`}>{j.status.replaceAll("_", " ")}</span>{j.failure_code && <small>{j.failure_code}</small>}{!terminal.has(j.status) && j.stage !== j.status && <small>{j.stage.replaceAll("_", " ")}</small>}</td>
         <td>{[run.model, run.effort && `${run.effort} effort`].filter(Boolean).join(" · ") || "—"}<small>{sources(run)}</small><small>{run.tools == null ? "Tools not recorded" : run.tools.length ? `Tools: ${run.tools.join(", ")}` : "No built-in tools"}</small>{claimsAsked(run) && <small>{claimsAsked(run)}</small>}<small>Prompt {count(run.prompt_characters)} characters</small></td>
-        <td>{limits ? <>{limits.max_turns != null ? `${count(limits.max_turns)} turns` : "—"} · {limits.max_budget_usd != null ? usd(limits.max_budget_usd) : "—"} · {limits.timeout_seconds != null ? duration(limits.timeout_seconds) : "—"}{limits.tool_calls != null && <small>{count(limits.tool_calls)} REVEAL tool calls</small>}</> : "—"}</td>
+        <td>{limits ? <>{limits.max_turns != null ? `${count(limits.max_turns)} turns` : "—"} · {limits.max_budget_usd != null ? usd(limits.max_budget_usd) : "—"} · {limits.timeout_seconds != null ? duration(limits.timeout_seconds) : "—"}{limits.tool_calls != null && <small>{count(limits.tool_calls)} REVEAL tool calls</small>}{limits.max_output_tokens != null && <small>{count(limits.max_output_tokens)} output tokens per response</small>}</> : "—"}</td>
         <td>{j.turns == null ? "—" : <>{of(j.turns, j.turn_limit)} turns{j.tool_calls != null && <small>{count(j.tool_calls)} tool calls{j.tool_failures ? `, ${count(j.tool_failures)} failed` : ""}</small>}{j.agent_seconds != null && <small>{duration(j.agent_seconds)}{j.time_limit_seconds != null ? ` of ${duration(j.time_limit_seconds)}` : ""}</small>}{(j.lint_checks != null || j.draft_writes != null) && <small>{count(j.lint_checks)} lint checks · {count(j.draft_writes)} draft writes</small>}</>}</td>
         <td><Returned job={j} /></td>
         <td>{outcome ? <><span className={`admin-status ${outcome.tone}`}>{outcome.text}</span>{run.result.deposit_id && <small className="admin-mono" title={run.result.deposit_id}>{run.result.deposit_id.slice(0, 16)}…</small>}{run.result.screen_outcome === "withheld" && <small>{screenSummary(run.result)}</small>}</> : <span title="An answer job deposits nothing.">Not applicable</span>}</td>

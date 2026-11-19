@@ -9684,7 +9684,7 @@ export interface components {
             /** @description The published reference release these rows were read from. */
             release_id: string;
         };
-        /** @description Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd. Each limit has a default, used when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the built-in ones and the range the service supports. */
+        /** @description Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd, or when one response exceeds max_output_tokens (CLAUDE_CODE_MAX_OUTPUT_TOKENS). Each limit has a default, used when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the built-in ones and the range the service supports. */
         AgentJobLimits: {
             /**
              * @description Wall-clock seconds for the run.
@@ -9706,6 +9706,11 @@ export interface components {
              * @default 30
              */
             tool_calls: number;
+            /**
+             * @description The most Claude Code may generate in one model response, thinking included; passed to Claude Code as CLAUDE_CODE_MAX_OUTPUT_TOKENS. A response that reaches it (after Claude Code's own attempts to continue) fails the job, and the failure names this limit and the ceiling. For long output, raise it or have the agent write files under output/.
+             * @default 128000
+             */
+            max_output_tokens: number;
         };
         /** @description Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream. */
         AgentJobInput: {
