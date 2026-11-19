@@ -378,6 +378,17 @@ def network_policy(selected_graphs, network, allowed_domains=(), deliverable='an
     return {'mode': 'custom', 'allowed_domains': domains}
 
 
+def egress_policy(config):
+    """Box egress once bootstrap is done, from the frozen request configuration (request.json in the Box): research's
+    fixed services, or the services an agent job's tools call. The worker applies it; the runner records it."""
+    if config['kind'] == 'agent':
+        settings = validate_bootstrap_settings(config.get('agent'))
+        return network_policy(config['selected_graphs'], settings['network'], settings['allowed_domains'], settings['deliverable'],
+                              claims_host_of(settings['claims_url']) if settings.get('claims_url') else None)
+    from .box_research import network_policy as research_network_policy
+    return research_network_policy(config.get('research_context'))
+
+
 def bootstrap_settings(value, claims_url=None):
     """The part of the frozen input the Box bootstrap needs before the runner starts: its egress.
 

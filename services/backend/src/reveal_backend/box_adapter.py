@@ -17,13 +17,12 @@ import time
 
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
-from .box_claims import host as claims_host_of
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE_PATH, bootstrap_settings,
-                        LIMITS as AGENT_LIMITS, network_policy as agent_network_policy, validate_bootstrap_settings,
-                        validate_input as validate_agent_input)
+                        LIMITS as AGENT_LIMITS, egress_policy, validate_input as validate_agent_input)
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
-from .box_upload import MAX_TOTAL, capture_file_limit
+from .box_stream import inflate
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit
 from .source_evidence import SOURCE_PACKAGES
 
 CLAUDE_VERSION = '2.1.282'
@@ -120,15 +119,6 @@ def captured_result(request, handle, marker):
                            remote_handle=handle, outcome_path=found('output/outcome.json'),
                            research_receipts_path=found('ledger/research-receipts.json'),
                            response_path=found(RESPONSE_CAPTURE_PATH) if request.kind == 'agent' else None)
-
-
-def egress_policy(config):
-    """Box egress once bootstrap is done: research's fixed services, or the services an agent job's tools call."""
-    if config['kind'] == 'agent':
-        settings = validate_bootstrap_settings(config.get('agent'))
-        return agent_network_policy(config['selected_graphs'], settings['network'], settings['allowed_domains'], settings['deliverable'],
-                                    claims_host_of(settings['claims_url']) if settings.get('claims_url') else None)
-    return network_policy(config.get('research_context'))
 
 
 def verified_box_not_found(exc):
@@ -595,7 +585,12 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 if relative.is_absolute() or '..' in relative.parts:
                     raise BoxTransportError('Remote artifact path escapes attempt')
                 content = base64.b64decode(encoded, validate=True); total += len(content)
-                if any(self.environ[key].encode() in content for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')):
+                scanned = [content]
+                if name in TRANSCRIPT_FILES:
+                    # Compression hides a credential from a byte match: a gzipped transcript is scanned inflated too.
+                    try: scanned.append(inflate(content, MAX_TRANSCRIPT_EXPANDED)[0])
+                    except ValueError: raise BoxTransportError('A captured transcript is not a bounded gzip file; capture rejected') from None
+                if any(self.environ[key].encode() in data for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY') for data in scanned):
                     raise BoxTransportError('Credential material detected in an output artifact; capture rejected')
                 if len(content) > capture_file_limit(name) or total > MAX_TOTAL:
                     raise BoxTransportError('Remote artifact exceeds capture limit')

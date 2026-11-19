@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 
 from .artifact_store import StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, BoxTransportError, TERMINAL_STATUSES
-from .box_upload import MAX_TOTAL, MAX_FILES, capture_file_limit
+from .box_stream import Inflater
+from .box_upload import MAX_TOTAL, MAX_FILES, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit
 from .runtime_config import setting
 
 MAX_CONTROL = 16_000_000
@@ -108,6 +109,9 @@ def verify_uploaded(storage, item, receipt, secrets):
         response = storage.client.get_object(**storage.validate(ref))
         digest = hashlib.sha256(); count = 0; overlap = b''; saved = []
         maximum_secret = max([len(secret) for secret in secrets] + [1])
+        # A gzipped transcript is scanned as stored and as inflated: compression hides a credential from a byte match.
+        inflater = Inflater(MAX_TRANSCRIPT_EXPANDED) if item['path'] in TRANSCRIPT_FILES else None
+        inflated_overlap = b''
         with response['Body'] as body:
             while chunk := body.read(65536):
                 count += len(chunk)
@@ -116,6 +120,13 @@ def verify_uploaded(storage, item, receipt, secrets):
                 joined = overlap + chunk
                 require(not any(secret in joined for secret in secrets), 'Output contains credential material')
                 overlap = joined[-(maximum_secret - 1):] if maximum_secret > 1 else b''
+                if inflater is not None:
+                    try: inflated = inflater.feed(chunk)
+                    except ValueError: inflated = None
+                    require(inflated is not None, 'A captured transcript is not a bounded gzip file')
+                    joined = inflated_overlap + inflated
+                    require(not any(secret in joined for secret in secrets), 'Output contains credential material')
+                    inflated_overlap = joined[-(maximum_secret - 1):] if maximum_secret > 1 else b''
                 if item['path'] == 'ledger/manifest.json': saved.append(chunk)
         require(count == item['size_bytes'] and digest.hexdigest() == sha, 'Direct object bytes differ from inventory')
         # The same proof a put's HEAD gives, so the closing checkpoint does not HEAD every captured file again.

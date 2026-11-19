@@ -489,6 +489,21 @@ redacted for credentials, as for research.
 The final answer is recorded by the root runner as `ledger/agent-response.json`, beside the tool ledger,
 where the agent cannot write it.
 
+**The full transcript is kept.** The root runner writes Claude Code's whole stream (every message, thinking block,
+tool call and tool result, as `stream-json`) and its stderr, gzipped, to `ledger/claude-stream.jsonl.gz` and
+`ledger/claude-stderr.txt.gz`. They are captured with the attempt, so they outlive the Box. The run's own
+credentials are redacted as the stream is written, and the capture scans both files, inflated, for credentials
+before it accepts them. Each file is kept under 20 MB: a longer one keeps its beginning and its end, with one line
+saying how much was left out between them. Lines saying when the stream's lines arrived are added, at most once a
+second. Only admins read the transcript, a page at a time and recorded per read
+([admin telemetry](admin-telemetry.md#read-one-agent-jobs-transcript)); the job's owner never receives it.
+The transcript counts toward the run's 100 MB capture total.
+
+**The run's configuration is recorded** in `runtime.json` under `configuration`: Claude Code's arguments (the system
+prompt and output schema by size and SHA-256), its environment by allowlist (the key proxy's placeholder, never a
+key), the built-in and REVEAL MCP tools it was given, the network policy, the toolchain stamp, an account job's
+skill SHA-256, and the limits. `observed_claude_runtime` adds the tools and MCP servers Claude Code reported having.
+
 ## Test it against a real Box
 
 `scripts/run_box_agent.py --kind agent` takes a `POST /v1/jobs` agent body, freezes it as the API would,

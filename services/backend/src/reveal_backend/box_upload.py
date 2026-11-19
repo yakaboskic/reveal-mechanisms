@@ -22,6 +22,11 @@ MAX_FILE = 8_000_000
 # An account job saves the papers it cites under output/sources/ (source_evidence): a PDF or full-text XML can be large.
 MAX_SOURCE_FILE = 25_000_000
 SOURCES_PREFIX = 'output/sources/'
+# Claude Code's stream and stderr, gzipped under the ledger by the runner (box_stream.TranscriptWriter), which keeps
+# each under this size by cutting its middle. Inflated, each is at most MAX_TRANSCRIPT_EXPANDED bytes.
+TRANSCRIPT_FILES = ('ledger/claude-stream.jsonl.gz', 'ledger/claude-stderr.txt.gz')
+MAX_TRANSCRIPT_FILE = 20_000_000
+MAX_TRANSCRIPT_EXPANDED = 48_000_000
 MAX_RUNTIME = 20_000_000
 # The capture and the account gate's copy of its saved sources (agent_account.accept) share one workspace checkpoint
 # of 256 MiB (REVEAL_WORKSPACE_MAX_BYTES), so a run captures at most 100 MB.
@@ -47,6 +52,8 @@ def capture_file_limit(name):
     # Authored output/runtime.json and ledger/runtime.json remain ordinary files.
     if name == 'runtime.json':
         return MAX_RUNTIME
+    if name in TRANSCRIPT_FILES:
+        return MAX_TRANSCRIPT_FILE
     return MAX_SOURCE_FILE if name.startswith(SOURCES_PREFIX) else MAX_FILE
 
 

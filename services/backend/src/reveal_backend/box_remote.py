@@ -19,12 +19,14 @@ import subprocess
 import sys
 import threading
 import time
+from time import time as wall_clock
 
 from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
-                        LIMITS as AGENT_LIMITS, KeyProxy, agent_environment, deliverable_of as agent_deliverable,
-                        output_cap_reason, response_record, schema_of, validate_input as validate_agent_input)
+                        KEY_PROXY_PLACEHOLDER, LIMITS as AGENT_LIMITS, MAX_OUTPUT_TOKENS_ENV, KeyProxy, agent_environment,
+                        deliverable_of as agent_deliverable, egress_policy, output_cap_reason, response_record, schema_of,
+                        validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
-from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
+from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError, TranscriptWriter
 from .box_timing import RuntimeTiming, provider_metrics
 from .public_tool_activity import DURABLE_TOOLS, durable_operation, tool_failed, tool_kind
 from .box_research import HostedResearchClient, ResearchAccessError, validate_context
@@ -35,7 +37,7 @@ from .evidence_package import declare_trusted_prefixes, trusted_prefixes
 from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
-from .box_upload import MAX_TOTAL, capture_file_limit, source_file
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, source_file
 from .source_evidence import CHECK as SOURCE_CHECK, tool_versions as source_tool_versions
 
 BASE = Path('/reveal')
@@ -526,6 +528,65 @@ def structured_output_arguments(agent_input):
     return [] if schema is None else ['--json-schema', json.dumps(schema, ensure_ascii=False, separators=(',', ':'))]
 
 
+CLAUDE_BINARY = '/reveal/claude/node_modules/.bin/claude'
+MCP_PREFIX = 'mcp__reveal__'
+CONFIGURATION_FORMAT = 'reveal.run-configuration/1'
+# Arguments whose values are request content (the caller's system prompt, its output schema). runtime.json is shown
+# without an access record (the saved-diagnostics preview), so it records their size and sha256 only; the admin
+# content read shows the request itself.
+CONTENT_ARGUMENTS = ('--append-system-prompt', '--json-schema')
+# The Claude process environment, by allowlist. A research or paragraph run holds the real API key there; an agent job
+# holds the key proxy's placeholder, the only key value ever recorded.
+ENVIRONMENT_SHOWN = ('PATH', 'HOME', 'ANTHROPIC_BASE_URL', 'PYTHONDONTWRITEBYTECODE', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+                     'DISABLE_AUTOUPDATER', 'REVEAL_DAPPER_ROOT', MAX_OUTPUT_TOKENS_ENV)
+
+
+def toolchain_stamp(base=None):
+    """The stamp of the toolchain recipe this Box holds (box_adapter.toolchain_stamp, written by the bootstrap), or None."""
+    try:
+        value = ((base or BASE) / 'toolchain.sha256').read_text().strip()
+    except OSError:
+        return None
+    return value if re.fullmatch(r'[a-f0-9]{64}', value) else None
+
+
+def run_configuration(request, runtime, command, env, tools, mcp_config, stamp_value):
+    """How Claude Code was started, for runtime.json: the arguments (request content as size and sha256), the
+    environment by allowlist, the built-in and REVEAL MCP tools it was given, the egress the worker applied (derived
+    from the same frozen request), the toolchain stamp, an account job's kit, and the limits. Never a credential."""
+    start = command.index(CLAUDE_BINARY)
+    argv = list(command[start:])
+    for index in range(len(argv) - 1):
+        if argv[index] in CONTENT_ARGUMENTS:
+            value = argv[index + 1]
+            argv[index + 1] = f'<{len(value)} characters, sha256 {hashlib.sha256(value.encode()).hexdigest()}>'
+    environment = {name: env[name] for name in ENVIRONMENT_SHOWN if name in env}
+    key = env.get('ANTHROPIC_API_KEY')
+    environment['ANTHROPIC_API_KEY'] = key if key == KEY_PROXY_PLACEHOLDER else '[REDACTED_CREDENTIAL]' if key else None
+    builtin = argv[argv.index('--tools') + 1] if '--tools' in argv else ''
+    views = runtime.get('derived_input_views') or {}
+    account = None
+    if runtime.get('deliverable') == 'scientific_account':
+        account = {'skill': ACCOUNT_SKILL, 'skill_sha256': views.get(ACCOUNT_SKILL_PATH),
+                   'schema_excerpt_sha256': views.get('account/authoring-schema-excerpt.yaml')}
+    agent = runtime.get('agent')
+    try:
+        network = egress_policy(request)
+    except (ValueError, KeyError, TypeError):   # recorded, never a reason to stop the run
+        network = None
+    return {'format': CONFIGURATION_FORMAT,
+            'claude_code': {'pinned_version': request['claude_version'], 'observed_version': runtime.get('observed_harness_version')},
+            'cli': {'argv': argv, 'wrapper': list(command[:start]), 'environment': environment, 'prompt': 'stdin'},
+            'tools': {'builtin': [name for name in builtin.split(',') if name],
+                      'mcp': [MCP_PREFIX + item['name'] for item in tools.definitions()],
+                      'mcp_servers': mcp_config['mcpServers']},
+            'network': network,
+            'toolchain': {'stamp': stamp_value},
+            'account_kit': account,
+            'limits': {'execution': runtime.get('execution_limits'), 'agent': agent.get('limits') if agent else None},
+            'source_tools': runtime.get('source_tools')}
+
+
 def agent_system_prompt(agent_input):
     """Harness facts the agent needs, then the caller's system prompt; appended to Claude Code's own."""
     note = ('You are running unattended in an isolated, disposable sandbox. Nobody can answer questions mid-run, so '
@@ -787,6 +848,7 @@ def main():
     request = json.loads((BASE / 'request.json').read_text())
     ledger = Ledger(STATE / 'ledger', request['job_id'], request['attempt'])
     process = server = parser = runtime = proxy = None
+    transcripts = {}
     agent = request['kind'] == 'agent'
     last_activity = None
     builtin_calls = {}
@@ -821,7 +883,7 @@ def main():
                 STATE / 'ledger/research-context', seed_path=runtime['evidence_package'],
                 execution_id=request['job_id'] + ':' + str(request['attempt']))
             runtime['research_receipts_path'] = 'ledger/research-receipts.json'
-        actual_version = subprocess.run(['/reveal/claude/node_modules/.bin/claude', '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
+        actual_version = subprocess.run([CLAUDE_BINARY, '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
         if actual_version.split()[0] != request['claude_version']:
             raise ValueError('Installed Claude Code version differs from the pinned harness')
         runtime['observed_harness_version'] = actual_version
@@ -859,7 +921,7 @@ def main():
                    'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
         command = ['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid), '--clear-groups', '--no-new-privs',
                    '/usr/bin/timeout', '--signal=TERM', '--kill-after=10s', str(max(1, int(request['timeout_seconds'] - (time.monotonic() - started)))),
-                   '/reveal/claude/node_modules/.bin/claude', '-p', '--verbose', '--output-format', 'stream-json',
+                   CLAUDE_BINARY, '-p', '--verbose', '--output-format', 'stream-json',
                    '--include-partial-messages', '--model', request['model'], '--max-turns', str(request['max_turns']),
                    # Low effort: about 60% of a run's output was reasoning, and slow runs hit the time limit.
                    '--effort', runtime['agent']['effort'] if agent else 'low',
@@ -871,6 +933,7 @@ def main():
             agent_input = json.loads((work / AGENT_INPUT_FILENAME).read_bytes())
             command += ['--append-system-prompt', agent_system_prompt(agent_input)]
             command += structured_output_arguments(agent_input)
+        runtime['configuration'] = run_configuration(request, runtime, command, env, tools, config, toolchain_stamp())
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    cwd=work, env=env, start_new_session=True)
         process.stdin.write(prompt.encode()); process.stdin.close()
@@ -884,9 +947,12 @@ def main():
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
         selector.register(process.stderr, selectors.EVENT_READ, 'stderr')
-        # Private raw trace is never an SSE payload. Restrict access to the trusted runner.
-        with (STATE / 'claude-stream.jsonl').open('wb') as trace, (STATE / 'claude-stderr.txt').open('wb') as errors:
-            os.chmod(trace.name, 0o600); os.chmod(errors.name, 0o600)
+        # The full transcript is never an SSE payload. Gzipped under the ledger, root-only, it is captured with the
+        # run for admins (admin_transcript), after the same credential filter and the capture's credential scan.
+        stream_name, stderr_name = TRANSCRIPT_FILES
+        with TranscriptWriter(STATE / stream_name, capture_file_limit(stream_name), expanded=MAX_TRANSCRIPT_EXPANDED, clock=wall_clock) as trace, \
+                TranscriptWriter(STATE / stderr_name, capture_file_limit(stderr_name), expanded=MAX_TRANSCRIPT_EXPANDED) as errors:
+            transcripts = {stream_name: trace, stderr_name: errors}
             total = 0
             while selector.get_map():
                 checkpoint()
@@ -903,7 +969,7 @@ def main():
                     if total > 40_000_000:
                         raise StreamProtocolError('Agent trace exceeded capture budget')
                     if key.data == 'stdout':
-                        trace.write(trace_filter.feed(chunk)); trace.flush()
+                        trace.write(trace_filter.feed(chunk))
                         for kind, payload in parser.feed(chunk):
                             if kind in ('tool_call', 'tool_result'):
                                 last_activity = observable_activity(kind, payload, parser.tools[payload['call_id']], last_activity)
@@ -920,9 +986,9 @@ def main():
                             emit(kind, payload)
                     else:
                         timing.bytes_received('stderr', len(chunk))
-                        errors.write(error_filter.feed(chunk)); errors.flush()
-            trace.write(trace_filter.feed(b'', final=True)); trace.flush()
-            errors.write(error_filter.feed(b'', final=True)); errors.flush()
+                        errors.write(error_filter.feed(chunk))
+            trace.write(trace_filter.feed(b'', final=True))
+            errors.write(error_filter.feed(b'', final=True))
             if process.poll() is None:
                 process.wait(timeout=10)
         if not reason:
@@ -980,6 +1046,8 @@ def main():
             runtime['timing_checkpoint'] = {'recorded_at': completion['completed_at'], 'timing': completion['timing'],
                                           'last_observable_activity': last_activity}
             runtime['observed_claude_runtime'] = parser.runtime if parser else {}
+            # Each transcript file is closed by now: what it holds, and whether its middle was cut to fit the capture.
+            runtime['transcript'] = {name: writer.summary() for name, writer in transcripts.items() if writer.stored_bytes is not None}
             write_json(STATE / 'runtime.json', runtime)
             os.chmod(STATE / 'runtime.json', 0o600)
         write_json(STATE / 'status.json', {'status': status, 'reason': reason, 'completed_at': stamp()})
