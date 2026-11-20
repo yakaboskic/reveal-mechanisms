@@ -681,6 +681,10 @@ def test_a_response_over_the_output_token_limit_fails_with_a_reason_naming_the_l
     # Any other failure still names the configured value, in case a capped response is reported in an unrecognized form.
     assert box_remote.provider_failure_reason(request, {'subtype': 'error_during_execution', 'is_error': True}, 32000) == (
         'Claude execution failed: error_during_execution (limits.max_output_tokens was 32000 tokens per response)')
+    # A provider or setup error Claude Code reports as subtype "success" names Claude Code's own text, not "success".
+    assert box_remote.provider_failure_reason(request, {'subtype': 'success', 'is_error': True,
+                                                         'result': 'Invalid API key · Fix external API key'}, 32000) == (
+        'Claude execution failed: Invalid API key · Fix external API key (limits.max_output_tokens was 32000 tokens per response)')
     # The turn and budget limits keep their own messages; research runs are unchanged.
     assert '7-turn limit' in box_remote.provider_failure_reason(request, {**CAPPED, 'subtype': 'error_max_turns'}, 32000)
     assert 'max_output_tokens' not in box_remote.provider_failure_reason({**request, 'kind': 'research'}, CAPPED)

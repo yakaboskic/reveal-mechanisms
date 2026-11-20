@@ -689,7 +689,11 @@ def provider_failure_reason(request, result, max_output_tokens=None):
         reached = output_cap_reached(result)
         if reached is not None and max_output_tokens is not None:
             return output_cap_reason(max_output_tokens, AGENT_LIMITS['max_output_tokens']['maximum'], reached)
-        reason = 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
+        # Claude Code reports a provider or setup error (an invalid API key, an overloaded API) as subtype "success" with
+        # is_error and the error text in `result`: name that text, not the subtype.
+        text = ' '.join(result['result'].split())[:300] if isinstance(result.get('result'), str) and result['result'].strip() else ''
+        subtype = str(result.get('subtype', 'nonzero exit'))
+        reason = 'Claude execution failed: ' + (text if text and subtype == 'success' else subtype + (': ' + text if text else ''))
         # Named in case Claude Code reports a capped response in a form output_cap_reached does not recognize.
         return reason + (f' (limits.max_output_tokens was {max_output_tokens} tokens per response)' if max_output_tokens is not None else '')
     if result.get('subtype') == 'error_max_turns':
