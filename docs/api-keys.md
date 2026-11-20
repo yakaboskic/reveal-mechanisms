@@ -134,7 +134,7 @@ with the existing UUID. To revoke, blank both settings and complete the rollout;
 old tasks must drain before revocation is complete. Existing event streams are
 bounded to at most four minutes and reauthorize before replaying further data.
 Retired or expired principals are rejected even if their key remains configured.
-To keep more than one key active, see the next section.
+To keep more than one key active, see [More than one key](#more-than-one-key).
 
 ## Administrative scientific read key
 
