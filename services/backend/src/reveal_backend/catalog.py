@@ -177,7 +177,12 @@ class Catalog:
         with self.readiness_lock:
             if self.readiness_cache and monotonic() - self.readiness_cache[0] < RELEASE_TTL_SECONDS:
                 return dict(self.readiness_cache[1])
-            binding = readiness_binding(current_release_id(self.repo))
+            release = current_release_id(self.repo)
+            if not release:  # as the readiness monitor: no published release is reported, not an outage
+                from .readiness import NO_RELEASE
+                self.readiness_cache = None
+                return dict(NO_RELEASE)
+            binding = readiness_binding(release)
             # Recheck the small release id frequently; independently verify
             # provider health/coverage at least once a minute, even with no publish.
             if (self.readiness_cache and self.readiness_cache[2] == binding

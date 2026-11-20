@@ -472,9 +472,10 @@ class CatalogReleaseTests(unittest.TestCase):
             with self.subTest(regime=regime):
                 self.assertTrue(all(cost <= limit for cost, limit in zip(seen[regime], limits)), (regime, seen[regime]))
 
-    def test_readiness_fails_closed_without_a_release_or_its_vectors(self):
+    def test_readiness_reports_a_missing_release_and_fails_closed_without_its_vectors(self):
         self.db.run('DELETE FROM reveal_ref_release')
-        self.assertProblem(503, 'SOURCE_NOT_READY', Catalog().readiness)
+        self.assertEqual(Catalog().readiness(), {'release_id': None, 'reference_release': 'not_published'})
+        self.assertProblem(503, 'SOURCE_NOT_READY', Catalog().load)  # research routes still refuse without one
         self.publish(R1)
         factors = self.provider.rows.pop('local-factors')
         self.assertProblem(503, 'SEMANTIC_SEARCH_UNAVAILABLE', Catalog().readiness)

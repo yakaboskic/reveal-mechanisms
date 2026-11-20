@@ -178,7 +178,7 @@ class ReadinessMonitorTests(unittest.TestCase):
         self.now[0] += RELEASE_TTL_SECONDS; self.tick()
         self.assertEqual((self.probe()[0], len(self.sources.verified)), (200, 2))
 
-    def test_a_publish_is_verified_and_a_missing_release_fails_closed(self):
+    def test_a_publish_is_verified_and_a_missing_release_is_reported_not_failed(self):
         self.tick()
         self.activate(KPN2); self.sources.gate = threading.Event()
         self.now[0] += RELEASE_TTL_SECONDS; self.monitor.tick()  # verification of the new release is in flight
@@ -188,9 +188,12 @@ class ReadinessMonitorTests(unittest.TestCase):
         self.assertEqual(self.probe()[1]['code'], 'SOURCE_NOT_READY')
         self.sources.gate.set(); self.tick()
         self.assertEqual(self.probe()[1]['sources']['release_id'], KPN2)
-        self.activate(None)
+        self.activate(None)  # no published release: the agent-job API still serves, so readiness says so and passes
         self.monitor.tick()
-        self.assertEqual(self.probe()[1]['code'], 'SOURCE_NOT_READY')
+        status, body = self.probe()
+        self.assertEqual((status, body['sources']), (200, {'release_id': None, 'reference_release': 'not_published'}))
+        self.activate(KPN2); self.tick()  # a later publish is verified as usual
+        self.assertEqual(self.probe()[1]['sources']['release_id'], KPN2)
 
     def test_readiness_still_checks_api_key_configuration_first(self):
         self.tick()

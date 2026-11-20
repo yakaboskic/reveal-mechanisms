@@ -26,6 +26,8 @@ VERIFY_MAX_AGE = 3 * READINESS_VERIFICATION_TTL_SECONDS
 NEW_BINDING_GRACE = 2 * READINESS_VERIFICATION_TTL_SECONDS  # a publish keeps the last verified sources this long
 BUSY_MAX_AGE = 60.0  # the last good read answers this long while every later tick found the pool busy
 _monitor = None
+# The sources readiness reports while no reference release is published.
+NO_RELEASE = {'release_id': None, 'reference_release': 'not_published'}
 
 
 def _answer(error):
@@ -54,7 +56,9 @@ class ReadinessMonitor:
                     {'database': 'aurora-mysql', 'tls': True} if getattr(tx.connection, 'reveal_verified_tls', False) else None)
             release = current_release_id(repo, inspect=inspect)
             database = facts['database'] or repo.readiness()  # sessions not opened by mysql_database.connect
-            binding = readiness_binding(release)
+            # No published reference release is not an outage: agent jobs serve without one, and the research routes
+            # answer 503 SOURCE_NOT_READY on their own. Readiness reports the release as absent instead of failing.
+            binding = readiness_binding(release) if release else None
         except Exception as error:
             now = self.clock()
             with self.lock:
@@ -72,9 +76,10 @@ class ReadinessMonitor:
         with self.lock:
             seen = self.current[3] if self.current and self.current[2] == binding else now
             self.current, self.busy = (now, database, binding, seen, None), None
+            if binding is None: self.verified = (None, now, dict(NO_RELEASE), None)
             verified = self.verified
             # a pass holds for the TTL; a failure (stamped when it was attempted) is retried at the next tick
-            due = not self.verifying and (verified is None or verified[0] != binding or now - verified[1] >= (
+            due = binding is not None and not self.verifying and (verified is None or verified[0] != binding or now - verified[1] >= (
                 READINESS_VERIFICATION_TTL_SECONDS if verified[3] is None else self.interval / 2))
             if due: self.verifying = True
         if due: threading.Thread(target=self.verify, args=(catalog, binding, now), name='readiness-verify', daemon=True).start()
