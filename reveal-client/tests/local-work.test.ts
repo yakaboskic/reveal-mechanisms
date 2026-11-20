@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { downloadLocalBlob, localClientPreference, localLaunchCommand, analysisAccountResults, activeLocalGrants, createLocalWorkClient, localConnectionConfig, localResearchPrompt, LocalWorkError, localWorkHref, submissionAccounts, type LocalWork } from "../src/lib/local-work";
 
 test("manual remote configurations begin anonymously without bearer credentials", () => {
@@ -193,4 +194,11 @@ test("cancelling a stalled ZIP body releases the read and never returns a partia
   controller.abort();
   await assert.rejects(pending, { name: "AbortError" });
   assert.equal(cancelled, true);
+});
+
+test("local research pages lay out as blocks inside the workspace's flex-column main", () => {
+  const globals = readFileSync(new URL("../src/app/globals.css", import.meta.url), "utf8");
+  const local = readFileSync(new URL("../src/components/local-work.css", import.meta.url), "utf8");
+  assert.match(globals, /^main \{[^}]*display:flex; flex-direction:column;/m);
+  assert.match(local, /^\.local-work-page\{display:block;/m);
 });

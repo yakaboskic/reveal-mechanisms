@@ -23,6 +23,15 @@ from reveal_backend.source_validation import source_findings, ledger_sources, ex
 
 ACCEPTANCE_POLICY = 'reveal.scientific-account/2'
 MINTED = re.compile(r'dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}')
+# Frozen reference-evidence capture formats (reveal.reference-evidence.mysql-capture/<version>): version -> (the capture's
+# identity key, the tables a SQL capture may read). /1 read a reference generation's tables; /2 reads the environment's
+# reference release (reference_evidence, and the release tables later readers capture). scientific_reuse shares it.
+REFERENCE_CAPTURES = {
+    '1': ('generation_id', frozenset({'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes', 'eaggl_gene_loadings',
+                                      'factor_gene_set_projections', 'cfde_gene_sets', 'cfde_gene_set_collections'})),
+    '2': ('release_id', frozenset({'reveal_ref_release', 'reveal_ref_factors', 'reveal_ref_traits', 'reveal_ref_factor_genes',
+                                   'reveal_ref_projections', 'reveal_ref_gene_sets', 'reveal_ref_collections', 'reveal_ref_trait_gene_sets',
+                                   'reveal_ref_factor_trait_links', 'reveal_ref_phenotypes'}))}
 
 
 class AccountValidationError(ValueError):
@@ -35,7 +44,8 @@ def cfde_source_files(package, package_path):
     """Recognize frozen reference evidence across the HTTP and SQL collectors.
 
     A SQL-looking origin alone is not evidence. Bind its verified capture to the
-    package's reference generation and source envelope, and follow derived
+    package's reference data (a generation's tables in format /1, the environment's
+    reference release tables in format /2) and source envelope, and follow derived
     captures only when all their inputs are captured reference observations.
     """
     sources = package['source_artifacts']
@@ -47,9 +57,6 @@ def cfde_source_files(package, package_path):
     if pigean.get('model') == 'eaggl-capped-v1' and len(generations) == 1:
         generation = next(iter(generations))
         if isinstance(generation, str) and re.fullmatch(r'[a-f0-9]{64}', generation):
-            tables = {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes',
-                      'eaggl_gene_loadings', 'factor_gene_set_projections', 'cfde_gene_sets',
-                      'cfde_gene_set_collections'}
             reference, derived = set(), {}
             root = Path(package_path).resolve().parent
             for key, source in sources.items():
@@ -64,13 +71,16 @@ def cfde_source_files(package, package_path):
                 provenance = capture.get('source', {})
                 kind = provenance.get('kind')
                 names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
-                if (capture.get('generation_id') != generation or capture.get('model') != 'eaggl-capped-v1'
+                version = capture.get('format').rsplit('/', 1)[-1] if isinstance(capture.get('format'), str) else None
+                if version not in REFERENCE_CAPTURES: continue
+                field, tables = REFERENCE_CAPTURES[version]
+                if (capture.get(field) != generation or capture.get('model') != 'eaggl-capped-v1'
                         or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
-                        or origin != f"{kind}:{'+'.join(names)}?generation_id={generation}"):
+                        or origin != f"{kind}:{'+'.join(names)}?{field}={generation}"):
                     continue
-                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/1' and set(names) <= tables:
+                if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/' + version and set(names) <= tables:
                     reference.add(key)
-                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/1':
+                elif kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/' + version:
                     derived[key] = set(names)
             while added := {key for key, dependencies in derived.items() if key not in reference and dependencies <= reference}:
                 reference.update(added)
@@ -197,6 +207,13 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
     raw = Path(document_path).read_bytes()
     document = decode(raw, 'yaml' if Path(document_path).suffix in ('.yaml', '.yml') else 'json')
     require(isinstance(document, dict), 'Account document must be a mapping')
+    unbound = []
+    if mode != 'profile-only':
+        # An author quotes a source and says what was asked; REVEAL ties the quote to the source that holds it and
+        # checks that copy. A document that already names its source Files is unchanged by this.
+        from reveal_backend.source_validation import bind_sources
+        document, unbound = bind_sources(document, decode(Path(package_path).read_bytes(), 'yaml' if Path(package_path).suffix in ('.yaml', '.yml') else 'json'),
+                                         package_path, ledger_path or None)
     if preloaded is None:
         schema_root = Path(dapper_root).resolve() / 'schema'
         sys.path[:0] = [str(schema_root / 'lint'), str(schema_root / 'identity'), str(schema_root)]
@@ -212,7 +229,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
     with tempfile.TemporaryDirectory(prefix='reveal-account-lint-') as directory:
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))
         upstream = lint(frozen, vocabulary, sv, validator, profile_name='scientific-account')
-    findings = [asdict(f) for f in upstream.findings]
+    findings = [asdict(f) for f in upstream.findings] + unbound
     advisories, structure = [], None
     def error(check, where, message):
         findings.append({'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''})

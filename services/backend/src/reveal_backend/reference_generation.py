@@ -36,10 +36,11 @@ CATALOG_OWNER = 'catalog'
 ARCHIVE_STATUS = 'archived'
 ARCHIVE_REASON = 'reference_generation_superseded'
 
-KPN_TRAIT_RE = re.compile(r'KPN\.TRAIT:(\d{7})')
+# [0-9], not \d: \d also matches non-ASCII digits, which no ascii_bin id column can hold (MySQL refuses the comparison, 1267).
+KPN_TRAIT_RE = re.compile(r'KPN\.TRAIT:([0-9]{7})')
 FACTOR_RE = re.compile(r'Factor[1-9][0-9]*')
-PUBLIC_ID_RE = re.compile(r'factor:kpn:(\d{7}):' + re.escape(KPN_MODEL) + r':(Factor[1-9][0-9]*)')
-FACTOR_KEY_RE = re.compile(r'(KPN\.TRAIT:\d{7})::(Factor[1-9][0-9]*)')
+PUBLIC_ID_RE = re.compile(r'factor:kpn:([0-9]{7}):' + re.escape(KPN_MODEL) + r':(Factor[1-9][0-9]*)')
+FACTOR_KEY_RE = re.compile(r'(KPN\.TRAIT:[0-9]{7})::(Factor[1-9][0-9]*)')
 GENERATION_RE = re.compile(r'[a-f0-9]{64}')
 
 
@@ -137,6 +138,15 @@ def generation_of_anchors(anchors) -> str | None:
     generations = {generation_of_binding(anchor) for anchor in anchors or []}
     if len(generations) > 1: raise ReferenceError('Anchors span several reference generations')
     return next(iter(generations), None)
+
+
+def shared_release(anchors) -> str | None:
+    """The one release id (stored as reference_generation_id) that every anchor binding was saved under, or None.
+
+    Under the reference release a draft may keep anchors saved under different releases, so unlike
+    generation_of_anchors this never raises; a mixed or empty draft pins no release."""
+    releases = {(anchor or {}).get('reference_generation_id') for anchor in anchors or []}
+    return next(iter(releases)) if len(releases) == 1 else None
 
 
 # --------------------------------------------------------------------------------------

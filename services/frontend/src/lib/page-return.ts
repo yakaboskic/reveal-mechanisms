@@ -1,5 +1,7 @@
 type VisibleDocument = EventTarget & { visibilityState: DocumentVisibilityState };
 export const pageReturnCoalesceMs = 250;
+/** Public rows younger than this are kept as they are when the reader returns to the page. */
+export const publicFreshMs = 60_000;
 
 /** One check per return to a visible page: a tab switch fires visibilitychange and focus together. */
 export function onPageReturn(check: () => void, options: { win?: EventTarget; doc?: VisibleDocument; now?: () => number; coalesceMs?: number } = {}) {

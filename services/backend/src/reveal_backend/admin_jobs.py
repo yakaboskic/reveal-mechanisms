@@ -6,7 +6,7 @@ from uuid import UUID
 
 from .auth import Problem
 from .runtime_config import artifacts_root
-from .telemetry import job_timings, records
+from .telemetry import account_sources, agent_runs, job_timings, records
 
 MAX_DIAGNOSTIC_BYTES = 128 * 1024
 MAX_DIAGNOSTICS = 20
@@ -37,7 +37,8 @@ def saved_diagnostics(job_id, attempts):
     candidates.append(root / 'token-budget.json')  # Workflow preparation writes its measurement at the workspace root.
     for attempt in reversed(attempts):
         directory = root / f"attempt-{attempt['attempt']}"
-        candidates.extend(directory / name for name in ('failure.json', 'token-budget.json', 'paragraph-grounding.json', 'output/runtime.json'))
+        candidates.extend(directory / name for name in ('failure.json', 'token-budget.json', 'paragraph-grounding.json', 'output/runtime.json',
+                                                        'output/ledger/agent-response.json'))
         if directory.is_dir() and not directory.is_symlink():
             candidates.extend(sorted(p for p in directory.iterdir() if re.fullmatch(r'(?:validation|grounding)-\d+\.json', p.name)))
     result = []
@@ -70,7 +71,7 @@ def s3_diagnostics(workspace, attempts):
         candidates = []
         for item in manifest['files']:
             name = item['path']
-            match = re.fullmatch(r'attempt-([1-9][0-9]*)/(?:failure|token-budget|paragraph-grounding|(?:validation|grounding)-[0-9]+|output/runtime)\.json', name)
+            match = re.fullmatch(r'attempt-([1-9][0-9]*)/(?:failure|token-budget|paragraph-grounding|(?:validation|grounding)-[0-9]+|output/runtime|output/ledger/agent-response)\.json', name)
             if name in ('evidence/dispatch-budget-failure.json', 'evidence/collection-error.json', 'token-budget.json') or match and int(match[1]) in allowed:
                 candidates.append(item)
         result = []
@@ -99,6 +100,12 @@ def job_detail(repository, job_id, *, before=None, limit=100):
         if not timings: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.')
         metadata = records(tx, 'job', ('failure', 'warnings', 'research_request_id', 'input_account_id'), [job_id])[job_id]['data']
         job = {**timings[0], **redact(metadata)}
+        # How an agent job was asked to run: settings, limits and sizes, never the prompt, question or claims.
+        agent = agent_runs(tx, [job_id])[job_id] if job['kind'] == 'agent' else None
+        # An account job's saved sources: paths, URLs, commands, sizes and checksums, never a file's content. Commands
+        # and URLs are the agent's own text, so credentials in them are redacted like any diagnostic.
+        if agent is not None and agent['deliverable'] == 'scientific_account':
+            agent['sources'] = redact(account_sources(tx, job_id))
         # The padded event sequence is part of the indexed primary key. Load the
         # tail first so the reason for failure is visible even on very long runs.
         upper = job_id+':'+before.zfill(12) if before else job_id+';'
@@ -126,4 +133,4 @@ def job_detail(repository, job_id, *, before=None, limit=100):
     diagnostics, diagnostics_limited = s3_diagnostics(workspace, allowed) if remote else saved_diagnostics(job_id, allowed)
     return {'job': job, 'events': events, 'next_before': next_before, 'attempts': attempts,
             'attempts_limited': len(values) > 50, 'diagnostics': diagnostics, 'diagnostics_limited': diagnostics_limited,
-            'metrics': redact(metrics['data']) if metrics else None}
+            'metrics': redact(metrics['data']) if metrics else None, 'agent': agent}

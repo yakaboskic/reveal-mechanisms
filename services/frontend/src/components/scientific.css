@@ -131,6 +131,29 @@
 .account-parts{display:flex;align-items:center;flex-wrap:wrap;column-gap:14px;row-gap:0}
 .account-parts>a{font-size:12px;color:#5b789f;min-height:38px;display:inline-flex;align-items:center}
 .account-paragraph-status{font-size:11px;color:#718399}
+/* Data lineage: reuse tables and per-claim datasets, from the account provenance trace. */
+.account-lineage{padding-bottom:26px;font-size:13px;color:#4d5e76}
+.account-lineage h3{font-size:14px;font-weight:500;color:#4d6380;margin:30px 0 12px}
+.account-lineage .small-note,.graph-record-content .lineage-list small{font-size:12px;line-height:1.75;color:#6b7b91}
+.account-lineage .notice{margin:12px 0}
+.lineage-facts{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0 0 6px;color:#71819a;font-size:12px}
+.lineage-facts b{font-weight:550;color:#506079}
+.lineage-list,.lineage-claims{list-style:none;padding:0;margin:8px 0 0;display:grid;gap:9px;overflow-wrap:anywhere}
+.lineage-list li,.lineage-claims>li{line-height:1.7}
+.lineage-list small{display:block;font-size:11px}
+.lineage-claims>li{border-top:1px solid #edf1f6;padding-top:12px}
+.lineage-claims>li>a{display:block;color:#40536f;margin-bottom:6px}
+.lineage-claims .lineage-list{margin:0 0 0 14px;gap:4px;font-size:12px}
+.lineage-gaps{margin:18px 0}
+.lineage-table-scroll{overflow:auto;max-height:440px;border:1px solid #e1e8f2;border-radius:8px}
+.lineage-table{width:100%;border-collapse:collapse;text-align:left;font-size:12px}
+.lineage-table th,.lineage-table td{padding:11px 13px;border-bottom:1px solid #edf1f6;vertical-align:top;line-height:1.65}
+.lineage-table thead th{position:sticky;top:0;background:#f5f8fc;color:#5b6f8a;font-weight:500;font-size:11px;white-space:nowrap}
+.lineage-table th[scope=row]{font-weight:450;color:#40536f;min-width:180px;overflow-wrap:anywhere}
+.lineage-table td{color:#5d6f88;font-variant-numeric:tabular-nums}
+.lineage-table tr:last-child>*{border-bottom:0}
+.lineage-route{display:block;white-space:nowrap}
+.account-lineage .link-secondary,.graph-record-content .link-secondary{margin-left:8px;font-size:11px;color:#6d82a0}
 @media(max-width:740px){.account-topbar{margin-bottom:24px;align-items:flex-start;gap:18px}.account-topbar>a:last-child{text-align:right;justify-content:flex-end}.account-gap{margin-bottom:24px}.account-gap h1,.claim-page-heading h1{font-size:19px;line-height:1.6}.account-study .reading-tabs{gap:22px}.account-study .reading-tabs button{font-size:12px;min-height:44px}.account-conclusions,.account-study .research-prose{font-size:14px;line-height:1.85}.claim-inline-body{padding:15px 14px 18px 41px}.claim-page.account-study{padding:12px 20px 48px}.scientific-keyval{grid-template-columns:85px minmax(0,1fr)}.claim-detail-panel .reading-tabs{gap:clamp(14px,4vw,22px);flex-wrap:nowrap}.account-study .research-downloads{gap:6px 18px}.account-result{padding:18px}.account-result-actions{align-items:flex-start;row-gap:2px}.account-parts{column-gap:10px}.source-artifact-heading{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){.claims-toggle-caret,.claim-selection-caret{transition:none}}
 @media(max-width:360px){.claim-detail-panel .reading-tabs{gap:12px}.claim-detail-panel .reading-tabs button{font-size:11px}}

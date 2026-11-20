@@ -1,0 +1,55 @@
+{
+  "operation_id": "listFactorTraitLinks",
+  "case": "trait",
+  "method": "GET",
+  "path_template": "/v1/factor-trait-links",
+  "request": {
+    "url": "https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0",
+    "path": {},
+    "query": {
+      "trait_id": "KPN.TRAIT:0001360",
+      "limit": 50,
+      "offset": 0
+    },
+    "headers": {
+      "Accept": "application/json"
+    },
+    "body": null
+  },
+  "responses": {
+    "200": {
+      "content_type": "application/json",
+      "examples": {
+        "trait": {
+          "source_id": null,
+          "trait_id": "KPN.TRAIT:0001360",
+          "scope": "all",
+          "sort": "phewas_q",
+          "summary": null,
+          "total": 1,
+          "next_offset": null,
+          "coverage": "Factor-phenotype links from the eaggl trait linkage and factor-PheWAS, kept at BH q <= 0.05 over all factor x phenotype tests. A phenotype absent for a factor is unlinked at this threshold, not a negative result.",
+          "release_id": "d474a07e7aa404d5a51f323c2f3cf340e39cc62a1f1a02ab8499ea553d3a318c",
+          "items": [
+            {
+              "source_id": "factor:kpn:0000398:eaggl-capped-v1:Factor1",
+              "factor_label": "Metabolic Dysregulation Indicators",
+              "fitted_kpn_trait_id": "KPN.TRAIT:0000398",
+              "fitted_trait_name": "Type 2 diabetes (T2D)",
+              "phenotype": "gcat_trait_illustrative_phenotype",
+              "phenotype_kpn_trait_id": "KPN.TRAIT:0001360",
+              "phenotype_name": "illustrative phenotype",
+              "is_own_trait": false,
+              "is_atlas_trait": false,
+              "nnls_loading": 0.042,
+              "phewas_beta": 0.31,
+              "phewas_p_onesided": 2.1e-07,
+              "phewas_q": 3.4e-05
+            }
+          ]
+        }
+      }
+    }
+  },
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/factor-trait-links?trait_id=KPN.TRAIT%3A0001360&limit=50&offset=0' -H 'Accept: application/json'"
+}

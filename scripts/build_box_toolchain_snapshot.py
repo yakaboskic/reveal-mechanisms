@@ -8,6 +8,11 @@ toolchain recipe and stamp. It never receives credentials, a bundle, a request o
 policy change, and never runs the agent, box_upload or box_remote. A Box made from the
 snapshot still checks the stamp, its executables and the Claude version, and installs the
 toolchain cleanly when any of them differs. --dry-run prints the plan without calling Upstash.
+
+The toolchain includes the programs account jobs fetch and convert papers with (curl, poppler-utils for pdftotext,
+libxml2-utils for xmllint), installed unpinned for now. The result's source_tools records each package's installed
+version (dpkg-query) and each program's version line: pin the apt packages to those versions once the Box image's
+distribution is known. Each account job also records them in its runtime.json (source_tools).
 """
 import argparse
 import asyncio
@@ -18,13 +23,19 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'services/backend/src'))
+import inspect  # noqa: E402
 from reveal_backend.box_adapter import BoxExecutionAdapter, CLAUDE_VERSION, TOOLCHAIN_FORMAT  # noqa: E402
+from reveal_backend import source_evidence  # noqa: E402
 
 BUILD = '/tmp/toolchain-build.sh'
 CHECK = '/tmp/toolchain-check.py'
 # /reveal must hold only the toolchain: any job marker or file would make box_upload or the bootstrap fail closed.
 EXPECTED = ['claude', 'state', 'toolchain.sha256', 'venv']
-PROBE = r'''import glob,hashlib,json,os,subprocess
+# The fetch and convert tools' installed versions come from the same function each account job records them with
+# (source_evidence.tool_versions), run here from its own source.
+TOOL_PROBE = ('SOURCE_PACKAGES=' + repr(source_evidence.SOURCE_PACKAGES) + '\nSOURCE_PROGRAMS=' + repr(source_evidence.SOURCE_PROGRAMS)
+              + '\n' + inspect.getsource(source_evidence.tool_versions))
+PROBE = TOOL_PROBE + r'''import glob,hashlib,json,os,subprocess
 def entries(path): return sorted(os.listdir(path)) if os.path.isdir(path) else None
 skel=set(entries('/etc/skel') or [])
 home=entries('/home/reveal-agent')
@@ -37,16 +48,18 @@ print(json.dumps({'reveal':entries('/reveal'),'state':entries('/reveal/state'),
     'stamp':open('/reveal/toolchain.sha256').read().strip(),
     'claude':subprocess.run(['/reveal/claude/node_modules/.bin/claude','--version'],capture_output=True,text=True,timeout=120).stdout.strip(),
     'python':subprocess.run(['/reveal/venv/bin/python','-m','pip','freeze','--all'],capture_output=True,text=True,timeout=120).stdout.split(),
-    'npm_lock_sha256':hashlib.sha256(open(lock,'rb').read()).hexdigest() if os.path.exists(lock) else None}))
+    'npm_lock_sha256':hashlib.sha256(open(lock,'rb').read()).hexdigest() if os.path.exists(lock) else None,
+    'source_tools':tool_versions()}))
 '''
 
 
 def plan(claude_version=CLAUDE_VERSION):
+    # Upstash Box labels are at most 20 characters, so the label carries 14 hex digits of the stamp.
     stamp = BoxExecutionAdapter.toolchain_stamp(claude_version)
     # The job bootstrap itself (stamp branch included) installs the toolchain; only apt's cache is dropped.
     script = BoxExecutionAdapter.bootstrap_script(claude_version, unpack=False) + 'sudo apt-get clean\n'
     return {'format': TOOLCHAIN_FORMAT, 'claude_version': claude_version, 'stamp': stamp,
-            'name': 'reveal-toolchain-' + stamp[:16], 'labels': ['reveal-toolchain', 'stamp-' + stamp[:16]], 'script': script}
+            'name': 'reveal-toolchain-' + stamp[:16], 'labels': ['reveal-toolchain', 'stamp-' + stamp[:14]], 'script': script}
 
 
 def problems(facts, expected):
@@ -60,6 +73,12 @@ def problems(facts, expected):
     if facts.get('stamp') != expected['stamp']: found.append('toolchain stamp differs')
     if str(facts.get('claude') or '').split()[:1] != [expected['claude_version']]: found.append('Claude version differs')
     if not facts.get('python') or not facts.get('npm_lock_sha256'): found.append('toolchain manifest is incomplete')
+    # The fetch and convert tools an account job's recorded commands run: each installed, with a version to pin.
+    tools = facts.get('source_tools') if isinstance(facts.get('source_tools'), dict) else {}
+    wanted = {'packages': source_evidence.SOURCE_PACKAGES, 'programs': [name for name, _ in source_evidence.SOURCE_PROGRAMS]}
+    missing = [name for group, names in wanted.items() for name in names
+               if not (tools.get(group) if isinstance(tools.get(group), dict) else {}).get(name)]
+    if missing: found.append('fetch and convert tools are missing: ' + ', '.join(missing))
     return found
 
 
@@ -87,6 +106,8 @@ async def build(environ, factory, *, delete_builder=False, emit=print):
                   'builder_box_id': box.id, 'builder_deleted': False, 'format': expected['format'],
                   'claude_version': expected['claude_version'], 'stamp': expected['stamp'],
                   'python_packages': facts['python'], 'npm_lock_sha256': facts['npm_lock_sha256'],
+                  # What to pin the apt packages to (curl, poppler-utils, libxml2-utils), and what each program reports.
+                  'source_tools': facts['source_tools'],
                   'next': 'Set REVEAL_BOX_TOOLCHAIN_SNAPSHOT=' + snapshot.id + ' for the environment that owns this Box API key.'}
         if delete_builder:
             await box.delete(); result['builder_deleted'] = True
@@ -122,9 +143,15 @@ def main(argv=None, factory=None):
     try:
         result = asyncio.run(build(environ, factory, delete_builder=args.delete_builder))
     except Exception as exc:
-        # Provider bodies can echo request details; report only the failure class and our own messages.
-        print('Toolchain snapshot build failed: ' + (str(exc) if isinstance(exc, RuntimeError) else type(exc).__name__),
-              file=sys.stderr)
+        # Provider bodies can echo request details: report the provider's status and message with the key removed,
+        # cut short, and our own messages whole.
+        if isinstance(exc, RuntimeError):
+            detail = str(exc)
+        else:
+            message = ' '.join(str(exc).replace(environ['UPSTASH_BOX_API_KEY'], '[UPSTASH_BOX_API_KEY]').split())[:300]
+            status = getattr(exc, 'status_code', None)
+            detail = type(exc).__name__ + (f' (HTTP {status})' if status else '') + (': ' + message if message else '')
+        print('Toolchain snapshot build failed: ' + detail, file=sys.stderr)
         return 1
     text = json.dumps(result, indent=2)
     if args.manifest: args.manifest.write_text(text + '\n')

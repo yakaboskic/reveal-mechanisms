@@ -25,7 +25,8 @@ from urllib.parse import urlsplit
 import httpx
 
 from . import jobs, workflow_state as state
-from .agent_execution import ExecutionRequest, agent_budget_usd
+from . import agent_limits
+from .agent_execution import ExecutionRequest, agent_budget_usd, authoring_stage, execution_kind
 from .artifact_store import store as artifact_store, StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, atomic_capture_marker, read_capture_marker, captured_result, BoxTransportError, verified_box_not_found
 from .box_lifecycle import BoxLifecycle
@@ -139,9 +140,10 @@ class Observation:
         # preserving files is not evidence that the agent finished an account.
         if self.failed and execution.get('failure_notice_attempt') != execution['authoring_attempt']:
             mapped = public_activity(current, 'stage', {
-                'stage': 'authoring_paragraph' if current['kind'] == 'paragraph' else 'authoring_account',
+                'stage': authoring_stage(current['kind']),
                 'state': 'failed',
-                'message': 'The research agent stopped before finishing. Preserving its partial output and diagnostics.'})
+                'message': ('The agent stopped before finishing. Preserving its partial output and diagnostics.' if current['kind'] == 'agent' else
+                            'The research agent stopped before finishing. Preserving its partial output and diagnostics.')})
             item = jobs.event_record(current, *mapped)
             records.append(('event', self.job_id+':'+item['id'].zfill(12), owner, item))
             execution['failure_notice_attempt'] = execution['authoring_attempt']
@@ -495,7 +497,7 @@ class WorkflowExecution:
         if phase in ('review_init', 'review_call', 'review_tools'):
             return {'next_phase': 'validate', 'validated_paths': None}
         adapter = self.box_adapter(queue)
-        if phase in ('launch', 'capture'):
+        if phase in ('launch', 'capture') and job['kind'] != 'agent':
             # Validation and commit follow the Box run: let the DAPPER helper warm up while it runs.
             from .acceptance import prewarm
             prewarm()
@@ -537,7 +539,7 @@ class WorkflowExecution:
             descriptor=queue['dispatch_input']
             require(isinstance(descriptor.get('selected_graphs'),list),'Direct capture requires its frozen graph selection')
             binding={'job_id':job['id'],'attempt':execution['authoring_attempt'],
-                'kind':'research' if job['kind']=='analysis' else 'paragraph','box_id':box['box_id'],
+                'kind':execution_kind(job['kind']),'box_id':box['box_id'],
                 'selected_graphs':descriptor['selected_graphs'],'input_sha256':descriptor['sha256']}
             captured=await adapter.capture_to_store(binding,box,self.store(),execution['workspace'])
             handle=captured['box']; capture_sha256=captured['capture_sha256']
@@ -612,7 +614,7 @@ class WorkflowExecution:
                 'Unknown frozen bootstrap configuration')
         config = bootstrap['config']
         expected = {'job_id': job['id'], 'attempt': execution['authoring_attempt'],
-            'kind': 'research' if job['kind'] == 'analysis' else 'paragraph',
+            'kind': execution_kind(job['kind']),
             'selected_graphs': descriptor['selected_graphs'], 'input_sha256': descriptor['sha256'],
             'model': descriptor['model']}
         require(all(config.get(key) == value for key, value in expected.items()),
@@ -622,18 +624,30 @@ class WorkflowExecution:
                     'Frozen bootstrap configuration differs from its assigned Box')
         return config
 
-    def request(self, job, queue, execution, root):
+    def request(self, job, queue, execution, root, budget_ceiling=None):
         path, inputs = restore_dispatch_input(root, queue['dispatch_input'])
-        selected = tuple(inputs['external_evidence']['selected_graphs']) if job['kind'] == 'analysis' else ()
+        selected = (tuple(inputs['external_evidence']['selected_graphs']) if job['kind'] == 'analysis' else
+                    tuple(inputs['graphs']) if job['kind'] == 'agent' else ())
         attempt = execution['authoring_attempt']
         frozen = self.bootstrap_config(job, execution, queue['dispatch_input']) if queue['dispatch_input'].get('bootstrap') else None
         if frozen: require(tuple(frozen['selected_graphs']) == selected, 'Frozen bootstrap graph selection differs from input')
-        kind = 'research' if job['kind'] == 'analysis' else 'paragraph'
+        kind = execution_kind(job['kind'])
+        if frozen:
+            limits = None  # the frozen bootstrap already holds this attempt's limits
+        elif kind == 'agent':
+            # An agent job carries its own limits in its frozen input; the current budget ceiling (admin console, then
+            # environment) still bounds its budget, so lowering the ceiling also reaches jobs already queued. prepare
+            # reads the ceiling off the event loop and passes it in.
+            ceiling = agent_limits.budget_ceiling(self.repository) if budget_ceiling is None else budget_ceiling
+            limits = {**inputs['limits'], 'max_budget_usd': min(inputs['limits']['max_budget_usd'], ceiling)}
+        else:
+            limits = {'timeout_seconds': int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800')), 'max_budget_usd': agent_budget_usd(kind),
+                      'max_turns': int(setting('REVEAL_AGENT_MAX_TURNS', '100'))}
         request = ExecutionRequest(job_id=job['id'], attempt=attempt, kind=kind,
             input_path=path, output_dir=root/f'attempt-{attempt}'/'output', selected_graphs=selected,
-            timeout_seconds=frozen['timeout_seconds'] if frozen else int(setting('REVEAL_AGENT_TIMEOUT_SECONDS', '1800')),
-            max_budget_usd=frozen['max_budget_usd'] if frozen else agent_budget_usd(kind),
-            max_turns=frozen['max_turns'] if frozen else int(setting('REVEAL_AGENT_MAX_TURNS', '100')),
+            timeout_seconds=frozen['timeout_seconds'] if frozen else limits['timeout_seconds'],
+            max_budget_usd=frozen['max_budget_usd'] if frozen else limits['max_budget_usd'],
+            max_turns=frozen['max_turns'] if frozen else limits['max_turns'],
             validation_feedback=tuple(frozen['validation_feedback']) if frozen else (), remote_handle=execution.get('box'))
         return request, inputs
 
@@ -643,9 +657,15 @@ class WorkflowExecution:
             return {'next_phase': 'create'}
         mode = setting('REVEAL_EXECUTION_MODE', 'box')
         require(mode == 'box', 'Workflow scientific execution requires Box; deployment probes do not use a model')
-        await run_sync(self.activity, payload, token, 'stage', {'stage': 'preparing_evidence', 'message': 'Preparing frozen evidence for durable execution.'})
-        source = await run_sync(read_preparation_inputs, self.repository, job)
-        if job['kind'] == 'analysis':
+        agent = job['kind'] == 'agent'
+        await run_sync(self.activity, payload, token, 'stage', {'stage': 'preparing_evidence',
+            'message': 'Freezing the prompt for durable execution.' if agent else 'Preparing frozen evidence for durable execution.'})
+        source = None if agent else await run_sync(read_preparation_inputs, self.repository, job)
+        if agent:
+            from .box_agent import INPUT_FILENAME, validate_input
+            package = validate_input(deepcopy(queue['inputs']))
+            path = root/INPUT_FILENAME; path.write_bytes(canonical_json(package))
+        elif job['kind'] == 'analysis':
             frozen, binding = source
             path, package = await run_sync(collect, job, frozen, binding, queue['inputs'].get('budgets', {}), root/'evidence', **({'repository': self.repository} if frozen.get('retrieval_mode') == 'progressive' else {}))
             path, package, measurement = await run_sync(fit_input_budget, path, mode, queue['inputs'].get('budgets', {}).get('evidence_tokens', 24000))
@@ -657,10 +677,12 @@ class WorkflowExecution:
             package = {'format': 'reveal.paragraph-input/1', 'account_document': source['result']['document'], 'account_id': job['input_account_id'], 'allowed_citations': allowed}
             path = root/'paragraph-input.json'; path.write_bytes(canonical_json(package))
         snapshot = {'path': str(path.relative_to(root)), 'sha256': sha256(path.read_bytes()), 'mode': mode,
-                    'model': setting('REVEAL_CLAUDE_MODEL', 'claude-sonnet-4-6'), 'kind': job['kind'],
-                    'selected_graphs':list(package['external_evidence']['selected_graphs']) if job['kind']=='analysis' else []}
+                    'model': package['model'] if agent else setting('REVEAL_CLAUDE_MODEL', 'claude-sonnet-4-6'), 'kind': job['kind'],
+                    'selected_graphs':list(package['external_evidence']['selected_graphs']) if job['kind']=='analysis' else
+                                      list(package['graphs']) if agent else []}
         prepared_queue = {**queue, 'dispatch_input': snapshot}
-        request, _ = self.request(job, prepared_queue, execution, root)
+        ceiling = await run_sync(agent_limits.budget_ceiling, self.repository) if agent else None
+        request, _ = self.request(job, prepared_queue, execution, root, ceiling)
         snapshot['bootstrap'] = await run_sync(self.box_adapter(prepared_queue).freeze_bootstrap, request, self.store())
         require(state.stored_bootstrap({'dispatch_input': snapshot}), 'Bootstrap bundle must have an immutable S3 reference')
         self.bootstrap_config(job, execution, snapshot)
@@ -670,7 +692,8 @@ class WorkflowExecution:
                 owner, _ = state.owned(tx, payload, token)
                 current = tx.get('job', job['id'])['data']; current['owner_user_id'] = owner
                 if current['status'] != 'cancel_requested': current['status'] = 'running'
-                jobs.event(tx, current, 'status', 'Frozen evidence saved. Preparing isolated research execution.')
+                jobs.event(tx, current, 'status', 'Prompt saved. Preparing an isolated agent sandbox.' if agent else
+                           'Frozen evidence saved. Preparing isolated research execution.')
         await run_sync(mark_running)
         return {'next_phase': 'create'}
 
@@ -689,11 +712,39 @@ class WorkflowExecution:
             from .job_failures import authoring_failure
             if result.status == 'failed':
                 await run_sync(self.activity, payload, token, 'stage', {
-                    'stage': 'authoring_paragraph' if job['kind'] == 'paragraph' else 'authoring_account',
+                    'stage': authoring_stage(job['kind']),
                     'state': 'failed', 'message': 'Agent execution did not finish. Its partial output and diagnostics have been preserved.'})
+            # A response over limits.max_output_tokens is reported with the ceiling a new request may ask for now.
+            ceiling = (await run_sync(agent_limits.ceiling, self.repository, 'max_output_tokens')
+                       if job['kind'] == 'agent' and result.status == 'failed' else None)
             await run_sync(jobs.finish, self.repository, job['id'], token, result.status,
-                                   failure=authoring_failure(result, request) if result.status == 'failed' else None)
+                                   failure=authoring_failure(result, request, ceiling) if result.status == 'failed' else None)
             return {'next_phase': 'complete', 'done': True}
+        if job['kind'] == 'agent':
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking the captured run and its tool ledger.'})
+            await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
+            require(result.status == 'succeeded' and result.response_path is not None, 'The agent run left no response record')
+            checked = {}
+            from .box_agent import deliverable_of, schema_of
+            schema = schema_of(inputs)
+            if schema is not None:
+                # The answer job asked for structured output: the object Claude Code returned must satisfy the frozen
+                # schema. A run that returned none, or one that does not, fails as VALIDATION_FAILED.
+                from .agent_output import check_result
+                await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating',
+                    'message': 'Checking the structured output against the requested schema.'})
+                await run_sync(check_result, decode(assert_artifact(result.response_path, root).read_bytes()), schema)
+            if deliverable_of(inputs) == 'scientific_account':
+                # The gate a research account passes, then the deposit form. Both happen here, once: assembly stamps
+                # the time, so the ids differ on a second run, and commit only reads back what this step saved.
+                from . import agent_account
+                await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating',
+                    'message': 'Checking the account against the sources it saved and cites.'})
+                checked['account'] = await run_sync(agent_account.accept, root, job, request.attempt, inputs['account'],
+                                                    queue['attribution'], result, request.output_dir)
+            # validated_paths[0] stays the response record: commit reads it by position.
+            await run_sync(self.checkpoint, payload, token, root, validated_paths=[str(result.response_path.relative_to(root))], **checked)
+            return {'next_phase': 'commit'}
         await run_sync(self.activity, payload, token, 'stage', {'stage': 'validating', 'message': 'Checking source fidelity, identities and captured provenance.'})
         await run_sync(validate_execution_ledger, result, request, queue['dispatch_input']['model'])
         if result.status == 'insufficient_evidence': return {'next_phase': 'commit', 'outcome': True}
@@ -735,7 +786,20 @@ class WorkflowExecution:
             def save_workspace(self, _job, _token, _root):
                 engine.checkpoint(payload, token, root)
         worker = AcceptanceWorker(self.repository)
-        if not await worker.begin_persistence(job, token, 'Saving the validated research outcome.'):
+        if not await worker.begin_persistence(job, token, 'Saving the agent response.' if job['kind'] == 'agent' else
+                                              'Saving the validated research outcome.'):
+            return {'next_phase': 'complete', 'done': True}
+        if job['kind'] == 'agent':
+            from .box_agent import job_result
+            record = decode(assert_artifact(root/execution['validated_paths'][0], request.output_dir).read_bytes())
+            account = None
+            if execution.get('account'):
+                account = await self.commit_account(payload, token, job, execution, root)
+                if account is None: return {'next_phase': 'complete', 'done': True}
+            outcome = job_result(record, marker['files'], job_id=job['id'], attempt=request.attempt, account=account)
+            await run_sync(jobs.finish, self.repository, job['id'], token, 'succeeded', result=outcome)
+            current, _, _ = await run_sync(self.context, payload)
+            if current['status'] == 'cancel_requested': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
             return {'next_phase': 'complete', 'done': True}
         directory = root/'validated'; directory.mkdir(exist_ok=True)
         result = captured_result(request, execution['box'], marker)
@@ -758,6 +822,80 @@ class WorkflowExecution:
         current, _, _ = await run_sync(self.context, payload)
         if current['status'] == 'cancel_requested': await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
         return {'next_phase': 'complete', 'done': True}
+
+    def record_screen(self, job, verdict):
+        """Copy the deposit screen's verdict (no text, only the check, score, threshold and location) into admin
+        telemetry; never affects the job."""
+        from .job_metrics import record
+        record(self.repository, job, screen=verdict)
+
+    def record_deposit(self, job, deposit):
+        """Copy the deposit outcome (status, reason, receipt id and counts; never the document) into admin telemetry;
+        never affects the job."""
+        from .job_metrics import record
+        record(self.repository, job, deposit=deposit)
+
+    async def commit_account(self, payload, token, job, execution, root):
+        """Deposit and store a checked account. Returns the job result's account block, or None when the job was
+        cancelled first (it is then finished as cancelled here).
+
+        The deposit goes first because the job result reports it and cannot be amended afterwards. It cannot be
+        recalled either, so a pending cancellation is honoured before sending, and its receipt is recorded at once: a
+        retried commit stores the account without depositing it twice. A deposit that fails is reported, never raised.
+        A receipt showing the repository holds the account otherwise than sent is `failed`/`inconsistent`
+        (claims_deposit): recorded like any receipt, and the account is kept with the job like an undeposited one.
+
+        Only an account the gate's prompt-injection screen passed is sent. A withheld one is stored and returned as
+        any other, with the deposit status withheld_unsafe; its verdict was checkpointed with the account, so a retried
+        commit reaches the same outcome. An account with no verdict is never sent."""
+        from . import agent_account, claims_deposit, deposit_screen
+        record = execution['account']
+        verdict = record.get('screen')
+        require(isinstance(verdict, dict) and verdict.get('outcome') in ('passed', 'withheld'),
+                'The account was not screened before its deposit')
+        data, texts = await run_sync(agent_account.stored, root, record)
+        await run_sync(self.record_screen, job, verdict)
+        deposit = execution.get('account_deposit')
+        if deposit is None:
+            current, _, _ = await run_sync(self.context, payload)
+            if current['status'] == 'cancel_requested':
+                await run_sync(jobs.finish, self.repository, job['id'], token, 'cancelled')
+                return None
+        if deposit is None and verdict['outcome'] == 'withheld':
+            deposit = deposit_screen.withheld(verdict)
+            await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
+                'message': 'Keeping the account with the job. It is not deposited in the claims repository.'})
+        elif deposit is None:
+            if claims_deposit.configuration():
+                await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
+                    'message': 'Depositing the account in the claims repository.'})
+            deposit = await run_sync(claims_deposit.send, data)
+            # Any receipt is recorded, an inconsistent one too: the repository has taken the objects either way.
+            if deposit.get('deposit_id'):
+                def remember():
+                    with self.repository.transaction() as tx:
+                        owner, current = state.owned(tx, payload, token)
+                        current.update(account_deposit=deposit, updated_at=now())
+                        tx.put('execution', payload['job_id'], owner, current)
+                await run_sync(remember)
+        await run_sync(self.record_deposit, job, deposit)
+        retained = {}
+        for paper in record['papers']:
+            retained[paper['sha256']] = await run_sync(agent_account.retain, job['id'], paper['sha256'],
+                                                       texts[paper['sha256']], paper['media_type'])
+        # A deposited account is served back from the claims repository; REVEAL keeps the document only when the
+        # repository does not hold it as sent, so its owner still gets it (claims_read, agent_account.kept_document).
+        kept = None
+        if deposit['status'] != 'deposited':
+            kept = await run_sync(agent_account.retain, job['id'], record['document']['sha256'], data, 'application/json')
+        def save():
+            with self.repository.transaction() as tx:
+                pair = jobs.fenced(tx, job['id'], token)
+                if not pair: return False
+                agent_account.save(tx, pair[0]['owner_user_id'], job['id'], record, retained, deposit, now(), kept)
+                return True
+        if not await run_sync(save): return None
+        return agent_account.public(record, deposit)
 
     def verified_capture(self, payload, execution, request):
         require(execution.get('capture_complete'), 'Validation requires durable captured output')

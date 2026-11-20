@@ -416,6 +416,27 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ordered, sorted(ordered))
         marker = json.loads((self.request.output_dir / CAPTURE_MARKER).read_text())
         self.assertEqual(marker['timings'], timing)
+    async def test_the_collected_transcript_is_scanned_for_credentials_as_inflated(self):
+        import gzip
+        original = self.adapter.remote
+        transcript = {}
+        async def remote(box, action, *args):
+            if action == 'collect':
+                return json.dumps({'files': {'output/account-1.json': base64.b64encode(b'{}').decode(), 'runtime.json': base64.b64encode(b'{}').decode(),
+                                             'ledger/claude-stream.jsonl.gz': base64.b64encode(transcript['bytes']).decode()}})
+            return await original(box, action, *args)
+        self.adapter.remote = remote
+        transcript['bytes'] = gzip.compress(b'{"type":"assistant","text":"secret-a"}\n')
+        self.assertNotIn(b'secret-a', transcript['bytes'])
+        with self.assertRaisesRegex(BoxTransportError, 'Credential material'):
+            await self.adapter.execute(self.request, self.emit, self.cancelled, self.checkpoint)
+        transcript['bytes'] = b'not gzip'
+        with self.assertRaisesRegex(BoxTransportError, 'gzip'):
+            await self.adapter.execute(self.request, self.emit, self.cancelled, self.checkpoint)
+        transcript['bytes'] = gzip.compress(b'{"type":"assistant","text":"clean"}\n')
+        result = await self.adapter.execute(self.request, self.emit, self.cancelled, self.checkpoint)
+        self.assertEqual(result.status, 'succeeded')
+        self.assertEqual((self.request.output_dir / 'ledger/claude-stream.jsonl.gz').read_bytes(), transcript['bytes'])
     async def test_recovery_reuses_handle_without_duplicate_launch(self):
         request = replace(self.request, remote_handle={'job_id':'job','attempt':1,'box_id':'test-box','cursor':1,'phase':'running','created_at':__import__('time').time()})
         await self.adapter.execute(request, self.emit, self.cancelled, self.checkpoint)

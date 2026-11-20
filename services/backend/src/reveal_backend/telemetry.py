@@ -36,8 +36,10 @@ METRIC_FIELDS = {'agent.cost_usd': 'cost_usd', 'agent.estimated_cost_usd': 'esti
                  'agent.cost_source': 'cost_source', 'agent.budget_usd': 'budget_usd',
                  'agent.budget_used': 'budget_used', 'agent.turns': 'turns', 'agent.tokens': 'tokens',
                  'agent.model': 'model', 'agent.status': 'agent_status', 'agent.subtype': 'agent_subtype',
-                 'agent.lint_checks': 'lint_checks', 'error.phase': 'error_phase', 'error.error_type': 'error_type',
-                 'parent_job_id': 'parent_job_id'}
+                 'agent.lint_checks': 'lint_checks', 'agent.draft_writes': 'draft_writes', 'agent.tool_calls': 'tool_calls',
+                 'agent.tool_failures': 'tool_failures', 'agent.turn_limit': 'turn_limit',
+                 'agent.time_limit_seconds': 'time_limit_seconds', 'error.phase': 'error_phase',
+                 'error.error_type': 'error_type', 'parent_job_id': 'parent_job_id'}
 
 
 def job_metrics(tx, identities):
@@ -48,9 +50,18 @@ def job_metrics(tx, identities):
             if identity in rows else dict(empty) for identity in identities}
 
 
+def deliverable_of(kind, queue):
+    """What an agent job was asked to return: 'answer' or 'scientific_account'. None for every other kind of job, and
+    for an agent job whose queue record is gone."""
+    if kind != 'agent': return None
+    value = queue.get('inputs.deliverable')
+    return value if isinstance(value, str) else None
+
+
 def job_timings(tx, identities=None):
     rows = records(tx, 'job', ('kind', 'status', 'stage', 'created_at', 'completed_at', 'updated_at', 'failure.code'), identities)
-    queues = records(tx, 'queue', ('attempt', 'worker_id', 'lease_until', 'recoveries', 'remote_handle'), list(rows))
+    queues = records(tx, 'queue', ('attempt', 'worker_id', 'lease_until', 'recoveries', 'remote_handle',
+                                   'inputs.deliverable'), list(rows))
     # Durable workflow jobs keep their start, attempt and recovery state on the execution, not on legacy attempt rows.
     executions = records(tx, 'execution', ('created_at', 'authoring_attempt', 'recoveries', 'delivery_recoveries', 'handoffs'), list(rows))
     metrics = job_metrics(tx, list(rows))
@@ -68,7 +79,8 @@ def job_timings(tx, identities=None):
         end = job.get('completed_at')
         phases = handle.get('timings', {})
         job_items.append({
-            'id': identity, 'owner': owner, 'kind': job['kind'], 'status': job['status'], 'stage': job['stage'],
+            'id': identity, 'owner': owner, 'kind': job['kind'], 'deliverable': deliverable_of(job['kind'], queue),
+            'status': job['status'], 'stage': job['stage'],
             'created_at': job.get('created_at'), 'completed_at': end, 'updated_at': job.get('updated_at'),
             'started_at': first_start, 'attempt_started_at': attempt.get('started_at'),
             'wall_seconds': seconds(job.get('created_at'), end),
@@ -88,6 +100,172 @@ def job_timings(tx, identities=None):
             **metrics[identity],
         })
     return job_items
+
+
+AGENT_JOB_WINDOW = 100
+# How an agent job was asked to run, by allowlisted path of the queue record's frozen input. That record also holds
+# the prompt, system prompt, question, claims, evidence package, lease token and (for an account) who is credited.
+# None of those is read here: text is reported as a length and lists of content as a count, both taken in SQL.
+AGENT_INPUT_FIELDS = {'inputs.format': 'input_format', 'inputs.model': 'model', 'inputs.effort': 'effort',
+                      'inputs.tools': 'tools', 'inputs.graphs': 'graphs', 'inputs.network': 'network', 'inputs.allowed_domains': 'allowed_domains',
+                      'inputs.claims_repository': 'claims_repository', 'inputs.limits': 'limits',
+                      'inputs.account.attribute_requester': 'attribute_requester'}
+AGENT_SWITCHES = ('claims_repository', 'attribute_requester')
+# What came back, from the job record. Never the response text, the account document or a claim.
+AGENT_RESULT_FIELDS = {'result.response_truncated': 'response_truncated', 'result.account.account_id': 'account_id',
+                       'result.account.objects': 'objects', 'result.account.claims': 'claims',
+                       'result.account.value_locators': 'quotes', 'result.account.lint_warnings': 'lint_warnings',
+                       'result.account.dapper_version': 'dapper_version',
+                       'result.account.deposit.status': 'deposit_status', 'result.account.deposit.deposit_id': 'deposit_id',
+                       'result.account.deposit.reason': 'deposit_reason',
+                       'result.account.deposit.http_status': 'deposit_http_status'}
+# The deposit screen's verdict, from job_metrics (deposit_screen): which check withheld the account, the classifier's
+# score and threshold, and where the text came from (a source file and lines, a ledger call, an account field).
+AGENT_SCREEN_FIELDS = {'screen.outcome': 'screen_outcome', 'screen.check': 'screen_check', 'screen.score': 'screen_score',
+                       'screen.threshold': 'screen_threshold', 'screen.location': 'screen_location',
+                       'screen.classifier': 'screen_classifier', 'screen.windows': 'screen_windows',
+                       'screen.texts': 'screen_texts', 'screen.seconds': 'screen_seconds'}
+# (record kind, output field, JSON path, what is measured). 'text' is a string's length in characters, 'items' a
+# list's length, 'triples' the claims that came with a subject. A missing or null value is None, never 0.
+AGENT_SIZES = (('queue', 'prompt_characters', 'inputs.prompt', 'text'),
+               ('queue', 'system_prompt_characters', 'inputs.system_prompt', 'text'),
+               ('queue', 'question_characters', 'inputs.account.question', 'text'),
+               ('queue', 'claims_requested', 'inputs.account.claims', 'items'),
+               ('queue', 'claims_with_triple', 'inputs.account.claims', 'triples'),
+               ('job', 'response_characters', 'result.response', 'text'),
+               ('job', 'papers', 'result.account.papers', 'items'),
+               ('job', 'files', 'result.files', 'items'),
+               # Structured output: only how large the schema and the returned object are, never either one.
+               ('queue', 'output_schema_characters', 'inputs.output_schema', 'json'),
+               ('job', 'structured_output_characters', 'result.structured_output', 'json'))
+
+
+def measure(tx, path, what):
+    """SQL for one size of a JSON value in payload, in the connection's dialect. The value itself is never selected."""
+    path = "'$." + path + "'"
+    if tx.sqlite:
+        if what == 'text': return f"CASE WHEN json_type(payload,{path})='text' THEN length(json_extract(payload,{path})) END"
+        if what == 'items': return f"CASE WHEN json_type(payload,{path})='array' THEN json_array_length(payload,{path}) END"
+        if what == 'json': return f"CASE WHEN json_type(payload,{path}) IN ('object','array') THEN length(json_extract(payload,{path})) END"
+        return (f"CASE WHEN json_type(payload,{path})='array' THEN (SELECT COUNT(*) FROM json_each(payload,{path}) "
+                "WHERE type='object' AND json_type(value,'$.subject_entity')='text') END")
+    value = f"JSON_EXTRACT(payload,{path})"
+    if what == 'text': return f"IF(JSON_TYPE({value})='STRING',CHAR_LENGTH(JSON_UNQUOTE({value})),NULL)"
+    if what == 'items': return f"IF(JSON_TYPE({value})='ARRAY',JSON_LENGTH({value}),NULL)"
+    if what == 'json': return f"IF(JSON_TYPE({value}) IN ('OBJECT','ARRAY'),CHAR_LENGTH(CAST({value} AS CHAR)),NULL)"
+    subjects = "JSON_EXTRACT(payload,'$." + path[3:-1] + "[*].subject_entity')"
+    return f"IF(JSON_TYPE({value})='ARRAY',COALESCE(JSON_LENGTH({subjects}),0),NULL)"
+
+
+def sizes(tx, kind, identities):
+    """{id: {field: size}} for the AGENT_SIZES of one record kind."""
+    wanted = [(field, path, what) for record, field, path, what in AGENT_SIZES if record == kind]
+    if not identities or not wanted: return {}
+    sql = ('SELECT id,' + ','.join(measure(tx, path, what) for _, path, what in wanted) + ' FROM reveal_records WHERE kind=%s AND id IN ('
+           + ','.join(['%s'] * len(identities)) + ')')
+    return {row[0]: {field: int(value) if value is not None else None for (field, _, _), value in zip(wanted, row[1:])}
+            for row in tx.execute(sql, [kind, *identities]).fetchall()}
+
+
+def agent_runs(tx, identities):
+    """{job id: how the agent job was asked to run and what it returned}. Settings, limits, sizes and outcomes only."""
+    identities = list(identities)
+    queues = records(tx, 'queue', ('inputs.deliverable', *AGENT_INPUT_FIELDS), identities)
+    results = records(tx, 'job', tuple(AGENT_RESULT_FIELDS), identities)
+    screens = records(tx, 'job_metrics', tuple(AGENT_SCREEN_FIELDS), identities)
+    queue_sizes, job_sizes = sizes(tx, 'queue', identities), sizes(tx, 'job', identities)
+    runs = {}
+    for identity in identities:
+        queue = queues.get(identity, {}).get('data', {})
+        asked = {field: queue.get(path) for path, field in AGENT_INPUT_FIELDS.items()}
+        # SQLite reports a JSON boolean as 0 or 1 and MySQL as true or false; a setting the input never had stays None.
+        for field in AGENT_SWITCHES:
+            if asked[field] is not None: asked[field] = bool(asked[field])
+        for field in ('tools', 'graphs', 'allowed_domains'):
+            if not isinstance(asked[field], list): asked[field] = None
+            else: asked[field] = [item for item in asked[field] if isinstance(item, str)][:50]
+        if not isinstance(asked['limits'], dict): asked['limits'] = None
+        result = {field: results.get(identity, {}).get('data', {}).get(path) for path, field in AGENT_RESULT_FIELDS.items()}
+        result.update({field: screens.get(identity, {}).get('data', {}).get(path) for path, field in AGENT_SCREEN_FIELDS.items()})
+        if result['response_truncated'] is not None: result['response_truncated'] = bool(result['response_truncated'])
+        empty = {field: None for record, field, _, _ in AGENT_SIZES}
+        runs[identity] = {'deliverable': deliverable_of('agent', queue), **asked,
+                          **{**empty, **queue_sizes.get(identity, {}), **job_sizes.get(identity, {})}, 'result': result}
+        # The sizes that describe the result belong with it.
+        for field in ('response_characters', 'papers', 'files', 'structured_output_characters'):
+            runs[identity]['result'][field] = runs[identity].pop(field)
+    return runs
+
+
+# Each source file an account job saved, for the admin job detail only (never the job list): what the agent wrote about
+# it (path, URL, the command it recorded and the Bash call REVEAL saw run) and what REVEAL measured (size, sha256, media
+# type), with how many quotes cite it. Metadata, not the file or its text. Caps bound what one job can put on the page.
+AGENT_SOURCE_FIELDS = {'path': 300, 'url': 2_000, 'command': 2_000, 'observed_command': 8_000, 'derived_from': 300,
+                       'sha256': 64, 'media_type': 100, 'size_bytes': None, 'evidence_items': None}
+MAX_AGENT_SOURCES = 100
+
+
+def account_sources(tx, identity):
+    """{'items': [...], 'total': n} for the saved sources the job result's account lists, each with AGENT_SOURCE_FIELDS
+    only; None when the job returned no account."""
+    papers = records(tx, 'job', ('result.account.papers',), [identity]).get(identity, {}).get('data', {}).get('result.account.papers')
+    if not isinstance(papers, list): return None
+    def value(paper, key, cap):
+        item = paper.get(key)
+        if cap is None: return item if isinstance(item, int) and not isinstance(item, bool) else None
+        return item[:cap] if isinstance(item, str) else None
+    items = [{key: value(paper, key, cap) for key, cap in AGENT_SOURCE_FIELDS.items()}
+             for paper in papers[:MAX_AGENT_SOURCES] if isinstance(paper, dict)]
+    return {'items': items, 'total': len(papers)}
+
+
+def median(values):
+    values = sorted(value for value in values if isinstance(value, (int, float)) and not isinstance(value, bool))
+    return values[len(values) // 2] if values else None
+
+
+def agent_jobs(tx, limit=AGENT_JOB_WINDOW):
+    """The latest general agent jobs with how each was asked to run, and what was asked for by type.
+
+    The job list above holds every kind of job, so agent jobs drop out of it as research runs accumulate; this
+    one selects them by kind."""
+    identities = [row[0] for row in tx.execute(
+        "SELECT id FROM reveal_records WHERE kind=%s AND JSON_EXTRACT(payload,'$.kind')=%s ORDER BY updated_at DESC,id DESC LIMIT %s",
+        ('job', 'agent', limit)).fetchall()]
+    runs = agent_runs(tx, identities)
+    items = [{**job, 'agent': runs[job['id']]} for job in job_timings(tx, identities)] if identities else []
+    types = {}
+    for job in items:
+        run = job['agent']; name = run['deliverable'] or 'unknown'
+        entry = types.setdefault(name, {'deliverable': name, 'jobs': 0, 'succeeded': 0, 'failed': 0, 'cancelled': 0, 'active': 0,
+                                        'deposited': 0, 'deposit_not_made': 0, 'withheld_unsafe': 0, 'withheld_by_check': {},
+                                        'spend_usd': 0.0, 'owners': set(),
+                                        'costs': [], 'turns': [], 'seconds': [], 'latest_at': None})
+        entry['jobs'] += 1; entry['owners'].add(job['owner'])
+        status = job['status']
+        entry[status if status in ('succeeded', 'cancelled') else 'failed' if status in TERMINAL else 'active'] += 1
+        deposit = run['result']['deposit_status']
+        if deposit == 'deposited': entry['deposited'] += 1
+        # Withheld by the deposit screen, counted by the check that withheld it: the rate the threshold is tuned from.
+        elif deposit == 'withheld_unsafe':
+            entry['withheld_unsafe'] += 1
+            check = run['result']['screen_check'] or run['result']['deposit_reason'] or 'unknown'
+            entry['withheld_by_check'][check] = entry['withheld_by_check'].get(check, 0) + 1
+        # An account that was accepted and returned but is not in the claims repository: the deposit failed or no
+        # repository is configured. The job itself still reads "succeeded".
+        elif status == 'succeeded' and name == 'scientific_account': entry['deposit_not_made'] += 1
+        cost = job['cost_usd'] if isinstance(job['cost_usd'], (int, float)) else job['estimated_cost_usd']
+        if isinstance(cost, (int, float)): entry['spend_usd'] += cost
+        if status == 'succeeded':
+            entry['costs'].append(job['cost_usd']); entry['turns'].append(job['turns']); entry['seconds'].append(job['wall_seconds'])
+        if isinstance(job['created_at'], str) and (entry['latest_at'] is None or job['created_at'] > entry['latest_at']):
+            entry['latest_at'] = job['created_at']
+    summary = [{**{key: value for key, value in entry.items() if key not in ('owners', 'costs', 'turns', 'seconds')},
+                'spend_usd': round(entry['spend_usd'], 4), 'owners': len(entry['owners']),
+                'typical_cost_usd': median(entry['costs']), 'typical_turns': median(entry['turns']),
+                'typical_seconds': median(entry['seconds'])}
+               for entry in sorted(types.values(), key=lambda entry: -entry['jobs'])]
+    return {'window_limit': limit, 'jobs': items, 'types': summary}
 
 
 COST_WINDOW = 1000
@@ -121,7 +299,8 @@ def cost_summary(tx, current=None):
     def bucket(): return {'spend_usd': 0.0, 'jobs': 0, 'estimated': 0, 'unreported': 0, 'failed': 0}
     totals = {name: bucket() for name in ('day', 'week', 'month', 'window')}
     daily, owners, failures = {}, {}, {}
-    research, exceeded, near = [], 0, 0
+    # Successful runs' provider-reported costs, per kind with a summary: research analyses and general agent jobs.
+    succeeded, exceeded, near = {'analysis': [], 'agent': []}, 0, 0
     for identity, row in metrics.items():
         data = row['data']; job = jobs.get(identity, {}).get('data', {})
         created = job.get('created_at') or data.get('created_at'); days = age(created)
@@ -136,9 +315,10 @@ def cost_summary(tx, current=None):
                 target = totals[name]; target['jobs'] += 1; target['spend_usd'] += cost or 0
                 target['estimated'] += estimated; target['unreported'] += unreported; target['failed'] += status == 'failed'
         if days is not None and days <= 30 and isinstance(created, str):
-            day = daily.setdefault(created[:10], {'date': created[:10], 'analysis_usd': 0.0, 'paragraph_usd': 0.0, 'jobs': 0, 'failed': 0})
+            day = daily.setdefault(created[:10], {'date': created[:10], 'analysis_usd': 0.0, 'paragraph_usd': 0.0, 'agent_usd': 0.0,
+                                                  'jobs': 0, 'failed': 0})
             day['jobs'] += 1; day['failed'] += status == 'failed'
-            day['paragraph_usd' if data.get('kind') == 'paragraph' else 'analysis_usd'] += cost or 0
+            day[{'paragraph': 'paragraph_usd', 'agent': 'agent_usd'}.get(data.get('kind'), 'analysis_usd')] += cost or 0
         owner = owners.setdefault(row['owner'], {'owner': row['owner'], 'label': labels.get(row['owner']), **bucket()})
         owner['jobs'] += 1; owner['spend_usd'] += cost or 0; owner['estimated'] += estimated
         owner['unreported'] += unreported; owner['failed'] += status == 'failed'
@@ -151,16 +331,18 @@ def cost_summary(tx, current=None):
             if cause: entry['causes'][cause] = entry['causes'].get(cause, 0) + 1
         if data.get('agent.subtype') == 'error_max_budget_usd' or code == 'AUTHORING_BUDGET_EXCEEDED': exceeded += 1
         elif isinstance(data.get('agent.budget_used'), (int, float)) and data['agent.budget_used'] >= .8: near += 1
-        if data.get('kind') == 'analysis' and status == 'succeeded' and reported is not None: research.append(reported)
-    research.sort()
-    def quantile(q): return round(research[min(len(research) - 1, int(q * len(research)))], 4) if research else None
+        if data.get('kind') in succeeded and status == 'succeeded' and reported is not None: succeeded[data['kind']].append(reported)
+    def distribution(values):
+        values = sorted(values)
+        def quantile(q): return round(values[min(len(values) - 1, int(q * len(values)))], 4) if values else None
+        return {'succeeded': len(values), 'p50_usd': quantile(.5), 'p90_usd': quantile(.9), 'max_usd': values[-1] if values else None,
+                'mean_usd': round(sum(values) / len(values), 4) if values else None}
     rounded = lambda items: [{**item, 'spend_usd': round(item['spend_usd'], 4)} for item in items]
     return {'window_jobs': len(metrics), 'window_limit': COST_WINDOW,
             'totals': {name: {**value, 'spend_usd': round(value['spend_usd'], 4)} for name, value in totals.items()},
-            'daily': [{**d, 'analysis_usd': round(d['analysis_usd'], 4), 'paragraph_usd': round(d['paragraph_usd'], 4)} for d in sorted(daily.values(), key=lambda d: d['date'])],
-            'research': {'succeeded': len(research), 'p50_usd': quantile(.5), 'p90_usd': quantile(.9),
-                         'max_usd': research[-1] if research else None,
-                         'mean_usd': round(sum(research) / len(research), 4) if research else None},
+            'daily': [{**d, **{key: round(d[key], 4) for key in ('analysis_usd', 'paragraph_usd', 'agent_usd')}}
+                      for d in sorted(daily.values(), key=lambda d: d['date'])],
+            'research': distribution(succeeded['analysis']), 'agents': distribution(succeeded['agent']),
             'owners': rounded(sorted(owners.values(), key=lambda o: -o['spend_usd'])[:20]),
             'failures': rounded(sorted(failures.values(), key=lambda f: -f['jobs'])),
             'budget': {'exceeded': exceeded, 'near_limit': near}}
@@ -176,7 +358,11 @@ def snapshot(repository):
         status_sql = "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status')),COUNT(*) FROM reveal_records WHERE kind='job' GROUP BY 1"
         if tx.sqlite: status_sql = status_sql.replace("JSON_UNQUOTE(JSON_EXTRACT(payload,'$.status'))", "json_extract(payload,'$.status')")
         statuses = [{'status': r[0], 'count': r[1]} for r in tx.execute(status_sql).fetchall()]
+        kind_sql = "SELECT JSON_UNQUOTE(JSON_EXTRACT(payload,'$.kind')),COUNT(*) FROM reveal_records WHERE kind='job' GROUP BY 1"
+        if tx.sqlite: kind_sql = kind_sql.replace("JSON_UNQUOTE(JSON_EXTRACT(payload,'$.kind'))", "json_extract(payload,'$.kind')")
+        job_kinds = sorted(({'kind': r[0], 'count': r[1]} for r in tx.execute(kind_sql).fetchall()), key=lambda k: -k['count'])
         job_items = job_timings(tx)
+        agents = agent_jobs(tx)
         costs = cost_summary(tx)
         # Only event envelope fields; messages/tool arguments may contain private scientific input.
         events = [row['data'] for row in records(tx, 'event', ('id', 'job_id', 'occurred_at', 'event_type', 'status', 'stage')).values()]
@@ -209,5 +395,7 @@ def snapshot(repository):
     return {'generated_at': now(), 'query_ms': round((time.perf_counter()-started)*1000, 1), 'runtime': metrics(),
             'notifications':notification_health(repository),
             'database': 'sqlite-test' if repository.sqlite_path else 'aurora-mysql',
-            'counts': counts, 'recent': recent, 'statuses': statuses, 'jobs': job_items, 'costs': costs, 'events': events,
-            'tables': tables, 'imports': imports, 'limits': {'jobs': 100, 'events': 100, 'recent': 100, 'imports_per_table': 10}}
+            'counts': counts, 'recent': recent, 'statuses': statuses, 'job_kinds': job_kinds, 'jobs': job_items,
+            'agent_jobs': agents, 'costs': costs, 'events': events,
+            'tables': tables, 'imports': imports,
+            'limits': {'jobs': 100, 'agent_jobs': AGENT_JOB_WINDOW, 'events': 100, 'recent': 100, 'imports_per_table': 10}}

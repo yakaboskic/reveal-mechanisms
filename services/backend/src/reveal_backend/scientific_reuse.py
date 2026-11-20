@@ -19,8 +19,10 @@ _UNREAD = object()
 
 
 def _legacy_sql_source(tx, owner, package, key, seen=frozenset()):
-    """Recheck historical SQL capture bytes, including derived input captures."""
+    """Recheck historical SQL capture bytes, including derived input captures: a reference generation's (format /1) or
+    the environment's reference release's (format /2), bound as scientific_account_lint.cfde_source_files binds them."""
     from .evidence_package import decode
+    from .scientific_account_lint import REFERENCE_CAPTURES
     if key in seen:
         return False
     artifacts = package.get('source_artifacts', {})
@@ -48,14 +50,17 @@ def _legacy_sql_source(tx, owner, package, key, seen=frozenset()):
     generation = next(iter(generations))
     provenance = capture.get('source', {}); kind = provenance.get('kind')
     names = provenance.get('tables' if kind == 'mysql' else 'derived_from')
-    if (capture.get('generation_id') != generation or capture.get('model') != 'eaggl-capped-v1'
-            or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
-            or source['origin'] != f"{kind}:{'+'.join(names)}?generation_id={generation}"):
+    version = capture.get('format').rsplit('/', 1)[-1] if isinstance(capture.get('format'), str) else None
+    if version not in REFERENCE_CAPTURES:
         return False
-    if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/1':
-        return set(names) <= {'reference_factors', 'kpn_traits', 'eaggl_factors', 'eaggl_genes', 'eaggl_gene_loadings',
-                             'factor_gene_set_projections', 'cfde_gene_sets', 'cfde_gene_set_collections'}
-    if kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/1':
+    field, tables = REFERENCE_CAPTURES[version]  # the generation (/1) or release (/2) the package's mechanisms were fit in
+    if (capture.get(field) != generation or capture.get('model') != 'eaggl-capped-v1'
+            or not isinstance(names, list) or not names or not all(isinstance(name, str) for name in names)
+            or source['origin'] != f"{kind}:{'+'.join(names)}?{field}={generation}"):
+        return False
+    if kind == 'mysql' and capture.get('format') == 'reveal.reference-evidence.mysql-capture/' + version:
+        return set(names) <= tables
+    if kind == 'mysql-derived' and capture.get('format') == 'reveal.reference-evidence.derived-capture/' + version:
         return all(_legacy_sql_source(tx, owner, package, item, seen | {key}) for item in names)
     return False
 

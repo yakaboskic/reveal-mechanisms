@@ -60,8 +60,7 @@ env:
   REVEAL_CANONICAL_URL: https://reveal-mechanisms.vercel.app
   REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms.vercel.app
   NEXTAUTH_URL: https://reveal-mechanisms.vercel.app
-  REVEAL_MAPPING_RUN_ID: 272cfa19d093257863d7e7134776229dbc9b9b018d974e6b311285686833ec31
-  EMBEDDING_SERVICE_URL: https://embedding-service-27386110942.us-east1.run.app
+  EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
   EMBEDDING_MODEL: pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb
   EMBEDDING_PROVIDER: huggingface
   EMBEDDING_MODEL_REVISION: unspecified
@@ -72,10 +71,11 @@ env:
   REVEAL_AGENT_MAX_BUDGET_USD: '50'
   REVEAL_PARAGRAPH_MAX_BUDGET_USD: '5'
   REVEAL_AGENT_MAX_TURNS: '100'
-  REVEAL_RETRIEVAL_BACKEND: upstash
   REVEAL_VECTOR_ENVIRONMENT: prod
   # BioIndex small-model phenotype readers; SmallModelBioIndex().verify() passed against the live host.
   REVEAL_SMALL_PHENOTYPE_VERIFIED: 'true'
+  # Translator provenance portal: the account trace reads trait GWAS lineage from it (unset disables the fetch).
+  REVEAL_PROVENANCE_PORTAL_URL: https://translator.broadinstitute.org/artifact_provenance
   REVEAL_NOTIFICATION_NAMESPACE: reveal-prod
   QSTASH_URL: https://qstash-us-east-1.upstash.io
   REVEAL_WORKFLOW_URL: https://api-prod.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
@@ -94,12 +94,12 @@ qa:
   on_demand_base: 1
   env:
     REVEAL_APPLICATION_TABLE_PREFIX: reveal_workflow_qa
+    # Built 2026-11-19 with QA's Box key (toolchain stamp 1889f86520c980d3; .runtime/workflow/toolchain-snapshot-qa.json).
+    REVEAL_BOX_TOOLCHAIN_SNAPSHOT: 6d34c836-21d6-4322-a089-cffe0db69d88
     REVEAL_PUBLIC_API_URL: https://api-qa.hugeampkpnbi.org/api/reveal
     REVEAL_PUBLIC_WEB_URL: https://reveal-mechanisms-qa.vercel.app
     REVEAL_CANONICAL_URL: https://reveal-mechanisms-qa.vercel.app
     NEXTAUTH_URL: https://reveal-mechanisms-qa.vercel.app
-    EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
-    REVEAL_QUERY_EMBEDDING_SERVICE_URL: https://embedding-service-848707719401.us-east1.run.app
     # Five users can author five jobs each; preparation/capture remain bounded.
     REVEAL_MAX_ACTIVE_JOBS: '5'
     REVEAL_MAX_ACTIVE_BOXES: '25'
@@ -109,12 +109,21 @@ qa:
     REVEAL_AGENT_TIMEOUT_SECONDS: '1800'
     # Private Lightning audits (docs/lightning-audit.md); the QA frontend is built with NEXT_PUBLIC_REVEAL_LIGHTNING_ENABLED=true.
     REVEAL_LIGHTNING_ENABLED: 'true'
+    # Jev ordering of automatic mechanism suggestions (docs/suggest-rerank.md); uses the QA TYPESAFE_API_KEY below.
+    REVEAL_SUGGEST_RERANK: jev
     REVEAL_JOB_NAMESPACE: reveal-workflow-qa
     REVEAL_VECTOR_ENVIRONMENT: qa
     REVEAL_NOTIFICATION_NAMESPACE: reveal-qa
     REVEAL_S3_PREFIX: qa/
     REVEAL_S3_READ_PREFIXES: ''
     REVEAL_WORKFLOW_URL: https://api-qa.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
+    # General agent jobs (docs/agent-jobs.md), allowed for: the owner's registered workspace and the
+    # agent-jobs-colleague API-key workspace (REVEAL_API_KEYS). Unset, nobody can start one.
+    REVEAL_AGENT_JOB_USERS: '13b86465-2324-43c7-9f13-de73e1d27256,7c363256-ce39-464a-a323-c0d11a279b58'
+    REVEAL_AGENT_JOB_MAX_BUDGET_USD: '5'
+    # Claims repository (docs/agent-jobs.md): the agent's query_claims lookups read it, and an accepted
+    # Scientific Account is deposited there with REVEAL_CLAIMS_API_KEY below.
+    REVEAL_CLAIMS_API_URL: https://api-qa.hugeampkpnbi.org/api/claims
   secrets:
     REVEAL_MYSQL_PASSWORD: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_MYSQL_PASSWORD::'
     EMBEDDING_SERVICE_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:EMBEDDING_SERVICE_API_KEY::'
@@ -127,6 +136,11 @@ qa:
     # Optional paired fields: an absent key is represented by two empty strings.
     REVEAL_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_SHA256::'
     REVEAL_API_KEY_USER_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEY_USER_ID::'
+    # Further keys beside that pair, as comma-separated <sha256>:<user id> entries (docs/api-keys.md).
+    REVEAL_API_KEYS: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_API_KEYS::'
+    # Deposit key issued by the claims repository (its admin console or scripts/api_key.py). It names REVEAL as the
+    # depositor. Add the field to the secret BEFORE this deploys, or the task cannot start.
+    REVEAL_CLAIMS_API_KEY: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_CLAIMS_API_KEY::'
     # Separate science:read credential; provision both fields before QA rollout.
     REVEAL_ADMIN_READ_API_KEY_SHA256: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_SHA256::'
     REVEAL_ADMIN_READ_API_KEY_ID: 'arn:aws:secretsmanager:us-east-1:005901288866:secret:cyaka/reveal/workflow-qa-uiJnVi:REVEAL_ADMIN_READ_API_KEY_ID::'

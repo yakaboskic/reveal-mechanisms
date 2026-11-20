@@ -1,0 +1,108 @@
+{
+  "format": "reveal.curated-collection-lineage/1",
+  "curation_id": "cfde-collection-lineage-2026-10-11",
+  "generation_id": "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a",
+  "policy": "Collapsed lineage, curated by hand from the provenance already stored with each collection. Each collection's convert Activity (the was_generated_by of its gene sets) prov:used the upstream Datasets of its filtered library: data_input is the measured source, metadata_input a gene-identifier mapping. The intermediate dig-gene-set-filtered library dataset is not represented as a step. The Datasets and Organizations are the stored nodes; only the used edges are added.",
+  "libraries": {
+    "GTEx": {
+      "excluded": [
+        {
+          "dataset_id": "dapper:Dataset.4mRa_g0V7grOD1GuhXfClXl0GMuFA2oK",
+          "name": "dig-gene-set-filtered/GTEx",
+          "reason": "filtered intermediate"
+        }
+      ],
+      "inputs": [
+        {
+          "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+          "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+          "edge_role": "data_input"
+        },
+        {
+          "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+          "name": "NCBI Gene Homo_sapiens.gene_info",
+          "edge_role": "metadata_input"
+        }
+      ]
+    },
+    "HuBMAP": {
+      "excluded": [
+        {
+          "dataset_id": "dapper:Dataset.LnSU7pY-1M9cAx3llTCoHI--6QQcHx4F",
+          "name": "dig-gene-set-filtered/HuBMAP",
+          "reason": "filtered intermediate"
+        }
+      ],
+      "inputs": [
+        {
+          "dataset_id": "dapper:Dataset.EeXwWx_l2ARlkDfZ40PdaZ6u7FWSh174",
+          "name": "HuBMAP ASCT+B tables, 8th release (v2.2)",
+          "edge_role": "data_input"
+        },
+        {
+          "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+          "name": "NCBI Gene Homo_sapiens.gene_info",
+          "edge_role": "metadata_input"
+        }
+      ]
+    },
+    "LINCS_L1000": {
+      "excluded": [
+        {
+          "dataset_id": "dapper:Dataset.-FfDi0hZGfGwimLpsM10oBFArYX19apl",
+          "name": "dig-gene-set-filtered/LINCS_L1000",
+          "reason": "filtered intermediate"
+        }
+      ],
+      "inputs": [
+        {
+          "dataset_id": "dapper:Dataset.6nVB5hkgLulEUdRFJBvaUi6N8lASgHy0",
+          "name": "LINCS L1000 consensus perturbation signatures (chemical perturbation and CRISPR knockout), Ma'ayan Laboratory",
+          "edge_role": "data_input"
+        },
+        {
+          "dataset_id": "dapper:Dataset.HoZfD9sll8NMO8uxzI4LOL_WlbSMoD1O",
+          "name": "Harmonizome gene symbol mapping file (mappingFile_2017.txt)",
+          "edge_role": "metadata_input"
+        }
+      ]
+    },
+    "MoTrPAC": {
+      "excluded": [
+        {
+          "dataset_id": "dapper:Dataset.vL-51ouJaw_b2eewj44Iipk4syazK2oL",
+          "name": "dig-gene-set-filtered/MoTrPAC",
+          "reason": "filtered intermediate"
+        }
+      ],
+      "inputs": [
+        {
+          "dataset_id": "dapper:Dataset.IR8masYrCdSIHjo3mvszKe7w7ZYIfJqC",
+          "name": "MoTrPAC PASS1B-06 rat endurance training study, released differential analysis (transcriptomics)",
+          "edge_role": "data_input"
+        },
+        {
+          "dataset_id": "dapper:Dataset.l_ygaoXdms1Pvp0EZHYE5pwvBzvRec88",
+          "name": "MoTrPAC PASS1B-06 rat endurance training study, transcriptomics raw counts and sample metadata",
+          "edge_role": "data_input"
+        },
+        {
+          "dataset_id": "dapper:Dataset.HoZfD9sll8NMO8uxzI4LOL_WlbSMoD1O",
+          "name": "Harmonizome gene symbol mapping file (mappingFile_2017.txt)",
+          "edge_role": "metadata_input"
+        }
+      ]
+    },
+    "LIGER": {
+      "excluded": [
+        {
+          "dataset_id": "dapper:Dataset.EhKSl68Hl6fLtRH2WdYChJnBT-wNTXJd",
+          "name": "dig-gene-set-filtered/LIGER",
+          "reason": "filtered intermediate"
+        }
+      ],
+      "inputs": [],
+      "unresolved_reason": "The stored provenance names only the filtered library and /liger_outputs/kidney/... gene loadings; no upstream Dataset or Organization is recorded, so none is invented."
+    }
+  }
+}

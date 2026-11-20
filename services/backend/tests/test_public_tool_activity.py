@@ -111,6 +111,17 @@ class PublicToolActivityTests(unittest.TestCase):
                 self.assertIn('account-1.json', value)
         self.assertEqual(json.loads(display_arguments(cases[-1][0], cases[-1][1]))['node_counts'], {'claims': 1, 'scientific_accounts': 1})
 
+    def test_agent_shell_search_and_fetch_show_what_ran_with_credentials_redacted(self):
+        secret = 'sk-ant-configured-secret'
+        bash = json.loads(display_arguments('Bash', {'command': 'curl -s "https://eutils.ncbi.nlm.nih.gov/x?k=' + secret + '"',
+                                                     'description': 'Search PubMed', 'dangerouslyDisableSandbox': True}, (secret,)))
+        self.assertEqual(bash['description'], 'Search PubMed')
+        self.assertIn('eutils.ncbi.nlm.nih.gov', bash['command']); self.assertNotIn(secret, bash['command'])
+        self.assertNotIn('dangerouslyDisableSandbox', bash)
+        self.assertEqual(json.loads(display_arguments('WebSearch', {'query': 'LEPR insulin resistance'})), {'query': 'LEPR insulin resistance'})
+        self.assertEqual(json.loads(display_arguments('WebFetch', {'url': 'https://example.org/a', 'prompt': 'Summarize'}))['url'],
+                         'https://example.org/a')
+
     def test_structured_secret_keys_bearer_values_and_private_fields_are_omitted(self):
         result = {'content': [{'type': 'thinking', 'thinking': 'PRIVATE BLOCK', 'text': 'HIDDEN BLOCK TEXT'},
             {'type': 'text', 'text': json.dumps({'rows': [{'name': 'Public result', 'api_key': 'API VALUE',

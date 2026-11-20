@@ -1,8 +1,14 @@
-"""Incremental Claude Code stream-json decoder; never publishes thinking blocks."""
+"""Incremental Claude Code stream-json decoder; never publishes thinking blocks. Also the runner's private, gzipped
+record of the whole stream (TranscriptWriter), captured under the ledger for admins."""
+from collections import deque
 import codecs
+from datetime import datetime, timezone
+import gzip
 import hashlib
 import json
+import os
 import time
+import zlib
 
 from .public_tool_activity import bounded, redact_text, tool_call_payload, tool_result_payload
 from .box_timing import RuntimeTiming, provider_metrics
@@ -136,6 +142,15 @@ class ClaudeStream:
         if kind == 'system':
             if event.get('subtype') == 'init':
                 self.runtime = {key: event[key] for key in ('model', 'claude_code_version', 'session_id', 'permissionMode') if key in event}
+                # The tools and MCP servers Claude Code says it has, for the run's recorded configuration.
+                tools = event.get('tools')
+                if isinstance(tools, list) and len(tools) <= 500 and all(isinstance(name, str) and len(name) <= 200 for name in tools):
+                    self.runtime['tools'] = tools
+                servers = event.get('mcp_servers')
+                if isinstance(servers, list) and len(servers) <= 50:
+                    self.runtime['mcp_servers'] = [{key: server.get(key) for key in ('name', 'status')
+                                                    if isinstance(server.get(key), str) and len(server[key]) <= 200}
+                                                   for server in servers if isinstance(server, dict)]
             return []
         if kind in PRIVATE_NOTIFICATION_TYPES:
             return []
@@ -159,3 +174,129 @@ class ClaudeStream:
         if self.result is None:
             raise StreamProtocolError('Claude stream ended without a terminal result')
         return events
+
+
+# Lines the runner adds to a transcript; Claude Code's own event types never start with "reveal_".
+TRANSCRIPT_CUT = 'reveal_transcript_cut'
+TRANSCRIPT_CLOCK = 'reveal_clock'
+# An unfinished line longer than this is written as it is (stderr need not end its lines). Above ClaudeStream's 2 MB
+# line limit, so a stream line is never split by a clock line, the cut or the tail's start.
+MAX_PENDING_LINE = 4_000_000
+
+
+class TranscriptWriter:
+    """One of Claude Code's output streams, gzipped as it arrives, for the ledger: the run's full transcript.
+
+    The stored file never exceeds `limit` bytes, and never inflates to more than `expanded` bytes. The head is kept
+    while it fits in half the limit (measured compressed); after that only a rolling tail of whole lines is kept, and
+    on close one cut line, {"type":"reveal_transcript_cut",...}, stands where lines were left out. With a clock, a
+    {"type":"reveal_clock","at":...} line is written before a line, at most once a second, saying when it arrived.
+    A context manager, so the gzip trailer is written however the run ends."""
+
+    def __init__(self, path, limit, *, expanded, clock=None):
+        self.limit, self.expanded, self.clock = limit, expanded, clock
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        self.file = os.fdopen(descriptor, 'wb')
+        self.gzip = gzip.GzipFile(fileobj=self.file, mode='wb', filename='', mtime=0)
+        self.head_limit = limit // 2
+        # Deflate can grow incompressible bytes by about 0.1%, plus the marker and the gzip trailer.
+        self.tail_budget = max(0, limit - self.head_limit - 1024 - (limit - self.head_limit) // 500)
+        self.head, self.head_bytes, self.unflushed = True, 0, 0
+        self.tail, self.tail_bytes = deque(), 0
+        self.pending = b''
+        self.second = None
+        self.original_bytes = self.original_lines = self.omitted_bytes = self.omitted_lines = 0
+        self.stored_bytes = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    def write(self, data):
+        self.pending += data
+        *lines, self.pending = self.pending.split(b'\n')
+        for line in lines:
+            self.line(line + b'\n')
+        if len(self.pending) > MAX_PENDING_LINE:
+            self.line(self.pending); self.pending = b''
+
+    def line(self, line):
+        if self.clock is not None:
+            now = self.clock()
+            if int(now) != self.second:
+                self.second = int(now)
+                at = datetime.fromtimestamp(now, timezone.utc).isoformat(timespec='milliseconds').replace('+00:00', 'Z')
+                self.put(json.dumps({'type': TRANSCRIPT_CLOCK, 'at': at}).encode() + b'\n')
+        self.put(line)
+
+    def fits(self, line):
+        """Whether the line fits in the head. Bytes not yet flushed are counted at their raw size, never less than
+        they compress to; only when that estimate says no is the compressor flushed and the head measured exactly."""
+        if self.head_bytes + len(line) > self.expanded - self.tail_budget - 4096: return False
+        def room(pending): return self.file.tell() + pending + pending // 500 + 64 <= self.head_limit
+        if room(self.unflushed + len(line)): return True
+        if self.unflushed:
+            self.gzip.flush(zlib.Z_SYNC_FLUSH); self.unflushed = 0
+        return room(len(line))
+
+    def put(self, line):
+        self.original_bytes += len(line); self.original_lines += 1
+        if self.head:
+            if self.fits(line):
+                self.gzip.write(line); self.head_bytes += len(line); self.unflushed += len(line)
+                return
+            self.head = False
+        self.tail.append(line); self.tail_bytes += len(line)
+        while self.tail_bytes > self.tail_budget:
+            dropped = self.tail.popleft(); self.tail_bytes -= len(dropped)
+            self.omitted_bytes += len(dropped); self.omitted_lines += 1
+
+    def close(self):
+        if self.stored_bytes is not None: return
+        if self.pending:
+            self.put(self.pending); self.pending = b''
+        if self.omitted_lines:
+            self.gzip.write(json.dumps({'type': TRANSCRIPT_CUT, 'omitted_bytes': self.omitted_bytes,
+                                        'omitted_lines': self.omitted_lines, 'original_bytes': self.original_bytes}).encode() + b'\n')
+        for line in self.tail:
+            self.gzip.write(line)
+        self.tail.clear()
+        self.gzip.close()
+        self.stored_bytes = self.file.tell()
+        self.file.close()
+
+    def summary(self):
+        """What runtime.json records about this file once it is closed."""
+        return {'stored_bytes': self.stored_bytes, 'original_bytes': self.original_bytes, 'cut': self.omitted_lines > 0,
+                'omitted_bytes': self.omitted_bytes, 'omitted_lines': self.omitted_lines}
+
+
+class Inflater:
+    """Bounded inflation of a captured transcript, fed its stored bytes in pieces. A file cut short (a runner stopped
+    mid-write) inflates as far as it goes: `complete` says whether the gzip trailer was reached. Corrupt bytes, bytes
+    after the gzip member, or more than `limit` inflated bytes raise ValueError."""
+
+    def __init__(self, limit):
+        self.decompressor, self.limit, self.count = zlib.decompressobj(31), limit, 0
+
+    @property
+    def complete(self):
+        return self.decompressor.eof
+
+    def feed(self, chunk):
+        if not chunk: return b''
+        if self.decompressor.eof: raise ValueError('Data follows the gzip member')
+        try: data = self.decompressor.decompress(chunk, self.limit - self.count + 1)
+        except zlib.error: raise ValueError('Not a readable gzip stream') from None
+        self.count += len(data)
+        if self.count > self.limit: raise ValueError('The inflated transcript exceeds its limit')
+        if self.decompressor.unused_data: raise ValueError('Data follows the gzip member')
+        return data
+
+
+def inflate(data, limit):
+    """(inflated bytes, whether the gzip trailer was reached) of one stored transcript. Raises ValueError as Inflater."""
+    inflater = Inflater(limit)
+    return inflater.feed(data), inflater.complete

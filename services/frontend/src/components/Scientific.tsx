@@ -14,7 +14,11 @@ import { sourceDownloadPath } from "@/lib/source-download";
 import { ReferenceArchiveBanner, ReferenceBadge, requestSettings } from "./ReferenceArchive";
 import { CitationReference } from "./CitationReference";
 import { AccountGraph } from "./AccountGraph";
-import { type AccountGraphNode } from "@/lib/account-graph";
+import { AccountLineage, ClaimDatasets, MechanismLink, useAccountLineage, type AccountLineageState } from "./AccountLineage";
+import { inputRoleLabel, type AccountGraphNode } from "@/lib/account-graph";
+import { publicSourceHref } from "@/lib/provenance-view";
+import { traitPageHref } from "@/lib/factor-links";
+import { OrganizationBadge } from "./OrganizationBadge";
 import "./scientific.css";
 
 type Document = Schema<"DapperDocument">;
@@ -91,13 +95,14 @@ function useReadingState(id: string) {
     if (requestedView === "statement") saved.tab = "Research Statement";
     if (requestedView === "conclusions") saved.tab = "Conclusions";
     if (requestedView === "overview") saved.tab = "Overview";
+    if (requestedView === "lineage") saved.tab = "Data lineage";
     setView({ ...defaultReading, ...saved }); setLoaded(id);
   }, [id, requestedView]);
   useEffect(() => { if (loaded === id) { try { const { tab: _tab, ...preferences } = view; sessionStorage.setItem(`reveal.account-reading.${id}`, JSON.stringify(preferences)); } catch { /* Storage may be unavailable. */ } } }, [id, loaded, view]);
   return { view, update: (patch: Partial<ReadingState>) => setView(previous => ({ ...previous, ...patch })) };
 }
 export function AccountView({ id, embedded = false }: { id: string; embedded?: boolean }) {
-  const { result, error, reload, retry } = useAccount(id), { view, update } = useReadingState(id);
+  const { result, error, reload, retry } = useAccount(id), { view, update } = useReadingState(id), lineage = useAccountLineage(id);
   const account = result?.document.scientific_accounts?.find(item => item.id === id);
   const claims = account?.component_claims.flatMap(claimId => result?.document.claims?.find(claim => claim.id === claimId) || []) || [];
   const proposition = (claim: Claim) => result?.document.propositions?.find(item => item.id === claim.proposition);
@@ -115,13 +120,13 @@ export function AccountView({ id, embedded = false }: { id: string; embedded?: b
   const model = result.document.mechanistic_models?.find(item => item.id === account.mechanistic_model);
   const claimsBody = `claims-${id}`, filtersId = `filters-${id}`;
   return <section className={`scientific account-study ${embedded ? "embedded" : ""}`} aria-label="Scientific account">
-    {!embedded && <><AccountNavigation /><header className="account-gap"><p className="gap-source">{gap ? `${gap.id.startsWith("dapper:KnowledgeGap.") ? "Knowledge gap" : "Question"}${gap.scope ? ` · ${gap.scope}` : ""}` : "Scientific account"}</p><div className="account-gap-heading"><h1>{gap?.text || account.name || "Scientific account"}</h1><AccountPublication key={id} id={id} publication={result.publication} onRefresh={retry} /></div>{!!mechanisms.length && <div className="account-mechanisms" aria-label="Mechanism records">{mechanisms.map(mechanism => <Link key={mechanism.id} className="account-mechanism" href={objectHref(mechanism.id)} title={mechanism.id}>{mechanism.name || "Mechanism record"}</Link>)}</div>}{model && <Link className="account-mechanism" href={objectHref(model.id)}>{model.name || "Mechanistic model"}</Link>}</header></>}
+    {!embedded && <><AccountNavigation /><header className="account-gap"><p className="gap-source">{gap ? `${gap.id.startsWith("dapper:KnowledgeGap.") ? "Knowledge gap" : "Question"}${gap.scope ? ` · ${gap.scope}` : ""}` : "Scientific account"}</p><div className="account-gap-heading"><h1>{gap?.text || account.name || "Scientific account"}</h1><AccountPublication key={id} id={id} publication={result.publication} onRefresh={retry} /></div>{!!mechanisms.length && <div className="account-mechanisms" aria-label="Mechanism records">{mechanisms.map(mechanism => <MechanismLink key={mechanism.id} className="account-mechanism" id={mechanism.id} from={accountHref(id)} title={mechanism.id}>{mechanism.name || "Mechanism record"}</MechanismLink>)}</div>}{model && <Link className="account-mechanism" href={objectHref(model.id)}>{model.name || "Mechanistic model"}</Link>}</header></>}
     {result.archive && <ReferenceArchiveBanner archive={result.archive} subject="scientific account" gapId={result.archive.gap?.id || account.question} settings={requestSettings(result.archive)} />}
     <AccountRefreshError error={error} onRetry={retry} />
     {embedded && <div className="account-embedded-tools"><AccountPublication key={id} id={id} publication={result.publication} onRefresh={retry} /></div>}
-    <Tabs labels={["Overview", "Conclusions", "Research Statement"]} pending={["queued", "running", "cancel_requested"].includes(result.research_statement.status) ? "Research Statement" : undefined} value={view.tab} onChange={tab => update({ tab })} />
+    <Tabs labels={["Overview", "Conclusions", "Research Statement", "Data lineage"]} pending={["queued", "running", "cancel_requested"].includes(result.research_statement.status) ? "Research Statement" : undefined} value={view.tab} onChange={tab => update({ tab })} />
     <div role="tabpanel" aria-label={view.tab}>
-    {view.tab === "Overview" ? <AccountGraph key={id} result={result} onReload={reload} inspector={(node, snapshot) => <ScientificInspector key={node.objectId} node={node} result={snapshot} />} /> : <section className="account-summary" aria-label="Account synthesis"><h2>{account.name || "Scientific account"}</h2>{view.tab === "Conclusions" ? <><p className="account-conclusions">{account.closing_remarks || "This account has no separate closing synthesis. Inspect its component claims and scope below."}</p><details className="scope-disclosure"><summary>Approach and scope</summary><p>{account.context}</p>{account.assumptions?.map(assumption => <p key={assumption}>{assumption}</p>)}</details><Attribution document={result.document} ids={account.was_attributed_to} />{!result.coverage.complete && <p className="notice">This source view is bounded. Missing records are not evidence of absence.</p>}</> : <ParagraphView key={`${id}:${result.publication?.can_manage === true}`} state={result.research_statement} accountId={id} onRefresh={retry} canManage={result.publication?.can_manage === true} />}</section>}
+    {view.tab === "Overview" ? <AccountGraph key={id} result={result} onReload={reload} inspector={(node, snapshot) => <ScientificInspector key={node.objectId} node={node} result={snapshot} lineage={lineage} />} /> : view.tab === "Data lineage" ? <AccountLineage lineage={lineage} accountId={id} claimHref={claim => claimHref(claim, id)} /> : <section className="account-summary" aria-label="Account synthesis"><h2>{account.name || "Scientific account"}</h2>{view.tab === "Conclusions" ? <><p className="account-conclusions">{account.closing_remarks || "This account has no separate closing synthesis. Inspect its component claims and scope below."}</p><details className="scope-disclosure"><summary>Approach and scope</summary><p>{account.context}</p>{account.assumptions?.map(assumption => <p key={assumption}>{assumption}</p>)}</details><Attribution document={result.document} ids={account.was_attributed_to} />{!result.coverage.complete && <p className="notice">This source view is bounded. Missing records are not evidence of absence.</p>}</> : <ParagraphView key={`${id}:${result.publication?.can_manage === true}`} state={result.research_statement} accountId={id} onRefresh={retry} canManage={result.publication?.can_manage === true} />}</section>}
     {view.tab === "Conclusions" && <section className="account-claims-section"><button className="account-claims-toggle" aria-expanded={view.claimsOpen} aria-controls={claimsBody} onClick={() => update({ claimsOpen: !view.claimsOpen })}><span>Associated claims <small>{claims.length}</small></span><span className="claims-toggle-caret" aria-hidden="true">⌄</span></button>
       <div id={claimsBody} className="account-claims-body" hidden={!view.claimsOpen}><span className="sr-only" role="status">{visible.length} of {claims.length} matching claims</span><div className="claim-search-toolbar"><label className="claim-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" /><path d="m16 16 4 4" /></svg><input type="search" aria-label="Search associated claims" placeholder="Search claims…" value={view.search} onChange={event => update({ search: event.target.value })} /></label><button className={`claim-filter-toggle ${view.relationship !== "All" ? "has-filter" : ""}`} aria-expanded={view.filtersOpen} aria-controls={filtersId} aria-label={view.relationship === "All" ? "Filters" : `Filters, ${view.relationship} selected`} onClick={() => update({ filtersOpen: !view.filtersOpen })}><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 7h4m4 0h10M3 17h10m4 0h4" /><circle cx="9" cy="7" r="2" /><circle cx="15" cy="17" r="2" /></svg>Filters{view.relationship !== "All" && <span className="claim-filter-count">1</span>}</button></div><div id={filtersId} className="claim-filters" role="group" aria-label="Filter by relationship" hidden={!view.filtersOpen}>{groups.map(group => <button key={group} aria-pressed={view.relationship === group} onClick={() => update({ relationship: group })}>{group}</button>)}</div>
         <div className="account-claim-results">{visible.map(claim => <article className={`account-claim-card ${view.expanded === claim.id ? "is-expanded" : ""}`} key={claim.id}><button id={`claim-toggle-${claim.id}`} className="account-claim-option" aria-expanded={view.expanded === claim.id} aria-controls={`claim-inline-${claim.id}`} onClick={() => update({ expanded: view.expanded === claim.id ? null : claim.id })}><span className="claim-ref">C{claims.indexOf(claim) + 1}</span><span><span className="claim-option-text">{proposition(claim)?.statement || claim.statement || claim.proposition}</span><span className="claim-option-meta"><span>{relationship(proposition(claim))}</span><span>{claim.has_evidence?.length || 0} evidence items</span></span></span><span className="claim-selection-caret" aria-hidden="true">⌄</span></button><div id={`claim-inline-${claim.id}`} className="claim-inline-body" hidden={view.expanded !== claim.id}><p className="claim-inline-assessment">{claim.statement || "No separate assessment text was supplied."}</p><div className="claim-inline-status"><span>{human(claim.direction)}</span><span>{claim.status ? human(claim.status) : "Review status not specified"}</span></div><div className="claim-inline-sources">{(claim.has_evidence || []).map(evidenceId => { const evidence = result.document.evidence_items?.find(item => item.id === evidenceId); return <p key={evidenceId}>{evidence?.name || evidence?.reference_title || "Evidence item"}<small>{evidence?.direction ? human(evidence.direction) : "Direction not specified"}</small></p>; })}</div><Link className="claim-page-link" href={claimHref(claim.id, id)}>Open claim page <span aria-hidden="true">↗</span></Link></div></article>)}</div>
@@ -256,9 +261,68 @@ function ProvenanceView({ claim, result }: { claim: Claim; result: Schema<"Claim
   return <><h2>Follow the evidence to its source</h2><p className="small-note">{result.coverage.complete ? "Complete authorized upstream view." : "Bounded upstream view. Missing records are not evidence of absence."}</p>{result.artifacts.length ? result.artifacts.map(artifact => <SourceArtifact key={artifact.file.id} artifact={artifact} />) : <p className="small-note">No downloadable source artifacts are included in this view.</p>}<section className="construction-provenance"><h3>Construction provenance</h3>{activity ? <><p>{activity.name || "Generating activity"}</p>{activity.description && <p>{activity.description}</p>}<dl className="scientific-keyval">{activity.software_name && <><dt>Software</dt><dd>{activity.software_name}{activity.software_version ? ` ${activity.software_version}` : ""}</dd></>}{activity.generated_at_time && <><dt>Generated</dt><dd><time dateTime={activity.generated_at_time}>{activity.generated_at_time}</time></dd></>}</dl><Technical label="Activity record and execution details" value={activity} /></> : <p className="small-note">The generating activity is not included in this view. <Link href={objectHref(claim.was_generated_by)}>Inspect activity</Link></p>}</section>{document.gene_sets?.length ? <section className="referenced-records"><h3>Referenced gene sets</h3>{document.gene_sets.map(set => <Link key={set.id} href={objectHref(set.id)}>{set.name || set.id}</Link>)}</section> : null}<details className="technical-disclosure"><summary>Exact payload observations and traversal coverage</summary><Record value={result.schema} /><Record value={result.payloads} /><Record value={result.coverage} /></details><Technical label="Claim record" value={claim} /></>;
 }
 
+const routeLabels: Record<string, string> = { proposition_reference: "Named in the claim's proposition", evidence_derivation: "Cited by the claim's evidence",
+  inherited_source_claim: "Through a source claim", factor_projection: "Through a mechanism's projected gene sets",
+  trait_gwas: "Through a KPN trait's published GWAS" };
+/** A KPN trait's GWAS bottom-line artifact on the Translator provenance portal: the release names it, nothing was fetched. */
+const isGwasSource = (dataset?: { kind?: string }) => dataset?.kind === "gwas_bottom_line";
+/** A dataset the account's stored trace reaches for one claim: reference lineage, not a record of the account. */
+function TracedDatasetView({ node, result }: { node: AccountGraphNode; result: Schema<"AccountResult"> }) {
+  const sources = result.data_sources, connection = node.trace!;
+  const dataset = sources?.datasets?.find(item => item.id === node.objectId);
+  const organizations = new Map((sources?.organizations || []).map(item => [item.id, item]));
+  const via = new Map((sources?.via || []).map(item => [item.id, item]));
+  const claims = result.document.claims || [], location = publicSourceHref(dataset?.location);
+  const viaLink = (id: string) => {
+    const claim = claims.find(item => item.id === id), number = (result.document.scientific_accounts?.[0]?.component_claims || []).indexOf(id);
+    if (claim) return <Link key={id} href={claimHref(id, result.root_id)}>{number >= 0 ? `Claim C${number + 1}` : "Source claim"}</Link>;
+    const name = via.get(id)?.name || via.get(id)?.filename || entityLabel(result.document, id);
+    return id.startsWith("dapper:") ? <Link key={id} href={objectHref(id)} title={id}>{name}</Link> : <span key={id}>{name}</span>;
+  };
+  const gwas = isGwasSource(dataset);
+  return <>
+    {dataset?.description && <p>{dataset.description}</p>}
+    {gwas && <p>The bottom-line GWAS summary statistics of the KPN trait this claim reaches, as the reference release names them. The provenance portal holds this artifact and its upstream GWAS studies.</p>}
+    <dl className="scientific-keyval">
+      <dt>Role</dt><dd>{gwas ? "Trait GWAS (bottom line)" : human(inputRoleLabel(connection.input_roles))}</dd>
+      {gwas && dataset?.ancestry_name && <><dt>Ancestry</dt><dd>{dataset.ancestry_name}</dd></>}
+      {gwas && dataset?.kpn_trait_id && <><dt>Trait</dt><dd>{traitPageHref(dataset.kpn_trait_id, accountHref(result.root_id))
+        ? <Link href={traitPageHref(dataset.kpn_trait_id, accountHref(result.root_id))!}>{dataset.kpn_trait_id}</Link> : dataset.kpn_trait_id}</dd></>}
+      {gwas && dataset?.artifact_id && <><dt>Artifact</dt><dd><code>{dataset.artifact_id}</code></dd></>}
+      {dataset?.version && <><dt>Version</dt><dd>{dataset.version}</dd></>}
+      <dt>Reached through</dt><dd className="traced-dataset-links">{connection.via_ids.map(viaLink)}</dd>
+      <dt>How</dt><dd className="traced-dataset-routes">{connection.routes.map(route => <span key={route}>{routeLabels[route] || human(route)}</span>)}</dd>
+      <dt>Credited</dt><dd className="traced-dataset-organizations">{connection.organizations.length ? connection.organizations.map(item => {
+        const organization = organizations.get(item.organization_id);
+        return <OrganizationBadge key={item.organization_id} organization={{ id: item.organization_id, name: organization?.name, ror: organization?.ror }} roles={item.roles} />;
+      }) : gwas ? "Not recorded by the portal's GWAS lineage" : "No organization recorded"}</dd>
+    </dl>
+    {location && <p><a href={location} target="_blank" rel="noreferrer">{gwas ? "GWAS provenance on the portal ↗" : "Dataset source ↗"}</a></p>}
+    {!!connection.curation_ids.length && <p className="small-note">REVEAL curated the step from the gene set&apos;s construction to this dataset ({connection.curation_ids.join(", ")}); the source gene set files do not record it.</p>}
+    {sources?.status === "incomplete" && <p className="small-note">Some of this account&apos;s sources have no recorded lineage, so its data sources are a lower bound.</p>}
+    <p className="small-note">{sources?.traced_at && <>Traced <time dateTime={sources.traced_at}>{sources.traced_at.slice(0, 10)}</time>. </>}Organization roles are recorded credit, not data production.</p>
+  </>;
+}
+/** The account's traced data sources: each dataset, how many claims reach it, and who is credited for it. */
+function DataSourcesSummary({ result }: { result: Schema<"AccountResult"> }) {
+  const sources = result.data_sources;
+  if (!sources || !["complete", "incomplete"].includes(sources.status)) return null;
+  const organizations = new Map((sources.organizations || []).map(item => [item.id, item.name || "Organization"]));
+  const reach = new Map<string, { claims: number; organizations: Set<string> }>();
+  for (const claim of sources.claims || []) for (const item of claim.datasets) {
+    const entry = reach.get(item.dataset_id) || { claims: 0, organizations: new Set<string>() };
+    entry.claims += 1; item.organizations.forEach(org => entry.organizations.add(organizations.get(org.organization_id) || "Organization"));
+    reach.set(item.dataset_id, entry);
+  }
+  return <section className="account-data-sources" aria-label="Data sources"><h4>Data sources</h4>{sources.datasets?.length ? <ul>{sources.datasets.map(dataset => {
+    const entry = reach.get(dataset.id);
+    return <li key={dataset.id}>{dataset.name || "Dataset"}<small>{isGwasSource(dataset) ? "Trait GWAS · " : ""}{entry?.claims || 0} {entry?.claims === 1 ? "claim" : "claims"}{entry?.organizations.size ? ` · ${[...entry.organizations].join(", ")}` : ""}</small></li>;
+  })}</ul> : <p className="small-note">No claim reaches a recorded dataset.</p>}{sources.status === "incomplete" && <p className="small-note">Some sources have no recorded lineage; this list is a lower bound.</p>}</section>;
+}
+
 /** Reuses the same evidence/provenance renderers as the full claim page. The
  * inspector reads only the selected account's observation, including its pages. */
-function ScientificInspector({ node, result }: { node: AccountGraphNode; result: Schema<"AccountResult"> }) {
+function ScientificInspector({ node, result, lineage }: { node: AccountGraphNode; result: Schema<"AccountResult">; lineage?: AccountLineageState }) {
   const [tab, setTab] = useState("Assessment");
   const document = result.document, claim = document.claims?.find(value => value.id === node.objectId);
   const claimResult: Schema<"ClaimResult"> = { ...result, document: { ...document, claims: document.claims || [] } };
@@ -269,19 +333,20 @@ function ScientificInspector({ node, result }: { node: AccountGraphNode; result:
   const artifact = result.artifacts.find(value => value.file.id === node.objectId);
   const record = recordNodes(document).find(value => value.id === node.objectId);
   return <div className="graph-record-content">
-    {node.missing ? <p>This referenced record is not included in the loaded account view. Load more source records when available.</p> : account ? <><p>{account.closing_remarks || "No separate closing synthesis was recorded."}</p><details><summary>Approach and scope</summary><p>{account.context}</p></details></> : claim ? <>
+    {node.missing ? <p>This referenced record is not included in the loaded account view. Load more source records when available.</p> : account ? <><p>{account.closing_remarks || "No separate closing synthesis was recorded."}</p><details><summary>Approach and scope</summary><p>{account.context}</p></details><DataSourcesSummary result={result} /></> : claim ? <>
       <p>{claim.statement || document.propositions?.find(value => value.id === claim.proposition)?.statement}</p>
-      <Tabs labels={["Assessment", "Evidence", "Provenance"]} value={tab} onChange={setTab} /><div role="tabpanel" aria-label={`Selected claim ${tab.toLowerCase()}`}>
+      <Tabs labels={lineage ? ["Assessment", "Evidence", "Provenance", "Datasets"] : ["Assessment", "Evidence", "Provenance"]} value={tab} onChange={setTab} /><div role="tabpanel" aria-label={`Selected claim ${tab.toLowerCase()}`}>
         {tab === "Assessment" && <><dl className="scientific-keyval"><dt>Direction</dt><dd>{human(claim.direction)}</dd><dt>Review status</dt><dd>{human(claim.status)}</dd><dt>Evidence</dt><dd>{claim.has_evidence?.length || 0} linked items</dd></dl><ScoreList document={document} ids={claim.has_score} /><Attribution document={document} ids={claim.was_attributed_to} /></>}
         {tab === "Evidence" && <EvidenceView claim={claim} result={claimResult} accountId={result.root_id} />}
         {tab === "Provenance" && <ProvenanceView claim={claim} result={claimResult} />}
+        {tab === "Datasets" && lineage && <ClaimDatasets lineage={lineage} claimId={claim.id} accountId={result.root_id} />}
       </div><Link className="claim-page-link" href={claimHref(claim.id, result.root_id)}>Open claim page ↗</Link>
-    </> : node.kind === "evidence" ? <EvidenceView evidenceIds={[node.objectId]} result={claimResult} accountId={result.root_id} /> : dataset ? <>
+    </> : node.kind === "evidence" ? <EvidenceView evidenceIds={[node.objectId]} result={claimResult} accountId={result.root_id} /> : node.trace && !dataset ? <TracedDatasetView node={node} result={result} /> : dataset ? <>
       {dataset.description && <p>{dataset.description}</p>}{dataset.location && <div className="graph-storage-location"><strong>Dataset location</strong><br /><code>{dataset.location}</code></div>}<p>A dataset location may describe a storage prefix. Only explicitly linked files are shown as its distributions.</p><dl className="scientific-keyval"><dt>Files</dt><dd>{dataset.has_file?.length || 0} explicitly linked</dd>{dataset.version && <><dt>Version</dt><dd>{dataset.version}</dd></>}</dl><Technical label="Dataset record" value={dataset} />
     </> : file ? <SourceArtifact artifact={artifact || { file, download_url: null, expires_at: null, availability: "not_available", verification: "source_reported" }} /> : activity ? <>
       {activity.description && <p>{activity.description}</p>}<p>Computational inputs record what this activity used. They do not by themselves establish support for a claim.</p><dl className="scientific-keyval">{activity.software_name && <><dt>Software</dt><dd>{activity.software_name}{activity.software_version ? ` ${activity.software_version}` : ""}</dd></>}{activity.generated_at_time && <><dt>Generated</dt><dd>{activity.generated_at_time}</dd></>}</dl><Technical label="Activity record" value={activity} />
     </> : <Technical label="Scientific record" value={record} />}
-    <Link className="account-explorer-record-link" href={objectHref(node.objectId)}>Open scientific record ↗</Link>
+    {!(node.trace && !dataset) && <Link className="account-explorer-record-link" href={objectHref(node.objectId)}>Open scientific record ↗</Link>}
   </div>;
 }
 export function ClaimView({ id }: { id: string }) {

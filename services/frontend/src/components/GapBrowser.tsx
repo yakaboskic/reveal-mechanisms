@@ -10,10 +10,8 @@ import { useIdentity } from "./Session";
 import { LoadingSurface } from "./LoadingSurface";
 import { VoteControls } from "./VoteControls";
 import { onWorkspaceChange } from "@/lib/workspace-events";
-import { onPageReturn } from "@/lib/page-return";
+import { onPageReturn, publicFreshMs } from "@/lib/page-return";
 import "./gap-browser.css";
-
-const publicFreshMs = 60_000;
 
 export type { GapScope, GapSort } from "@/lib/gap-discovery";
 export const gapScopeLabel = (scope: GapScope) => scope === "public" ? "Trending knowledge gaps" : "Top questions in your workspace";

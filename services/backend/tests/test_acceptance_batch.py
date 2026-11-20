@@ -19,10 +19,10 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from reveal_backend import jobs, workspace_events, research_execution, worker as W
+from reveal_backend import account_data_sources, jobs, workspace_events, research_execution, worker as W
 # Imported before any patch window: a module first imported inside one would keep the patched uid/now.
 from reveal_backend import (acceptance, analysis_outcomes, citations, reference_archive, reference_generation,  # noqa: F401
-    research_hosted, scientific_reuse, scientific_writes, workflow_execution)
+    research_hosted, scientific_reuse, scientific_writes, workflow_execution, provenance_api, provenance_reference, provenance_supplements)
 from reveal_backend.evidence_package import canonical_json, sha256
 from reveal_backend.repository import Repository, Transaction, digest
 
@@ -42,7 +42,6 @@ async def accept_accounts(self,job,token,accepted,frozen,package_path,result,dir
         for checksum,source in captured.items():
             source['retained']=await asyncio.to_thread(retained_file,source['path'],checksum)
     await asyncio.to_thread(self.save_workspace,job,token,artifacts_root()/job['id'])
-    from .analysis_outcomes import creation_stamp, stamp_gap, stamped
     from .workflow_execution import drain_on_cancel
     def persist():
         # One fenced transaction in one worker thread: the event loop keeps serving while it holds the fence.
@@ -89,11 +88,8 @@ async def accept_accounts(self,job,token,accepted,frozen,package_path,result,dir
                 envelope=object_envelope(doc,identity,metadata,artifact_access); envelope['research_statement']=state
                 summary={'account':account,'knowledge_gap':gap,'claim_count':len(account['component_claims']),'created_at':now(),'job_id':job['id'],'research_statement':state}
                 if not previous:
-                    # A job that finishes after its reference generation was superseded is born archived.
-                    stamp=creation_stamp(tx,owner,job['research_request_id'],gap=stamp_gap(frozen['composer'].get('source_gap'),frozen.get('question_id')),scientific_document=doc,
-                        analysis={'job_id':job['id'],'request_id':job['research_request_id'],'evidence_package_sha256':evidence_sha256,'account_id':identity})
-                    tx.put('account',digest([owner,identity]),owner,stamped('account',{'result':envelope,'summary':deepcopy(summary)},stamp))
-                    tx.put('account_membership',digest([owner,identity]),owner,stamped('account_membership',{'account_id':identity,'summary':summary},stamp))
+                    tx.put('account',digest([owner,identity]),owner,{'result':envelope,'summary':deepcopy(summary)})
+                    tx.put('account_membership',digest([owner,identity]),owner,{'account_id':identity,'summary':summary})
                 document_sha=sha256(path.read_bytes())
                 tx.put('scientific_document',digest([owner,document_sha]),owner,{'sha256':document_sha,'document':doc,'job_id':job['id'],'observed_at':now(),
                     'citation_metadata':metadata,'artifact_access':artifact_access})
@@ -128,7 +124,6 @@ def commit_accounts(service, tx, operation, prepared):
     from .acceptance import object_envelope
     from .citations import register
     from .scientific_reuse import record_dependencies
-    from .analysis_outcomes import creation_stamp, stamp_gap, stamped
     owner = operation['owner_user_id']; work_id = operation['local_work_id']; args = operation['arguments']
     frozen = owned(tx, 'request', operation['research_request_id'], owner)['data']
     reused = record_dependencies(tx, owner, frozen['id'], prepared['reused']['receipt_ids'],
@@ -153,11 +148,8 @@ def commit_accounts(service, tx, operation, prepared):
             envelope = object_envelope(doc, identity, metadata, access); envelope['research_statement'] = state
             summary = {'account': account, 'knowledge_gap': gap, 'claim_count': len(account['component_claims']),
                 'created_at': now(), 'job_id': work_id, 'local_work_id': work_id, 'execution_mode': 'local', 'research_statement': state}
-            stamp = creation_stamp(tx, owner, frozen['id'], gap=stamp_gap(frozen['composer'].get('source_gap'), frozen.get('question_id')),
-                scientific_document=doc, analysis={'job_id': work_id, 'request_id': frozen['id'],
-                    'evidence_package_sha256': prepared['evidence_manifest_sha256'], 'account_id': identity})
-            tx.put('account', digest([owner, identity]), owner, stamped('account', {'result': envelope, 'summary': deepcopy(summary)}, stamp))
-            tx.put('account_membership', digest([owner, identity]), owner, stamped('account_membership', {'account_id': identity, 'summary': summary}, stamp))
+            tx.put('account', digest([owner, identity]), owner, {'result': envelope, 'summary': deepcopy(summary)})
+            tx.put('account_membership', digest([owner, identity]), owner, {'account_id': identity, 'summary': summary})
         document_sha = accepted['storage']['sha256']
         tx.put('scientific_document', digest([owner, document_sha]), owner, {'sha256': document_sha, 'document': doc,
             'job_id': work_id, 'local_work_id': work_id, 'observed_at': now(), 'citation_metadata': metadata, 'artifact_access': access,
@@ -262,6 +254,7 @@ class AcceptanceBatchTests(unittest.TestCase):
         """Run the batched and the sequential acceptance on copies of one database; their rows must be identical."""
         for index, (prior_owner, prior) in enumerate(before): self.accept(self.repo, SequentialWorker, prior_owner, prior, label='prior%d' % index)
         claimed = self.claimed(self.repo, owner)   # one job and lease, copied into both databases
+        prior = {json.loads(payload)['account_id'] for (kind, _), (_, _, payload, _) in rows(self.repo).items() if kind == 'account_membership'}
         batched = Repository(str(self.root / 'batched.sqlite')); sequential = Repository(str(self.root / 'sequential.sqlite'))
         for copy in (batched, sequential): shutil.copy(self.repo.sqlite_path, copy.sqlite_path)
         statements = []; execute = Transaction.execute
@@ -271,6 +264,12 @@ class AcceptanceBatchTests(unittest.TestCase):
         with patch.object(Transaction, 'execute', counted):
             self.accept(sequential, SequentialWorker, owner, documents, claimed=deepcopy(claimed), **options)
         after, reference = rows(batched), rows(sequential)
+        # Stored account data sources postdate the sequential copy: each new account gains exactly one, and every
+        # other row is unchanged.
+        traced = {key: value for key, value in after.items() if key[0] == account_data_sources.KIND}
+        new = {document['scientific_accounts'][0]['id'] for document in documents} - prior
+        self.assertEqual({json.loads(payload)['account_id'] for _, _, payload, _ in traced.values()}, new)
+        after = {key: value for key, value in after.items() if key not in traced}
         self.assertEqual(set(after), set(reference))
         for key in reference: self.assertEqual(after[key], reference[key], key)
         kinds = {kind for kind, _ in after}
@@ -346,6 +345,21 @@ class SubmissionBatchTests(unittest.TestCase):
         after, reference = rows(batched), rows(sequential_repo)
         self.assertEqual(set(after), set(reference))
         for key in reference: self.assertEqual(after[key], reference[key], key)
+
+
+    def test_submission_stores_prepared_data_sources_only_for_new_accounts(self):
+        traced = {'format': account_data_sources.FORMAT, 'account_id': self.document['scientific_accounts'][0]['id'],
+                  'document_sha256': sha256(canonical_json(self.document)), 'status': 'complete', 'claims': []}
+        key = (account_data_sources.KIND, account_data_sources.owner_key(OWNER, traced['account_id']))
+        def commit(record):
+            original = research_execution.commit_accounts
+            def with_traces(service, tx, operation, prepared):
+                return original(service, tx, operation, {**prepared, 'data_sources': {traced['account_id']: record}})
+            self.commit(self.repo, with_traces, [self.document])
+        commit(traced)
+        self.assertEqual(json.loads(rows(self.repo)[key][2]), traced)
+        commit({**traced, 'status': 'incomplete'})   # re-accepting an account never replaces its first trace
+        self.assertEqual(json.loads(rows(self.repo)[key][2])['status'], 'complete')
 
 
 class ApplyPutsTests(unittest.TestCase):

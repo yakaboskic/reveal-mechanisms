@@ -14,11 +14,25 @@ const account = JSON.parse(await readFile(resolve(root, 'data/fixtures/bubble-ac
 account.publication = { visibility: 'private', version: 0, can_manage: true, published_at: null, updated_at: null, has_unpublished_changes: false };
 account.research_statement = { status: 'not_requested', paragraph_id: null, job_id: null };
 const accountPath = `/api/backend/v1/accounts/${account.root_id}`;
+// Stored data sources as the account response serves them: the first claim's mechanism projects onto GTEx gene sets
+// whose curated reference lineage reaches GTEx V8 and NCBI gene_info; neither dataset is in the account document.
+const mechanism = account.document.mechanisms[0].id, gtex = 'dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5', geneInfo = 'dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk';
+const broad = 'dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8', consortium = 'dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ', ncbi = 'dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK';
+const tracedVia = { routes: ['factor_projection', 'proposition_reference'], via_ids: [mechanism], curation_ids: ['cfde-collection-lineage-2026-10-11'], trace_count: 1 };
+const dataSources = { status: 'complete', traced_at: '2026-10-12T00:00:00Z', reference_generation_ids: ['ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a'],
+  coverage: { trace_count: 2, counts_are_lower_bounds: false, issue_counts: {} },
+  claims: account.document.scientific_accounts[0].component_claims.map((claim_id, index) => ({ claim_id, resolution: index ? 'not_applicable' : 'complete', datasets: index ? [] : [
+    { dataset_id: gtex, input_roles: ['data_input'], ...tracedVia, organizations: [{ organization_id: broad, roles: ['publisher'] }, { organization_id: consortium, roles: ['attribution'] }] },
+    { dataset_id: geneInfo, input_roles: ['metadata_input'], ...tracedVia, organizations: [{ organization_id: ncbi, roles: ['publisher'] }] }] })),
+  datasets: [{ id: geneInfo, name: 'NCBI Gene Homo_sapiens.gene_info', location: 'https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/' },
+    { id: gtex, name: 'GTEx Analysis V8 bulk tissue RNA-seq', version: 'v8', description: 'Genotype-Tissue Expression project release V8.', location: 'https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression' }],
+  organizations: [{ id: consortium, name: 'GTEx Consortium' }, { id: ncbi, name: 'National Center for Biotechnology Information', ror: 'ror:02meqm098' }, { id: broad, name: 'Broad Institute', ror: 'ror:05a0ya142' }],
+  via: [{ id: mechanism, kind: 'mechanism', name: account.document.mechanisms[0].name }] };
 async function playwright() { if (process.env.PLAYWRIGHT_MODULE) return import(process.env.PLAYWRIGHT_MODULE.startsWith('/') ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : process.env.PLAYWRIGHT_MODULE); try { return await import('playwright'); } catch { return import(pathToFileURL(resolve(homedir(), '.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs')).href); } }
 async function executable() { if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) return process.env.PLAYWRIGHT_EXECUTABLE_PATH; for (const name of (await readdir(resolve(homedir(), 'Library/Caches/ms-playwright')).catch(() => [])).filter(value => /^chromium-\d+$/.test(value)).sort().reverse()) { const path = resolve(homedir(), 'Library/Caches/ms-playwright', name, 'chrome-mac/Chromium.app/Contents/MacOS/Chromium'); try { await access(path); return path; } catch {} } }
 const { chromium } = await playwright(), browser = await chromium.launch({ headless: true, executablePath: await executable() });
 const report = { scope: 'Local mocked APIs with the canonical dataset-rich account. Real Cytoscape canvas rendering and browser clicks; no database writes, downloads, publication or jobs.', scenarios: [] };
-async function harness(name, { mobile = false, paged = false, conflict = false } = {}) {
+async function harness(name, { mobile = false, paged = false, conflict = false, traced = false } = {}) {
   const context = await browser.newContext({ viewport: mobile ? { width: 390, height: 844 } : { width: 1440, height: 1050 }, reducedMotion: 'reduce', serviceWorkers: 'block' });
   const page = await context.newPage(); page.setDefaultTimeout(15000);
   const errors = [], calls = [], unexpected = [];
@@ -34,6 +48,7 @@ async function harness(name, { mobile = false, paged = false, conflict = false }
     if (path === accountPath) {
       if (url.searchParams.has('cursor') && conflict) return route.fulfill({ status: 409, json: { code: 'CURSOR_EXPIRED', detail: 'The account publication changed. Reload its first page.' } });
       const value = structuredClone(account);
+      if (traced) value.data_sources = structuredClone(dataSources);
       if (paged && !url.searchParams.has('cursor')) {
         value.document.datasets = []; value.document.files = [];
         value.coverage = { ...value.coverage, complete: false, missing_ids: [...account.document.datasets, ...account.document.files].map(node => node.id), next_cursor: 'same-account-snapshot' };
@@ -119,6 +134,31 @@ try {
     return root.x1 >= 0 && root.y1 >= 0 && root.x2 <= cy.width() && root.y2 <= cy.height();
   });
   await full.close(['canonical membership count and claim numbering', 'no external captions or duplicate list', 'full-text hover without selection and keyboard tooltip', 'tooltip stays inside diagram', 'four visible types only', 'keyboard drilldown and inspector focus', 'real canvas dataset hit testing', 'existing evidence inspector', 'reset']);
+
+  const sources = await harness('stored data sources inside their claim and in the inspector', { traced: true });
+  await sources.page.locator('.account-bubbles').focus(); await sources.page.keyboard.press('ArrowRight');
+  await sources.page.waitForFunction(id => document.querySelector('.account-bubbles')._cyreg.cy.$(':selected').data('objectId') === id, account.document.scientific_accounts[0].component_claims[0]);
+  const traced = await sources.page.evaluate(id => {
+    const cy = document.querySelector('.account-bubbles')._cyreg.cy, claim = cy.$(':selected').first();
+    const node = cy.nodes().filter(value => value.id().startsWith(claim.id() + '/') && value.data('objectId') === id).first();
+    if (!node.length) throw new Error('The traced dataset should be drawn inside its claim');
+    const position = node.renderedPosition(), rect = cy.container().getBoundingClientRect();
+    return { x: position.x + rect.left, y: position.y + rect.top };
+  }, gtex);
+  await sources.page.mouse.click(traced.x, traced.y);
+  await sources.page.waitForFunction(id => document.querySelector('.account-bubbles')._cyreg.cy.$(':selected').data('objectId') === id, gtex);
+  const inspector = sources.page.locator('.account-explorer-inspector');
+  assert.match(await sources.page.locator('.account-explorer-kind').innerText(), /Dataset/i);
+  assert.equal(await inspector.locator('h3').innerText(), 'GTEx Analysis V8 bulk tissue RNA-seq');
+  assert.match(await sources.page.locator('.account-explorer-relation').innerText(), /^Supporting dataset · primary data · through Factor1$/);
+  assert.match(await inspector.innerText(), /Broad Institute[\s\S]*Publisher[\s\S]*GTEx Consortium[\s\S]*Attribution/);
+  assert.match(await inspector.innerText(), /REVEAL curated the step/);
+  assert.equal(await inspector.getByRole('link', { name: 'Open scientific record ↗' }).count(), 0, 'Reference datasets are not account records');
+  await sources.page.locator('.account-explorer').screenshot({ path: resolve(output, 'traced-dataset-inspector.png') });
+  await sources.page.getByRole('button', { name: 'Reset view', exact: true }).click();
+  await sources.page.waitForFunction(() => document.querySelector('.account-bubbles')._cyreg.cy.$(':selected').id() === 'account');
+  assert.match(await inspector.locator('.account-data-sources').innerText(), /GTEx Analysis V8[\s\S]*1 claim/);
+  await sources.close(['traced datasets drawn inside their claim', 'canvas hit testing on a traced dataset', 'role, route and credited organizations', 'curated lineage disclosure', 'no account-record link', 'account data sources summary']);
 
   const pages = await harness('same-account paging, missing-record recovery', { paged: true });
   await pages.page.getByRole('button', { name: 'Load more source records', exact: true }).click();

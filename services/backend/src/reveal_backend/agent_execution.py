@@ -29,11 +29,27 @@ Cancelled = Callable[[], Awaitable[bool]]
 Checkpoint = Callable[[dict], Awaitable[None]]
 
 
+# Public job kinds and the Box execution each runs.
+EXECUTION_KINDS = {'analysis': 'research', 'paragraph': 'paragraph', 'agent': 'agent'}
+
+
+def execution_kind(job_kind: str) -> str:
+    return EXECUTION_KINDS[job_kind]
+
+
+def authoring_stage(job_kind: str) -> str:
+    """The job stage while its agent runs."""
+    return {'paragraph': 'authoring_paragraph', 'agent': 'running_agent'}.get(job_kind, 'authoring_account')
+
+
 def agent_budget_usd(kind: str) -> float:
-    """Dollar cap for one agent run. Writing a statement costs cents, so it does not share research's cap."""
+    """Dollar cap for one agent run. Writing a statement costs cents, so it does not share research's cap.
+    A general agent job's own limit may only lower its cap."""
     from .runtime_config import setting
     if kind == 'paragraph':
         return float(setting('REVEAL_PARAGRAPH_MAX_BUDGET_USD', '1'))
+    if kind == 'agent':
+        return float(setting('REVEAL_AGENT_JOB_MAX_BUDGET_USD', '5'))
     return float(setting('REVEAL_AGENT_MAX_BUDGET_USD', '5'))
 
 
@@ -41,7 +57,7 @@ def agent_budget_usd(kind: str) -> float:
 class ExecutionRequest:
     job_id: str
     attempt: int
-    kind: Literal['research', 'paragraph']
+    kind: Literal['research', 'paragraph', 'agent']
     input_path: Path
     output_dir: Path
     selected_graphs: tuple[str, ...] = ()
@@ -66,6 +82,7 @@ class ExecutionResult:
     remote_handle: dict | None = None
     outcome_path: Path | None = None
     research_receipts_path: Path | None = None
+    response_path: Path | None = None
 
 
 class ExecutionAdapter(Protocol):

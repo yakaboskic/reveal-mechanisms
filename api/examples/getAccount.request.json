@@ -1643,6 +1643,201 @@
             "job_id": "55555555-5555-4555-8555-555555555555",
             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
           },
+          "data_sources": {
+            "status": "incomplete",
+            "traced_at": "2026-10-12T00:00:00Z",
+            "reference_generation_ids": [
+              "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a"
+            ],
+            "coverage": {
+              "trace_count": 3,
+              "counts_are_lower_bounds": true,
+              "issue_counts": {
+                "MISSING_LINEAGE": 3
+              }
+            },
+            "claims": [
+              {
+                "claim_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "resolution": "complete",
+                "datasets": [
+                  {
+                    "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                    "input_roles": [
+                      "data_input"
+                    ],
+                    "routes": [
+                      "factor_projection",
+                      "proposition_reference"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "curation_ids": [],
+                    "trace_count": 1,
+                    "organizations": [
+                      {
+                        "organization_id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                        "roles": [
+                          "publisher"
+                        ]
+                      },
+                      {
+                        "organization_id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                        "roles": [
+                          "attribution"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                    "input_roles": [
+                      "metadata_input"
+                    ],
+                    "routes": [
+                      "factor_projection",
+                      "proposition_reference"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "curation_ids": [],
+                    "trace_count": 1,
+                    "organizations": [
+                      {
+                        "organization_id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                        "roles": [
+                          "publisher"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "dataset_id": "gwas-bottom-line:bl-t2d-mixed",
+                    "input_roles": [
+                      "unknown"
+                    ],
+                    "routes": [
+                      "proposition_reference",
+                      "trait_gwas"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "organizations": [],
+                    "curation_ids": [],
+                    "trace_count": 1
+                  }
+                ]
+              },
+              {
+                "claim_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "resolution": "not_applicable",
+                "datasets": []
+              }
+            ],
+            "datasets": [
+              {
+                "id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                "name": "NCBI Gene Homo_sapiens.gene_info",
+                "version": "undated snapshot",
+                "description": "NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.",
+                "location": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/"
+              },
+              {
+                "id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+                "version": "v8",
+                "description": "Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.",
+                "location": "https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression"
+              },
+              {
+                "id": "gwas-bottom-line:bl-t2d-mixed",
+                "name": "Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)",
+                "location": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed",
+                "kind": "gwas_bottom_line",
+                "artifact_id": "bl-t2d-mixed",
+                "ancestry_code": "Mixed",
+                "ancestry_name": "Mixed ancestry",
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "portal_trait_id": "T2D"
+              }
+            ],
+            "organizations": [
+              {
+                "id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                "name": "GTEx Consortium"
+              },
+              {
+                "id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                "name": "National Center for Biotechnology Information",
+                "ror": "ror:02meqm098"
+              },
+              {
+                "id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                "name": "Broad Institute",
+                "ror": "ror:05a0ya142"
+              }
+            ],
+            "via": [
+              {
+                "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "kind": "mechanism",
+                "name": "CAD-in-T2D mechanism Factor1"
+              }
+            ]
+          },
           "publication": {
             "visibility": "private",
             "version": 0,
@@ -3272,6 +3467,201 @@
             "status": "succeeded",
             "job_id": "55555555-5555-4555-8555-555555555555",
             "paragraph_id": "dapper:Paragraph.uSYa1LdXNPuwlSgsCz3oZ7IfrVoztroD"
+          },
+          "data_sources": {
+            "status": "incomplete",
+            "traced_at": "2026-10-12T00:00:00Z",
+            "reference_generation_ids": [
+              "ec3364ae1dfdeeead0110dd8129a16aa03dbd90b11400108e274f8d9ded92c8a"
+            ],
+            "coverage": {
+              "trace_count": 3,
+              "counts_are_lower_bounds": true,
+              "issue_counts": {
+                "MISSING_LINEAGE": 3
+              }
+            },
+            "claims": [
+              {
+                "claim_id": "dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km",
+                "resolution": "complete",
+                "datasets": [
+                  {
+                    "dataset_id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                    "input_roles": [
+                      "data_input"
+                    ],
+                    "routes": [
+                      "factor_projection",
+                      "proposition_reference"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "curation_ids": [],
+                    "trace_count": 1,
+                    "organizations": [
+                      {
+                        "organization_id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                        "roles": [
+                          "publisher"
+                        ]
+                      },
+                      {
+                        "organization_id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                        "roles": [
+                          "attribution"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "dataset_id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                    "input_roles": [
+                      "metadata_input"
+                    ],
+                    "routes": [
+                      "factor_projection",
+                      "proposition_reference"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "curation_ids": [],
+                    "trace_count": 1,
+                    "organizations": [
+                      {
+                        "organization_id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                        "roles": [
+                          "publisher"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "dataset_id": "gwas-bottom-line:bl-t2d-mixed",
+                    "input_roles": [
+                      "unknown"
+                    ],
+                    "routes": [
+                      "proposition_reference",
+                      "trait_gwas"
+                    ],
+                    "via_ids": [
+                      "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX"
+                    ],
+                    "organizations": [],
+                    "curation_ids": [],
+                    "trace_count": 1
+                  }
+                ]
+              },
+              {
+                "claim_id": "dapper:Claim.Uv7_cT46DdsqZMvk5nh8G48qOIKvhRgc",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.I2mf6PJ0DPF5_nnbiBjAhgjlUCOiUZZ9",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.Kd3psmdr4G9AlD0UU1E1Vu6AjpKaQYWE",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.NBafdtdEE2Uabs-8pZqurv7SoWpg7Yhi",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.Oe2UZeV7oMY4NsMHyB8h4HJO1FH4nSGF",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.2idJniYU4zCtCN6puy8XZ2mzo9Mq6c5p",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.H5icBYm5JLM3_T-b1mMfH65Nc0zMhZzH",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.xzV_35EYnLl-zy03YbmhfBk_ynNbl7H9",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.SYqCJXxCVXDpwflRSdZnkVLzGLO_vi_r",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.x7aCVQ1uTkYKLJo32ZyAGMGZaAGCSvWV",
+                "resolution": "not_applicable",
+                "datasets": []
+              },
+              {
+                "claim_id": "dapper:Claim.uzqyfwuhf59hSTdravdcr4cTxuitWGx-",
+                "resolution": "not_applicable",
+                "datasets": []
+              }
+            ],
+            "datasets": [
+              {
+                "id": "dapper:Dataset.1_jI4ui3k3Zm8A3fu4tEcb28kA8ungVk",
+                "name": "NCBI Gene Homo_sapiens.gene_info",
+                "version": "undated snapshot",
+                "description": "NCBI Gene per-species gene_info table for human, used for Ensembl-to-symbol mapping.",
+                "location": "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/"
+              },
+              {
+                "id": "dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5",
+                "name": "GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)",
+                "version": "v8",
+                "description": "Genotype-Tissue Expression project release V8, as distributed by the GTEx Portal.",
+                "location": "https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression"
+              },
+              {
+                "id": "gwas-bottom-line:bl-t2d-mixed",
+                "name": "Type 2 diabetes (T2D) GWAS bottom line (Mixed ancestry)",
+                "location": "https://translator.broadinstitute.org/artifact_provenance/artifact/bl-t2d-mixed",
+                "kind": "gwas_bottom_line",
+                "artifact_id": "bl-t2d-mixed",
+                "ancestry_code": "Mixed",
+                "ancestry_name": "Mixed ancestry",
+                "kpn_trait_id": "KPN.TRAIT:0000398",
+                "portal_trait_id": "T2D"
+              }
+            ],
+            "organizations": [
+              {
+                "id": "dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ",
+                "name": "GTEx Consortium"
+              },
+              {
+                "id": "dapper:Organization.eJyMMiyG16zfF85-2hwC5VA3yzXORmIK",
+                "name": "National Center for Biotechnology Information",
+                "ror": "ror:02meqm098"
+              },
+              {
+                "id": "dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8",
+                "name": "Broad Institute",
+                "ror": "ror:05a0ya142"
+              }
+            ],
+            "via": [
+              {
+                "id": "dapper:Mechanism.kEJMDzCkDYE94DpWaXrQg-eC4gFGQyuX",
+                "kind": "mechanism",
+                "name": "CAD-in-T2D mechanism Factor1"
+              }
+            ]
           },
           "publication": {
             "visibility": "private",

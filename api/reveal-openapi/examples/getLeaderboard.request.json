@@ -4,12 +4,13 @@
   "method": "GET",
   "path_template": "/v1/leaderboard",
   "request": {
-    "url": "https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20",
+    "url": "https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&scope=published&limit=20",
     "path": {},
     "query": {
       "view": "researchers",
       "sort": "overall",
       "evidence": "all",
+      "scope": "published",
       "limit": 20
     },
     "headers": {
@@ -51,11 +52,13 @@
             "scope": "Currently public frozen snapshots only; all time.",
             "score": "Positive metrics use the eligible-cohort midrank percentile; nonpositive metrics receive zero. Weighted 30/40/30. Exact ties share rank.",
             "own_votes": "Researcher scores exclude their own ballots. Account scores retain canonical totals.",
-            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap."
+            "evidence": "Only explicit evidence interpretations targeting the claim proposition qualify; direction counts can overlap.",
+            "traced": "Claims and accounts traced read each account’s stored provenance trace; scope=all adds private accounts as anonymous totals."
           },
           "view": "researchers",
           "sort": "overall",
           "evidence": "all",
+          "scope": "published",
           "items": [],
           "page": {
             "next_cursor": null,
@@ -66,5 +69,5 @@
       }
     }
   },
-  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&limit=20' -H 'Accept: application/json'"
+  "curl": "curl -X GET 'https://api.reveal.example.org/v1/leaderboard?view=researchers&sort=overall&evidence=all&scope=published&limit=20' -H 'Accept: application/json'"
 }

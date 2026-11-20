@@ -75,7 +75,7 @@ class AuthoringContractTests(unittest.TestCase):
         original=bundle['documents'][0]
         doc=json.loads((ROOT/'services/backend/agent-runtime/authoring-skeleton.json').read_bytes())
         self.assertEqual(set(doc), {'prefixes','scientific_accounts','propositions','claims','evidence_items','claim_scores'})
-        self.assertEqual((len(doc['scientific_accounts']),len(doc['claims']),len(doc['claim_scores'])),(1,6,5))
+        self.assertEqual((len(doc['scientific_accounts']),len(doc['claims']),len(doc['claim_scores'])),(1,7,7))
         for group,rows in doc.items():
             for node in rows if isinstance(rows,list) else ():
                 self.assertFalse({'was_generated_by','was_attributed_to','source_ref','source_locator','subject_proposition','required_question'} & set(node))
@@ -177,7 +177,7 @@ class AuthoringContractTests(unittest.TestCase):
                 summary=result['claim_structure']
                 self.assertEqual({family:value['count'] for family,value in summary['families'].items()},dict.fromkeys(summary['families'],1))
                 self.assertEqual((summary['atomic'],summary['synthesis'],summary['other'],summary['issues']),
-                                 ({'count':5,'conformant':5},{'count':1,'coherent':1,'gap_relevance':1},0,{}))
+                                 ({'count':6,'conformant':6},{'count':1,'coherent':1,'gap_relevance':1},0,{}))
                 self.assertEqual([a['check'] for a in result['advisories'] if a['severity']=='suggestion'],['claim-structure-summary'])
                 props={p['id']:p for p in doc['propositions']}; claims={c['id']:c for c in doc['claims']}
                 gene_set=doc['gene_sets'][0]['id'];source=doc['files'][0]['id']
@@ -189,7 +189,11 @@ class AuthoringContractTests(unittest.TestCase):
                             cited=[props[claims[ref]['proposition']] for ref in item['source_claims']]
                             self.assertTrue(any(gene_set in (p.get('subject_entity'),p.get('object_entity')) for p in cited))
                         else:
-                            self.assertIn(gene_set,item['was_derived_from']);self.assertIn(source,item['was_derived_from'])
+                            # The author names the GeneSet, a scientific object, and never the source File.
+                            self.assertEqual(item['was_derived_from'],[gene_set])
+                # No evidence names a File or a pointer: it quotes the row and says what was asked.
+                for item in doc['evidence_items']:
+                    self.assertNotIn(source,item.get('was_derived_from',[]));self.assertNotRegex(item['context'],r'/result/|/items/')
                 self.assertTrue(any(e.get('source_claims') for e in doc['evidence_items']))
                 # Trusted assembly mints final identities and the final gate accepts the account.
                 from reveal_backend import acceptance
@@ -199,6 +203,12 @@ class AuthoringContractTests(unittest.TestCase):
                 self.assertTrue(final['valid'],final)
                 self.assertEqual(final['mode'],'final')
                 self.assertEqual(final['claim_structure']['conformance_rate'],1.0)
+                # REVEAL tied every quoted row to the source that holds it, and recorded where.
+                quoting=[item for item in accepted['evidence_items'] if not item.get('source_claims')]
+                self.assertEqual(len(quoting),6)
+                for item in quoting:
+                    self.assertEqual(item['was_derived_from'][0],source)
+                    self.assertRegex(item['context'],r'Source row: /result/[a-z_]+/items/0$')
 
     def test_draft_ids_embedded_in_longer_ids_fail_draft_lint_before_trusted_minting(self):
         if self.release is None: self.skipTest('Set REVEAL_TEST_DAPPER_RELEASE to a checkout containing the locked release')
@@ -207,11 +217,12 @@ class AuthoringContractTests(unittest.TestCase):
         bundle=json.loads((ROOT/'services/backend/agent-runtime/authoring-examples.json').read_bytes())
         doc=bundle['documents'][0]; base=doc['claims'][0]['id'].rpartition(':')[0]+':'
         synthesis=next(item for item in doc['evidence_items'] if item.get('source_claims'))
-        self.assertEqual(synthesis['id'],base+'evidence-6')
+        self.assertEqual(synthesis['id'],base+'evidence-7')
         # Renumber the synthesis below an atomic Claim it cites, whose id then extends the synthesis id.
         for (synthesis_number,atomic),cited in (((1,10),'claim-10'),((3,30),'claim-30')):
+            # The synthesis has no ClaimScore; score-7 belongs to an atomic Claim and keeps its id.
             mapping={base+f'{kind}-{old}':base+f'{kind}-{new}' for kind in ('claim','evidence','proposition','score')
-                     for old,new in ((6,synthesis_number),(atomic//10,atomic))}
+                     for old,new in ((7,synthesis_number),(atomic//10,atomic)) if kind!='score' or old!=7}
             changed=exact_rewrite(doc,mapping)
             cites={item['id']:item.get('source_claims',[]) for item in changed['evidence_items']}
             self.assertIn(base+cited,cites[base+f'evidence-{synthesis_number}'])

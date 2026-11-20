@@ -32,6 +32,13 @@ curl --fail-with-body "$REVEAL_API_URL/v1/me" \
   -H "Authorization: Bearer $REVEAL_API_KEY"
 ```
 
+### More than one key
+
+`REVEAL_API_KEY_SHA256` and `REVEAL_API_KEY_USER_ID` hold one key. To give another person a key without
+replacing it, add `REVEAL_API_KEYS`: comma-separated `<sha256>:<workspace user id>` entries, one per key.
+Take both values from the issuance command's `--config-output` file. A malformed or duplicated entry
+disables key authentication and fails `/readyz`, so a mistake is caught at deployment.
+
 Keep the key in the Authorization header, not a URL. The handoff JSON is the
 credential to share privately with its intended holder. Gateway signing keys,
 gateway service tokens and backend environment files stay with the operator.

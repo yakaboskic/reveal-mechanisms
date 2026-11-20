@@ -433,7 +433,6 @@ class ApplicationTests(unittest.TestCase):
             with copy.transaction() as tx:
                 identity=principal(tx,authorization); owner=identity['user_id']
                 identity_key=digest([owner,'job',key])
-                api.reload_gate(tx)
                 frozen,binding=api.freeze_research_request(tx,identity,body)
                 job={'id':api.uid(),'kind':'analysis','owner_user_id':owner,'status':'queued','stage':'queued','research_request_id':frozen['id'],
                     'input_account_id':None,'created_at':api.now(),'updated_at':api.now(),'completed_at':None,'result':None,'failure':None,'warnings':[],'last_event_id':'0'}

@@ -60,7 +60,7 @@ def test_prepare_separates_application_state_and_backend_secrets(tmp_path, monke
     assert backend['REVEAL_APPLICATION_TABLE_PREFIX']=='reveal_workflow_local'
     assert backend['REVEAL_PUBLIC_WEB_URL'] == backend['REVEAL_CANONICAL_URL'] == frontend['NEXTAUTH_URL'] == f'http://localhost:{frontend_port}'
     assert backend['REVEAL_JOB_TRANSPORT']=='workflow'
-    assert backend['REVEAL_RETRIEVAL_BACKEND']=='upstash'
+    assert 'REVEAL_RETRIEVAL_BACKEND' not in backend  # reference vectors always come from the fixed Upstash namespaces
     assert backend['TMPDIR'] == backend['REVEAL_WORK_DIR'] == '/work'
     assert backend['REVEAL_MAX_SCRATCH_STEPS'] == '2'
     assert backend['REVEAL_WORKSPACE_MAX_BYTES'] == '268435456'

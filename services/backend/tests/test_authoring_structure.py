@@ -32,9 +32,9 @@ def test_skeleton_defers_only_omitted_attribution_and_dependency_bodies(draft):
     before = canonical_json(draft)
     report = preflight(draft)
     assert report['valid'], report
-    # One account, six Claims (five atomic families and a gap-relevance synthesis), their Propositions and
-    # EvidenceItems, and five ClaimScores; the server-declared prefixes are the only non-node key.
-    assert report['counts'] == {'nodes': 24, 'errors': 0, 'warnings': 0}
+    # One account, seven Claims (six atomic families and a gap-relevance synthesis), their Propositions and
+    # EvidenceItems, and seven ClaimScores; the server-declared prefixes are the only non-node key.
+    assert report['counts'] == {'nodes': 29, 'errors': 0, 'warnings': 0}
     assert report['dapper_release']['tag'] == '0.2.0'
     assert report['document_sha256'] == hashlib.sha256(before).hexdigest()
     assert canonical_json(draft) == before

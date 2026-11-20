@@ -10,6 +10,7 @@ import { useIdentity } from "./Session";
 import { ReferenceNavigation } from "./FactorView";
 import { LoadingSurface } from "./LoadingSurface";
 import { Record } from "./Scientific";
+import { TraitGeneSets } from "./TraitView";
 import "./factor-pages.css";
 
 type GeneSetData = { catalog: Schema<"CatalogGeneSet">; saved?: never } | { saved: Schema<"GeneSetResult">; catalog?: never };
@@ -37,11 +38,11 @@ export function GeneSetView({ id, generation, from }: { id: string; generation?:
   const data = ready && loaded?.binding === binding ? loaded.value : null;
   const error = failure?.binding === binding ? failure.message : "";
   return <main id="main" className="reference-page gene-set-page"><ReferenceNavigation from={from} />
-    {data ? <GeneSetContent key={binding} id={id} data={data} /> : <LoadingSurface title={error ? "Couldn’t open this gene set" : "Opening gene set"} description="Retrieving its membership, collection and original source records." error={error} onRetry={() => retry(n => n + 1)} skeleton="record" />}
+    {data ? <GeneSetContent key={binding} id={id} data={data} from={from} /> : <LoadingSurface title={error ? "Couldn’t open this gene set" : "Opening gene set"} description="Retrieving its membership, collection and original source records." error={error} onRetry={() => retry(n => n + 1)} skeleton="record" />}
   </main>;
 }
 
-function GeneSetContent({ id, data }: { id: string; data: GeneSetData }) {
+function GeneSetContent({ id, data, from }: { id: string; data: GeneSetData; from?: string }) {
   const catalog = data.catalog, saved = data.saved;
   const object = catalog?.object || saved?.document.gene_sets?.find(set => set.id === id) || {};
   const collection = catalog?.collection;
@@ -56,10 +57,14 @@ function GeneSetContent({ id, data }: { id: string; data: GeneSetData }) {
   const memberCount = catalog ? catalog.gene_count : typeof object.n_members === "number" ? object.n_members : Array.isArray(object.members) ? members.length : null;
   const countLabel = memberCount == null ? "Gene count not reported" : `${memberCount.toLocaleString()} genes`;
   const context = [textOf(object.organism), textOf(object.assay), textOf(object.data_type), textOf(object.genome_build)].filter(Boolean);
+  // Portal pages are built from ids by the backend; only public http(s) links are followed.
+  const portal = (catalog?.external_links || []).flatMap(link => { const href = publicSourceHref(link.href); return href ? [{ ...link, href }] : []; });
+  // Betas are keyed by release gene-set ids; a saved document's gene set is not looked up.
+  const traitsFrom = catalog && /^dapper:GeneSet\.[A-Za-z0-9_-]{32}$/.test(id) ? geneSetHref(id, catalog.generation_id, from) : null;
   return <>
-    <header className="reference-heading"><p className="reference-kind">Gene set{catalog?.library ? ` / ${catalog.library}` : ""}</p><h1>{title}</h1>{textOf(object.description) && <p className="reference-description">{textOf(object.description)}</p>}<div className="reference-meta"><span>{countLabel}</span>{catalog?.genes_in_universe != null && <span>{catalog.genes_in_universe.toLocaleString()} in the EAGGL universe</span>}{context.map((item, i) => <span key={i}>{item}</span>)}</div></header>
+    <header className="reference-heading"><p className="reference-kind">Gene set{catalog?.library ? ` / ${catalog.library}` : ""}</p><h1>{title}</h1>{textOf(object.description) && <p className="reference-description">{textOf(object.description)}</p>}<div className="reference-meta"><span>{countLabel}</span>{catalog?.genes_in_universe != null && <span>{catalog.genes_in_universe.toLocaleString()} in the EAGGL universe</span>}{context.map((item, i) => <span key={i}>{item}</span>)}{portal.map(link => <a key={link.kind} href={link.href} target="_blank" rel="noopener noreferrer">{link.label} ↗<span className="sr-only"> (opens in a new tab)</span></a>)}</div></header>
     {!!catalog?.limitations.length && <div className="reference-notice">{catalog.limitations.map(note => <p key={note}>{note}</p>)}</div>}
-    <nav className="reference-sections" aria-label="Gene-set sections"><a href="#gene-set-provenance">Provenance</a><a href="#gene-set-members">Member genes{memberCount != null && <span>{memberCount.toLocaleString()}</span>}</a><a href="#gene-set-record">Source record</a></nav>
+    <nav className="reference-sections" aria-label="Gene-set sections"><a href="#gene-set-provenance">Provenance</a>{traitsFrom && <a href="#gene-set-traits">Associated traits</a>}<a href="#gene-set-members">Member genes{memberCount != null && <span>{memberCount.toLocaleString()}</span>}</a><a href="#gene-set-record">Source record</a></nav>
     <section id="gene-set-provenance" className="gene-set-provenance"><h2>Provenance</h2><p className="reference-description">{catalog ? "Source records supplied with this gene set and its collection." : "Source records retained with the saved scientific document."}</p>
       <dl className="reference-properties provenance-relations">
         {collection && <div><dt>Collection</dt><dd><a href="#gene-set-collection">{textOf(collection.object?.name) || collection.label}</a></dd></div>}
@@ -75,6 +80,7 @@ function GeneSetContent({ id, data }: { id: string; data: GeneSetData }) {
       <ProvenanceGroup title="Organizations and attribution" records={organizations} names={names} collapsible />
       {!named.length && <p className="reference-notice">No upstream source records were included. The source record below shows the provenance fields that were retained.</p>}
     </section>
+    {traitsFrom && <div id="gene-set-traits"><TraitGeneSets geneSetId={id} release={catalog?.generation_id} self={traitsFrom} /></div>}
     <section id="gene-set-members" className="gene-set-members"><h2>Member genes</h2>{members.length ? <><label htmlFor="member-search" className="sr-only">Search member genes</label><input id="member-search" className="field" type="search" placeholder="Search member genes…" value={search} onChange={event => { setSearch(event.target.value); setShowAll(false); }} /><p className="loading-result-count" role="status">{matches.length.toLocaleString()} {search.trim() ? "matching" : "recorded"} genes{memberCount != null && memberCount > members.length ? ` of ${memberCount.toLocaleString()} reported` : ""}</p><ul className="member-genes">{(showAll ? matches : matches.slice(0, 100)).map((member, index) => <li key={`${member}:${index}`} title={member}>{member.replace(/^HGNC\.SYMBOL:/, "")}</li>)}</ul>{matches.length > 100 && <button className="reference-action" type="button" onClick={() => setShowAll(value => !value)}>{showAll ? "Show fewer genes" : `Show all ${matches.length.toLocaleString()} genes`}</button>}{!matches.length && <p className="loading-empty">No member genes match “{search}”.</p>}</> : <p className="reference-notice">{memberCount == null ? "The source does not report a member count or an explicit membership list." : `The source reports ${memberCount.toLocaleString()} genes, but does not include an explicit membership list in this record.`}</p>}</section>
     <section id="gene-set-record" className="reference-source"><h2>Source record</h2><dl className="reference-properties"><div><dt>Gene-set identity</dt><dd>{id}</dd></div>{catalog?.generation_id && <div><dt>Reference generation</dt><dd>{catalog.generation_id}</dd></div>}</dl>
       {!!stringsOf(object.was_derived_from).filter(value => value.startsWith("dapper:GeneSet.")).length && <p>Related gene sets: {stringsOf(object.was_derived_from).filter(value => value.startsWith("dapper:GeneSet.")).map(value => <Link key={value} href={geneSetHref(value)}>{names.get(value) || value}</Link>)}</p>}

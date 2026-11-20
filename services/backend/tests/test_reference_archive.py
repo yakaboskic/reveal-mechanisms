@@ -14,6 +14,7 @@ from unittest.mock import patch
 from reveal_backend import analysis_outcomes as outcomes, jobs
 from reveal_backend import reference_archive as archive
 from reveal_backend import reference_generation as reference
+from reveal_backend import reference_release
 from reveal_backend.repository import Repository, canonical, digest, uid
 
 MAPPING = 'a' * 64
@@ -168,8 +169,8 @@ class ClassificationTests(unittest.TestCase):
             written |= set(re.findall(r"\brecords\.append\(\(\s*'([a-z_]+)'\s*,", text))
             # Unfenced inserts of untracked rows (Repository.append).
             written |= set(re.findall(r"\brepo(?:sitory)?\.append\(\s*'([a-z_]+)'", text))
-        written |= {reference.ACTIVE_KIND, reference.CONTROL_KIND, reference.ARCHIVE_RUN_KIND, reference.RELOAD_KIND}
-        self.assertTrue({'account', 'suggestion', 'workspace_cursor', 'remote_event', 'vector_batch'} <= written)
+        written |= {reference.ACTIVE_KIND, reference.CONTROL_KIND, reference.ARCHIVE_RUN_KIND, reference.RELOAD_KIND, reference_release.RECORD_KIND}
+        self.assertTrue({'account', 'suggestion', 'workspace_cursor', 'remote_event'} <= written)
         self.assertEqual(sorted(kind for kind in written if archive.classify(kind) is None), [])
         self.assertLessEqual(set(archive.KIND_ACTIONS.values()), {'archive', 'keep', 'drop_anchored_draft', 'cancel_nonterminal', 'purge_at_retire'})
 

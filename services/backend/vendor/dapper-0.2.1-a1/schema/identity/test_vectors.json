@@ -1,0 +1,197 @@
+{
+  "profile": "DAPPER-ID-1",
+  "_readme": "PERMANENT test vectors. schema/trusty-identifiers.md: \"Keep test vectors forever. Every supported profile needs fixed positive and negative vectors so future library upgrades cannot silently change IDs.\" If a dependency bump breaks these, the identifiers in the wild broke too \u2014 fix the code, never the vectors.",
+  "ga4gh_cross_check": {
+    "sha512t24u_of_ACGT": "aKF498dAxcJAqme6QYQ7EZ07-fiw8Kw2",
+    "note": "Verbatim from the GA4GH VRS spec; proves our digest primitive is byte-compatible."
+  },
+  "vectors": [
+    {
+      "name": "minimal-activity",
+      "class": "Activity",
+      "note": "Baseline. Locks canonicalization + sha512t24u against library upgrades.",
+      "instance": {
+        "name": "generate_hubmap_hz2",
+        "activity_type": "converter_invocation",
+        "command": "geneset-extractors convert unsigned_term_gene --gmt_min_genes 5",
+        "code_version": "2fb57130136a8fa25211ef1e77fe13d220e4b115",
+        "generated_at_time": "2026-06-29T15:52:17Z"
+      },
+      "expected_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g"
+    },
+    {
+      "name": "activity-timestamp-changed",
+      "class": "Activity",
+      "note": "SAME expected_id as minimal-activity. generated_at_time is unhashable, so re-running a pipeline must not change what the activity IS.",
+      "instance": {
+        "name": "generate_hubmap_hz2",
+        "activity_type": "converter_invocation",
+        "command": "geneset-extractors convert unsigned_term_gene --gmt_min_genes 5",
+        "code_version": "2fb57130136a8fa25211ef1e77fe13d220e4b115",
+        "generated_at_time": "2099-12-31T23:59:59Z"
+      },
+      "expected_id": "dapper:Activity.b4IAIg_sR6RfE5ZFf0zU_BNbfpz5A_2g"
+    },
+    {
+      "name": "activity-command-changed",
+      "class": "Activity",
+      "note": "DIFFERENT id. command is hashable: change the analysis, change the identity.",
+      "instance": {
+        "name": "generate_hubmap_hz2",
+        "activity_type": "converter_invocation",
+        "command": "geneset-extractors convert unsigned_term_gene --gmt_min_genes 10",
+        "code_version": "2fb57130136a8fa25211ef1e77fe13d220e4b115",
+        "generated_at_time": "2026-06-29T15:52:17Z"
+      },
+      "expected_id": "dapper:Activity.6lyFLWpOxTJk-OaihI-wkOBE8fcDlI0q"
+    },
+    {
+      "name": "dataset-creators-ordered",
+      "class": "Dataset",
+      "note": "Author order is citation-bearing (DataCite), so the list index is part of the digest.",
+      "instance": {
+        "name": "HuBMAP markers",
+        "description": "ASCT+B augmented",
+        "has_creator": [
+          "orcid:0000-0002-1825-0097",
+          "orcid:0000-0003-1613-5981"
+        ]
+      },
+      "expected_id": "dapper:Dataset._TJalk13dpLd3WHGnBsv73tuiGlYZVXg"
+    },
+    {
+      "name": "dataset-creators-reversed",
+      "class": "Dataset",
+      "note": "DIFFERENT id from dataset-creators-ordered. Proves order is preserved, not sorted.",
+      "instance": {
+        "name": "HuBMAP markers",
+        "description": "ASCT+B augmented",
+        "has_creator": [
+          "orcid:0000-0003-1613-5981",
+          "orcid:0000-0002-1825-0097"
+        ]
+      },
+      "expected_id": "dapper:Dataset._yYpAh_bIWZIwtjTQf1obCqGA19B8z2X"
+    },
+    {
+      "name": "nested-reference-substitution",
+      "class": "Dataset",
+      "note": "A dapper: reference contributes only its BARE digest, as GA4GH VRS requires.",
+      "instance": {
+        "name": "derived",
+        "was_derived_from": [
+          "dapper:GeneSet.IvU_xZRHwvrxk-Po0hBE_Hffsr8LP5s4"
+        ]
+      },
+      "expected_id": "dapper:Dataset.UIypYwZSXzkH0bQAutCVyev07HmQZZp8"
+    },
+    {
+      "name": "minimal-gene-program",
+      "class": "GeneProgram",
+      "note": "Baseline for the 4.0 single-cell block. GeneProgram extends Set the same way GeneSet does. Renamed from CellProgram; the class name is part of the digest, so the id changed even though the content did not.",
+      "instance": {
+        "name": "hypoxia response program",
+        "assay": "scRNA-seq",
+        "organism": "human",
+        "inference_method": "cNMF",
+        "biological_process": [
+          "obo:GO_0001666"
+        ],
+        "n_genes": 42
+      },
+      "expected_id": "dapper:GeneProgram.TcCFYMbd8N6Usvp16eQAgQhWw0WPr4w0"
+    },
+    {
+      "name": "gene-program-gene-count-changed",
+      "class": "GeneProgram",
+      "note": "DIFFERENT id from minimal-gene-program. n_genes is hashable: a different loading is a different program.",
+      "instance": {
+        "name": "hypoxia response program",
+        "assay": "scRNA-seq",
+        "organism": "human",
+        "inference_method": "cNMF",
+        "biological_process": [
+          "obo:GO_0001666"
+        ],
+        "n_genes": 43
+      },
+      "expected_id": "dapper:GeneProgram.RkjL2cpmspK5ZuK6_fzESv-Sts0gHGKc"
+    },
+    {
+      "name": "cell-state-references-program",
+      "class": "CellState",
+      "note": "A CellState digests the GeneProgram(s) active in it via their bare digest, same as nested-reference-substitution.",
+      "instance": {
+        "name": "hypoxic tumor cell state",
+        "cell_type": "obo:CL_0001063",
+        "has_program": [
+          "dapper:GeneProgram.TcCFYMbd8N6Usvp16eQAgQhWw0WPr4w0"
+        ]
+      },
+      "expected_id": "dapper:CellState.Odfn6Ab5WmbeI0CFX5gMLAaW1GpQHfD8"
+    },
+    {
+      "name": "minimal-embedding",
+      "class": "Embedding",
+      "note": "Baseline for 0.2.0-a2. embedding_of and was_generated_by are nested references (bare digests); the vector bytes enter via vector_sha256.",
+      "instance": {
+        "name": "Embedding of a gene set",
+        "embedding_of": "dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO",
+        "embedding_model": "toy-4d",
+        "embedding_provider": "example",
+        "dimensions": 4,
+        "dtype": "float16",
+        "normalization": "none",
+        "embedded_text": "First illustrative gene set",
+        "text_template": "example-v1",
+        "vector_sha256": "6566c469ce79b2bc95f3ffcff7ab1167e1e894aeb4f05aea78c2a95ff074e131",
+        "was_generated_by": "dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX",
+        "has_vector_file": "dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3",
+        "vector_row": 0
+      },
+      "expected_id": "dapper:Embedding.YqmiaFk6ncTlhHuHfauwDiWb_4MvPvex"
+    },
+    {
+      "name": "embedding-relocated",
+      "class": "Embedding",
+      "note": "SAME expected_id as minimal-embedding. has_vector_file and vector_row are unhashable representation locators: moving the matrix or re-packing rows must not change what the embedding IS.",
+      "instance": {
+        "name": "Embedding of a gene set",
+        "embedding_of": "dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO",
+        "embedding_model": "toy-4d",
+        "embedding_provider": "example",
+        "dimensions": 4,
+        "dtype": "float16",
+        "normalization": "none",
+        "embedded_text": "First illustrative gene set",
+        "text_template": "example-v1",
+        "vector_sha256": "6566c469ce79b2bc95f3ffcff7ab1167e1e894aeb4f05aea78c2a95ff074e131",
+        "was_generated_by": "dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX",
+        "has_vector_file": "dapper:File.71tWGS-PbGUXPR1jD_ZsXMJDbsnWtr3N",
+        "vector_row": 17
+      },
+      "expected_id": "dapper:Embedding.YqmiaFk6ncTlhHuHfauwDiWb_4MvPvex"
+    },
+    {
+      "name": "embedding-vector-bytes-changed",
+      "class": "Embedding",
+      "note": "DIFFERENT id from minimal-embedding. vector_sha256 is hashable: different floats are a different embedding even for the same model and text.",
+      "instance": {
+        "name": "Embedding of a gene set",
+        "embedding_of": "dapper:GeneSet.sKbhzueXIbO9Xms62_nyJxlZ13en1fRO",
+        "embedding_model": "toy-4d",
+        "embedding_provider": "example",
+        "dimensions": 4,
+        "dtype": "float16",
+        "normalization": "none",
+        "embedded_text": "First illustrative gene set",
+        "text_template": "example-v1",
+        "vector_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "was_generated_by": "dapper:Activity.f3NvLfo3qeBImT1Iqolj0z3sdOc_mAnX",
+        "has_vector_file": "dapper:File.aYgsG7KuOqG7gJ_yC9i9zCmvjMsTCMQ3",
+        "vector_row": 0
+      },
+      "expected_id": "dapper:Embedding.zNIkkVxHH_wK5PNSxJdduJhcX6jaF7NY"
+    }
+  ]
+}

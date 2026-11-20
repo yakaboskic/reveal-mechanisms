@@ -19,9 +19,14 @@ import subprocess
 import sys
 import threading
 import time
+from time import time as wall_clock
 
+from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_FILENAME as AGENT_RESPONSE_FILENAME,
+                        KEY_PROXY_PLACEHOLDER, LIMITS as AGENT_LIMITS, MAX_OUTPUT_TOKENS_ENV, KeyProxy, agent_environment,
+                        deliverable_of as agent_deliverable, egress_policy, output_cap_reason, response_record, schema_of,
+                        validate_input as validate_agent_input)
 from .box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools, canonical, serve, stamp
-from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError
+from .box_stream import ClaudeStream, SecretFilter, StreamProtocolError, TranscriptWriter
 from .box_timing import RuntimeTiming, provider_metrics
 from .public_tool_activity import DURABLE_TOOLS, durable_operation, tool_failed, tool_kind
 from .box_research import HostedResearchClient, ResearchAccessError, validate_context
@@ -32,7 +37,8 @@ from .evidence_package import declare_trusted_prefixes, trusted_prefixes
 from .evidence_reader import WorkspaceReader, read_artifact, READER_VERSION
 from .box_literature import LiteratureClient
 from .research_outcome import validate_insufficient_outcome
-from .box_upload import MAX_TOTAL, capture_file_limit, source_file
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total, source_file
+from .source_evidence import CHECK as SOURCE_CHECK, tool_versions as source_tool_versions
 
 BASE = Path('/reveal')
 STATE = BASE / 'state'
@@ -142,11 +148,15 @@ def setup(request):
             if request.get('research_context') != context:
                 raise ValueError('Research context differs from the frozen seed')
             runtime['research_context'] = context
-        from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256
+        from .dispatch_view import pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256
         contract_sha256 = pinned_contract_sha256(frozen)
         prompt = research_prompt(request['selected_graphs'], request.get('validation_feedback', ()), progressive=progressive,
                                  contract_sha256=contract_sha256, skeleton_sha256=pinned_skeleton_sha256(frozen),
-                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')))
+                                 claim_structure_sha256=pinned_claim_structure_sha256(frozen), lightning_audit=bool(frozen.get('lightning_audit')),
+                                 kit_version=pinned_kit_version(frozen))
+        # A kit that cites by quotation is shown no capture record: its tool results and tool descriptions name no File.
+        from .dispatch_view import QUOTE_KITS
+        runtime['cites_by_quotation'] = pinned_kit_version(frozen) in QUOTE_KITS
         frozen_input = BASE / 'input' / FILE_INPUT_FILENAME
         if frozen_input.exists():
             manifest = json.loads(frozen_input.read_bytes())
@@ -190,6 +200,27 @@ def setup(request):
             'reader_version': READER_VERSION,
             'schema_sha256': views[str(excerpt_path.relative_to(work))],
             'examples_sha256': views[str(example_path.relative_to(work))]}
+    elif request['kind'] == 'agent':
+        # A general agent job: no DAPPER release, evidence package or skill. The caller's prompt is the task.
+        work = BASE / 'trusted'
+        work.mkdir()
+        shutil.copyfile(BASE / 'input' / AGENT_INPUT_FILENAME, work / AGENT_INPUT_FILENAME)
+        agent_input = validate_agent_input(json.loads((work / AGENT_INPUT_FILENAME).read_bytes()))
+        if agent_input['graphs'] != request['selected_graphs'] or agent_input['model'] != request['model']:
+            raise ValueError('Agent graphs or model differ from the frozen input')
+        if {k: request[k] for k in ('timeout_seconds', 'max_turns')} != {k: agent_input['limits'][k] for k in ('timeout_seconds', 'max_turns')} \
+                or request['max_budget_usd'] > agent_input['limits']['max_budget_usd']:
+            raise ValueError('Agent limits differ from the frozen input')
+        runtime = {'runtime_version': 'reveal.agent-runtime/1', 'working_directory': str(work),
+                   'evidence_package_sha256': hashlib.sha256((work / AGENT_INPUT_FILENAME).read_bytes()).hexdigest(),
+                   'derived_input_views': {},
+                   'agent': {**{key: agent_input[key] for key in ('tools', 'graphs', 'network', 'allowed_domains', 'effort')},
+                             'limits': dict(agent_input['limits']),
+                             # Frozen with the bootstrap: the one repository address this sandbox may read, or None.
+                             'claims_url': (request.get('agent') or {}).get('claims_url')}}
+        if agent_deliverable(agent_input) == 'scientific_account':
+            account_workspace(work, project, lock, agent_input, runtime)
+        prompt = agent_input['prompt']
     else:
         root = BASE / 'workspace'
         root.mkdir()
@@ -213,8 +244,11 @@ def setup(request):
                     'job_id': request['job_id'], 'attempt': request['attempt'],
                     'execution_limits': {k: request[k] for k in ['timeout_seconds', 'max_budget_usd', 'max_turns']},
                     'input_sha256': request['input_sha256']})
+    if request['kind'] == 'agent':
+        # Set as CLAUDE_CODE_MAX_OUTPUT_TOKENS for the Claude process (box_agent.agent_environment).
+        runtime['execution_limits']['max_output_tokens'] = runtime['agent']['limits']['max_output_tokens']
     runtime['validation_feedback_sha256'] = hashlib.sha256(canonical(request.get('validation_feedback', []))).hexdigest()
-    if request['kind'] == 'research':
+    if request['kind'] == 'research' or runtime.get('deliverable') == 'scientific_account':
         executor_id = 'urn:reveal:runtime:executor'
         activity_id = 'urn:reveal:runtime:execution:' + request['job_id'] + ':' + str(request['attempt'])
         runtime['draft_attribution'] = {'organizations': [{'id': executor_id, 'name': 'REVEAL Mechanisms runtime executor'}],
@@ -223,13 +257,14 @@ def setup(request):
                                                       'software_name': 'Claude Code', 'software_version': request['claude_version'],
                                                       'generated_at_time': runtime['started_at']}]}
         (work / 'runtime-context.json').write_bytes(canonical(runtime['draft_attribution']))
-    if request['kind'] != 'research' and request.get('validation_feedback'):
+    if request['kind'] == 'paragraph' and request.get('validation_feedback'):
         prompt += '\nTrusted independent review feedback from a rejected earlier draft. Address these constraints afresh; they are not new evidence:\n' + '\n'.join(request['validation_feedback'])
     prepare_writable_output(work)
     runtime['output_directory'] = str(OUTPUT)
     runtime['output_alias'] = str(work / 'output')
     write_json(STATE / 'runtime.json', runtime)
-    for target in [project, BASE / 'input', BASE / 'workspace']:
+    # A general agent run has no DAPPER workspace; an account job and every other kind create one above.
+    for target in [project, BASE / 'input', *([BASE / 'workspace'] if (BASE / 'workspace').exists() else [])]:
         protect(target)
     if (BASE / 'trusted').exists():
         protect(BASE / 'trusted')
@@ -310,8 +345,24 @@ def lint_tool(filename, ledger):
         # without freezing or interrupting the agent's remaining tool calls.
         ledger_path = ledger.root / 'lint-sources.json'
         with ledger.lock:
-            write_json(ledger_path, json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0]))
+            calls = json.loads(ledger.sanitized_bytes({'calls': ledger.entries})[0])['calls']
         evidence_path = RESEARCH.materialize(deadline=deadline, progress=timing.phase) if RESEARCH else runtime['evidence_package']
+        account_job = runtime.get('deliverable') == 'scientific_account'
+        problems = []
+        if account_job:
+            # The agent's record of its saved sources, checked against the files under output/sources/ and the Bash
+            # calls in the live ledger. Only this lint copy carries what REVEAL measured; the saved draft is as the
+            # agent wrote it. The linter counts the accepted files, and nothing else, as captured sources.
+            from . import source_evidence
+            try:
+                problems, binding = source_evidence.check(document, OUTPUT, calls, ledger.root)
+            except source_evidence.SourceError as exc:
+                problems, binding = [('ledger', str(exc))], {'files': {}, 'activities': {}, 'quotes': []}
+            document = source_evidence.bind(document, binding)
+            frozen.write_bytes(canonical(document))
+            write_json(ledger_path, source_evidence.ledger_view(binding))
+        else:
+            write_json(ledger_path, {'calls': calls})
         timing.phase('full_lint')
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -320,16 +371,262 @@ def lint_tool(filename, ledger):
                                          release_lock=BASE / 'bundle/services/backend/agent-runtime/dapper-release.json',
                                          evidence_package=evidence_path, ledger_path=ledger_path, mode='draft', timeout=remaining)
         checks = {finding.get('check') for finding in report.get('findings', []) if finding.get('severity') == 'error'}
-        if checks & {'source-ancestry', 'claim-evidence'}:
-            report['repair_guidance'] = 'Each component Claim needs explicit, target-matched EvidenceItems and unchanged eligible scientific source Files with exact locators. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
+        if account_job:
+            report = source_feedback(report, document, problems)
+            # A Proposition without a triple is valid. The agent is asked for one where it can give it (advisory only).
+            report['advisories'] = [*report.get('advisories', []), *triple_findings(document, decode(Path(evidence_path).read_bytes()))]
+        elif checks & {'source-ancestry', 'claim-evidence'}:
+            report['repair_guidance'] = 'Each component Claim needs target-matched EvidenceItems that quote an eligible scientific source this run retrieved. Use captured reference data, authorized prior science or eligible independent evidence. Seek a relevant CFDE connection when supported and explain its absence when not; never attach an unrelated row to satisfy guidance. If no useful supported interpretation exists, save an insufficient-evidence outcome identifying the missing observation.'
         timing.phase('diagnostic_report')
         return timing.feedback(diagnostic_response(report, output=OUTPUT, filename=filename,
             capture_roots=(OUTPUT, STATE / 'ledger', STATE / 'runtime.json')), runtime.get('execution_deadline_monotonic'))
 
 
+ACCOUNT_SKILL = 'services/backend/agent-skills/construct-literature-account/SKILL.md'
+ACCOUNT_SKILL_PATH = 'account/SKILL.md'
+ACCOUNT_REQUEST_FILENAME = 'account-request.json'
+
+
+def account_workspace(work, project, lock, agent_input, runtime):
+    """What a scientific_account job needs beyond a general agent job, the way a research run has it: the pinned
+    DAPPER release the draft and lint tools check against, the account's evidence package (the requester's question
+    and claims as trusted nodes, no source artifacts), and the authoring skill and schema for the agent to read (the
+    account excerpt: the research classes plus Activity and the provenance edges its record of sources uses).
+    The package comes from the frozen input, so the run lints against exactly what was frozen when the job was queued."""
+    from .authoring_contract import ACCOUNT_EXCERPT, pinned_schema
+    from .dapper_release import clone_release
+    root = BASE / 'workspace'
+    root.mkdir()
+    release = clone_release(root / 'dapper', lock)
+    account = agent_input['account']
+    package = root / 'evidence-package.json'
+    package.write_bytes(canonical(account['package']))
+    folder = work / 'account'
+    folder.mkdir()
+    shutil.copyfile(project / ACCOUNT_SKILL, work / ACCOUNT_SKILL_PATH)
+    (folder / 'authoring-schema-excerpt.yaml').write_bytes(pinned_schema(project, ACCOUNT_EXCERPT))
+    request_view = {'question': account['question'], 'question_id': account['package']['selection']['knowledge_gap_id'],
+                    'claims': account['claims'], 'limits': runtime['agent']['limits'],
+                    'deliverable': 'One DAPPER ScientificAccount saved as output/account-1.json. Follow ' + ACCOUNT_SKILL_PATH + '.'}
+    (work / ACCOUNT_REQUEST_FILENAME).write_text(json.dumps(request_view, ensure_ascii=False, indent=2) + '\n')
+    runtime.update({'dapper': release, 'dapper_root': str(root / 'dapper'), 'evidence_package': str(package),
+                    'deliverable': 'scientific_account',
+                    # The installed versions of the programs the account's Activities run (curl, pdftotext, xmllint),
+                    # so each recorded fetch and conversion can be explained and rerun with the same tools.
+                    'source_tools': source_tool_versions()})
+    runtime['derived_input_views'] = {str(path.relative_to(work)): hashlib.sha256(path.read_bytes()).hexdigest()
+                                      for path in (work / ACCOUNT_SKILL_PATH, folder / 'authoring-schema-excerpt.yaml', work / ACCOUNT_REQUEST_FILENAME)}
+
+
+TRIPLE_CHECK = 'proposition-triple'
+TRIPLE_OWN = ('This Proposition has no subject_entity, relation and object_entity. Add all three if you can name both ends with '
+              'identifiers from the request, a claims-repository record or a paper you read (a human gene is HGNC.SYMBOL:<symbol>; '
+              'a relation is a biolink predicate such as biolink:associated_with). Leave it as text if you cannot: do not '
+              'recall an identifier from memory.')
+TRIPLE_REQUESTED = ("This Claim is about a requester's Proposition that has no subject_entity, relation and object_entity. If you "
+                    'can state them, add a Proposition with exactly the same statement plus all three, and point this Claim '
+                    "and its evidence at it. REVEAL still reports the requester's claim as assessed.")
+
+
+def triple_findings(document, package):
+    """Advisories asking for the structured form of a Proposition where it is missing: for each Proposition the draft
+    writes without one, and for each requester Proposition without one that a Claim is about. A text-only Proposition
+    stays valid, so these never fail a lint. The messages are fixed text and quote nothing from the draft."""
+    from .box_agent import TRIPLE_SLOTS
+
+    def bare(node):
+        return not any(node.get(slot) for slot in TRIPLE_SLOTS)
+
+    def advisory(where, message):
+        return {'severity': 'suggestion', 'check': TRIPLE_CHECK, 'where': where, 'message': message}
+    context = package.get('dapper_context') if isinstance(package.get('dapper_context'), dict) else {}
+    requested = {node.get('id'): node for node in context.get('propositions', []) if isinstance(node, dict)}
+    propositions = document.get('propositions') if isinstance(document.get('propositions'), list) else []
+    claims = document.get('claims') if isinstance(document.get('claims'), list) else []
+    found = [advisory(f'propositions[{index}]', TRIPLE_OWN) for index, node in enumerate(propositions)
+             if isinstance(node, dict) and node.get('id') not in requested and bare(node)]
+    seen = set()
+    for index, claim in enumerate(claims):
+        target = claim.get('proposition') if isinstance(claim, dict) else None
+        if isinstance(target, str) and target in requested and target not in seen and bare(requested[target]):
+            seen.add(target)
+            found.append(advisory(f'claims[{index}].proposition', TRIPLE_REQUESTED))
+    return found
+
+
+# Lint feedback drops a finding's message unless the finding names a `rule` (authoring_structure._normalized_finding):
+# ordinary lint messages may quote private text. A source-evidence message is the repair instruction and never repeats
+# a file's text (source_evidence.SourceError), so it carries a rule and reaches the agent as written.
+SOURCE_REPAIR = ('Each Claim needs at least one EvidenceItem that quotes a file you saved under output/sources/ with a recorded '
+                 'command: snippet is the verbatim passage, was_derived_from the File, and target_proposition the Claim\'s '
+                 'proposition. Repair the source-evidence findings listed for its evidence and files. Remove a Claim you have '
+                 'no evidence for and say so in your final message.')
+
+
+def source_feedback(report, document, problems):
+    """The pinned linter's report for an account job, with source_evidence's findings in place of the linter's own
+    about the same Files and Claims.
+
+    A File REVEAL could not accept is not among the captured sources the linter knows, so the linter also reports it
+    (source-file) and every Claim whose evidence rests on it (source-ancestry); the source-evidence finding says what
+    to change, and is the one shown. An Activity that fetched a file has no inputs by nature, and the run's own
+    Activity is REVEAL's business: activity-inputs warnings are not shown."""
+    located = [{'severity': 'error', 'check': SOURCE_CHECK, 'rule': SOURCE_CHECK, 'where': where, 'message': message, 'why': ''}
+               for where, message in problems]
+    broken = {finding['where'] for finding in located}
+    files = {node.get('id') for node in document.get('files', []) if isinstance(node, dict)}
+    items = {node.get('id'): node for node in document.get('evidence_items', []) if isinstance(node, dict)}
+    waiting = set()
+    for claim in document.get('claims', []):
+        if not isinstance(claim, dict) or not isinstance(claim.get('has_evidence'), list):
+            continue
+        for evidence in claim['has_evidence']:
+            cited = items.get(evidence, {}).get('was_derived_from')
+            if evidence in broken or (isinstance(cited, list) and broken & set(map(str, cited))):
+                waiting.add(claim.get('id'))
+    kept = []
+    for finding in report.get('findings', []):
+        check = finding.get('check')
+        if check == 'activity-inputs' and finding.get('severity') == 'warning':
+            continue
+        if check == 'source-file' and finding.get('where') in files:
+            continue   # every File is checked by source_evidence: one it refused is reported there
+        if check == 'source-ancestry' and finding.get('where') in waiting:
+            continue
+        if check in ('source-ancestry', 'claim-evidence') and finding.get('severity') == 'error':
+            finding = {**finding, 'rule': check, 'message': SOURCE_REPAIR}
+        kept.append(finding)
+    findings = [*kept, *located]
+    errors = sum(1 for finding in findings if finding.get('severity') == 'error')
+    counts = report.get('counts')
+    if isinstance(counts, dict):
+        counts = {**counts, 'errors': errors, 'warnings': sum(1 for finding in findings if finding.get('severity') == 'warning')}
+    return {**report, 'findings': findings, 'valid': errors == 0 and not report.get('operational_error'),
+            **({'counts': counts} if isinstance(counts, dict) else {})}
+
+
+def agent_tools(selected_graphs, ledger, settings, lint=None, write_draft=None, claims_client=None):
+    """The scoped REVEAL tools of a general agent job, bounded by the job's own frozen limits. A spent allowance
+    is a tool error the agent can finish after, never a failed job. A scientific_account job also gets the draft and
+    lint tools a research run authors with. No agent job gets paper tools: the agent fetches papers with its own
+    commands."""
+    limits = settings['limits']
+    claims = None
+    if settings.get('claims_url'):
+        from .box_claims import ClaimsClient
+        claims = (claims_client or ClaimsClient)(settings['claims_url'])
+    return ScopedTools(selected_graphs, ledger, max_calls=limits['tool_calls'], soft_budget=True, claims=claims,
+                       draft_files=('account-1.json',), capture_descriptor=False,
+                       lint=lint, write_draft=write_draft)
+
+
+def structured_output_arguments(agent_input):
+    """Claude Code arguments for an answer job that asked for structured output: the frozen schema as --json-schema, so
+    the final answer is an object satisfying it, reported as the result's structured_output (the mechanism behind
+    Upstash Box's response_schema). None for every other job."""
+    schema = schema_of(agent_input)
+    return [] if schema is None else ['--json-schema', json.dumps(schema, ensure_ascii=False, separators=(',', ':'))]
+
+
+CLAUDE_BINARY = '/reveal/claude/node_modules/.bin/claude'
+MCP_PREFIX = 'mcp__reveal__'
+CONFIGURATION_FORMAT = 'reveal.run-configuration/1'
+# Arguments whose values are request content (the caller's system prompt, its output schema). runtime.json is shown
+# without an access record (the saved-diagnostics preview), so it records their size and sha256 only; the admin
+# content read shows the request itself.
+CONTENT_ARGUMENTS = ('--append-system-prompt', '--json-schema')
+# The Claude process environment, by allowlist. A research or paragraph run holds the real API key there; an agent job
+# holds the key proxy's placeholder, the only key value ever recorded.
+ENVIRONMENT_SHOWN = ('PATH', 'HOME', 'ANTHROPIC_BASE_URL', 'PYTHONDONTWRITEBYTECODE', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC',
+                     'DISABLE_AUTOUPDATER', 'REVEAL_DAPPER_ROOT', MAX_OUTPUT_TOKENS_ENV)
+
+
+def toolchain_stamp(base=None):
+    """The stamp of the toolchain recipe this Box holds (box_adapter.toolchain_stamp, written by the bootstrap), or None."""
+    try:
+        value = ((base or BASE) / 'toolchain.sha256').read_text().strip()
+    except OSError:
+        return None
+    return value if re.fullmatch(r'[a-f0-9]{64}', value) else None
+
+
+def run_configuration(request, runtime, command, env, tools, mcp_config, stamp_value):
+    """How Claude Code was started, for runtime.json: the arguments (request content as size and sha256), the
+    environment by allowlist, the built-in and REVEAL MCP tools it was given, the egress the worker applied (derived
+    from the same frozen request), the toolchain stamp, an account job's kit, and the limits. Never a credential."""
+    start = command.index(CLAUDE_BINARY)
+    argv = list(command[start:])
+    for index in range(len(argv) - 1):
+        if argv[index] in CONTENT_ARGUMENTS:
+            value = argv[index + 1]
+            argv[index + 1] = f'<{len(value)} characters, sha256 {hashlib.sha256(value.encode()).hexdigest()}>'
+    environment = {name: env[name] for name in ENVIRONMENT_SHOWN if name in env}
+    key = env.get('ANTHROPIC_API_KEY')
+    environment['ANTHROPIC_API_KEY'] = key if key == KEY_PROXY_PLACEHOLDER else '[REDACTED_CREDENTIAL]' if key else None
+    builtin = argv[argv.index('--tools') + 1] if '--tools' in argv else ''
+    views = runtime.get('derived_input_views') or {}
+    account = None
+    if runtime.get('deliverable') == 'scientific_account':
+        account = {'skill': ACCOUNT_SKILL, 'skill_sha256': views.get(ACCOUNT_SKILL_PATH),
+                   'schema_excerpt_sha256': views.get('account/authoring-schema-excerpt.yaml')}
+    agent = runtime.get('agent')
+    try:
+        network = egress_policy(request)
+    except (ValueError, KeyError, TypeError):   # recorded, never a reason to stop the run
+        network = None
+    return {'format': CONFIGURATION_FORMAT,
+            'claude_code': {'pinned_version': request['claude_version'], 'observed_version': runtime.get('observed_harness_version')},
+            'cli': {'argv': argv, 'wrapper': list(command[:start]), 'environment': environment, 'prompt': 'stdin'},
+            'tools': {'builtin': [name for name in builtin.split(',') if name],
+                      'mcp': [MCP_PREFIX + item['name'] for item in tools.definitions()],
+                      'mcp_servers': mcp_config['mcpServers']},
+            'network': network,
+            'toolchain': {'stamp': stamp_value},
+            'account_kit': account,
+            'limits': {'execution': runtime.get('execution_limits'), 'agent': agent.get('limits') if agent else None},
+            'source_tools': runtime.get('source_tools')}
+
+
+def agent_system_prompt(agent_input):
+    """Harness facts the agent needs, then the caller's system prompt; appended to Claude Code's own."""
+    note = ('You are running unattended in an isolated, disposable sandbox. Nobody can answer questions mid-run, so '
+            'make reasonable assumptions and finish the task. Your working directory is read-only. Write any files '
+            'you want returned to the output/ directory (/reveal/output): regular files only, no symlinks, each under '
+            '8 MB and 100 MB in all. Use /tmp or your home directory for scratch work. Everything else is discarded '
+            'when the run ends. Your final message is returned to the requester as the result, so make it complete '
+            'on its own.')
+    restricted = agent_input['network'] == 'restricted'
+    if restricted:
+        reachable = (['the selected knowledge-graph services'] if agent_input['graphs'] else []) \
+            + (['these hosts over HTTPS: ' + ', '.join(agent_input['allowed_domains'])] if agent_input['allowed_domains'] else [])
+        note += (' The network is restricted to the Anthropic API' + ''.join(' and ' + item for item in reachable) +
+                 '; requests to any other host fail, including package installs and downloads from it.' +
+                 (' WebSearch still works.' if 'WebSearch' in agent_input['tools'] else ''))
+    else:
+        note += ' The network is open: your commands and tools can reach any host.'
+    if agent_input['deliverable'] == 'scientific_account':
+        note += (' This run\'s deliverable is one DAPPER ScientificAccount, saved as output/account-1.json with '
+                 'mcp__reveal__write_account_draft and checked with mcp__reveal__lint_account. Read and follow '
+                 f'{ACCOUNT_SKILL_PATH} before anything else; the question and the requester\'s claims are in '
+                 f'{ACCOUNT_REQUEST_FILENAME}.')
+        if 'Bash' in agent_input['tools']:
+            note += (' Fetch each paper you cite yourself with a Bash command and save it under output/sources/ (up to 25 MB a file)'
+                     + ('; only the hosts named above can be reached' if restricted else '') +
+                     f'. Only text saved there by a command you record can be quoted. {ACCOUNT_SKILL_PATH} says how to record '
+                     'each fetch and cite the saved file.')
+        else:
+            note += ' This run has no Bash tool, so it cannot fetch papers; say so in your report.'
+        note += (' A run that ends without a saved account returns nothing. Your final message is a short report to the '
+                 'requester: what the account concludes, which of their claims you assessed, and what you did not read.')
+    if schema_of(agent_input) is not None:
+        note += (' The requester asked for structured output: finish by returning your result as one object that satisfies '
+                 'the JSON Schema you were given. That object is the result; your final message is kept beside it.')
+    return note + ('\n\n' + agent_input['system_prompt'] if agent_input['system_prompt'] else '')
+
+
 def deadline_reason(request, last_activity=None):
     last_activity = last_activity or {}
-    stage = 'during research' if request['kind'] == 'research' else 'while writing the research statement'
+    stage = {'research': 'during research', 'agent': 'while working on the prompt'}.get(request['kind'], 'while writing the research statement')
     last_tool = last_activity.get('tool_name')
     operation = last_activity.get('operation') or {}
     if (operation.get('state') in ('received', 'running') or
@@ -364,7 +661,41 @@ def observable_activity(kind, payload, call, previous=None):
     return value
 
 
-def provider_failure_reason(request, result):
+# Claude Code (2.1.282) ends a run whose response hit CLAUDE_CODE_MAX_OUTPUT_TOKENS, after its own continuation retries,
+# with an API error result: no result subtype of its own, the text below in `result` and `stop_reason` "max_tokens".
+OUTPUT_CAP = re.compile(r"exceeded the (\d+) output token maximum")
+
+
+def output_cap_reached(result):
+    """Whether a failed Claude result says one response hit the output-token cap: the cap Claude Code reports, True
+    when it names none, or None."""
+    if not isinstance(result, dict): return None
+    texts = [result.get('result'), *(result.get('errors') if isinstance(result.get('errors'), list) else [])]
+    for text in texts:
+        found = OUTPUT_CAP.search(text) if isinstance(text, str) else None
+        if found: return int(found.group(1))
+    return True if result.get('stop_reason') == 'max_tokens' else None
+
+
+def provider_failure_reason(request, result, max_output_tokens=None):
+    """max_output_tokens: an agent job's frozen limits.max_output_tokens, named when a response exceeded it."""
+    if request['kind'] == 'agent':
+        if result.get('subtype') == 'error_max_turns':
+            return f"The agent reached its {request['max_turns']}-turn limit before finishing."
+        if result.get('subtype') == 'error_max_budget_usd':
+            return f"The agent reached its ${request['max_budget_usd']:g} budget before finishing."
+        if result.get('subtype') == 'error_max_structured_output_retries':
+            return 'The agent could not produce an answer that satisfies output_schema, after the retries Claude Code allows.'
+        reached = output_cap_reached(result)
+        if reached is not None and max_output_tokens is not None:
+            return output_cap_reason(max_output_tokens, AGENT_LIMITS['max_output_tokens']['maximum'], reached)
+        # Claude Code reports a provider or setup error (an invalid API key, an overloaded API) as subtype "success" with
+        # is_error and the error text in `result`: name that text, not the subtype.
+        text = ' '.join(result['result'].split())[:300] if isinstance(result.get('result'), str) and result['result'].strip() else ''
+        subtype = str(result.get('subtype', 'nonzero exit'))
+        reason = 'Claude execution failed: ' + (text if text and subtype == 'success' else subtype + (': ' + text if text else ''))
+        # Named in case Claude Code reports a capped response in a form output_cap_reached does not recognize.
+        return reason + (f' (limits.max_output_tokens was {max_output_tokens} tokens per response)' if max_output_tokens is not None else '')
     if result.get('subtype') == 'error_max_turns':
         return (f"The agent reached its {request['max_turns']}-turn execution limit before completing the result. "
                 'No scientific result was accepted. Retry the analysis to start a new attempt with the current execution limits.')
@@ -373,8 +704,10 @@ def provider_failure_reason(request, result):
     return 'Claude execution failed: ' + str(result.get('subtype', 'nonzero exit'))
 
 
-def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None, timing=None):
-    """Safe terminal metrics, including deadline exits without provider usage."""
+def runtime_completion(request, started, status, reason, process=None, parser=None, last_activity=None, timing=None,
+                       max_output_tokens=None):
+    """Safe terminal metrics, including deadline exits without provider usage. max_output_tokens: an agent job's
+    limits.max_output_tokens, recorded with whether a failed run's response exceeded it."""
     result = parser.result if parser else None
     reported = provider_metrics(result)
     summary = {'completed_at': stamp(), 'elapsed_seconds': round(time.monotonic() - started, 3),
@@ -388,6 +721,11 @@ def runtime_completion(request, started, status, reason, process=None, parser=No
                'cost_usd': reported['cost_usd'],
                'provider_reported': reported,
                'last_observable_activity': last_activity}
+    if max_output_tokens is not None:
+        reached = output_cap_reached(result) if status == 'failed' and isinstance(result, dict) and result.get('is_error') is True else None
+        summary.update({'max_output_tokens': max_output_tokens, 'output_token_limit_reached': reached is not None,
+                        # The cap Claude Code said it applied, when it named one.
+                        'output_token_limit_applied': reached if type(reached) is int else None})
     timing = timing if timing is not None else getattr(parser, 'timing', None)
     if timing is not None:
         summary['timing'] = timing.snapshot()
@@ -462,8 +800,17 @@ def write_draft_tool(filename, document):
         declare_trusted_prefixes(document, trusted_prefixes(package))
         context = runtime.get('draft_attribution')
         if context:
+            # An account job's Activities that wrote its saved source files are its record of how it got them, and
+            # stay. Every other authored Activity, Person or Organization is replaced by REVEAL's record of the run.
+            reserved = {node['id'] for group in ('persons', 'organizations', 'activities') for node in context.get(group, [])}
+            sources = set()
+            if runtime.get('deliverable') == 'scientific_account':
+                from .source_evidence import source_activities
+                sources = {identity for identity in source_activities(document)
+                           if identity not in reserved and not identity.startswith('urn:reveal:')}
             for group in ('persons', 'organizations', 'activities'):
-                document[group] = [node for node in document.get(group, []) if node.get('id') in trusted]
+                document[group] = [node for node in document.get(group, []) if isinstance(node, dict)
+                                   and (node.get('id') in trusted or (group == 'activities' and node.get('id') in sources))]
                 document[group].extend(context.get(group, []))
             for group in ('claims', 'scientific_accounts'):
                 for node in document.get(group, []):
@@ -504,7 +851,9 @@ def main():
         return 0
     request = json.loads((BASE / 'request.json').read_text())
     ledger = Ledger(STATE / 'ledger', request['job_id'], request['attempt'])
-    process = server = parser = runtime = None
+    process = server = parser = runtime = proxy = None
+    transcripts = {}
+    agent = request['kind'] == 'agent'
     last_activity = None
     builtin_calls = {}
     status, reason = 'failed', None
@@ -526,7 +875,7 @@ def main():
     write_json(STATE / 'status.json', {'status': 'preparing', 'started_at': stamp(), 'pid': os.getpid()})
     try:
         emit('stage', {'stage': 'starting_agent', 'state': 'started', 'source': 'harness',
-                       'message': 'Verifying the research runtime and preparing evidence files.'})
+                       'message': 'Preparing the agent sandbox.' if agent else 'Verifying the research runtime and preparing evidence files.'})
         credentials = json.loads((BASE / 'credentials.json').read_text())
         (BASE / 'credentials.json').unlink()
         SECRETS = tuple(value for value in credentials.values() if isinstance(value, str) and value)
@@ -538,7 +887,7 @@ def main():
                 STATE / 'ledger/research-context', seed_path=runtime['evidence_package'],
                 execution_id=request['job_id'] + ':' + str(request['attempt']))
             runtime['research_receipts_path'] = 'ledger/research-receipts.json'
-        actual_version = subprocess.run(['/reveal/claude/node_modules/.bin/claude', '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
+        actual_version = subprocess.run([CLAUDE_BINARY, '--version'], capture_output=True, text=True, check=True, timeout=15).stdout.strip()
         if actual_version.split()[0] != request['claude_version']:
             raise ValueError('Installed Claude Code version differs from the pinned harness')
         runtime['observed_harness_version'] = actual_version
@@ -546,43 +895,68 @@ def main():
         OUTPUT.mkdir(exist_ok=True)
         os.chown(OUTPUT, user.pw_uid, user.pw_gid)
         os.chmod(OUTPUT, 0o700)
-        tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
-                            write_draft=write_draft_tool if request['kind'] == 'research' else None,
-                            literature=LiteratureClient() if request['kind'] == 'research' else None,
-                            write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
-                            read_evidence=read_frozen_evidence if request['kind'] == 'research' else None)
+        # Research runs keep the Europe PMC paper tools; agent jobs fetch papers with their own commands.
+        literature = request['kind'] == 'research'
+        if agent:
+            accounting = runtime.get('deliverable') == 'scientific_account'
+            tools = agent_tools(request['selected_graphs'], ledger, runtime['agent'],
+                                lint=(lambda filename: lint_tool(filename, ledger)) if accounting else None,
+                                write_draft=write_draft_tool if accounting else None)
+        else:
+            tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,
+                                write_draft=write_draft_tool if request['kind'] == 'research' else None,
+                                literature=LiteratureClient() if literature else None,
+                                write_outcome=write_outcome_tool if request['kind'] == 'research' else None, research=RESEARCH,
+                                read_evidence=read_frozen_evidence if request['kind'] == 'research' else None,
+                                capture_descriptor=not runtime.get('cites_by_quotation'))
         server = serve(tools)
         config = {'mcpServers': {'reveal': {'type': 'http', 'url': 'http://127.0.0.1:8765/mcp'}}}
         config_path = BASE / 'mcp.json'
         config_path.write_bytes(canonical(config)); os.chmod(config_path, 0o444)
-        env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
-               'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
-               'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
-               'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
+        if agent:
+            # The agent may run shell commands and reach the open network, so it never holds the API key.
+            proxy = KeyProxy(credentials['ANTHROPIC_API_KEY']).start()
+            env = agent_environment(user.pw_dir, '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', proxy,
+                                    runtime['agent']['limits']['max_output_tokens'])
+        else:
+            env = {'PATH': '/reveal/venv/bin:/usr/local/bin:/usr/bin:/bin', 'HOME': user.pw_dir,
+                   'ANTHROPIC_API_KEY': credentials['ANTHROPIC_API_KEY'],
+                   'PYTHONDONTWRITEBYTECODE': '1', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC': '1',
+                   'DISABLE_AUTOUPDATER': '1', 'REVEAL_DAPPER_ROOT': runtime['dapper_root']}
         command = ['setpriv', '--reuid', str(user.pw_uid), '--regid', str(user.pw_gid), '--clear-groups', '--no-new-privs',
                    '/usr/bin/timeout', '--signal=TERM', '--kill-after=10s', str(max(1, int(request['timeout_seconds'] - (time.monotonic() - started)))),
-                   '/reveal/claude/node_modules/.bin/claude', '-p', '--verbose', '--output-format', 'stream-json',
+                   CLAUDE_BINARY, '-p', '--verbose', '--output-format', 'stream-json',
                    '--include-partial-messages', '--model', request['model'], '--max-turns', str(request['max_turns']),
                    # Low effort: about 60% of a run's output was reasoning, and slow runs hit the time limit.
-                   '--effort', 'low',
+                   '--effort', runtime['agent']['effort'] if agent else 'low',
                    '--max-budget-usd', str(request['max_budget_usd']), '--permission-mode', 'bypassPermissions',
-                   '--tools', 'Read,Glob,Grep,Write,Edit', '--strict-mcp-config', '--mcp-config', str(config_path),
+                   '--tools', ','.join(runtime['agent']['tools']) if agent else 'Read,Glob,Grep,Write,Edit',
+                   '--strict-mcp-config', '--mcp-config', str(config_path),
                    '--setting-sources', '', '--disable-slash-commands']
+        if agent:
+            agent_input = json.loads((work / AGENT_INPUT_FILENAME).read_bytes())
+            command += ['--append-system-prompt', agent_system_prompt(agent_input)]
+            command += structured_output_arguments(agent_input)
+        runtime['configuration'] = run_configuration(request, runtime, command, env, tools, config, toolchain_stamp())
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    cwd=work, env=env, start_new_session=True)
         process.stdin.write(prompt.encode()); process.stdin.close()
         write_json(STATE / 'status.json', {'status': 'running', 'started_at': stamp(), 'pid': os.getpid(), 'agent_pid': process.pid})
-        emit('agent_started', {'message': 'Claude is reading the frozen evidence and authoring a result.', 'model': request['model'],
-                               'stage': 'authoring_account' if request['kind'] == 'research' else 'authoring_paragraph'})
+        emit('agent_started', {'message': 'Claude is working on the prompt.' if agent else 'Claude is reading the frozen evidence and authoring a result.',
+                               'model': request['model'],
+                               'stage': {'research': 'authoring_account', 'agent': 'running_agent'}.get(request['kind'], 'authoring_paragraph')})
         parser = ClaudeStream(secrets=SECRETS, timing=timing)
         checkpoint(force=True)
         trace_filter, error_filter = SecretFilter(SECRETS), SecretFilter(SECRETS)
         selector = selectors.DefaultSelector()
         selector.register(process.stdout, selectors.EVENT_READ, 'stdout')
         selector.register(process.stderr, selectors.EVENT_READ, 'stderr')
-        # Private raw trace is never an SSE payload. Restrict access to the trusted runner.
-        with (STATE / 'claude-stream.jsonl').open('wb') as trace, (STATE / 'claude-stderr.txt').open('wb') as errors:
-            os.chmod(trace.name, 0o600); os.chmod(errors.name, 0o600)
+        # The full transcript is never an SSE payload. Gzipped under the ledger, root-only, it is captured with the
+        # run for admins (admin_transcript), after the same credential filter and the capture's credential scan.
+        stream_name, stderr_name = TRANSCRIPT_FILES
+        with TranscriptWriter(STATE / stream_name, capture_file_limit(stream_name), expanded=MAX_TRANSCRIPT_EXPANDED, clock=wall_clock) as trace, \
+                TranscriptWriter(STATE / stderr_name, capture_file_limit(stderr_name), expanded=MAX_TRANSCRIPT_EXPANDED) as errors:
+            transcripts = {stream_name: trace, stderr_name: errors}
             total = 0
             while selector.get_map():
                 checkpoint()
@@ -599,7 +973,7 @@ def main():
                     if total > 40_000_000:
                         raise StreamProtocolError('Agent trace exceeded capture budget')
                     if key.data == 'stdout':
-                        trace.write(trace_filter.feed(chunk)); trace.flush()
+                        trace.write(trace_filter.feed(chunk))
                         for kind, payload in parser.feed(chunk):
                             if kind in ('tool_call', 'tool_result'):
                                 last_activity = observable_activity(kind, payload, parser.tools[payload['call_id']], last_activity)
@@ -616,9 +990,9 @@ def main():
                             emit(kind, payload)
                     else:
                         timing.bytes_received('stderr', len(chunk))
-                        errors.write(error_filter.feed(chunk)); errors.flush()
-            trace.write(trace_filter.feed(b'', final=True)); trace.flush()
-            errors.write(error_filter.feed(b'', final=True)); errors.flush()
+                        errors.write(error_filter.feed(chunk))
+            trace.write(trace_filter.feed(b'', final=True))
+            errors.write(error_filter.feed(b'', final=True))
             if process.poll() is None:
                 process.wait(timeout=10)
         if not reason:
@@ -630,15 +1004,21 @@ def main():
             for kind, payload in parser.finish():
                 emit(kind, payload)
             if process.returncode != 0 or parser.result.get('is_error'):
-                reason = provider_failure_reason(request, parser.result)
+                reason = provider_failure_reason(request, parser.result, runtime['agent']['limits']['max_output_tokens'] if agent else None)
             else:
                 status = 'succeeded'
-                if (OUTPUT / 'outcome.json').exists():
-                    outcome = json.loads((OUTPUT / 'outcome.json').read_text())
+                # A general agent's output/ is its own; only research writes a structured outcome there.
+                outcome_path = None if agent else OUTPUT / 'outcome.json'
+                if outcome_path and outcome_path.exists():
+                    outcome = json.loads(outcome_path.read_text())
                     if outcome.get('status') in ('insufficient_evidence', 'failed'):
                         status, reason = outcome['status'], str(outcome.get('reason', ''))[:2000]
-                expected = list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else list(OUTPUT.glob('paragraph.json'))
-                reused = outcome.get('existing_account_ids', []) if (OUTPUT / 'outcome.json').exists() else []
+                # An account job's deliverable is its saved account; a general agent job's is its answer.
+                # An account job returns one file, the one its gate reads (agent_account.accept).
+                expected = ([OUTPUT / 'account-1.json'] if (OUTPUT / 'account-1.json').is_file() else []) if runtime.get('deliverable') == 'scientific_account' else (
+                            list(OUTPUT.glob('account-*.*')) if request['kind'] == 'research' else
+                            [True] if agent else list(OUTPUT.glob('paragraph.json')))
+                reused = outcome.get('existing_account_ids', []) if outcome_path and outcome_path.exists() else []
                 reuse_output = RESEARCH is not None and bool(reused) and isinstance(reused, list) and all(isinstance(item, str) for item in reused) and set(reused) <= RESEARCH.existing_account_ids
                 if status == 'succeeded' and not expected and not reuse_output:
                     status, reason = 'failed', 'Claude completed without the required output documents'
@@ -653,16 +1033,25 @@ def main():
             terminate(process)
         if server:
             server.shutdown()
+        if proxy:
+            proxy.shutdown()
+        if agent and parser is not None and parser.result is not None:
+            # Root-owned, beside the tool ledger: the agent cannot write or replace its own final answer.
+            write_json(STATE / 'ledger' / AGENT_RESPONSE_FILENAME,
+                       response_record(request['job_id'], request['attempt'], status, parser.result, SECRETS))
         if RESEARCH is not None:
             RESEARCH.freeze()
         ledger.freeze()
         if runtime is not None:
-            completion = runtime_completion(request, started, status, reason, process, parser, last_activity, timing)
+            completion = runtime_completion(request, started, status, reason, process, parser, last_activity, timing,
+                                            runtime['agent']['limits']['max_output_tokens'] if agent else None)
             runtime['completed_at'], runtime['cost_usd'] = completion['completed_at'], completion['cost_usd']
             runtime['completion'] = completion
             runtime['timing_checkpoint'] = {'recorded_at': completion['completed_at'], 'timing': completion['timing'],
                                           'last_observable_activity': last_activity}
             runtime['observed_claude_runtime'] = parser.runtime if parser else {}
+            # Each transcript file is closed by now: what it holds, and whether its middle was cut to fit the capture.
+            runtime['transcript'] = {name: writer.summary() for name, writer in transcripts.items() if writer.stored_bytes is not None}
             write_json(STATE / 'runtime.json', runtime)
             os.chmod(STATE / 'runtime.json', 0o600)
         write_json(STATE / 'status.json', {'status': status, 'reason': reason, 'completed_at': stamp()})
@@ -708,8 +1097,9 @@ def collect():
                 raise ValueError('Output symlinks are forbidden')
             if not path.is_file():
                 continue
-            data = path.read_bytes(); size += len(data)
-            if len(data) > capture_file_limit(prefix + '/' + str(path.relative_to(root))) or size > MAX_TOTAL:
+            data = path.read_bytes(); name = prefix + '/' + str(path.relative_to(root))
+            if counts_toward_total(name): size += len(data)
+            if len(data) > capture_file_limit(name) or size > MAX_TOTAL:
                 raise ValueError('Output artifact budget exceeded')
             files[prefix + '/' + str(path.relative_to(root))] = base64.b64encode(data).decode()
     if (STATE / 'runtime.json').exists() or (STATE / 'runtime.json').is_symlink():

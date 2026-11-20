@@ -85,6 +85,13 @@ class LightningContinuationTests(unittest.TestCase):
         self.assertEqual(self.row('research_pin', child['id'])['data']['generation_id'], fixtures.GEN)
         self.assertEqual(self.row('request', self.frozen['id'])['data']['archive']['status'], 'archived')
 
+    def test_anchors_saved_under_several_releases_are_unavailable_not_an_error(self):
+        mixed = deepcopy(self.binding); mixed['anchors'].append({**mixed['anchors'][0], 'reference_generation_id': fixtures.OTHER})
+        with self.repo.transaction() as tx: tx.put('request_binding', self.frozen['id'], self.owner, mixed)
+        with self.assertRaises(Problem) as caught: self.create()
+        self.assertEqual((caught.exception.status, caught.exception.code), (409, 'SOURCE_UNAVAILABLE'))
+        self.assertEqual(self.row('lightning_audit', self.audit_id)['data']['public']['continuations'], [])
+
     def test_delivery_replay_and_changed_body_have_one_child(self):
         first = self.create(key='same-key')
         self.assertEqual(self.create(key='same-key'), first)
@@ -179,7 +186,7 @@ class LightningContinuationTests(unittest.TestCase):
     def test_hosted_audit_guidance_is_bound_to_the_retained_seed_on_replay(self):
         from reveal_backend.agent_execution import ExecutionRequest
         from reveal_backend.box_adapter import make_bundle
-        from reveal_backend.dispatch_view import (pinned_claim_structure_sha256, pinned_contract_sha256,
+        from reveal_backend.dispatch_view import (pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version,
             pinned_skeleton_sha256, research_prompt, validate_file_input, FILE_INPUT_FILENAME)
         from reveal_backend.evidence_budget import fit_input_budget
         from reveal_backend.evidence_package import EvidenceBuildError, decode
@@ -193,7 +200,7 @@ class LightningContinuationTests(unittest.TestCase):
         metadata = decode((path.parent.parent / FILE_INPUT_FILENAME).read_bytes())
         arguments = {'progressive': True, 'contract_sha256': pinned_contract_sha256(package),
             'skeleton_sha256': pinned_skeleton_sha256(package),
-            'claim_structure_sha256': pinned_claim_structure_sha256(package)}
+            'claim_structure_sha256': pinned_claim_structure_sha256(package), 'kit_version': pinned_kit_version(package)}
         plain = research_prompt([], **arguments)
         self.assertNotIn('lightning_audit', plain)
         with self.assertRaises(EvidenceBuildError): validate_file_input(path.read_bytes(), metadata, plain)

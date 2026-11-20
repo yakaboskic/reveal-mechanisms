@@ -7,10 +7,10 @@ from copy import deepcopy
 from pathlib import Path
 import re
 
-from .dispatch_view import CLAIM_STRUCTURE_PATH, KIT_V3
+from .dispatch_view import CLAIM_STRUCTURE_PATH, KIT_V5
 from .evidence_package import BuiltPackage, PACKAGE_VERSION, canonical_json, decode, require, sha256
-from .reference_generation import generation_of_anchors
-from .research_data import capability_catalog as default_catalog
+from .reference_generation import shared_release
+from .research_data import RELEASE, capability_catalog as default_catalog
 
 SEED_VERSION = 'reveal.research-seed/1'
 KIT_FILES = (
@@ -130,7 +130,8 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
     """
     root = Path(project_root)
     require(1 <= max_accounts <= 3, 'A seed allows one to three accounts per submission')
-    generation = generation_of_anchors(binding['anchors'])
+    # The work's own pin (research_hosted / research_work): the one release every anchor was saved under, else none.
+    generation = shared_release(binding['anchors'])
     require(generation is not None, 'Research seed requires an exact reference generation')
     anchors = deepcopy(binding['anchors'])
     factor_ids = [a['cfde_node_id'] for a in anchors]
@@ -277,8 +278,12 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
         }
     composer=frozen['composer']
     origins={a['reference']['source_id']:a['origin'] for a in composer['eaggl_anchors']}
+    # A binding saved under a release names its embedding space in mapping_run_id (catalog.kpn_factors); a reload-era
+    # generation's names the generation itself, and a legacy binding has no generation.
+    kind=RELEASE if all(a.get('mapping_run_id') not in (None, a.get('reference_generation_id')) for a in anchors) else None
     catalog=deepcopy(capability_catalog) if capability_catalog is not None else default_catalog(
-        {'generation_id':generation,'model':model,'status':'pinned','eaggl_import_id':anchors[0].get('eaggl_import_id')})
+        {'generation_id':generation,'model':model,'status':'pinned','eaggl_import_id':anchors[0].get('eaggl_import_id'),
+         **({'source_kind':kind} if kind else {})}, source_kind=kind)
     package={
         'package_version':PACKAGE_VERSION,'seed_version':SEED_VERSION,'retrieval_mode':'progressive',
         'research_request_id':frozen['id'],'reference_generation_id':generation,
@@ -320,7 +325,7 @@ def prepare_research_seed(frozen, binding, *, dapper, project_root, output=None,
                 [next(item for item in implementation if item['path'] == SKELETON_PATH)],
             'required_question':frozen['question_id'],'max_accounts':max_accounts,
             'assembly_builder':{'version':SEED_VERSION,'source_sha256':sha256(Path(__file__).read_bytes())}},
-        'authoring_kit':{'version':KIT_V3,'files':kit+implementation,
+        'authoring_kit':{'version':KIT_V5,'files':kit+implementation,
             'kit_sha256':sha256(canonical_json(kit+implementation)),
             'release_lock_sha256':sha256((root/KIT_FILES[-1]).read_bytes()),'release_tag':lock['tag'],'release_commit':lock['commit']},
         'readiness':{'input_capture_complete':False,'seed_ready':True,'capture_blockers':['progressive_data_not_requested'],

@@ -78,7 +78,7 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
     backend.update(REVEAL_APPLICATION_TABLE_PREFIX='reveal_workflow_local',
         REVEAL_JOB_NAMESPACE='reveal-workflow-local', REVEAL_LOCAL_DEPLOYMENT='1',
         REVEAL_ENVIRONMENT='development', REVEAL_JOB_TRANSPORT='workflow',
-        REVEAL_RETRIEVAL_BACKEND='upstash', REVEAL_VECTOR_ENVIRONMENT='local',
+        REVEAL_VECTOR_ENVIRONMENT='local',
         REVEAL_NOTIFICATION_NAMESPACE='reveal-workflow-local',
         REVEAL_MYSQL_CA_FILE='/app/runtime-ca.pem', REVEAL_DAPPER_ROOT='/app/.runtime/dapper',
         REVEAL_DISMECH_SOURCE='/app/dismech', REVEAL_WORK_DIR='/work', TMPDIR='/work', REVEAL_ARTIFACT_STORE='s3',
@@ -86,6 +86,8 @@ def prepare(*, scheduler='local', api_port=18001, frontend_port=3000, callback_u
         REVEAL_GATEWAY_SECRET=keys['gateway'], REVEAL_GATEWAY_SERVICE_TOKEN=keys['service'],
         REVEAL_GATEWAY_ISSUER='reveal-nextjs', REVEAL_GATEWAY_AUDIENCE='reveal-api',
         NEXTAUTH_URL=origin, REVEAL_CANONICAL_URL=origin, REVEAL_PUBLIC_WEB_URL=origin)
+    # The account trace's trait GWAS lineage (deploy/dig/service.yaml); a .env value, even empty (disabled), wins.
+    backend.setdefault('REVEAL_PROVENANCE_PORTAL_URL', 'https://translator.broadinstitute.org/artifact_provenance')
     backend.pop('SERVICE_PATH_PREFIX', None)
     frontend = {k:v for k,v in source.items() if k.startswith(('AUTH_GOOGLE_','AUTH_ORCID_')) or k == 'ADMIN_EMAILS'}
     frontend.update({k:backend[k] for k in ('REVEAL_GATEWAY_SECRET','REVEAL_GATEWAY_SERVICE_TOKEN',

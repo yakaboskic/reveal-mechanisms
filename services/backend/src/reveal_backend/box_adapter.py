@@ -17,9 +17,13 @@ import time
 
 from .agent_execution import (ExecutionRequest, ExecutionResult, MAX_EMIT_BATCH_BYTES,
                               MAX_EMIT_BATCH_EVENTS, emit_batch_size)
+from .box_agent import (INPUT_FILENAME as AGENT_INPUT_FILENAME, RESPONSE_CAPTURE_PATH, bootstrap_settings,
+                        LIMITS as AGENT_LIMITS, egress_policy, validate_input as validate_agent_input)
 from .box_mcp import GRAPHS
 from .box_research import network_policy, validate_context, validate_access, validate_hosted_context
-from .box_upload import MAX_TOTAL, capture_file_limit
+from .box_stream import inflate
+from .box_upload import MAX_TOTAL, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total
+from .source_evidence import SOURCE_PACKAGES
 
 CLAUDE_VERSION = '2.1.282'
 MODEL = 'claude-sonnet-4-6'
@@ -96,7 +100,8 @@ def read_capture_marker(request, handle):
             target = request.output_dir / name
             if relative.is_absolute() or '..' in relative.parts or target.is_symlink() or not target.resolve().is_relative_to(request.output_dir.resolve()):
                 raise ValueError('Capture path escapes attempt')
-            raw = target.read_bytes(); total += len(raw)
+            raw = target.read_bytes()
+            if counts_toward_total(name): total += len(raw)
             if len(raw) > capture_file_limit(name) or total > MAX_TOTAL or len(raw) != expected['size_bytes'] or hashlib.sha256(raw).hexdigest() != expected['sha256']:
                 raise ValueError('Captured bytes changed')
         return marker
@@ -113,7 +118,8 @@ def captured_result(request, handle, marker):
                            paragraph_path=found('output/paragraph.json'), runtime_manifest_path=found('runtime.json'),
                            ledger_manifest_path=found('ledger/manifest.json'), reason=marker['state'].get('reason'),
                            remote_handle=handle, outcome_path=found('output/outcome.json'),
-                           research_receipts_path=found('ledger/research-receipts.json'))
+                           research_receipts_path=found('ledger/research-receipts.json'),
+                           response_path=found(RESPONSE_CAPTURE_PATH) if request.kind == 'agent' else None)
 
 
 def verified_box_not_found(exc):
@@ -183,16 +189,19 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
     for name in ('__init__.py', 'evidence_package.py', 'dapper_release.py', 'scientific_account_lint.py', 'source_validation.py',
                  'box_remote.py', 'box_upload.py', 'box_stream.py', 'box_mcp.py', 'box_research.py', 'box_literature.py', 'research_outcome.py',
                  'dispatch_view.py', 'evidence_files.py', 'evidence_reader.py', 'authoring_contract.py', 'authoring_structure.py',
-                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py'):
+                 'box_timing.py', 'relationship_provenance.py', 'claim_suggestions.py', 'public_tool_activity.py', 'box_agent.py',
+                 'source_evidence.py', 'box_claims.py'):
         files['bundle/services/backend/src/reveal_backend/' + name] = (source / name).read_bytes()
     relative = ['scripts/lint_scientific_account.py', 'services/backend/agent-runtime/dapper-release.json',
                 'services/backend/agent-runtime/authoring-schema-dependencies.json',
                 'services/backend/agent-runtime/linkml-types-1.11.1.yaml',
                 'services/backend/agent-runtime/authoring-schema-excerpt.yaml',
+                'services/backend/agent-runtime/account-schema-excerpt.yaml',
                 'services/backend/agent-runtime/authoring-examples.json', 'docs/authoring-contract.md', 'docs/local-agent-mcp.md', 'docs/local-workspaces-and-authentication.md',
                 'services/backend/agent-skills/construct-scientific-account/SKILL.md',
                 'services/backend/agent-skills/read-evidence-package/SKILL.md',
                 'services/backend/agent-skills/write-cited-paragraph/SKILL.md',
+                'services/backend/agent-skills/construct-literature-account/SKILL.md',
                 'docs/evidence-package.md', 'docs/scientific-account-construction.md', 'docs/pigean-claim-model.md',
                 'docs/dapper-integration.md', 'docs/agent-evidence-integration.md', 'docs/scientific-account-linting.md',
                 'docs/evidence-claim-structure.md']
@@ -217,7 +226,7 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if set(value['external_evidence']['selected_graphs']) != set(request.selected_graphs):
             raise BoxConfigurationError('Selected graphs do not match the frozen evidence package')
         files['input/evidence-package.json'] = data
-        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt, pinned_claim_structure_sha256, pinned_contract_sha256, pinned_skeleton_sha256,
+        from .dispatch_view import (BUDGET_FILENAME, VIEW_FILENAME, legacy_research_prompt, research_prompt, pinned_claim_structure_sha256, pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256,
                                     validate_dispatch_budget, validate_file_input)
         budget_path = request.input_path.parent / BUDGET_FILENAME
         view_path = request.input_path.parent / VIEW_FILENAME
@@ -247,7 +256,8 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
                     validate_file_input(data, json.loads(manifest_data),
                                         research_prompt(request.selected_graphs, request.validation_feedback, progressive=value.get('retrieval_mode') == 'progressive',
                                                         contract_sha256=pinned_contract_sha256(value), skeleton_sha256=pinned_skeleton_sha256(value),
-                                                        claim_structure_sha256=pinned_claim_structure_sha256(value), lightning_audit=bool(value.get('lightning_audit'))))
+                                                        claim_structure_sha256=pinned_claim_structure_sha256(value), lightning_audit=bool(value.get('lightning_audit')),
+                                                        kit_version=pinned_kit_version(value)))
                     files['input/evidence-input.json'] = manifest_data
                 frozen_view = frozen_input.get('dispatch_view')
                 if frozen_view:
@@ -287,6 +297,12 @@ def make_bundle(project_root: Path, request: ExecutionRequest):
         if value.get('format') != 'reveal.paragraph-input/1' or request.selected_graphs:
             raise BoxConfigurationError('Invalid paragraph input format or external graph selection')
         files['input/paragraph-input.json'] = data
+    elif request.kind == 'agent':
+        try: validate_agent_input(value)
+        except ValueError as exc: raise BoxConfigurationError(str(exc)) from None
+        if tuple(value['graphs']) != tuple(request.selected_graphs):
+            raise BoxConfigurationError('Selected graphs do not match the frozen agent input')
+        files['input/' + AGENT_INPUT_FILENAME] = data
     else:
         raise BoxConfigurationError('Unsupported execution kind')
     result = io.BytesIO()
@@ -335,6 +351,10 @@ class BoxExecutionAdapter:
                   'model': self.environ.get('REVEAL_CLAUDE_MODEL', MODEL), 'claude_version': CLAUDE_VERSION,
                   'input_sha256': hashlib.sha256(request.input_path.read_bytes()).hexdigest()}
         config['validation_feedback'] = list(request.validation_feedback)
+        if request.kind == 'agent':
+            # The caller chose the model; the frozen input, not this worker's environment, says which.
+            agent_input = json.loads(request.input_path.read_bytes())
+            config['agent'], config['model'] = bootstrap_settings(agent_input, self.environ.get('REVEAL_CLAIMS_API_URL')), agent_input['model']
         if request.kind == 'research':
             package = json.loads(request.input_path.read_bytes())
             if package.get('retrieval_mode') == 'progressive':
@@ -351,7 +371,7 @@ class BoxExecutionAdapter:
         # harness bundle, input, model, limits and selected evidence services.
         fingerprint = hashlib.sha256(bundle + json.dumps(config, sort_keys=True).encode()).hexdigest()
         marker = await self.command(box, "sudo -n sh -c 'if [ -f /reveal/state/bootstrap-ready ]; then cat /reveal/state/bootstrap-ready; fi'")
-        policy = network_policy(config.get('research_context'))
+        policy = egress_policy(config)
         if marker.strip():
             if marker.strip() != fingerprint:
                 raise BoxConfigurationError('Existing Box bootstrap belongs to different frozen input or harness')
@@ -366,16 +386,21 @@ class BoxExecutionAdapter:
         bootstrap = self.bootstrap_script(config['claude_version'])
         await box.files.write(path='/tmp/reveal-bootstrap.sh', content=bootstrap)
         await self.command(box, 'sh /tmp/reveal-bootstrap.sh')
-        await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'), research_access=request.research_access)
+        await self.finish_prepare(box, fingerprint, research_context=config.get('research_context'),
+                                  research_access=request.research_access, policy=policy)
 
     @staticmethod
     def toolchain_script(claude_version):
-        """The pinned agent toolchain install; a prebuilt snapshot holds exactly its result."""
+        """The pinned agent toolchain install; a prebuilt snapshot holds exactly its result.
+
+        It includes the programs an account job fetches and converts papers with (curl, pdftotext, xmllint:
+        source_evidence.SOURCE_PACKAGES). They are not yet pinned to exact apt versions: the snapshot builder records
+        the installed versions, and each account job's runtime.json records them too (source_tools)."""
         if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', claude_version):
             raise BoxConfigurationError('Invalid frozen Claude runtime version')
         return '''id reveal-agent >/dev/null 2>&1 || sudo useradd --create-home --uid 1999 --shell /usr/sbin/nologin reveal-agent
 sudo apt-get update -qq
-sudo apt-get install -y -qq python3-venv
+sudo apt-get install -y -qq python3-venv ''' + ' '.join(SOURCE_PACKAGES) + '''
 sudo python3 -m venv /reveal/venv
 sudo /reveal/venv/bin/pip -q install PyYAML==6.0.2 linkml==1.11.1 rdflib==7.6.0
 sudo mkdir -p /reveal/claude
@@ -408,7 +433,7 @@ sudo chmod 755 /reveal/state
 sudo /reveal/claude/node_modules/.bin/claude --version
 '''
 
-    async def finish_prepare(self, box, fingerprint, *, research_context=None, research_access=None):
+    async def finish_prepare(self, box, fingerprint, *, research_context=None, research_access=None, policy=None):
         # Secret only uses structured SDK file input, then root-only protection before launch.
         credentials = {'ANTHROPIC_API_KEY': self.environ['ANTHROPIC_API_KEY']}
         if research_context:
@@ -418,8 +443,9 @@ sudo /reveal/claude/node_modules/.bin/claude --version
         await box.files.write(path='/tmp/reveal-credential.json', content=json.dumps(credentials))
         await self.command(box, 'sudo mv /tmp/reveal-credential.json /reveal/credentials.json && sudo chown root:root /reveal/credentials.json && sudo chmod 600 /reveal/credentials.json')
         await self.command(box, "sudo -n sh -c " + shlex.quote("printf '%s' " + fingerprint + " > /reveal/state/bootstrap-ready && chmod 600 /reveal/state/bootstrap-ready"))
-        # After installation only Anthropic and the fixed evidence service are reachable.
-        await box.update_network_policy(network_policy(research_context))
+        # After installation only Anthropic and the fixed evidence service are reachable
+        # (or, for an agent job, the services its chosen tools call).
+        await box.update_network_policy(policy or network_policy(research_context))
         # DAPPER clone is intentionally fresh and requires github.com after policy tightening.
 
     async def execute(self, request, emit, cancelled, checkpoint):
@@ -428,7 +454,7 @@ sudo /reveal/claude/node_modules/.bin/claude --version
             raise BoxConfigurationError('Missing required environment: ' + ', '.join(missing))
         if set(request.selected_graphs) - set(GRAPHS) or not 1 <= request.attempt or not 10 <= request.timeout_seconds <= 3600:
             raise BoxConfigurationError('Invalid execution graph, attempt or time limit')
-        if not math.isfinite(request.max_budget_usd) or request.max_budget_usd <= 0 or not 1 <= request.max_turns <= 100:
+        if not math.isfinite(request.max_budget_usd) or request.max_budget_usd <= 0 or not 1 <= request.max_turns <= AGENT_LIMITS['max_turns']['maximum']:
             raise BoxConfigurationError('Invalid execution budget')
         if len(request.validation_feedback) > 10 or any(not isinstance(x, str) or len(x) > 4000 for x in request.validation_feedback):
             raise BoxConfigurationError('Validation feedback exceeds limits')
@@ -559,8 +585,14 @@ sudo /reveal/claude/node_modules/.bin/claude --version
                 relative = PurePosixPath(name)
                 if relative.is_absolute() or '..' in relative.parts:
                     raise BoxTransportError('Remote artifact path escapes attempt')
-                content = base64.b64decode(encoded, validate=True); total += len(content)
-                if any(self.environ[key].encode() in content for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY')):
+                content = base64.b64decode(encoded, validate=True)
+                if counts_toward_total(name): total += len(content)
+                scanned = [content]
+                if name in TRANSCRIPT_FILES:
+                    # Compression hides a credential from a byte match: a gzipped transcript is scanned inflated too.
+                    try: scanned.append(inflate(content, MAX_TRANSCRIPT_EXPANDED)[0])
+                    except ValueError: raise BoxTransportError('A captured transcript is not a bounded gzip file; capture rejected') from None
+                if any(self.environ[key].encode() in data for key in ('ANTHROPIC_API_KEY', 'UPSTASH_BOX_API_KEY') for data in scanned):
                     raise BoxTransportError('Credential material detected in an output artifact; capture rejected')
                 if len(content) > capture_file_limit(name) or total > MAX_TOTAL:
                     raise BoxTransportError('Remote artifact exceeds capture limit')

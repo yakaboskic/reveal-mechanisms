@@ -1,4 +1,4 @@
-"""Owned-input projections against isolated SQL fixtures; no provider calls."""
+"""Owned-input projections against isolated reference-release SQL fixtures (reveal_ref_*); no provider calls."""
 from copy import deepcopy
 import json
 import sqlite3
@@ -21,8 +21,8 @@ class SelectedCatalog:
 
     def __init__(self):
         self.lock = threading.Lock(); self.loaded = True
-        self.reference_generation_id = references.GEN; self.model = KPN_MODEL
-        self.eaggl_import = references.IMP; self.dismech_import = 'd' * 64; self.source_commit = 'f' * 40
+        self.reference_generation_id = references.RELEASE; self.model = KPN_MODEL
+        self.eaggl_import = None; self.dismech_import = 'd' * 64; self.source_commit = 'f' * 40
         self.factors = {references.FACTOR: {'source_id': references.FACTOR, 'source_revision': 'e' * 64,
             'object': {'id': 'dapper:Mechanism.selected', 'name': 'selected factor'},
             'cfde_anchor': {'label': 'insulin secretion'}, 'kpn_trait': {'id': 'KPN.TRAIT:0000398',
@@ -43,7 +43,7 @@ class SelectedCatalog:
 
 class AssessmentStateTests(unittest.TestCase):
     def setUp(self):
-        self.fixture = references.ReferenceQueryTests()
+        self.fixture = references.ReleaseQueryTests()
         self.fixture.setUp(); self.addCleanup(self.fixture.doCleanups)
         self.catalog = SelectedCatalog()
         self.composer = {'source_gap': {'id': self.catalog.record['object']['id'], **self.catalog.record['source']},
@@ -52,42 +52,83 @@ class AssessmentStateTests(unittest.TestCase):
             'model': KPN_MODEL, 'research_direction': 'Investigate this question.', 'upload_ids': []}
         self.inputs = {'format': 'reveal.user-inputs/1', 'research_direction': self.composer['research_direction'],
             'context': '', 'hypotheses': '', 'uploads': []}
+        organism = {'collection': {'id': references.COLLECTION2, 'organism': 'human'}, 'document_sha256': '9' * 64, 'provenance': {}}
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE cfde_gene_set_collections SET payload=?', (json.dumps({'collection': {'id': 'collection',
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?', (json.dumps({'collection': {'id': references.COLLECTION,
                 'name': 'Human source signatures', 'organism': 'human'}, 'document_sha256': 'a' * 64,
                 'provenance': {'activities': [{'id': 'activity:1', 'name': 'Source assay',
-                    'perturbation_target': 'GENE_Z', 'api_key': 'private-secret'}]}}),))
+                    'perturbation_target': 'GENE_Z', 'api_key': 'private-secret'}]}}), references.COLLECTION))
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?', (json.dumps(organism), references.COLLECTION2))
 
     def build(self):
         return assessment.build_state(self.catalog, self.composer, self.inputs,
-            connection_factory=lambda: references.Connection(self.fixture.path, self.fixture.queries))
+            connection_factory=lambda: references.ReleaseConnection(self.fixture.path, self.fixture.queries))
+
+    def factor_row(self, c, number, identity, key):
+        references.insert(c, 'reveal_ref_factors', [{'factor_key': key, 'public_id': identity, 'eaggl_factor_id': 'T2D::Factor' + str(number),
+            'kpn_trait_id': references.T2D, 'factor_number': number, 'label': 'factor', 'input_sha256': 'e' * 64, 'source_revision': 'e' * 64,
+            'metadata': {}}])
+
+    def gene_set_row(self, c, identity, name, n_genes=0, members=()):
+        c.execute('INSERT OR IGNORE INTO reveal_ref_gene_sets VALUES(?,?,?,?,?,?,?,?)', (identity, references.COLLECTION, name, 'GO', n_genes,
+            n_genes, None, json.dumps({'dapper_gene_set': {'id': identity, 'name': name, 'members': list(members)}})))
 
     def test_authoritative_selection_exact_values_and_batched_metadata(self):
         with patch('socket.create_connection', side_effect=AssertionError('network forbidden')):
             built = self.build()
         state = built['state']; factor = state['factors'][0]
+        self.assertEqual(state['format'], 'reveal.cfde-assessment-state/2')
         self.assertEqual(state['gap']['rationale']['text'], 'A meaningful disease rationale.')
         self.assertEqual([item['id'] for item in state['factors']], [references.FACTOR])
-        self.assertEqual(factor['genes']['rows'], [['GENE_A', 0, .8], ['GENE_B', 1, .8], ['literal%_', 2, .1]])
-        self.assertEqual(factor['gene_sets']['rows'][0], [0, .4, .2, '0.4', '0.2', 1, 1250, 1])
-        self.assertEqual(state['gene_sets']['rows'][0][0], references.SET)
-        self.assertEqual(state['source_pins']['generation_id'], references.GEN)
-        self.assertEqual(state['source_pins']['eaggl_import_id'], references.IMP)
+        self.assertEqual(factor['genes']['rows'], [['GENE_A', .8], ['GENE_B', .8], ['literal%_', .1]])
+        self.assertEqual(factor['genes']['columns'], ['symbol', 'loading'])
+        self.assertEqual(factor['gene_sets']['rows'], [[0, .4, .2, '0.4', '0.2', 1, 1250, 1], [1, .3, .6, '0.3', '0.6', 1, 1, 0]])
+        self.assertIn('per library', factor['gene_sets']['coverage'])
+        self.assertEqual(factor['gene_sets']['source'], 'mysql:reveal_ref_release+reveal_ref_factors+reveal_ref_projections+reveal_ref_gene_sets'
+                                                        '?generation_id=' + references.RELEASE)
+        self.assertEqual([row[0] for row in state['gene_sets']['rows']], [references.SET, references.SET2])
+        self.assertEqual(state['source_pins'], {'release_id': references.RELEASE, 'model': KPN_MODEL,
+            'release_manifest_sha256': sha256(canonical_json({'release_id': references.RELEASE, 'absent_files': []}))})
+        self.assertNotIn('scope', state['selection'])
         self.assertTrue(built['coverage']['complete'])
         self.assertEqual(built['coverage']['gene_loading_count'], 3)
-        self.assertEqual(built['coverage']['unique_gene_set_count'], 1)
+        self.assertEqual(built['coverage']['unique_gene_set_count'], 2)
+        self.assertEqual(self.fixture.queries[0][0], 'SELECT release_id,published_at,manifest FROM reveal_ref_release')
         self.assertTrue(all(sql.startswith('SELECT ') for sql, _ in self.fixture.queries))
-        self.assertEqual(sum('FROM cfde_gene_sets WHERE' in sql for sql, _ in self.fixture.queries), 1)
-        self.assertEqual(sum('FROM cfde_gene_set_collections WHERE' in sql for sql, _ in self.fixture.queries), 1)
+        self.assertFalse(any('reference_generations' in sql or 'cfde_' in sql or 'scope' in sql for sql, _ in self.fixture.queries))
+        self.assertEqual(sum('FROM reveal_ref_gene_sets WHERE' in sql for sql, _ in self.fixture.queries), 1)
+        self.assertEqual(sum('FROM reveal_ref_collections WHERE' in sql for sql, _ in self.fixture.queries), 1)
+        self.assertEqual(state['collections'][references.COLLECTION]['source'], 'mysql:reveal_ref_collections/' + references.COLLECTION)
         encoded = canonical_json(state).decode()
-        self.assertNotIn('private-secret', encoded); self.assertNotIn('embedding', encoded)
+        self.assertNotIn('private-secret', encoded); self.assertNotIn('embedding', encoded); self.assertNotIn('gene_index', encoded)
         self.assertIn('GENE_Z', encoded)
         self.assertIn('not necessarily a signature member', state['interpretation'])
+
+    def test_superseded_release_or_another_model_is_refused(self):
+        self.fixture.publish()
+        with self.assertRaises(Problem) as caught: self.build()
+        self.assertEqual((caught.exception.status, caught.exception.code, caught.exception.extra['reason']),
+                         (409, 'SOURCE_UNAVAILABLE', 'reference_release_superseded'))
+        self.assertEqual(len(self.fixture.queries), 1)  # only the release row was read
+        self.catalog.reference_generation_id = references.NEXT
+        self.catalog.model = self.composer['model'] = LEGACY_MODEL
+        with self.assertRaises(Problem) as caught: self.build()
+        self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
+
+    def test_curated_source_datasets_join_the_collection_provenance(self):
+        dataset = {'id': 'dapper:Dataset.glygen', 'name': 'GlyGen data release v1.12.1', 'organism': 'human'}
+        with sqlite3.connect(self.fixture.path) as c:
+            payload = json.loads(c.execute('SELECT payload FROM reveal_ref_collections WHERE collection_id=?', (references.COLLECTION,)).fetchone()[0])
+            payload['curated_provenance'] = {'source': 'lap/config/source_datasets.yaml', 'groups': {'datasets': [dataset]}}
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?', (json.dumps(payload), references.COLLECTION))
+        collection = self.build()['state']['collections'][references.COLLECTION]
+        self.assertEqual(collection['provenance']['datasets'], [{'id': dataset['id'], 'name': dataset['name'], 'organism': 'human'}])
+        self.assertEqual(collection['provenance_sha256'], sha256(canonical_json({'activities': payload['provenance']['activities'], 'datasets': [dataset]})))
 
     def test_reproducible_state_and_exact_decimal_text(self):
         text = '0.4000000000000000000000000000000001'
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE factor_gene_set_projections SET joint_loading_text=?', (text,))
+            c.execute('UPDATE reveal_ref_projections SET joint_loading_text=? WHERE gene_set_id=?', (text, references.SET))
         first = self.build(); second = self.build()
         self.assertEqual(canonical_json(first), canonical_json(second))
         self.assertEqual(first['state']['factors'][0]['gene_sets']['rows'][0][3], text)
@@ -95,18 +136,15 @@ class AssessmentStateTests(unittest.TestCase):
     def test_top_fifty_and_ties_never_truncate_numeric_rows(self):
         with sqlite3.connect(self.fixture.path) as c:
             for i in range(3, 65):
-                c.execute('INSERT INTO eaggl_genes VALUES(?,?,?)', (references.IMP, i, f'GENE_{i:03}'))
-                c.execute('INSERT INTO eaggl_gene_loadings VALUES(?,?,?,?)', (references.IMP, 1, i, .12345678901234567))
+                references.insert(c, 'reveal_ref_factor_genes', [{'factor_key': references.KEY, 'gene': f'GENE_{i:03}', 'loading': .12345678901234567}])
                 identity = 'dapper:GeneSet.' + str(i).zfill(32)
-                node = {'id': identity, 'name': f'set{i}', 'members': []}
-                c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)', (references.GEN, identity, 'collection',
-                    f'set{i}', 'GO', 0, 0, json.dumps({'dapper_gene_set': node})))
-                c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                    (references.GEN, 'per_trait', references.KEY, identity, .3, .7, '0.30', '0.70', i, i + 20, 0))
+                self.gene_set_row(c, identity, f'set{i}')
+                c.execute('INSERT INTO reveal_ref_projections VALUES(?,?,?,?,?,?,?,?,?,?)',
+                    (references.KEY, identity, 'GO', .3, .7, '0.30', '0.70', i, i + 20, 0))
         value = self.build(); factor = value['state']['factors'][0]
         self.assertEqual(len(factor['genes']['rows']), 50); self.assertTrue(factor['genes']['has_more'])
         self.assertEqual(len(factor['gene_sets']['rows']), 50); self.assertTrue(factor['gene_sets']['has_more'])
-        self.assertEqual(factor['genes']['rows'][2][2], .12345678901234567)
+        self.assertEqual(factor['genes']['rows'][2][1], .12345678901234567)
         self.assertEqual(value['coverage']['unique_gene_set_count'], 50)
         self.assertEqual(canonical_json(value), canonical_json(self.build()))
 
@@ -116,7 +154,7 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
         self.composer['eaggl_anchors'][0]['reference']['source_revision'] = 'e' * 64
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE reference_factors SET source_revision=? WHERE generation_id=?', ('f' * 64, references.GEN))
+            c.execute('UPDATE reveal_ref_factors SET source_revision=? WHERE factor_key=?', ('f' * 64, references.KEY))
         with self.assertRaises(Problem) as caught: self.build()
         self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
 
@@ -131,27 +169,21 @@ class AssessmentStateTests(unittest.TestCase):
                 reference = {'source': 'eaggl', 'source_id': identity, 'source_revision': 'e' * 64,
                     'dapper_id': record['object']['id']}
                 self.composer['eaggl_anchors'].append({'reference': reference})
-                c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
-                    (references.GEN, key, identity, 'T2D::Factor' + str(number), 'KPN.TRAIT:0000398', 'factor', 'e' * 64, '{}'))
-                c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)',
-                    (references.IMP, number, 'T2D::Factor' + str(number), 'T2D', 'factor', 'e' * 64, '{}', sha256(('T2D::Factor' + str(number)).encode())))
+                self.factor_row(c, number, identity, key)
             for index in range(3, 53):
-                c.execute('INSERT INTO eaggl_genes VALUES(?,?,?)', (references.IMP, index, f'GENE_{index}'))
                 identity = 'dapper:GeneSet.' + str(index).zfill(32)
-                c.execute('INSERT INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)', (references.GEN, identity, 'collection',
-                    f'Verified source signature {index}', 'GO', 42, 37, json.dumps({'dapper_gene_set': {
-                        'id': identity, 'name': f'Signature {index}', 'members': ['GENE_A']}})))
-                for factor_index in range(1, 6):
-                    c.execute('INSERT INTO eaggl_gene_loadings VALUES(?,?,?,?)', (references.IMP, factor_index, index, .1234567890123456))
-                    c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-                        (references.GEN, 'per_trait', references.KEY.replace('Factor1', 'Factor' + str(factor_index)),
-                         identity, .1, .2, '0.10000000000000000001', '0.20000000000000000001', index, index + 1, 0))
+                self.gene_set_row(c, identity, f'Verified source signature {index}', 42, ['GENE_A'])
+                for number in range(1, 6):
+                    key = references.KEY.replace('Factor1', 'Factor' + str(number))
+                    references.insert(c, 'reveal_ref_factor_genes', [{'factor_key': key, 'gene': f'GENE_{index}', 'loading': .1234567890123456}])
+                    c.execute('INSERT INTO reveal_ref_projections VALUES(?,?,?,?,?,?,?,?,?,?)', (key, identity, 'GO', .1, .2,
+                        '0.10000000000000000001', '0.20000000000000000001', index, index + 1, 0))
         built = self.build()
         self.assertEqual(built['coverage']['factor_count'], 5)
         self.assertEqual(built['coverage']['gene_loading_count'], 250)
         self.assertEqual(built['coverage']['gene_set_loading_count'], 250)
-        self.assertEqual(len(built['state']['gene_sets']['rows']), 51)
-        self.assertEqual(len(built['state']['collections']), 1)
+        self.assertEqual(len(built['state']['gene_sets']['rows']), 52)  # the fixture's two sets and the 50 shared ones
+        self.assertEqual(len(built['state']['collections']), 2)
         self.assertLess(len(canonical_json(built['state'])), 50_000)
 
     def add_factors(self, count, genes=60):
@@ -164,18 +196,13 @@ class AssessmentStateTests(unittest.TestCase):
                 record['object']['id'] = 'dapper:Mechanism.' + str(number); self.catalog.factors[identity] = record
                 self.composer['eaggl_anchors'].append({'reference': {'source': 'eaggl', 'source_id': identity,
                     'source_revision': 'e' * 64, 'dapper_id': record['object']['id']}})
-                c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
-                    (references.GEN, key, identity, 'T2D::Factor' + str(number), 'KPN.TRAIT:0000398', 'factor', 'e' * 64, '{}'))
-                c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)',
-                    (references.IMP, number, 'T2D::Factor' + str(number), 'T2D', 'factor', 'e' * 64, '{}', sha256(('T2D::Factor' + str(number)).encode())))
+                self.factor_row(c, number, identity, key)
                 for index in range(3, 3 + (genes if number == 2 else 5)):
-                    c.execute('INSERT OR IGNORE INTO eaggl_genes VALUES(?,?,?)', (references.IMP, index, f'GENE_{index:03}'))
-                    c.execute('INSERT INTO eaggl_gene_loadings VALUES(?,?,?,?)', (references.IMP, number, index, round(1 / (index + number), 6)))
+                    references.insert(c, 'reveal_ref_factor_genes', [{'factor_key': key, 'gene': f'GENE_{index:03}', 'loading': round(1 / (index + number), 6)}])
                     identity_set = 'dapper:GeneSet.' + str(index).zfill(32)
-                    c.execute('INSERT OR IGNORE INTO cfde_gene_sets VALUES(?,?,?,?,?,?,?,?)', (references.GEN, identity_set, 'collection',
-                        f'set {index}', 'GO', 10, 9, json.dumps({'dapper_gene_set': {'id': identity_set, 'name': f'set {index}', 'members': ['GENE_A']}})))
-                    c.execute('INSERT INTO factor_gene_set_projections VALUES(?,?,?,?,?,?,?,?,?,?,?)', (references.GEN, 'per_trait', key,
-                        identity_set, .5 if index % 7 else .25, .1, '0.5', '0.1', index, index + 1, 0))
+                    self.gene_set_row(c, identity_set, f'set {index}', 10, ['GENE_A'])
+                    c.execute('INSERT INTO reveal_ref_projections VALUES(?,?,?,?,?,?,?,?,?,?)', (key, identity_set, 'GO',
+                        .5 if index % 7 else .25, .1, '0.5', '0.1', index, index + 1, 0))
 
     def test_batched_anchor_reads_build_the_identical_state_in_six_selects(self):
         self.add_factors(4)
@@ -185,7 +212,7 @@ class AssessmentStateTests(unittest.TestCase):
         batched = self.build()
         self.assertEqual(canonical_json(batched), canonical_json(per_anchor))
         self.assertTrue(batched['state']['factors'][1]['genes']['has_more'])
-        self.assertEqual(len(self.fixture.queries), 6)  # generation, factors, genes, gene sets, definitions, collections
+        self.assertEqual(len(self.fixture.queries), 6)  # release, factors, genes, gene sets, definitions, collections
         self.assertGreaterEqual(per_anchor_queries, 6 + 2 * 5)  # memoized per-anchor reads: two loading reads per anchor
         self.assertFalse(any(' OR ' in sql for sql, _ in self.fixture.queries))
 
@@ -193,14 +220,14 @@ class AssessmentStateTests(unittest.TestCase):
         self.add_factors(2)
         second = self.composer['eaggl_anchors'][1]['reference']['source_id']
         with sqlite3.connect(self.fixture.path) as c:  # a third factor whose EAGGL id is the second anchor's public id
-            c.execute('INSERT INTO reference_factors VALUES(?,?,?,?,?,?,?,?)',
-                (references.GEN, 'KPN.TRAIT:0000398::Factor9', references.FACTOR.replace('Factor1', 'Factor9'), second, 'KPN.TRAIT:0000398', 'x', 'e' * 64, '{}'))
-            c.execute('INSERT INTO eaggl_factors VALUES(?,?,?,?,?,?,?,?)', (references.IMP, 9, second, 'T2D', 'x', 'e' * 64, '{}', sha256(second.encode())))
+            references.insert(c, 'reveal_ref_factors', [{'factor_key': 'KPN.TRAIT:0000398::Factor9', 'public_id': references.FACTOR.replace('Factor1', 'Factor9'),
+                'eaggl_factor_id': second, 'kpn_trait_id': references.T2D, 'factor_number': 9, 'label': 'x', 'input_sha256': 'e' * 64,
+                'source_revision': 'e' * 64, 'metadata': {}}])
         for models in (set(), {KPN_MODEL}):
             with self.subTest(batched=bool(models)), patch.object(assessment, 'BATCHED_MODELS', models):
                 with self.assertRaises(Problem) as caught: self.build()
                 self.assertEqual(caught.exception.code, 'AMBIGUOUS_IDENTITY')
-        with sqlite3.connect(self.fixture.path) as c: c.execute("DELETE FROM reference_factors WHERE factor_key='KPN.TRAIT:0000398::Factor9'")
+        with sqlite3.connect(self.fixture.path) as c: c.execute("DELETE FROM reveal_ref_factors WHERE factor_key='KPN.TRAIT:0000398::Factor9'")
         self.composer['eaggl_anchors'][2]['reference']['source_revision'] = '0' * 64
         self.catalog.factors[self.composer['eaggl_anchors'][2]['reference']['source_id']]['source_revision'] = '0' * 64
         for models in (set(), {KPN_MODEL}):
@@ -209,7 +236,7 @@ class AssessmentStateTests(unittest.TestCase):
                 self.assertEqual(caught.exception.code, 'SOURCE_REVISION_CHANGED')
 
     def test_pooled_borrower_takes_the_deadline_and_is_dropped_once_it_passes(self):
-        class Borrowed(references.Connection):
+        class Borrowed(references.ReleaseConnection):
             def __init__(self, *args): super().__init__(*args); self.limits, self.ended = [], []
             def limit(self, seconds): self.limits.append(seconds)
             def close(self): self.ended.append('close'); super().close()
@@ -230,7 +257,7 @@ class AssessmentStateTests(unittest.TestCase):
         original = assessment.ReferenceQueryService.factor_tops
         def factor_tops(reader, *args, **kwargs):
             result = original(reader, *args, **kwargs)
-            self.catalog.reference_generation_id = references.OTHER
+            self.catalog.reference_generation_id = references.NEXT
             return result
         with patch.object(assessment.ReferenceQueryService, 'factor_tops', factor_tops):
             with self.assertRaises(Problem) as caught: self.build()
@@ -246,34 +273,20 @@ class AssessmentStateTests(unittest.TestCase):
 
     def test_missing_species_definition_and_collection_are_explicit(self):
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('DELETE FROM cfde_gene_set_collections')
-            c.execute('UPDATE cfde_gene_sets SET metadata=?', ('{}',))
+            c.execute('DELETE FROM reveal_ref_collections WHERE collection_id=?', (references.COLLECTION,))
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=? WHERE gene_set_id=?', ('{}', references.SET))
         value = self.build()
         self.assertFalse(value['coverage']['complete'])
         self.assertIn('gene_sets:species_unknown:1', value['coverage']['missing'])
         self.assertIn('gene_set:' + references.SET + ':definition', value['coverage']['missing'])
-        self.assertIn('collection:collection:metadata', value['coverage']['missing'])
-        self.assertEqual(len(value['state']['factors'][0]['gene_sets']['rows']), 1)
+        self.assertIn('collection:' + references.COLLECTION + ':metadata', value['coverage']['missing'])
+        self.assertEqual(len(value['state']['factors'][0]['gene_sets']['rows']), 2)
 
     def test_wrong_geneset_object_identity_fails_closed(self):
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE cfde_gene_sets SET metadata=?', ('{"dapper_gene_set":{"id":"different"}}',))
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=?', ('{"dapper_gene_set":{"id":"different"}}',))
         with self.assertRaises(Problem) as caught: self.build()
         self.assertEqual(caught.exception.code, 'SOURCE_NOT_READY')
-
-    def test_legacy_does_not_substitute_ranked_labels_for_numeric_projections(self):
-        self.catalog.model = self.composer['model'] = LEGACY_MODEL
-        with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE reference_generations SET model=?,legacy_mapping_run_id=? WHERE generation_id=?',
-                (LEGACY_MODEL, 'mapping', references.GEN))
-            c.execute('INSERT INTO eaggl_cfde_factor_links VALUES(?,?,?,?)',
-                ('mapping', 1, references.FACTOR, '{"raw":{"label":"legacy"}}'))
-            c.execute('INSERT INTO eaggl_cfde_gene_set_links VALUES(?,?,?,?,?)',
-                ('mapping', 1, 'legacy-label', 'label-only', 1))
-        state = self.build()
-        self.assertEqual(state['state']['factors'][0]['gene_sets']['rows'], [])
-        self.assertIn(references.FACTOR + ':numeric_gene_set_loadings', state['coverage']['missing'])
-        self.assertNotIn('label-only', canonical_json(state).decode())
 
     def attachment(self):
         raw = {'id': 'dismech:mechanism', 'description': 'Stored attachment description.',
@@ -343,7 +356,7 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertEqual(len(result['state']['dismech']['mechanisms'][0]['description']['text']), 1200)
         self.assertTrue(any(item['total_chars'] == 3000 for item in result['coverage']['truncations']))
         self.assertEqual(result['coverage']['gene_loading_count'], 3)
-        self.assertEqual(result['coverage']['gene_set_loading_count'], 1)
+        self.assertEqual(result['coverage']['gene_set_loading_count'], 2)
 
     def test_expired_deadline_does_no_catalog_or_source_work(self):
         with patch.object(self.catalog, 'load') as load, patch.object(assessment, 'reference_mysql_connection') as connect:
@@ -356,7 +369,7 @@ class AssessmentStateTests(unittest.TestCase):
     def test_connection_timeouts_are_local_and_bounded_by_remaining_time(self):
         connections = []
         def factory():
-            connection = references.Connection(self.fixture.path, self.fixture.queries)
+            connection = references.ReleaseConnection(self.fixture.path, self.fixture.queries)
             connection._read_timeout = connection._write_timeout = 120
             connections.append(connection)
             return connection
@@ -366,7 +379,7 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertTrue(all(0 < c._read_timeout <= 2 and 0 < c._write_timeout <= 2 for c in connections))
 
     def tracked_connection(self):
-        class Tracked(references.Connection):
+        class Tracked(references.ReleaseConnection):
             def __init__(self, *args):
                 super().__init__(*args); self.closes = 0; self.rollbacks = 0
             def close(self):
@@ -386,13 +399,13 @@ class AssessmentStateTests(unittest.TestCase):
         self.assertLessEqual(factory.call_args.kwargs['timeout_seconds'], 10)
         self.assertEqual((connection.closes, connection.rollbacks), (1, 1))
         self.assertEqual(built['coverage']['gene_loading_count'], 3)
-        self.assertEqual(built['coverage']['gene_set_loading_count'], 1)
-        self.assertTrue(any('FROM cfde_gene_sets WHERE' in sql for sql, _ in self.fixture.queries))
-        self.assertTrue(any('FROM cfde_gene_set_collections WHERE' in sql for sql, _ in self.fixture.queries))
+        self.assertEqual(built['coverage']['gene_set_loading_count'], 2)
+        self.assertTrue(any('FROM reveal_ref_gene_sets WHERE' in sql for sql, _ in self.fixture.queries))
+        self.assertTrue(any('FROM reveal_ref_collections WHERE' in sql for sql, _ in self.fixture.queries))
 
     def test_failed_late_source_validation_still_releases_shared_connection_once(self):
         with sqlite3.connect(self.fixture.path) as c:
-            c.execute('UPDATE cfde_gene_sets SET metadata=?', ('{"dapper_gene_set":{"id":"wrong"}}',))
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=?', ('{"dapper_gene_set":{"id":"wrong"}}',))
         connection = self.tracked_connection()
         with self.assertRaises(Problem) as caught:
             assessment.build_state(self.catalog, self.composer, self.inputs, connection_factory=lambda: connection)
@@ -404,7 +417,7 @@ class AssessmentStateTests(unittest.TestCase):
         with assessment._reference_connection(lambda: connection, None) as borrower:
             with borrower.cursor() as cursor:
                 with self.assertRaisesRegex(ValueError, 'SELECT statements only'):
-                    cursor.execute('DELETE FROM reference_generations')
+                    cursor.execute('DELETE FROM reveal_ref_release')
             borrower.rollback(); borrower.close()
             self.assertEqual((connection.closes, connection.rollbacks), (0, 0))
         self.assertEqual(self.fixture.queries, [])
@@ -414,7 +427,7 @@ class AssessmentStateTests(unittest.TestCase):
         with patch.object(assessment.time, 'monotonic', return_value=10) as clock:
             def factory():
                 clock.return_value = 30
-                return references.Connection(self.fixture.path, self.fixture.queries)
+                return references.ReleaseConnection(self.fixture.path, self.fixture.queries)
             with self.assertRaises(Problem) as caught:
                 assessment.build_state(self.catalog, self.composer, self.inputs, connection_factory=factory, deadline=20)
         self.assertEqual(caught.exception.code, 'CFDE_ASSESSMENT_TIMEOUT')
@@ -424,13 +437,13 @@ class AssessmentStateTests(unittest.TestCase):
         with sqlite3.connect(self.fixture.path) as c:
             node = {'id': references.SET, 'name': 'signature', 'was_generated_by': ['dapper:Activity.related'],
                     'sample': {'organism': 'mouse', 'cell_type': 'beta cell', 'api_key': 'private-secret'}}
-            c.execute('UPDATE cfde_gene_sets SET metadata=?', (json.dumps({'dapper_gene_set': node}),))
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=? WHERE gene_set_id=?', (json.dumps({'dapper_gene_set': node}), references.SET))
             values = [{'id': 'dapper:Activity.unrelated' + str(i), 'name': 'Other assay'} for i in range(6)]
             values.append({'id': 'dapper:Activity.related', 'perturbation_target': 'EXACT_TARGET', 'species': 'mouse'})
-            c.execute('UPDATE cfde_gene_set_collections SET payload=?', (json.dumps({'collection': {'organism': 'mouse'},
-                'provenance': {'activities': values}}),))
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?', (json.dumps({'collection': {'organism': 'mouse'},
+                'provenance': {'activities': values}}), references.COLLECTION))
         result = self.build(); state = result['state']
-        self.assertEqual(state['collections']['collection']['provenance']['activities'][0]['id'], 'dapper:Activity.related')
+        self.assertEqual(state['collections'][references.COLLECTION]['provenance']['activities'][0]['id'], 'dapper:Activity.related')
         context = state['gene_sets']['rows'][0][-1]
         self.assertEqual(context['sample']['organism'], 'mouse')
         self.assertNotIn('private-secret', canonical_json(result).decode())

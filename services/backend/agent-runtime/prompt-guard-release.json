@@ -1,0 +1,25 @@
+{
+  "lock_version": "reveal.prompt-guard-release/1",
+  "repository": "meta-llama/Llama-Prompt-Guard-2-22M",
+  "revision": null,
+  "malicious_label": "LABEL_1",
+  "source_files": {},
+  "files": {
+    "config.json": null,
+    "model.onnx": null,
+    "tokenizer.json": null
+  },
+  "conversion": {
+    "command": ["optimum-cli", "export", "onnx", "--model", "{source}", "--task", "text-classification", "{output}"],
+    "converter": null
+  },
+  "operator": [
+    "The deposit screen's classifier (services/backend/src/reveal_backend/deposit_screen.py). Nothing here is pinned yet: revision, source_files and files are filled in once by an operator. This lock decides whether the classifier runs. Until it is pinned the classifier is off everywhere: bundles carry no model (only a CLASSIFIER-DISABLED marker), the image build prints 'classifier disabled: lock not pinned', deployed processes start, and every screen verdict records the classifier as disabled while the fixed checks still withhold unsafe accounts. Pinning (step 3) turns it on: from then on a bundle needs the verified model, the image build verifies it, and a deployed process without it does not start.",
+    "1. Licence: the model is gated. Accept the Llama 4 Community License on https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M with the Hugging Face account whose token will fetch it, and keep the licence terms with the deployment.",
+    "2. Converter: in a separate virtual environment, never the image or REVEAL's .venv, install the ONNX exporter: python3 -m venv /tmp/pg-convert && /tmp/pg-convert/bin/pip install 'optimum-onnx[onnxruntime]' torch transformers. Point REVEAL_PROMPT_GUARD_CONVERTER at /tmp/pg-convert/bin/optimum-cli (default: optimum-cli on PATH).",
+    "3. Pin: HF_TOKEN=<read token> python scripts/platform_bundle.py <output> --fetch-assets --allow-dirty --pin-prompt-guard. It resolves the repository's current commit, downloads that revision into .deployment-assets/prompt-guard-2-22m/, converts it to ONNX with conversion.command, and writes the revision, the sha256 of every downloaded file (source_files) and of every file the image carries (files) into this lock. Review the diff and commit it.",
+    "4. Later fetches (no --pin-prompt-guard) reuse .deployment-assets/prompt-guard-2-22m/ when it matches files; otherwise they download the pinned revision, refuse any file whose sha256 differs from source_files, convert, and refuse a conversion whose files differ from files (ONNX export is not byte-reproducible across converter versions: keep the folder, or re-pin).",
+    "5. Measure on the 1-vCPU task before relying on the screen: deposit_screen logs nothing per window, but job_metrics records each screen's windows and seconds (admin telemetry). Target under 50 ms per 512-token window and under 5 s per job with a few full papers.",
+    "HF_TOKEN is read from the environment by the fetch only. It is never written to the bundle, the image, a log or this file."
+  ]
+}

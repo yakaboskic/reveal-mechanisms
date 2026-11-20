@@ -40,7 +40,7 @@ class WorkerFileEvidenceTests(unittest.TestCase):
             'dismissed_source_ids': [],
             'eaggl_anchors': [{'reference': {'source_id': factor}, 'origin': 'user_supplied'}]}}
         self.binding = {'source_gap': {'object': gap}, 'anchors': [{
-            'cfde_node_id': factor, 'gene_set_import_id': 'test-import', 'embedding_run_id': 'test-embedding'}]}
+            'cfde_node_id': factor, 'model': 'eaggl-capped-v1', 'gene_set_import_id': 'test-release', 'embedding_run_id': 'test-release'}]}
 
     def test_collection_uses_configured_source_bounds_independent_of_token_budget(self):
         calls = []
@@ -50,8 +50,7 @@ class WorkerFileEvidenceTests(unittest.TestCase):
             fixtures.EvidencePackageTests.built.write(kwargs['output'] / 'package')
             return fixtures.EvidencePackageTests.built
 
-        with patch.object(worker, 'collect_package', side_effect=collect_fixture), \
-                patch.object(worker, 'geneset_resolver', return_value=None), \
+        with patch.object(worker, 'collect_reference_package', side_effect=collect_fixture), \
                 patch.object(worker, 'DapperRuntime', return_value=fixtures.EvidencePackageTests.runtime), \
                 patch('httpx.post', side_effect=AssertionError('Collection must not request a model token count')):
             for index, token_budget in enumerate((1, 24000, 1000000)):

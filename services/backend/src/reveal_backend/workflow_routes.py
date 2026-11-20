@@ -458,8 +458,6 @@ def mount_workflow(app, repository):
             recovered, deferred, held = await asyncio.to_thread(sweep, repository)
             delivery = await dispatch_pending(repository)
             cleanup = await dispatch_cleanup(repository)
-            from .vector_workflow import dispatch_pending as dispatch_vectors
-            vector_delivery = await dispatch_vectors(repository)
             from .workspace_events import reconcile_notifications
             notifications = await asyncio.to_thread(reconcile_notifications, repository)
         except DatabaseBusy:
@@ -467,7 +465,7 @@ def mount_workflow(app, repository):
             return {'status': 'deferred'}
         # A held row never fails the tick: it is reported here, logged, and decided again after its hold.
         return {'status': 'deferred' if deferred else 'ok', 'recovered': recovered, **delivery, 'cleanup':cleanup,
-                'vector_delivery': vector_delivery, 'notifications': notifications, 'needs_operator': held}
+                'notifications': notifications, 'needs_operator': held}
 
     @app.post(CLEANUP_PATH, include_in_schema=False)
     async def cleanup(request: Request):

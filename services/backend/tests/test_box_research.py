@@ -142,6 +142,22 @@ def test_hosted_catalog_selects_private_variant_and_hides_remote_oauth(hosted):
     assert 'reference_generation_id' not in called
 
 
+def test_release_beta_and_link_reads_are_registered_on_every_research_surface(hosted):
+    from reveal_backend import research_public, research_tools
+    from reveal_backend.public_tool_activity import ARGUMENTS, DURABLE_TOOLS
+    from reveal_backend.research_data import OPERATIONS, RELEASE_OPERATIONS
+    research, state, _ = hosted
+    hosted_tools = {item['name']: item for item in research.definitions()}
+    for name in RELEASE_OPERATIONS:
+        for tools in (research_tools.private_definitions(), research_public.definitions(), research_tools.definitions(), research.definitions()):
+            assert 'Reference releases only' in next(item for item in tools if item['name'] == name)['description']
+        assert set(hosted_tools[name]['inputSchema']['properties']['arguments']['properties']) == OPERATIONS[name] | {'limit', 'cursor'}
+        assert name in ALLOWED_TOOLS and ARGUMENTS[name] == ('arguments',) and name in DURABLE_TOOLS
+    research.call('get_trait_gene_sets', {'arguments': {'trait_id': 'KPN.TRAIT:0000398', 'library': 'GTEx'}})
+    called = next(args for tool, args in state['calls'] if tool == 'get_trait_gene_sets')
+    assert called['arguments'] == {'trait_id': 'KPN.TRAIT:0000398', 'library': 'GTEx'}
+
+
 def test_gene_gene_sets_is_registered_on_every_research_surface(hosted):
     from reveal_backend import research_public, research_tools
     from reveal_backend.public_tool_activity import ARGUMENTS, DURABLE_TOOLS

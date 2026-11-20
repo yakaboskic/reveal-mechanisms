@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/broadinstitute/dapper.git",
+  "ref": "chase/0.2.1-a1",
+  "commit": "ac1a4d7e1973c2076131bbfc5de7ba67e7b0e5ca",
+  "version": "0.2.1-a1",
+  "purpose": "Identity code and schema of DAPPER 0.2.1-a1, used only to mint the Scientific Account a general agent job deposits (reveal_backend/account_deposit.py). Research accounts are authored, linted and minted with the pinned 0.2.0 release (agent-runtime/dapper-release.json); this copy never replaces it.",
+  "files": {
+    "schema/dapper.yaml": "892ef71bd5a4bd249a0bf4c4b08a16858dc189e210c0ffbf113fb610eb1c9a68",
+    "schema/claims.yaml": "af7f098d97bc0c9bcf1676a6e4f5176f85de0c1aa304c3342945c73b39d0e014",
+    "schema/identity/dapper_identity.py": "5ee89d791ce4ed9c0b264b8c4013a5565cf7e3df18058e0ff31ed6b18d3b7807",
+    "schema/identity/test_vectors.json": "a550144e6d9856805ec36383a5747b7b4cc806db0c749f5e3d982591f2382f21",
+    "LICENSE": "a9dd59be2eaeb06d97411c7f08197c423136e8059f635ad7979264771deb529f"
+  }
+}

@@ -39,10 +39,11 @@ def service(monkeypatch, tmp_path):
         for identity in (owner, other):
             me = {**api.fresh_principal('anonymous'), 'user_id': identity}
             tx.put('principal', identity, identity, {'me': me, 'retired': False})
+    # The served release serves seed_draft's anchor (an anchor is current iff its factor id is served).
     catalog = SimpleNamespace(load=lambda: None, readiness=lambda: {
         'dismech_import': 'test-dismech', 'mapping_run': 'test-mapping', 'embedding_run': 'test-embedding',
-        'gaps': 0, 'mapped_factors': 0}, validate_composer=lambda *args, **kwargs: None,
-        selected=lambda reference: reference, dismech_import='source', gaps={}, mapping_run='mapping', factors={}, embedding_run='embedding')
+        'gaps': 0, 'mapped_factors': 1}, validate_composer=lambda *args, **kwargs: None,
+        selected=lambda reference: reference, dismech_import='source', gaps={}, mapping_run='mapping', factors={'factor:test': {}}, embedding_run='embedding')
     monkeypatch.setattr(api, 'repo', repo); monkeypatch.setattr(api, 'catalog', catalog)
     with TestClient(api.app) as client:
         yield SimpleNamespace(client=client, repo=repo, owner=owner, other=other,
@@ -172,6 +173,33 @@ def test_configuration_is_pure_and_accepts_disabled_or_exact_pair(service):
     assert api_keys.configuration({'REVEAL_API_KEY_SHA256': ' ', 'REVEAL_API_KEY_USER_ID': '\t'}) is None
     assert api_keys.configuration({'REVEAL_API_KEY_SHA256': HASH, 'REVEAL_API_KEY_USER_ID': service.owner}) == (HASH, service.owner)
     assert service.client.get('/readyz').status_code == 200
+
+
+def test_additional_keys_each_reach_their_own_workspace_beside_the_original(service, monkeypatch):
+    # A colleague's key is added without displacing the original holder's.
+    monkeypatch.setenv('REVEAL_API_KEYS', hashlib.sha256(ROTATED.encode()).hexdigest() + ':' + service.other)
+    assert service.client.get('/v1/me', headers=service.headers).json()['user_id'] == service.owner
+    assert service.client.get('/v1/me', headers={'Authorization': 'Bearer ' + ROTATED}).json()['user_id'] == service.other
+    assert service.client.get('/readyz').status_code == 200
+    # Only additional keys, with the original pair disabled, still work.
+    monkeypatch.setenv('REVEAL_API_KEY_SHA256', ''); monkeypatch.setenv('REVEAL_API_KEY_USER_ID', '')
+    assert service.client.get('/v1/me', headers=service.headers).status_code == 401
+    assert service.client.get('/v1/me', headers={'Authorization': 'Bearer ' + ROTATED}).json()['user_id'] == service.other
+
+
+@pytest.mark.parametrize('value', ['x' * 64 + ':' + '11111111-1111-4111-8111-111111111111', HASH, HASH + ':not-a-uuid',
+    HASH + ':11111111-1111-4111-8111-111111111111,' + HASH + ':22222222-2222-4222-8222-222222222222', ' , '])
+def test_malformed_additional_keys_fail_closed(service, monkeypatch, value):
+    monkeypatch.setenv('REVEAL_API_KEYS', value)
+    for path in ('/v1/me', '/readyz'):
+        response = service.client.get(path, headers=service.headers)
+        assert response.status_code == 503 and response.json()['code'] == 'API_KEY_CONFIGURATION_INVALID'
+    assert service.client.get('/v1/me', headers=jwt_headers(service.owner)).status_code == 200
+
+
+def test_an_additional_key_cannot_repeat_the_original(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_API_KEYS', HASH + ':' + service.other)
+    assert service.client.get('/v1/me', headers=service.headers).status_code == 503
 
 
 @pytest.mark.parametrize('state', ['missing', 'retired', 'expired'])

@@ -19,6 +19,7 @@ export function layoutAccountHierarchy(root: AccountGraphNode) {
   });
   tree.sum(node => node.children.length ? 0 : Math.max(0.65, Math.min(1.45, scales.get(node.id)!)) ** 2)
     .sort((a, b) => (b.value || 0) - (a.value || 0) || a.data.id.localeCompare(b.data.id));
+  // A claim's inner padding shrinks as it holds more datasets, so several traced datasets stay legible.
   return pack<AccountGraphNode>().size([1000, 1000])
-    .padding(node => node.depth === 0 ? 20 : node.depth === 1 ? 50 : 18)(tree).descendants();
+    .padding(node => node.depth === 0 ? 20 : node.depth === 1 ? Math.max(24, 50 - 4 * Math.max(0, (node.children?.length || 0) - 1)) : 18)(tree).descendants();
 }

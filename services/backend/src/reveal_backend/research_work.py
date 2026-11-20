@@ -346,8 +346,8 @@ class ResearchWorkService:
     @staticmethod
     def frozen_rows(identity, frozen, binding):
         """Stage local work for a newly frozen request, also used by Lightning continuation."""
-        from .reference_generation import generation_of_anchors
-        owner = identity['user_id']; generation = generation_of_anchors(binding['anchors'])
+        from .reference_generation import shared_release
+        owner = identity['user_id']; generation = shared_release(binding['anchors'])
         work_id = uid(); created = now(); operation_id = uid()
         work = {'id': work_id, 'owner_user_id': owner, 'research_request_id': frozen['id'],
             'state': 'preparing', 'created_at': created, 'last_activity': created,

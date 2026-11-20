@@ -11,9 +11,11 @@ import unittest
 from urllib.error import HTTPError,URLError
 from urllib.parse import parse_qs,urlparse
 
+from reveal_backend import factor_details
 from reveal_backend.auth import Problem
 from reveal_backend.evidence_package import DapperRuntime, EvidenceBuildError, canonical_json, decode, sha256
-from reveal_backend.research_data import ReferenceQueryService, SmallModelBioIndex
+from reveal_backend.research_data import (READER_VERSION, RELEASE_ONLY, RELEASE_OPERATIONS, RELEASE_READER_VERSION, ReferenceQueryService,
+                                          SmallModelBioIndex)
 from reveal_backend.research_seed import prepare_research_seed, validate_seed_shape
 from reveal_backend.repository import digest
 from reveal_backend.runtime_config import ROOT, CURRENT_DAPPER_SNAPSHOT
@@ -67,6 +69,7 @@ CREATE TABLE eaggl_cfde_factor_links(run_id TEXT,factor_index INTEGER,cfde_node_
 CREATE TABLE eaggl_cfde_gene_set_links(run_id TEXT,factor_index INTEGER,node_id TEXT,source_key TEXT,gene_set_rank INTEGER);
 CREATE TABLE cfde_gene_set_aliases(import_id TEXT,dapper_id TEXT,source_key TEXT,node_id TEXT,node_id_sha256 TEXT,provenance TEXT);
 CREATE TABLE dapper_objects(id TEXT,payload TEXT);
+CREATE TABLE reveal_ref_release(release_id TEXT PRIMARY KEY,published_at TEXT NOT NULL,manifest TEXT NOT NULL);
 ''')
             for generation,status in [(GEN,'superseded'),(OTHER,'complete')]:
                 c.execute('INSERT INTO reference_generations VALUES(?,?,?,?,?,?,?,?)',
@@ -179,6 +182,35 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         semantics=next(item for item in self.service.catalog(GEN)['operations'] if item['name']=='get_gene_gene_sets')['semantics']
         self.assertEqual(semantics['factor_id'],scoped.result['import_coverage'].split(' Read the trusted GeneSet with get_gene_set before citing membership. ')[1])
 
+    def test_unscoped_membership_scan_is_time_bounded_and_a_stopped_scan_is_unavailable(self):
+        self.query('get_gene_gene_sets',{'gene':'GENE_A'})
+        self.assertTrue(self.queries[-1][0].startswith('SELECT /*+ MAX_EXECUTION_TIME(4000) */ s.gene_set_id,'))  # SQLite ran it
+        self.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':FACTOR})
+        self.assertNotIn('MAX_EXECUTION_TIME',self.queries[-1][0])  # one factor's projections need no budget
+        service=ReferenceQueryService(lambda:InterruptingConnection(self.path,self.queries),cursor_secret=b'test-durable-key')
+        stopped=service.query('get_gene_gene_sets',{'gene':'GENE_A'},generation_id=GEN)
+        self.assertEqual((stopped.result['status'],stopped.result['reason'],stopped.result['items'],stopped.result['truncated']),
+                         ('unavailable','scan_budget_exceeded',[],False))
+        self.assertIn('Pass factor_id',stopped.result['import_coverage'])
+        self.assertEqual(stopped.source['tables'],['reference_generations','cfde_gene_sets'])
+        self.assertEqual(service.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':FACTOR},generation_id=GEN).result['status'],'complete')
+
+    def test_non_ascii_identifiers_of_a_kpn_generation_are_not_found_without_a_statement(self):
+        for op,args in (('get_factor',{'factor_id':'TNFα'}),('get_trait',{'trait_id':'trait:kpn:٠٠٠٠٣٩٨'}),('get_gene_set',{'gene_set_id':'TNFα'}),
+                        ('get_gene_gene_sets',{'gene':'GENE_A','factor_id':'factor:kpn:٠٠٠٠٣٩٨:eaggl-capped-v1:Factor1'})):
+            with self.subTest(op=op):
+                del self.queries[:]
+                self.assertEqual(self.query(op,args).result['status'],'not_stored')
+                self.assertEqual([sql for sql,_ in self.queries if 'reveal_ref_release' not in sql],['SELECT generation_id,kind,model,status,'
+                    'eaggl_import_id,legacy_mapping_run_id,legacy_gene_set_import_id,manifest FROM reference_generations WHERE generation_id=%s'])
+        del self.queries[:]
+        self.assertEqual(self.query('search_factors',{'q':'TNFα'}).result['status'],'empty')
+        self.assertNotIn('eaggl_factor_id) LIKE',self.queries[-1][0])  # the ascii_bin column is never compared with it
+        self.assertEqual(self.query('search_factors',{'q':'t2d::'}).result['items'][0]['public_id'],FACTOR)
+        del self.queries[:]
+        self.assertIsNone(self.service.phenotype_trait(GEN,'Sézary_syndrome_Orphanet_3162'))
+        self.assertFalse(any('kpn_traits' in sql for sql,_ in self.queries))
+
     def test_phenotype_trait_resolves_kpn_or_bioindex_identifiers(self):
         expected={'kpn_trait_id':'KPN.TRAIT:0000398','legacy_phenotype_id':'T2D','phenotype_name':'type 2 diabetes','gwas_source_category':'KPN'}
         self.assertEqual(self.service.phenotype_trait(GEN,'KPN.TRAIT:0000398'),expected)
@@ -290,6 +322,12 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertEqual(self.query('get_gene_set_members',{'gene_set_id':SET},legacy).result['items'][0]['member'],'HGNC.SYMBOL:GENE_A')
         self.assertEqual(self.query('get_gene_set_factors',{'gene_set_id':SET},legacy).result['status'],'not_stored')
         self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A'},legacy).result['status'],'not_stored')
+        for op in ('get_gene_set','get_gene_set_members'):  # dapper ids are ascii_bin (MySQL 1267): never compared with a non-ASCII id
+            del self.queries[:]
+            self.assertEqual(self.query(op,{'gene_set_id':'dapper:GeneSet.TNFα'+'a'*28},legacy).result['status'],'not_stored')
+            self.assertFalse(any('cfde_gene_set_aliases' in sql for sql,_ in self.queries))
+        self.assertEqual(self.query('get_factor',{'factor_id':'TNFα'},legacy).result['status'],'not_stored')  # utf8mb4 factor ids: looked up
+        self.assertIn('eaggl_factors',self.queries[-1][0])
         catalog=self.service.catalog(legacy)
         self.assertEqual(catalog['generation']['model'],'cfde-inc-v2')
         self.assertEqual(catalog['generation']['legacy_mapping_run_id'],mapping)
@@ -308,7 +346,11 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertEqual(catalog['generation']['model'],'eaggl-capped-v1')
         self.assertNotIn('manifest',catalog['generation'])
         self.assertEqual(catalog['generation']['generation_manifest_sha256'],sha256(canonical_json({'source_release':'fixture'})))
-        self.assertEqual({item['availability'] for item in catalog['operations']},{'supported'})
+        self.assertEqual({item['availability'] for item in catalog['operations'] if item['name'] not in RELEASE_OPERATIONS},{'supported'})
+        # Betas and factor-trait links exist only in reference releases.
+        self.assertEqual({item['name']:item['reason'] for item in catalog['operations'] if item['availability']!='supported'},
+                         dict.fromkeys(RELEASE_OPERATIONS,RELEASE_ONLY))
+        self.assertEqual((catalog['version'],catalog['coverage']['phenotype_associations']),(READER_VERSION,'not_stored'))
         self.assertIn('top 50',catalog['coverage']['gene_set_projections'])
         with self.assertRaises(Problem): self.service.catalog('9'*64)
 
@@ -331,6 +373,28 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         self.assertNotIn('gene_sets',missing['dapper_context'])
         self.assertEqual(missing['object_resolution'][0]['status'],'unavailable')
 
+    def test_materialization_retains_anonymous_activity_input_edges(self):
+        runtime = SeedTests.runtime()
+        activity = {'name': 'extract'}
+        activity['id'] = runtime.compute_id(activity, 'Activity', runtime.schema)
+        dataset = {'name': 'raw measurements'}
+        dataset['id'] = runtime.compute_id(dataset, 'Dataset', runtime.schema)
+        node = {'name': 'source set', 'member_type': 'gene', 'members': ['https://identifiers.org/hgnc.symbol:GENE_A'],
+                'was_generated_by': activity['id']}
+        node['id'] = runtime.compute_id(node, 'GeneSet', runtime.schema)
+        edge = {'subject': activity['id'], 'predicate': 'prov:used', 'object': dataset['id'], 'edge_role': 'data_input'}
+        provenance = {'activities': [activity], 'datasets': [dataset], 'used_edges': [edge]}
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE cfde_gene_sets SET gene_set_id=?,metadata=? WHERE generation_id=?',
+                      (node['id'], json.dumps({'dapper_gene_set': node}), GEN))
+            c.execute('UPDATE cfde_gene_set_collections SET payload=? WHERE generation_id=?',
+                      (json.dumps({'provenance': provenance}), GEN))
+        materialized = self.query('get_gene_set', {'gene_set_id': node['id']}).materialize(runtime)
+        self.assertEqual(materialized['dapper_context']['used_edges'], [edge])
+        self.assertEqual(materialized['dapper_context']['datasets'], [dataset])
+        self.assertEqual(materialized['dapper_context']['gene_sets'], [node])
+        runtime.validate(materialized['dapper_context'])
+
     def test_byte_budget_does_not_truncate_a_source_object_and_unknown_model_is_explicit(self):
         self.service.max_capture_bytes=20_300
         with sqlite3.connect(self.path) as c:
@@ -341,6 +405,519 @@ CREATE TABLE dapper_objects(id TEXT,payload TEXT);
         with sqlite3.connect(self.path) as c: c.execute('UPDATE reference_generations SET model=? WHERE generation_id=?',('unknown',GEN))
         result=self.query('search_factors')
         self.assertEqual(result.result['status'],'not_supported_for_model')
+
+
+RELEASE='7'*64
+NEXT='8'*64
+T2D,BMI,LDL='KPN.TRAIT:0000398','KPN.TRAIT:0000100','KPN.TRAIT:0000500'
+BMI_FACTOR,BMI_KEY='factor:kpn:0000100:eaggl-capped-v1:Factor1','KPN.TRAIT:0000100::Factor1'
+SET2='dapper:GeneSet.'+'e'*32
+SET3='dapper:GeneSet.'+'0'*32
+COLLECTION,COLLECTION2,PORTAL='dapper:GeneSetCollection.'+'c'*32,'dapper:GeneSetCollection.'+'g'*32,'dapper:GeneSetCollection.'+'p'*32
+LINKS={'n_phenotypes':6698,'n_linked':3,'n_linked_kpn_traits':1,'n_linked_atlas_traits':1,'own_trait_q':1e-6,
+       'top_linked':[{'phenotype':'T2D','kpn_trait_id':T2D,'name':'type 2 diabetes','phewas_q':1e-6}]}
+# The flat per-environment release tables (reveal_ref_*, contract columns), spelled for SQLite.
+RELEASE_DDL='''
+CREATE TABLE reveal_ref_release(release_id TEXT PRIMARY KEY,published_at TEXT NOT NULL,manifest TEXT NOT NULL);
+CREATE TABLE reveal_ref_traits(kpn_trait_id TEXT PRIMARY KEY,legacy_phenotype_id TEXT NOT NULL UNIQUE,phenotype_name TEXT NOT NULL,
+  gwas_source_category TEXT NOT NULL,trait_group TEXT,legacy_trait_group TEXT,trait_type TEXT,description TEXT,is_dichotomous INTEGER,
+  is_complex INTEGER,n_factors INTEGER NOT NULL,metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_factors(factor_key TEXT PRIMARY KEY,public_id TEXT NOT NULL UNIQUE,eaggl_factor_id TEXT NOT NULL UNIQUE,kpn_trait_id TEXT NOT NULL,
+  factor_number INTEGER NOT NULL,label TEXT NOT NULL,input_sha256 TEXT NOT NULL,source_revision TEXT NOT NULL,metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_factor_genes(factor_key TEXT NOT NULL,gene TEXT NOT NULL,loading REAL NOT NULL,PRIMARY KEY(factor_key,gene));
+CREATE TABLE reveal_ref_collections(collection_id TEXT PRIMARY KEY,cfde_label TEXT NOT NULL UNIQUE,library TEXT NOT NULL,n_sets INTEGER NOT NULL,
+  portal_collection_id TEXT NOT NULL,payload TEXT NOT NULL);
+CREATE TABLE reveal_ref_gene_sets(gene_set_id TEXT PRIMARY KEY,collection_id TEXT NOT NULL,gene_set_name TEXT NOT NULL,library TEXT NOT NULL,
+  n_genes INTEGER NOT NULL,n_genes_in_eaggl_universe INTEGER NOT NULL,legacy_source_key TEXT,metadata TEXT NOT NULL);
+CREATE TABLE reveal_ref_projections(factor_key TEXT NOT NULL,gene_set_id TEXT NOT NULL,library TEXT NOT NULL,joint_loading REAL NOT NULL,
+  marginal_loading REAL NOT NULL,joint_loading_text TEXT NOT NULL,marginal_loading_text TEXT NOT NULL,joint_rank INTEGER NOT NULL,
+  marginal_rank INTEGER NOT NULL,is_joint_top_factor INTEGER NOT NULL,PRIMARY KEY(factor_key,gene_set_id));
+CREATE TABLE reveal_ref_trait_gene_sets(kpn_trait_id TEXT NOT NULL,gene_set_id TEXT NOT NULL,library TEXT NOT NULL,beta_uncorrected REAL NOT NULL,
+  beta REAL NOT NULL,avg_postp REAL NOT NULL,library_rank INTEGER NOT NULL,PRIMARY KEY(kpn_trait_id,gene_set_id));
+CREATE TABLE reveal_ref_factor_trait_links(factor_key TEXT NOT NULL,phenotype TEXT NOT NULL,phenotype_kpn_trait_id TEXT,is_own_trait INTEGER NOT NULL,
+  is_atlas_trait INTEGER NOT NULL,nnls_loading REAL NOT NULL,phewas_beta REAL NOT NULL,phewas_p_onesided REAL NOT NULL,phewas_q REAL NOT NULL,
+  PRIMARY KEY(factor_key,phenotype));
+CREATE TABLE reveal_ref_phenotypes(phenotype TEXT PRIMARY KEY,kpn_trait_id TEXT UNIQUE,phenotype_name TEXT,display_name TEXT NOT NULL,
+  legacy_phenotype_id TEXT,category TEXT,is_atlas INTEGER NOT NULL,metadata TEXT NOT NULL);
+'''
+
+
+class MissingTable(Exception):
+    """pymysql's shape of MySQL 1146 (ER_NO_SUCH_TABLE)."""
+
+
+class ReleaseCursor(Cursor):
+    def execute(self,sql,args=()):
+        try: super().execute(sql,args)
+        except sqlite3.OperationalError as error:
+            if 'no such table' in str(error): raise MissingTable(1146,str(error)) from None
+            raise
+
+
+class ReleaseConnection(Connection):
+    """An environment with only the release tables: a reload-era table is missing (1146), as after cleanup."""
+    def cursor(self): return ReleaseCursor(self.c,self.queries)
+
+
+class Interrupted(Exception):
+    """pymysql's shape of MySQL 3024 (ER_QUERY_TIMEOUT): MAX_EXECUTION_TIME stopped the statement."""
+
+
+class InterruptingCursor(ReleaseCursor):
+    def execute(self,sql,args=()):
+        if 'MAX_EXECUTION_TIME' in sql:
+            self.queries.append((sql,tuple(args)))
+            raise Interrupted(3024,'Query execution was interrupted, maximum statement execution time exceeded')
+        super().execute(sql,args)
+
+
+class InterruptingConnection(ReleaseConnection):
+    """MySQL past a statement's MAX_EXECUTION_TIME: every statement carrying the hint is stopped."""
+    def cursor(self): return InterruptingCursor(self.c,self.queries)
+
+
+def insert(c,table,rows):
+    for row in rows:
+        c.execute(f'INSERT INTO {table} ({",".join(row)}) VALUES ({",".join("?"*len(row))})',
+                  [json.dumps(v) if isinstance(v,(dict,list)) else v for v in row.values()])
+
+
+class ReleaseQueryTests(unittest.TestCase):
+    """Research reads of the published reference release (reveal_ref_*), with no reload-era table in the database."""
+    def setUp(self):
+        self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
+        self.path=str(Path(self.temp.name)/'release.sqlite'); self.queries=[]
+        self.service=ReferenceQueryService(lambda:ReleaseConnection(self.path,self.queries),cursor_secret=b'test-durable-key')
+        factor_details.clear_caches(); self.addCleanup(factor_details.clear_caches)  # parsed collection lineages are per process
+        node={'id':SET,'name':'stored set','members':['HGNC.SYMBOL:GENE_A','HGNC.SYMBOL:GENE_B']}
+        with sqlite3.connect(self.path) as c:
+            c.executescript(RELEASE_DDL)
+            insert(c,'reveal_ref_release',[{'release_id':RELEASE,'published_at':'2026-10-10 12:00:00','manifest':{'release_id':RELEASE,'absent_files':[]}}])
+            insert(c,'reveal_ref_traits',[
+                {'kpn_trait_id':T2D,'legacy_phenotype_id':'T2D','phenotype_name':'type 2 diabetes','gwas_source_category':'KPN','trait_group':'kpn',
+                 'trait_type':'phenotype','description':'description','n_factors':1,'metadata':{'bottom_line':{'gwas_reason':None}}},
+                {'kpn_trait_id':BMI,'legacy_phenotype_id':'BMI','phenotype_name':'body mass index','gwas_source_category':'KPN','n_factors':1,'metadata':{}}])
+            insert(c,'reveal_ref_factors',[
+                {'factor_key':KEY,'public_id':FACTOR,'eaggl_factor_id':'T2D::Factor1','kpn_trait_id':T2D,'factor_number':1,'label':'retained',
+                 'input_sha256':'e'*64,'source_revision':'e'*64,'metadata':{'factor':'Factor1','trait_links':LINKS}},
+                {'factor_key':BMI_KEY,'public_id':BMI_FACTOR,'eaggl_factor_id':'BMI::Factor1','kpn_trait_id':BMI,'factor_number':1,'label':'adiposity',
+                 'input_sha256':'f'*64,'source_revision':'f'*64,'metadata':{'factor':'Factor1'}}])
+            insert(c,'reveal_ref_factor_genes',[{'factor_key':KEY,'gene':gene,'loading':loading} for gene,loading in
+                                                 [('GENE_A',.8),('GENE_B',.8),('literal%_',.1)]]+[{'factor_key':BMI_KEY,'gene':'GENE_A','loading':.5}])
+            insert(c,'reveal_ref_collections',[
+                {'collection_id':COLLECTION,'cfde_label':'GO_label','library':'GO','n_sets':3,'portal_collection_id':PORTAL,
+                 'payload':{'collection':{'id':COLLECTION,'name':'GO sets'},'document_sha256':'d'*64,
+                            'provenance':{'prefixes':{'HGNC.SYMBOL':'https://identifiers.org/hgnc.symbol:'}}}},
+                {'collection_id':COLLECTION2,'cfde_label':'GTEx_label','library':'GTEx','n_sets':1,'portal_collection_id':COLLECTION2,
+                 'payload':{'collection':{'id':COLLECTION2},'document_sha256':'9'*64,'provenance':{}}}])
+            insert(c,'reveal_ref_gene_sets',[
+                {'gene_set_id':SET,'collection_id':COLLECTION,'gene_set_name':'stored set','library':'GO','n_genes':2,'n_genes_in_eaggl_universe':2,
+                 'metadata':{'dapper_gene_set':node}},
+                {'gene_set_id':SET2,'collection_id':COLLECTION2,'gene_set_name':'aging signature','library':'GTEx','n_genes':1,'n_genes_in_eaggl_universe':1,
+                 'metadata':{'dapper_gene_set':{'id':SET2,'name':'aging signature','members':['HGNC.SYMBOL:GENE_C']}}}])
+            insert(c,'reveal_ref_projections',[
+                {'factor_key':KEY,'gene_set_id':SET,'library':'GO','joint_loading':.4,'marginal_loading':.2,'joint_loading_text':'0.4',
+                 'marginal_loading_text':'0.2','joint_rank':1,'marginal_rank':1250,'is_joint_top_factor':1},
+                {'factor_key':KEY,'gene_set_id':SET2,'library':'GTEx','joint_loading':.3,'marginal_loading':.6,'joint_loading_text':'0.3',
+                 'marginal_loading_text':'0.6','joint_rank':1,'marginal_rank':1,'is_joint_top_factor':0}])
+            insert(c,'reveal_ref_trait_gene_sets',[
+                {'kpn_trait_id':T2D,'gene_set_id':SET,'library':'GO','beta_uncorrected':.5,'beta':.3,'avg_postp':.9,'library_rank':1},
+                {'kpn_trait_id':T2D,'gene_set_id':SET2,'library':'GTEx','beta_uncorrected':.7,'beta':.6,'avg_postp':.95,'library_rank':1},
+                {'kpn_trait_id':BMI,'gene_set_id':SET,'library':'GO','beta_uncorrected':0.0,'beta':0.0,'avg_postp':.2,'library_rank':1}])
+            link=lambda key,phenotype,kpn,own,atlas,q:{'factor_key':key,'phenotype':phenotype,'phenotype_kpn_trait_id':kpn,'is_own_trait':own,
+                'is_atlas_trait':atlas,'nnls_loading':.5,'phewas_beta':1.5,'phewas_p_onesided':q/10,'phewas_q':q}
+            insert(c,'reveal_ref_factor_trait_links',[link(KEY,'T2D',T2D,1,1,1e-6),link(KEY,'BMI',BMI,0,1,1e-3),
+                link(KEY,'gcat_trait_height','',0,0,.01),link(BMI_KEY,'T2D',T2D,0,1,.02)])
+            insert(c,'reveal_ref_phenotypes',[
+                {'phenotype':'T2D','kpn_trait_id':T2D,'phenotype_name':'type 2 diabetes','display_name':'type 2 diabetes','legacy_phenotype_id':'T2D',
+                 'category':'KPN','is_atlas':1,'metadata':{}},
+                {'phenotype':'BMI','kpn_trait_id':BMI,'phenotype_name':'body mass index','display_name':'body mass index','legacy_phenotype_id':'BMI',
+                 'category':'KPN','is_atlas':1,'metadata':{}},
+                {'phenotype':'gcat_trait_height','kpn_trait_id':None,'phenotype_name':None,'display_name':'height','legacy_phenotype_id':None,
+                 'category':'gcat','is_atlas':0,'metadata':{}},
+                {'phenotype':'LDL','kpn_trait_id':LDL,'phenotype_name':'LDL cholesterol','display_name':'LDL cholesterol','legacy_phenotype_id':'LDL',
+                 'category':'KPN','is_atlas':0,'metadata':{'bottom_line':{'gwas_reason':'not_on_portal'}}}])
+
+    def query(self,op,args=None,release=RELEASE): return self.service.query(op,args or {},generation_id=release)
+
+    def publish(self,release=NEXT,absent=()):
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_release SET release_id=?,manifest=?',(release,json.dumps({'release_id':release,'absent_files':list(absent)})))
+
+    def test_release_pin_is_read_first_and_named_in_the_capture_source(self):
+        capture=self.query('get_factor',{'factor_id':FACTOR})
+        self.assertEqual(self.queries[0][0],'SELECT release_id,published_at,manifest FROM reveal_ref_release')
+        self.assertFalse(any('reference_generations' in sql or 'kpn_traits' in sql for sql,_ in self.queries))
+        item=capture.result['items'][0]
+        self.assertEqual((item['public_id'],item['label'],item['trait_metadata']['phenotype_name']),(FACTOR,'retained','type 2 diabetes'))
+        self.assertEqual(item['metadata']['trait_links'],LINKS)
+        self.assertEqual({key:capture.source[key] for key in ('generation_id','release_id','source_kind','eaggl_import_id','model','mechanism_identity_version')},
+                         {'generation_id':RELEASE,'release_id':RELEASE,'source_kind':'reference_release','eaggl_import_id':None,
+                          'model':'eaggl-capped-v1','mechanism_identity_version':1})
+        self.assertEqual(capture.source['origin'],'mysql:reveal_ref_release+reveal_ref_factors+reveal_ref_traits?generation_id='+RELEASE)
+        envelope=decode(capture.raw)
+        self.assertEqual((envelope['format'],envelope['reader_version']),('reveal.reference-query.capture/1',RELEASE_READER_VERSION))
+        self.assertIn('phewas_q',envelope['metric_definitions'])
+        for identity in (KEY,'T2D::Factor1'): self.assertEqual(self.query('get_factor',{'factor_id':identity}).result['items'],capture.result['items'])
+        self.assertEqual(self.query('get_factor',{'factor_id':FACTOR}).raw,capture.raw)
+
+    def test_release_factor_materializes_the_catalog_mechanism(self):
+        from reveal_backend.reference_generation import mechanism_node
+        runtime=SeedTests.runtime()
+        expected=mechanism_node(FACTOR,'type 2 diabetes',T2D,'Factor1','retained')
+        expected['id']=runtime.compute_id(expected,'Mechanism',runtime.schema)
+        context=self.query('get_factor',{'factor_id':FACTOR}).materialize(runtime)
+        self.assertEqual(context['dapper_context']['mechanisms'],[expected])
+        resolution=context['object_resolution'][0]
+        self.assertEqual((resolution['status'],resolution['dapper_id'],resolution['reference_generation_id'],resolution['eaggl_import_id'],
+                          resolution['identity_version']),('ready',expected['id'],RELEASE,None,1))
+
+    def test_superseded_release_and_missing_reload_tables_are_conflicts_not_errors(self):
+        self.publish()
+        for call in (lambda:self.query('get_factor',{'factor_id':FACTOR}),lambda:self.service.catalog(RELEASE),
+                     lambda:self.service.phenotype_trait(RELEASE,'T2D')):
+            with self.subTest(call=call),self.assertRaises(Problem) as caught: call()
+            self.assertEqual((caught.exception.status,caught.exception.code,caught.exception.extra['reason']),
+                             (409,'SOURCE_UNAVAILABLE','reference_release_superseded'))
+            self.assertEqual((caught.exception.extra['pinned_release_id'],caught.exception.extra['current_release_id']),(RELEASE,NEXT))
+        with self.assertRaises(Problem) as caught: self.service.release(ReleaseConnection(self.path,[]),RELEASE)
+        self.assertEqual(caught.exception.extra['reason'],'reference_release_superseded')
+        self.assertEqual(self.query('get_factor',{'factor_id':FACTOR},NEXT).result['items'][0]['public_id'],FACTOR)
+        # Nothing published and no reload tables (1146): the old generation answer, never a 500.
+        with sqlite3.connect(self.path) as c: c.execute('DELETE FROM reveal_ref_release')
+        with self.assertRaises(Problem) as caught: self.query('get_factor',{'factor_id':FACTOR})
+        self.assertEqual((caught.exception.status,caught.exception.code),(409,'SOURCE_UNAVAILABLE'))
+        self.assertNotIn('reason',caught.exception.extra)
+        # A retained generation row whose reload tables cleanup already dropped: the same conflict, from every read.
+        with sqlite3.connect(self.path) as c:
+            c.execute('CREATE TABLE reference_generations(generation_id TEXT,kind TEXT,model TEXT,status TEXT,eaggl_import_id TEXT,'
+                      'legacy_mapping_run_id TEXT,legacy_gene_set_import_id TEXT,manifest TEXT)')
+            c.execute('INSERT INTO reference_generations VALUES(?,?,?,?,?,?,?,?)',(OTHER,'kpn','eaggl-capped-v1','complete','c'*64,None,None,'{}'))
+        for call in (lambda:self.query('get_factor',{'factor_id':FACTOR},OTHER),lambda:self.query('search_genes',{'q':'gene'},OTHER),
+                     lambda:self.service.phenotype_trait(OTHER,'T2D')):
+            with self.subTest(call=call),self.assertRaises(Problem) as caught: call()
+            self.assertEqual((caught.exception.status,caught.exception.code),(409,'SOURCE_UNAVAILABLE'))
+        self.assertEqual(self.service.catalog(OTHER)['generation']['generation_id'],OTHER)
+
+    def test_release_loadings_rank_within_libraries_and_genes_have_no_import_index(self):
+        first=self.query('get_factor_loadings',{'factor_id':FACTOR,'limit':1})
+        self.assertEqual(first.result['items'],[{'symbol':'GENE_A','gene_index':None,'loading':.8}])
+        second=self.query('get_factor_loadings',{'factor_id':FACTOR,'limit':1,'cursor':first.result['next_cursor']})
+        self.assertEqual(second.result['items'][0]['symbol'],'GENE_B')
+        self.assertEqual(second.source['tables'],['reveal_ref_release','reveal_ref_factors','reveal_ref_factor_genes'])
+        with self.assertRaises(Problem): self.query('get_factor_loadings',{'factor_id':FACTOR,'limit':1,'cursor':first.result['next_cursor'],'q':'GENE'})
+        self.assertEqual([x['symbol'] for x in self.query('get_factor_loadings',{'factor_id':FACTOR,'q':'%_'}).result['items']],['literal%_'])
+        joint=self.query('get_factor_loadings',{'factor_id':FACTOR,'kind':'gene_set'})
+        self.assertEqual([(x['gene_set_id'],x['library'],x['joint_rank']) for x in joint.result['items']],[(SET,'GO',1),(SET2,'GTEx',1)])
+        self.assertIn('per library',joint.result['import_coverage'])
+        self.assertNotIn('scope',' '.join(sql for sql,_ in self.queries if 'reveal_ref_projections' in sql))
+        marginal=self.query('get_factor_loadings',{'factor_id':FACTOR,'kind':'gene_set','metric':'marginal'})
+        self.assertEqual([x['gene_set_id'] for x in marginal.result['items']],[SET2,SET])
+        reverse=self.query('get_gene_set_factors',{'gene_set_id':SET})
+        self.assertEqual(reverse.result['items'],[{'factor_id':FACTOR,'factor_key':KEY,'joint_loading':.4,'marginal_loading':.2,'joint_loading_text':'0.4',
+            'marginal_loading_text':'0.2','joint_rank':1,'marginal_rank':1250,'library':'GO'}])
+        self.assertEqual(self.query('search_factors',{'q':'adip'}).result['items'][0]['public_id'],BMI_FACTOR)
+
+    def test_release_genes_are_the_loaded_symbols(self):
+        found=self.query('search_genes',{'q':'gene'})
+        self.assertEqual([x['symbol'] for x in found.result['items']],['GENE_A','GENE_B'])
+        self.assertIn('Loaded genes only',found.result['import_coverage'])
+        item=found.result['items'][0]
+        self.assertEqual((item['gene_index'],item['source_local_id']),(None,'urn:reveal:release-gene:'+RELEASE+':GENE_A'))
+        self.assertEqual(self.query('resolve_gene',{'gene':'absent'}).result['status'],'empty')
+        resolved=self.query('resolve_gene',{'gene':'GENE_A'}).result['items'][0]
+        self.assertEqual(resolved['identity_mapping']['source_local'],{'symbol':'GENE_A','source_import':RELEASE,'source_index':None})
+        factors=self.query('get_gene_factors',{'gene':'GENE_A'}).result['items']
+        self.assertEqual([(x['factor_id'],x['public_id'],x['trait'],x['loading']) for x in factors],
+                         [('T2D::Factor1',FACTOR,'T2D',.8),('BMI::Factor1',BMI_FACTOR,'BMI',.5)])
+
+    def test_release_membership_covers_referenced_sets_only(self):
+        found=self.query('get_gene_gene_sets',{'gene':'gene_a'})
+        self.assertEqual([(x['gene_set_id'],x['member'],x['source_pointer']) for x in found.result['items']],[(SET,'HGNC.SYMBOL:GENE_A','/members/0')])
+        self.assertIn('absent is not non-member',found.result['import_coverage'])
+        self.assertEqual(found.source['tables'],['reveal_ref_release','reveal_ref_gene_sets'])
+        scoped=self.query('get_gene_gene_sets',{'gene':'GENE_C','factor_id':FACTOR})
+        self.assertEqual([(x['gene_set_id'],x['library'],x['marginal_loading']) for x in scoped.result['items']],[(SET2,'GTEx',.6)])
+        self.assertEqual(scoped.result['factor'],{'factor_id':FACTOR,'factor_key':KEY,'label':'retained'})
+        semantics=next(item for item in self.service.catalog(RELEASE)['operations'] if item['name']=='get_gene_gene_sets')['semantics']
+        self.assertEqual(semantics['factor_id'],scoped.result['import_coverage'].split(' Read the trusted GeneSet with get_gene_set before citing membership. ')[1])
+        members=self.query('get_gene_set_members',{'gene_set_id':SET,'limit':1})
+        self.assertEqual((members.result['total_rows'],members.result['items'][0]['member']),(2,'HGNC.SYMBOL:GENE_A'))
+        self.assertIn('references',self.query('search_gene_sets',{'q':'aging'}).result['import_coverage'])
+
+    def test_release_traits_include_the_linkage_phenotypes_with_kpn_ids(self):
+        found=self.query('search_traits',{'q':'e'})
+        self.assertEqual([(x['kpn_trait_id'],x['is_atlas']) for x in found.result['items']],[(BMI,True),(T2D,True),(LDL,False)])
+        self.assertIn('get_trait_gene_sets',found.result['import_coverage'])
+        ldl=self.query('get_trait',{'trait_id':'trait:kpn:0000500'}).result['items']
+        self.assertEqual([(x['phenotype_name'],x['legacy_phenotype_id'],x['metadata']['bottom_line']['gwas_reason'])
+                          for x in ldl],[('LDL cholesterol','LDL','not_on_portal')])
+        self.assertEqual(self.query('get_trait',{'trait_id':T2D}).result['items'][0]['trait_group'],'kpn')
+        expected={'kpn_trait_id':T2D,'legacy_phenotype_id':'T2D','phenotype_name':'type 2 diabetes','gwas_source_category':'KPN'}
+        self.assertEqual(self.service.phenotype_trait(RELEASE,T2D),expected)
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'T2D'),expected)
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'LDL')['gwas_source_category'],'KPN')
+        self.assertIsNone(self.service.phenotype_trait(RELEASE,'height'))
+        with sqlite3.connect(self.path) as c:  # an atlas trait's own phenotype row is never a second, ambiguous match
+            c.execute('UPDATE reveal_ref_phenotypes SET display_name=? WHERE phenotype=?',('Type 2 diabetes (T2D)','T2D'))
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'T2D'),expected)
+
+    def test_release_has_no_graph(self):
+        for op,args in (('get_connections',{'factor_id':FACTOR}),('get_imported_graph',{'node_id':'T2D::Factor1'})):
+            with self.subTest(op=op):
+                result=self.query(op,args).result
+                self.assertEqual((result['status'],result['reason']),('not_stored','A reference release stores no EAGGL factor hierarchy graph.'))
+
+    def test_trait_gene_set_betas_sort_by_beta_and_keep_zero_rows(self):
+        betas=self.query('get_trait_gene_sets',{'trait_id':T2D})
+        self.assertEqual([(x['gene_set_id'],x['library'],x['beta_uncorrected'],x['trait_name']) for x in betas.result['items']],
+                         [(SET2,'GTEx',.7,'type 2 diabetes'),(SET,'GO',.5,'type 2 diabetes')])
+        self.assertEqual(set(betas.result['items'][0]),{'kpn_trait_id','trait_name','gene_set_id','gene_set_name','library','collection_id','n_genes',
+                                                        'beta_uncorrected','beta','avg_postp','library_rank'})
+        self.assertIn('absent (trait, gene set) pair is not a zero beta',betas.result['import_coverage'])
+        self.assertEqual(betas.source['tables'],['reveal_ref_release','reveal_ref_trait_gene_sets','reveal_ref_gene_sets','reveal_ref_traits'])
+        self.assertEqual([x['gene_set_id'] for x in self.query('get_trait_gene_sets',{'trait_id':'trait:kpn:0000398','library':'GO'}).result['items']],[SET])
+        self.assertEqual([x['gene_set_id'] for x in self.query('get_trait_gene_sets',{'trait_id':T2D,'q':'aging'}).result['items']],[SET2])
+        with self.assertRaises(Problem): self.query('get_trait_gene_sets',{'trait_id':T2D,'library':'x'*65})
+        reverse=self.query('get_gene_set_traits',{'gene_set_id':SET})
+        self.assertEqual([(x['kpn_trait_id'],x['beta_uncorrected']) for x in reverse.result['items']],[(T2D,.5),(BMI,0.0)])  # a kept zero row
+        self.assertEqual(reverse.result['gene_set_id'],SET)
+        self.assertNotIn('beta',self.query('get_factor_loadings',{'factor_id':FACTOR,'kind':'gene_set'}).result['items'][0])
+
+    def test_factor_trait_links_order_by_q_with_scope_and_summary(self):
+        links=self.query('get_factor_trait_links',{'factor_id':FACTOR})
+        self.assertEqual([(x['phenotype'],x['phenotype_kpn_trait_id'],x['phenotype_name'],x['is_own_trait'],x['is_atlas_trait'])
+                          for x in links.result['items']],
+                         [('T2D',T2D,'type 2 diabetes',True,True),('BMI',BMI,'body mass index',False,True),('gcat_trait_height',None,'height',False,False)])
+        self.assertEqual(set(links.result['items'][0]),set(('source_id','factor_label','fitted_kpn_trait_id','fitted_trait_name','phenotype',
+            'phenotype_kpn_trait_id','phenotype_name','is_own_trait','is_atlas_trait','nnls_loading','phewas_beta','phewas_p_onesided','phewas_q')))
+        self.assertEqual((links.result['items'][0]['source_id'],links.result['items'][0]['fitted_trait_name']),(FACTOR,'type 2 diabetes'))
+        self.assertEqual(links.result['summary'],{key:LINKS[key] for key in ('n_phenotypes','n_linked','n_linked_kpn_traits','n_linked_atlas_traits','own_trait_q')})
+        self.assertIn('unlinked at this threshold, not a negative',links.result['import_coverage'])
+        atlas=self.query('get_factor_trait_links',{'factor_id':FACTOR,'scope':'atlas'})
+        self.assertEqual([x['phenotype'] for x in atlas.result['items']],['T2D','BMI'])
+        with self.assertRaises(Problem): self.query('get_factor_trait_links',{'factor_id':FACTOR,'scope':'every'})
+        self.assertEqual(self.query('get_factor_trait_links',{'factor_id':'absent'}).result['status'],'not_stored')
+        reverse=self.query('get_trait_factor_links',{'trait_id':T2D})
+        self.assertEqual([(x['source_id'],x['is_own_trait'],x['phewas_q']) for x in reverse.result['items']],[(FACTOR,True,1e-6),(BMI_FACTOR,False,.02)])
+        self.assertEqual((reverse.result['trait_id'],reverse.result['scope']),(T2D,'all'))
+
+    def test_optional_files_absent_at_publish_are_not_stored(self):
+        self.publish(RELEASE,('trait_gene_sets.tsv.gz','factor_trait_links.tsv.gz'))
+        for op,args in (('get_trait_gene_sets',{'trait_id':T2D}),('get_gene_set_traits',{'gene_set_id':SET}),
+                        ('get_factor_trait_links',{'factor_id':FACTOR}),('get_trait_factor_links',{'trait_id':T2D})):
+            with self.subTest(op=op):
+                result=self.query(op,args).result
+                self.assertEqual(result['status'],'not_stored'); self.assertIn('published without',result['reason'])
+        catalog=self.service.catalog(RELEASE)
+        self.assertEqual({item['name'] for item in catalog['operations'] if item['availability']=='not_stored'},
+                         {*RELEASE_OPERATIONS,'get_connections','get_imported_graph'})
+        self.assertEqual((catalog['coverage']['gene_set_betas'],catalog['coverage']['phenotype_associations'],catalog['generation']['absent_files']),
+                         ('not_stored','not_stored',['factor_trait_links.tsv.gz','trait_gene_sets.tsv.gz']))
+
+    def test_release_catalog_marks_graph_tools_not_stored_and_serves_betas(self):
+        catalog=self.service.catalog(RELEASE)
+        availability={item['name']:item['availability'] for item in catalog['operations']}
+        self.assertEqual({name for name,value in availability.items() if value!='supported'},{'get_connections','get_imported_graph'})
+        self.assertEqual((catalog['version'],catalog['coverage']['phenotype_associations'],catalog['coverage']['imported_graph']),
+                         (RELEASE_READER_VERSION,'gene_set_betas','not_stored'))
+        self.assertEqual({key:catalog['generation'][key] for key in ('generation_id','release_id','source_kind','model','eaggl_import_id')},
+                         {'generation_id':RELEASE,'release_id':RELEASE,'source_kind':'reference_release','model':'eaggl-capped-v1','eaggl_import_id':None})
+        self.assertNotIn('manifest',catalog['generation'])
+        self.assertIn('per library',catalog['coverage']['gene_set_projections'])
+        self.assertEqual(next(item for item in catalog['operations'] if item['name']=='get_trait_gene_sets')['arguments'],
+                         ['cursor','library','limit','q','trait_id'])
+
+    def test_factor_tops_read_the_release_as_query_does(self):
+        connection=ReleaseConnection(self.path,self.queries)
+        pin=self.service.release(connection,RELEASE)
+        factors,tops=self.service.factor_tops(connection,pin,[FACTOR,BMI_FACTOR],1)
+        connection.close()
+        for identity in (FACTOR,BMI_FACTOR):
+            self.assertEqual(factors[identity][0]['public_id'],identity)
+            for kind in ('gene','gene_set'):
+                with self.subTest(identity=identity,kind=kind):
+                    capture=self.query('get_factor_loadings',{'factor_id':identity,'kind':kind,'limit':1})
+                    top=tops[(identity,kind)]
+                    self.assertEqual((top['items'],top['status'],top['truncated'],top['import_coverage'],top['origin']),
+                        (capture.result['items'],capture.result['status'],capture.result['truncated'],capture.result['import_coverage'],capture.source['origin']))
+
+    def glygen(self,runtime,count):
+        """A GlyGen-HZ2-shaped collection: one extractor used `count` cached API responses, each derived (curated) from the GlyGen release."""
+        mint=lambda node,cls:{**node,'id':runtime.compute_id(node,cls,runtime.schema)}
+        consortium=mint({'name':'GlyGen Consortium'},'Organization')
+        dataset=mint({'name':'GlyGen data release v1.12.1','publisher':consortium['id']},'Dataset')
+        activity=mint({'name':'glygen extractor'},'Activity')
+        files=[mint({'name':f'G{index:05d}AB.json'},'File') for index in range(count)]
+        node=mint({'name':'glycan set','member_type':'gene','members':['https://identifiers.org/hgnc.symbol:GENE_A'],'was_generated_by':activity['id']},'GeneSet')
+        payload={'collection':{'id':COLLECTION},'document_sha256':'b'*64,
+                 'provenance':{'files':files,'activities':[activity],
+                               'used_edges':[{'subject':activity['id'],'predicate':'prov:used','object':item['id'],'edge_role':'data_input'} for item in files]},
+                 'curated_provenance':{'source':'lap/config/source_datasets.yaml','groups':{'organizations':[consortium],'datasets':[dataset],
+                     'was_derived_from_edges':[{'subject':item['id'],'predicate':'prov:wasDerivedFrom','object':dataset['id']} for item in files]}}}
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_gene_sets SET gene_set_id=?,metadata=? WHERE gene_set_id=?',(node['id'],json.dumps({'dapper_gene_set':node}),SET))
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?',(json.dumps(payload),COLLECTION))
+        return node,dataset,consortium,files
+
+    def test_gene_set_carries_its_lineage_closure_and_materializes_the_trusted_gene_set(self):
+        runtime=SeedTests.runtime()
+        node,dataset,consortium,files=self.glygen(runtime,40)
+        capture=self.query('get_gene_set',{'gene_set_id':node['id']})
+        item=capture.result['items'][0]
+        self.assertEqual({key:item['payload'][key] for key in ('collection_id','document_sha256','portal_collection_id','collapsed')},
+                         {'collection_id':COLLECTION,'document_sha256':'b'*64,'portal_collection_id':PORTAL,
+                          'collapsed':[{'activity':node['was_generated_by'],'representative':min(f['id'] for f in files),'collapsed_inputs':40}]})
+        self.assertEqual([x['id'] for x in item['payload']['provenance']['datasets']],[dataset['id']])
+        self.assertEqual(item['metadata']['dapper_gene_set'],node)
+        context=capture.materialize(runtime)
+        resolution=context['object_resolution'][0]
+        self.assertEqual((resolution['status'],resolution['dapper_id'],resolution['reference_generation_id'],resolution['construction_provenance_status']),
+                         ('ready',node['id'],RELEASE,'generating_activity_loaded'))
+        self.assertEqual(context['dapper_context']['gene_sets'],[node])
+        self.assertEqual((context['dapper_context']['datasets'],context['dapper_context']['organizations']),([dataset],[consortium]))
+        self.assertEqual(len(context['dapper_context']['files']),2)  # the capture's File and one representative input
+        runtime.validate({key:value for key,value in context['dapper_context'].items()})
+
+    def test_glygen_hz2_shaped_gene_set_stays_far_under_the_capture_budget(self):
+        consortium,dataset,activity='dapper:Organization.'+'o'*32,'dapper:Dataset.'+'s'*32,'dapper:Activity.'+'a'*32
+        files=[f'dapper:File.{index:0>32}' for index in range(6620)]
+        node={'id':SET,'name':'stored set','members':['HGNC.SYMBOL:GENE_A'],'was_generated_by':activity}
+        payload={'collection':{'id':COLLECTION},'document_sha256':'b'*64,
+                 'provenance':{'files':[{'id':item,'filename':f'G{index:05d}AB.json'} for index,item in enumerate(files)],'activities':[{'id':activity}],
+                               'used_edges':[{'subject':activity,'predicate':'prov:used','object':item,'edge_role':'data_input'} for item in files]},
+                 'curated_provenance':{'groups':{'organizations':[{'id':consortium,'name':'GlyGen Consortium'}],
+                     'datasets':[{'id':dataset,'name':'GlyGen data release v1.12.1','publisher':consortium}],
+                     'was_derived_from_edges':[{'subject':item,'predicate':'prov:wasDerivedFrom','object':dataset} for item in files]}}}
+        self.assertGreater(len(canonical_json(payload)),1_000_000)
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=? WHERE gene_set_id=?',(json.dumps({'dapper_gene_set':node}),SET))
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?',(json.dumps(payload),COLLECTION))
+        capture=self.query('get_gene_set',{'gene_set_id':SET})
+        self.assertEqual(capture.result['status'],'complete')
+        self.assertLess(len(capture.raw),10_000)
+        self.assertEqual(capture.result['items'][0]['payload']['collapsed'],[{'activity':activity,'representative':files[0],'collapsed_inputs':6620}])
+        self.assertEqual([x['id'] for x in capture.result['items'][0]['payload']['provenance']['datasets']],[dataset])
+
+
+    def test_gene_set_lineage_is_parsed_once_per_release_collection_and_document(self):
+        payloads=lambda: [sql for sql,_ in self.queries if sql.startswith('SELECT payload FROM reveal_ref_collections')]
+        activity='dapper:Activity.'+'a'*32
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_gene_sets SET metadata=? WHERE gene_set_id=?',(json.dumps({'dapper_gene_set':{'id':SET,'was_generated_by':activity}}),SET))
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?',(json.dumps({'collection':{'id':COLLECTION},'document_sha256':'d'*64,
+                      'provenance':{'activities':[{'id':activity,'name':'extractor'}]}}),COLLECTION))
+        first=self.query('get_gene_set',{'gene_set_id':SET})
+        self.assertEqual(first.result['items'][0]['payload']['provenance'],{'activities':[{'id':activity,'name':'extractor'}]})
+        self.assertEqual(len(payloads()),1)
+        self.assertIn("JSON_EXTRACT(c.payload,'$.document_sha256')",next(sql for sql,_ in self.queries if 'JOIN reveal_ref_collections' in sql))
+        self.assertEqual(self.query('get_gene_set',{'gene_set_id':SET}).raw,first.raw)
+        self.assertEqual(len(payloads()),1)  # the parsed lineage of (release, collection, document) is reused
+        self.assertEqual(first.source['tables'],['reveal_ref_release','reveal_ref_gene_sets','reveal_ref_collections'])
+        # A mutated capture never reaches the cache: the closure is a copy.
+        first.result['items'][0]['payload']['provenance']['activities'][0]['name']='changed'
+        self.assertEqual(self.query('get_gene_set',{'gene_set_id':SET}).raw,first.raw)
+        self.publish(NEXT)  # another release: never served from the first release's entry
+        self.assertEqual(self.query('get_gene_set',{'gene_set_id':SET},NEXT).result['items'][0]['payload']['document_sha256'],'d'*64)
+        self.assertEqual(len(payloads()),2)
+        with sqlite3.connect(self.path) as c:  # another document of the collection
+            c.execute('UPDATE reveal_ref_collections SET payload=? WHERE collection_id=?',(json.dumps({'collection':{'id':COLLECTION},
+                      'document_sha256':'7'*64,'provenance':{'prefixes':{'NCBIGene':'https://www.ncbi.nlm.nih.gov/gene/'}}}),COLLECTION))
+        item=self.query('get_gene_set',{'gene_set_id':SET},NEXT).result['items'][0]
+        self.assertEqual((item['payload']['document_sha256'],item['payload']['provenance']),('7'*64,{'prefixes':{'NCBIGene':'https://www.ncbi.nlm.nih.gov/gene/'}}))
+        self.assertEqual(len(payloads()),3)
+
+    def test_unscoped_membership_scan_is_time_bounded_and_a_stopped_scan_is_unavailable(self):
+        found=self.query('get_gene_gene_sets',{'gene':'GENE_A'})
+        self.assertEqual(found.result['status'],'complete')
+        self.assertTrue(self.queries[-1][0].startswith('SELECT /*+ MAX_EXECUTION_TIME(4000) */ s.gene_set_id,'))  # a comment to SQLite
+        self.query('get_gene_gene_sets',{'gene':'GENE_C','factor_id':FACTOR})
+        self.assertNotIn('MAX_EXECUTION_TIME',self.queries[-1][0])
+        service=ReferenceQueryService(lambda:InterruptingConnection(self.path,self.queries),cursor_secret=b'test-durable-key')
+        stopped=service.query('get_gene_gene_sets',{'gene':'GENE_A'},generation_id=RELEASE)
+        self.assertEqual((stopped.result['status'],stopped.result['reason'],stopped.result['items'],stopped.result['next_cursor']),
+                         ('unavailable','scan_budget_exceeded',[],None))
+        self.assertIn('Pass factor_id',stopped.result['import_coverage']); self.assertIn('not a biological negative',stopped.result['import_coverage'])
+        self.assertEqual(stopped.source['tables'],['reveal_ref_release','reveal_ref_gene_sets'])
+        self.assertEqual(stopped.materialize(SeedTests.runtime())['eligible_source_ids'],[])  # an outage is never evidence
+        scoped=service.query('get_gene_gene_sets',{'gene':'GENE_C','factor_id':FACTOR},generation_id=RELEASE)
+        self.assertEqual([x['gene_set_id'] for x in scoped.result['items']],[SET2])
+        # Other errors are not a budget.
+        class Gone(ReleaseCursor):
+            def execute(self,sql,args=()):
+                if 'MAX_EXECUTION_TIME' in sql: raise MissingTable(2013,'Lost connection to MySQL server during query')
+                super().execute(sql,args)
+        class GoneConnection(ReleaseConnection):
+            def cursor(self): return Gone(self.c,self.queries)
+        broken=ReferenceQueryService(lambda:GoneConnection(self.path,[]),cursor_secret=b'test-durable-key')
+        with self.assertRaises(MissingTable): broken.query('get_gene_gene_sets',{'gene':'GENE_A'},generation_id=RELEASE)
+        from reveal_backend.research_data import DESCRIPTIONS
+        self.assertIn('factor_id (recommended)',DESCRIPTIONS['get_gene_gene_sets'])
+        self.assertIn('scan_budget_exceeded',DESCRIPTIONS['get_gene_gene_sets'])
+
+    def test_factor_gene_set_listings_break_ties_on_the_projection_key(self):
+        with sqlite3.connect(self.path) as c:  # the same joint loading as SET (0.4): ties order by gene set id
+            insert(c,'reveal_ref_gene_sets',[{'gene_set_id':SET3,'collection_id':COLLECTION,'gene_set_name':'tied set','library':'GO','n_genes':1,
+                                              'n_genes_in_eaggl_universe':1,'metadata':{'dapper_gene_set':{'id':SET3,'members':['HGNC.SYMBOL:GENE_A']}}}])
+            insert(c,'reveal_ref_projections',[{'factor_key':KEY,'gene_set_id':SET3,'library':'GO','joint_loading':.4,'marginal_loading':.1,
+                'joint_loading_text':'0.4','marginal_loading_text':'0.1','joint_rank':2,'marginal_rank':3,'is_joint_top_factor':0}])
+        joint=self.query('get_factor_loadings',{'factor_id':FACTOR,'kind':'gene_set'})
+        self.assertEqual([x['gene_set_id'] for x in joint.result['items']],[SET3,SET,SET2])
+        self.assertEqual(joint.result['ordering'],'p.joint_loading DESC,p.gene_set_id')
+        self.assertTrue(self.queries[-1][0].endswith('ORDER BY p.joint_loading DESC,p.gene_set_id LIMIT %s OFFSET %s'))
+        scoped=self.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':FACTOR})
+        self.assertEqual(([x['gene_set_id'] for x in scoped.result['items']],scoped.result['ordering']),([SET3,SET],'p.joint_loading DESC,p.gene_set_id'))
+        connection=ReleaseConnection(self.path,self.queries)
+        _,tops=self.service.factor_tops(connection,self.service.release(connection,RELEASE),[FACTOR],5)
+        connection.close()
+        self.assertEqual([x['gene_set_id'] for x in tops[(FACTOR,'gene_set')]['items']],[SET3,SET,SET2])
+        self.assertIn('ORDER BY p.joint_loading DESC,p.gene_set_id LIMIT',self.queries[-1][0])
+
+    def test_non_ascii_identifiers_are_not_found_without_comparing_an_ascii_column(self):
+        """MySQL refuses (1267) to compare an ascii_bin id column with a non-ASCII value; such an id is simply not stored."""
+        foreign=('TNFα','Sézary_syndrome_Orphanet_3162','KPN.TRAIT:٠٠٠٠٣٩٨','factor:kpn:٠٠٠٠٣٩٨:eaggl-capped-v1:Factor1')
+        for op,field in (('get_factor','factor_id'),('get_factor_loadings','factor_id'),('get_factor_trait_links','factor_id'),
+                         ('get_trait','trait_id'),('get_trait_gene_sets','trait_id'),('get_trait_factor_links','trait_id'),
+                         ('get_gene_set','gene_set_id'),('get_gene_set_members','gene_set_id'),('get_gene_set_factors','gene_set_id'),
+                         ('get_gene_set_traits','gene_set_id')):
+            for identity in foreign:
+                with self.subTest(op=op,identity=identity):
+                    del self.queries[:]
+                    # As an unknown id of its kind: an unknown trait has no rows (empty); an unknown factor or gene set is not stored.
+                    self.assertEqual(self.query(op,{field:identity}).result['status'],'empty' if field=='trait_id' else 'not_stored')
+                    self.assertEqual([sql for sql,_ in self.queries],['SELECT release_id,published_at,manifest FROM reveal_ref_release'])
+        del self.queries[:]
+        self.assertEqual(self.query('get_trait',{'trait_id':'trait:kpn:٠٠٠٠٣٩٨'}).result['status'],'empty')  # never read as KPN.TRAIT:0000398
+        self.assertEqual(self.query('get_trait',{'trait_id':'KPN.TRAIT:9999999'}).result['status'],'empty')  # the same answer as an unknown ASCII trait
+        self.assertEqual(self.query('get_gene_gene_sets',{'gene':'GENE_A','factor_id':'TNFα'}).result['status'],'not_stored')
+        self.assertFalse(any('JSON_EXTRACT' in sql for sql,_ in self.queries))
+        connection=ReleaseConnection(self.path,self.queries)
+        factors,_=self.service.factor_tops(connection,self.service.release(connection,RELEASE),['TNFα',FACTOR],1)
+        connection.close()
+        self.assertEqual((factors['TNFα'],factors[FACTOR][0]['public_id']),([],FACTOR))
+        self.assertFalse(any('TNFα' in args for _,args in self.queries))
+
+    def test_non_ascii_search_and_phenotype_skip_the_ascii_columns(self):
+        with sqlite3.connect(self.path) as c:
+            c.execute('UPDATE reveal_ref_factors SET label=? WHERE factor_key=?',('TNFα response',BMI_KEY))
+            insert(c,'reveal_ref_phenotypes',[{'phenotype':'Sezary_syndrome_Orphanet_3162','kpn_trait_id':'KPN.TRAIT:0006001','phenotype_name':'Sézary syndrome',
+                'display_name':'Sézary syndrome','legacy_phenotype_id':'Sézary_syndrome_Orphanet_3162','category':'rare_v2','is_atlas':0,'metadata':{}}])
+        del self.queries[:]
+        found=self.query('search_factors',{'q':'TNFα'})
+        self.assertEqual([x['public_id'] for x in found.result['items']],[BMI_FACTOR])
+        self.assertNotIn('eaggl_factor_id) LIKE',self.queries[-1][0])  # the label (utf8mb4) only
+        self.assertEqual(self.query('search_factors',{'q':'bmi::'}).result['items'][0]['public_id'],BMI_FACTOR)  # ASCII still matches the id
+        self.assertIn('eaggl_factor_id) LIKE',self.queries[-1][0])
+        del self.queries[:]
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'Sézary_syndrome_Orphanet_3162'),
+                         {'kpn_trait_id':'KPN.TRAIT:0006001','legacy_phenotype_id':'Sézary_syndrome_Orphanet_3162','phenotype_name':'Sézary syndrome',
+                          'gwas_source_category':'rare_v2'})
+        statement=self.queries[-1][0]
+        self.assertNotIn('reveal_ref_traits',statement); self.assertNotIn('kpn_trait_id=%s',statement)
+        for phenotype in ('TNFα','KPN.TRAIT:٠٠٠٠٣٩٨'):
+            self.assertIsNone(self.service.phenotype_trait(RELEASE,phenotype))
+        self.assertEqual(self.service.phenotype_trait(RELEASE,'T2D')['kpn_trait_id'],T2D)
+        self.assertIn('reveal_ref_traits',self.queries[-1][0])
 
 
 class SmallModelTests(unittest.TestCase):
@@ -574,6 +1151,22 @@ class SeedTests(unittest.TestCase):
             self.assertEqual(Path(path,'evidence-package.json').read_bytes(),built.files['evidence-package.json'])
             self.assertEqual(built.files,prepare_research_seed(frozen,binding,dapper=dapper,project_root=ROOT).files)
             validate_seed_shape(package,path)
+
+    def test_seed_capabilities_follow_the_pin_kind_and_mixed_releases_pin_none(self):
+        dapper,frozen,binding=self.inputs()
+        availability=lambda built:{item['name']:item['availability'] for item in built.package['capabilities']['operations']}
+        generation=availability(prepare_research_seed(frozen,binding,dapper=dapper,project_root=ROOT))
+        self.assertEqual((generation['get_trait_gene_sets'],generation['get_imported_graph']),('not_stored','supported'))
+        # A release binding names its embedding space, not the release, in mapping_run_id (catalog.kpn_factors).
+        binding['anchors'][0].update(reference_generation_id=RELEASE,eaggl_import_id=None,mapping_run_id='9'*64,gene_set_import_id=RELEASE)
+        built=prepare_research_seed(frozen,binding,dapper=dapper,project_root=ROOT)
+        release=availability(built)
+        self.assertEqual((release['get_trait_gene_sets'],release['get_factor_trait_links'],release['get_imported_graph']),
+                         ('supported','supported','not_stored'))
+        self.assertEqual((built.package['reference_generation_id'],built.package['capabilities']['generation']['source_kind']),(RELEASE,'reference_release'))
+        validate_seed_shape(built.package)
+        binding['anchors'].append({**binding['anchors'][0],'cfde_node_id':BMI_FACTOR,'reference_generation_id':NEXT})
+        with self.assertRaisesRegex(EvidenceBuildError,'exact reference generation'): prepare_research_seed(frozen,binding,dapper=dapper,project_root=ROOT)
 
     def test_seed_validator_rejects_false_completeness_and_mutated_sources(self):
         dapper,frozen,binding=self.inputs()

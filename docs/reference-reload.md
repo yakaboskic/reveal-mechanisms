@@ -1,5 +1,11 @@
 # Reference reload: versioned EAGGL/CFDE reference generations, archive-on-reload, and the protected flush
 
+> **Superseded for operations (2026-10).** Reference data is now built as one release folder and published with one
+> command, without generations, snapshots, approvals or an archive pass: see [reference-release.md](reference-release.md).
+> This document remains the record of the archive stamp (§4.1) and the frozen `archived_reference_factors` snapshot
+> (§3), which the accounts and outcomes stamped during the 2026-10 cutover still carry and the app still renders.
+> Everything about the `reference_reload` CLI, targets, snapshots, plans and purges describes code that has been removed.
+
 This document is the contract for replacing the EAGGL factor and CFDE gene-set reference data in MySQL and Upstash with a new **reference generation**. The data comes from the LAP projection pipeline in `lap/`.
 
 Each reload:

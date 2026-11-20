@@ -19,6 +19,9 @@ export function appendLoadings(previous: readonly Schema<"FactorLoading">[], inc
   return [...previous, ...incoming.filter(row => { if (ids.has(row.id)) return false; ids.add(row.id); return true; })];
 }
 
+/** The libraries of a factor's retained gene sets, for the library filter. */
+export const loadingLibraries = (rows: readonly Schema<"FactorLoading">[]) => [...new Set(rows.flatMap(row => row.library ? [row.library] : []))].sort((a, b) => a.localeCompare(b));
+
 /** The gene page a factor page opens on. It needs only the factor, so it is read alongside the detail. */
 export const firstGenePage = { kind: "gene", metric: "joint", sort: "alphabetical", q: "", offset: 0, limit: 200 } as const;
 type PageRequest = { source_id: string; generation_id: string | null; gnomad_import_id?: string; kind: string; metric: string; sort: string; q: string; offset: number; limit: number };

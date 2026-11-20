@@ -57,7 +57,7 @@ export function AccountGraph({ result: initial, onReload, inspector }: Props) {
       if (!active || !container.current) return;
       const claimLabels = new Map(root.children.map((claim, index) => [claim.objectId, `C${index + 1}`]));
       const elements: ElementDefinition[] = layout.map(node => ({ group: "nodes", position: { x: node.x, y: node.y },
-        data: { id: node.data.id, objectId: node.data.objectId, diameter: node.r * 2, depth: node.depth, color: colors[node.data.kind], label: node.depth === 0 ? "Scientific account" : node.data.kind === "claim" ? claimLabels.get(node.data.objectId) || "" : "", labelOffset: -node.r + (node.depth === 0 ? 30 : 20) },
+        data: { id: node.data.id, objectId: node.data.objectId, diameter: node.r * 2, depth: node.depth, color: colors[node.data.kind], label: node.depth === 0 ? "Scientific account" : node.data.kind === "claim" ? claimLabels.get(node.data.objectId) || "" : "", labelOffset: -node.r + (node.depth === 0 ? 30 : 20), leaf: !node.data.children.length },
         classes: [node.data.kind, node.data.missing ? "missing" : ""].join(" "), locked: true }));
       instance = cytoscape({ container: container.current, elements, layout: { name: "preset", fit: true, padding: 50 },
         minZoom: 0.15, maxZoom: 5, wheelSensitivity: 0.2, autoungrabify: true, boxSelectionEnabled: false, selectionType: "single",
@@ -81,11 +81,13 @@ export function AccountGraph({ result: initial, onReload, inspector }: Props) {
           instance.nodes(".claim, .dataset, .file").forEach(node => {
             const kind: IconKind = node.hasClass("claim") ? "claim" : node.hasClass("dataset") ? "dataset" : "file";
             const diameter = node.renderedHeight(), position = node.renderedPosition();
+            // Circles with nothing inside carry their symbol at the center; a dataset holding files keeps it at the top.
+            const centered = kind === "file" || (kind === "dataset" && node.data("leaf"));
             // Keep small source circles quiet; zoom reveals their line symbols.
-            if (kind !== "claim" && diameter < (kind === "dataset" ? 40 : 24)) return;
+            if (kind !== "claim" && diameter < (centered ? 24 : 40)) return;
             const size = kind === "claim" ? diameter < 42 ? 0 : 13 : Math.max(11, Math.min(17, diameter * 0.2));
             markers.push({ id: node.id(), kind, text: node.data("label"), x: position.x, size,
-              y: kind === "file" ? position.y - size / 2 : position.y - diameter / 2 + (kind === "claim" ? Math.max(4, Math.min(10, diameter * 0.07)) : 3) });
+              y: centered ? position.y - size / 2 : position.y - diameter / 2 + (kind === "claim" ? Math.max(4, Math.min(10, diameter * 0.07)) : 3) });
           });
           setCircleMarkers(markers);
         });
@@ -168,6 +170,7 @@ export function AccountGraph({ result: initial, onReload, inspector }: Props) {
       <p className="sr-only" role="status">{graphKindLabel(selected.kind)}: {selected.label}. {selected.children.length} contained records.{selected.missing ? " Record not loaded." : ""}</p>
       {rendererError && <div className="notice" role="status"><p>{rendererError}</p><label>Scientific record<select aria-label="Choose a scientific record" value={selected.id} onChange={event => setSelectedId(event.target.value)}>{nodes.map(node => <option key={node.id} value={node.id}>{graphKindLabel(node.kind)}: {node.label}</option>)}</select></label></div>}
       <div className="account-explorer-legend" aria-label="Circle types">{(["claim", "dataset", "file"] as const).map(kind => <span key={kind}><i style={{ background: colors[kind] }}><CircleIcon kind={kind} /></i>{graphKindLabel(kind)}</span>)}</div><p className="account-explorer-scale">Circle sizes vary for visual clarity and do not indicate evidence strength. Shared sources appear within each use.</p>
+      {result.data_sources?.status === "unavailable" && <p className="notice">Data sources could not be traced for this account.</p>}
       {(selected.limited || selected.cycle || selected.missingReferences.length > 0) && <p className="notice">{selected.limited && "Some source paths reach the display limit. "}{selected.cycle && "Repeated provenance paths are shown once. "}{selected.missingReferences.length > 0 && "Some referenced source records have not been loaded. "}Inspect the scientific record for its full references.</p>}
       {!result.coverage.complete && <div className="account-explorer-coverage"><p>This source view is bounded. Missing records are not evidence of absence.</p>{result.coverage.next_cursor && !expired ? <button disabled={loading} onClick={() => void loadMore()}>{loading ? "Loading source records…" : "Load more source records"}</button> : <p>Further references may require opening their individual scientific records.</p>}</div>}
       {error && <div role="alert" className="error"><span>{error}</span>{expired && <button onClick={onReload}>Reload account</button>}</div>}

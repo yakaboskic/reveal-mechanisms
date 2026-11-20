@@ -149,9 +149,10 @@ Read closing remarks; open associated claims on demand.
 
 **Request:** Exact account/claim/GeneSet/object ID and optional payload/traversal bounds.
 
-**Response:** DAPPER document, payload checksums, coverage, artifacts and research_statement state.
+**Response:** DAPPER document, payload checksums, coverage, artifacts and research_statement state; provenance wrappers, traces and distinct claim reuse totals.
 
 - `GET /v1/accounts/{dapper_id}` — [request request/response](examples/getAccount.request.json)
+- `GET /v1/accounts/{account_id}/provenance` — [request request/response](examples/getAccountProvenance.request.json)
 - `GET /v1/claims/{dapper_id}` — [request request/response](examples/getClaim.request.json)
 - `GET /v1/gene-sets/{dapper_id}` — [request request/response](examples/getGeneSet.request.json)
 - `GET /v1/objects/{dapper_id}` — [request request/response](examples/resolveDapperObject.request.json)
@@ -166,6 +167,7 @@ Read closing remarks; open associated claims on demand.
 - Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.
 - Partial provenance and unavailable downloads remain explicit.
 - Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.
+- Account provenance is a REST application view over unchanged scientific records. Trace pages repeat full-account totals; incomplete lineage produces explicit lower-bound counts.
 
 ### 7. Generate the cited statement automatically
 
@@ -388,6 +390,25 @@ Open an exact reference factor, search its retained loadings, and follow a gene 
 - Gene sets retain the top 50 projections by joint or marginal rank; absent weights are never treated as zero.
 - Public reference reads expose imported catalog data only; account gene-set permissions are unchanged.
 
+### Inspect traits, gene-set betas and factor-trait links
+
+Open a KPN trait, page its gene-set betas or a gene set's traits, page a factor's linked phenotypes or a trait's linked factors, and resolve a minted Mechanism id to its factor.
+
+**Request:** KPN trait, gene set, factor or Mechanism id; library, scope and sort; offset and bounded page size.
+
+**Response:** Trait detail with portal GWAS links, beta and link pages with coverage, and the current factor of a Mechanism id, each with the published release id.
+
+- `GET /v1/traits/{kpn_trait_id}` — [request request/response](examples/getTrait.request.json)
+- `GET /v1/trait-gene-sets` — [trait request/response](examples/listTraitGeneSets.trait.json)
+- `GET /v1/trait-gene-sets` — [gene set request/response](examples/listTraitGeneSets.gene_set.json)
+- `GET /v1/factor-trait-links` — [factor request/response](examples/listFactorTraitLinks.factor.json)
+- `GET /v1/factor-trait-links` — [trait request/response](examples/listFactorTraitLinks.trait.json)
+- `GET /v1/mechanism-objects/{dapper_id}` — [request request/response](examples/getMechanismObject.request.json)
+
+- Every read is of the one published release; a release without the betas or links returns 404.
+- Only PIGEAN-kept gene sets have betas and only links at BH q <= 0.05 are stored: absent rows are not zeros or negatives.
+- A Mechanism id of a superseded release's factor returns 410 with the frozen factor; portal links are built from ids, never fetched.
+
 ### Download and resume local research
 
 Prepare a frozen workspace, explore public science anonymously and inspect accepted/reused results in Research runs.
@@ -523,8 +544,23 @@ Explicitly request one preliminary completion, review the saved direction, then 
 - Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.
 - Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently.
 
+### Read an agent job's Scientific Account
+
+Fetch the account a deliverable scientific_account agent job returned, and the source files it saved and quotes.
+
+**Request:** An owned, succeeded agent job whose result carries an account block.
+
+**Response:** The DAPPER document as deposited, its summary and deposit outcome; exact saved source bytes by checksum.
+
+- `GET /v1/jobs/{job_id}/account` — [request request/response](examples/getJobAccount.request.json)
+- `GET /v1/jobs/{job_id}/account/sources/{sha256}` — [request request/response](examples/downloadJobAccountSource.request.json)
+
+- Owner only; 404 until the job has succeeded and for every other job.
+- The document names each saved source file by checksum and URL and never carries it; the source download is owner-only.
+- A failed or unconfigured deposit is reported in the account block and does not fail the job.
+
 ## Evidence and validation
 
 Requests/responses are taken from the existing validated OpenAPI exchange library. The CADinT2D analysis/paragraph sequence is internally linked. The CAD source-selected gap now frames the request and account. The evidence package is a separate captured input; the authored account is not its validated agent output. Semantic scores and agent outputs remain illustrative fixtures.
 
-The mapping covers 91 operations and all 114 exchanges. OpenAPI SHA-256: `a3834b0dd1fbebfc27a46a6040cc7ac2cdee0962dd5293bf99becae00051a962`. No endpoints or payloads were changed to build this diagram.
+The mapping covers 98 operations and all 123 exchanges. OpenAPI SHA-256: `b40d40667d66db388317726dd4cb430771d45f15d7ccb5761cbb5087c909dd3d`. No endpoints or payloads were changed to build this diagram.

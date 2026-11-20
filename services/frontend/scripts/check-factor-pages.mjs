@@ -129,6 +129,17 @@ async function harness(name, options = {}) {
       return;
     }
     if (path === `/api/backend/v1/reference-factors/${old.archive_id}`) return route.fulfill({ json: old });
+    // The gene-set page's associated traits and the factor's linked traits: contract examples, pinned to this fixture's reference.
+    if (path === '/api/backend/v1/trait-gene-sets') {
+      const geneSet = url.searchParams.get('gene_set_id'); assert.ok(geneSet && !url.searchParams.get('trait_id'), 'Associated traits are read by gene set');
+      const json = example('/v1/trait-gene-sets', 'gene_set');
+      return route.fulfill({ json: { ...json, gene_set_id: geneSet, release_id: generation, items: json.items.map(row => ({ ...row, gene_set_id: geneSet })) } });
+    }
+    if (path === '/api/backend/v1/factor-trait-links') {
+      assert.equal(url.searchParams.get('source_id'), factor.source_id);
+      const json = example('/v1/factor-trait-links', 'factor');
+      return route.fulfill({ json: { ...json, source_id: factor.source_id, scope: url.searchParams.get('scope') || 'all', sort: url.searchParams.get('sort') || 'phewas_q', release_id: generation, items: json.items.map(row => ({ ...row, source_id: factor.source_id })) } });
+    }
     unexpected.push(path); return route.fulfill({ status: 500, json: { detail: 'Unexpected browser fixture route' } });
     } catch (error) {
       errors.push(String(error));

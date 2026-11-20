@@ -11,12 +11,13 @@ import base64
 import hmac
 import re
 from contextlib import asynccontextmanager
+from time import monotonic
 from fastapi import BackgroundTasks, FastAPI, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse, Response, RedirectResponse
 from starlette.concurrency import run_in_threadpool
 from jsonschema import Draft202012Validator
 from .auth import Problem, decode_assertion, owned, require_owned, principal, principal_with, publication_principal, service_authority
-from .catalog import GENERATION_TTL_SECONDS, Catalog
+from .catalog import RELEASE_TTL_SECONDS, Catalog
 from .repository import DatabaseBusy, Repository, now, uid, digest
 from .runtime_config import ROOT, artifacts_root
 from .service_routing import mount_service
@@ -27,11 +28,12 @@ from . import analysis_outcomes
 from . import reference_generation
 from . import votes
 from . import user_inputs
+from . import gap_rerank
 
 CONTRACT = json.loads((ROOT/'api/openapi.json').read_text())
 GATEWAY = json.loads((ROOT/'schema/gateway.schema.json').read_text())
-# The catalog polls the active reference generation on its own thread, never inside a request's transaction.
-repo, catalog = Repository(), Catalog(poll_seconds=GENERATION_TTL_SECONDS)
+# The catalog polls the published reference release on its own thread, never inside a request's transaction.
+repo, catalog = Repository(), Catalog(poll_seconds=RELEASE_TTL_SECONDS)
 
 def validate_query(request:Request):
     template=getattr(request.scope.get('route'),'path','')
@@ -165,35 +167,27 @@ def fresh_principal(kind, profile=None):
         'person': None, 'workspace_expires_at': (datetime.now(timezone.utc)+timedelta(days=30)).isoformat().replace('+00:00','Z') if kind=='anonymous' else None}
     return me
 
-def current_binding(binding):
-    """A frozen catalog binding belongs to the served reference generation.
+def served_anchor(source_id):
+    """An anchor is current iff the served reference release still serves its factor id.
 
-    Legacy mode (no active generation) keeps today's behaviour: saved selections retain
-    the exact run bindings first saved with them, so every binding is current. Catalogs
-    without generations (test doubles) accept every binding; in active mode a binding
-    whose generation cannot be derived is never current.
+    Saved selections retain the exact run bindings first saved with them while their factor is
+    served, whichever release froze them. Catalogs without factors (test doubles) serve every anchor.
     """
-    served=getattr(catalog,'reference_generation_id',None)
-    if served is None or not getattr(catalog,'active_generation',None): return True
-    try: return reference_generation.generation_of_binding(binding)==served
-    except reference_generation.ReferenceError: return False
+    factors=getattr(catalog,'factors',None)
+    return factors is None or source_id in factors
 
 def superseded_source(source_id):
-    """A factor id the active (non-legacy) generation no longer serves."""
-    return bool(getattr(catalog,'active_generation',None) and reference_generation.model_of_source_id(source_id)
-        and source_id not in catalog.factors)
+    """An EAGGL factor id that the served reference release does not serve."""
+    factors=getattr(catalog,'factors',None)
+    return factors is not None and reference_generation.model_of_source_id(source_id) is not None and source_id not in factors
 
 def superseded(detail,status=409,**extra):
     return Problem(status,'REFERENCE_GENERATION_SUPERSEDED',detail,**extra)
 
-def reload_gate(tx):
-    if reference_generation.read_gate(tx):
-        raise Problem(503,'REFERENCE_RELOAD_IN_PROGRESS','Reference data is being reloaded. Retry shortly.')
-
 def preload_catalog(composer=None):
-    """Cold-load the catalog before a write transaction opens: the cold load reads the active
-    generation through the application pool, which must never nest inside a pooled write
-    transaction. A loaded catalog does no I/O. Failures surface later with their usual precedence."""
+    """Cold-load the catalog before a write transaction opens: a cold load reads the reference
+    tables and checks the vector index, I/O that must never run while a write transaction holds
+    the global write lock. A loaded catalog does no I/O. Failures surface later with their usual precedence."""
     if composer is not None and not (composer.get('source_gap') or composer.get('eaggl_anchors')): return
     load=getattr(catalog,'load',None)
     if not load: return
@@ -202,34 +196,32 @@ def preload_catalog(composer=None):
 
 def freeze_draft_bindings(tx,draft_id,owner,composer,*,new=False):
     """An unchanged selection retains the exact run bindings first saved with it,
-    while its reference generation is still served; otherwise it is re-validated.
+    while the served reference release still serves its factor; otherwise it is re-validated.
     new: the draft is created in this transaction, so there is no prior binding to read and the caller inserts
     the returned binding with it."""
     gap=catalog.selected(composer['source_gap']) if composer['source_gap'] else None
     if composer['eaggl_anchors'] and hasattr(catalog,'load'): catalog.load()
     previous=None if new else tx.get('draft_binding',draft_id)
     previous=previous['data'].get('selections',{}) if previous else {}
-    selections={}; gate_checked=False; suggestions={}   # automatic anchors share one suggestion: read and parse it once
+    selections={}; suggestions={}   # automatic anchors share one suggestion: read and parse it once
     for selection in composer['eaggl_anchors']:
         reference=selection['reference']; native=reference['source_id']; old=previous.get(native)
-        stale=bool(old) and not current_binding(old['binding'])
+        stale=bool(old) and not served_anchor(native)
         if old and old['reference']==reference and not stale:
             selections[native]=old
         else:
-            # Anchor writes wait for a reload to finish; unchanged anchors stay editable.
-            if not gate_checked: reload_gate(tx); gate_checked=True
             try:
                 catalog.validate_composer(dict(composer,eaggl_anchors=[selection]))
             except Problem as error:
                 if error.status==409 and error.code=='SOURCE_REVISION_CHANGED' and (stale or superseded_source(native)):
-                    raise superseded('This anchor belongs to a superseded reference generation; select current factors.') from None
+                    raise superseded('This anchor is no longer served by the current reference data; select current factors.') from None
                 raise
             selections[native]={'reference':reference,'record':catalog.factors[native],'binding':catalog.bindings[native]}
         identity=selection.get('suggestion_id')
         if identity and identity not in suggestions: suggestions[identity]=tx.get('suggestion',identity)
         suggestion=suggestions.get(identity) if identity else None
         if suggestion and native in suggestion['data']['hits']:
-            selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k!='hits'}|{'hit':suggestion['data']['hits'][native]}
+            selections[native]['retrieval']={k:v for k,v in suggestion['data'].items() if k not in ('hits','rerank_pool')}|{'hit':suggestion['data']['hits'][native]}
     if len(selections)!=len(composer['eaggl_anchors']): raise Problem(422,'DUPLICATE_ANCHOR','Select each native mechanism once.')
     frozen={'dismech_import_id':catalog.dismech_import if gap else None,'source_gap':gap,'selections':selections}
     if not new: tx.put('draft_binding',draft_id,owner,frozen)
@@ -250,6 +242,58 @@ def admin_telemetry(request: Request):
 def admin_database_authority(request: Request):
     service_authority(request.headers.get('authorization'))
     decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_telemetry')
+
+def admin_settings_authority(request: Request):
+    """Changing limits is a different authority from reading telemetry: its own assertion purpose, and the
+    verified admin's email for the change record."""
+    service_authority(request.headers.get('authorization'))
+    claims = decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_settings')
+    email = claims.get('admin_email')
+    return email if isinstance(email, str) and 0 < len(email) <= 254 else 'admin-console'
+
+@app.get('/internal/v1/admin/agent-limits')
+def admin_agent_limits(actor: str = Depends(admin_settings_authority)):
+    from . import agent_limits
+    with repo.read_transaction() as tx:
+        return JSONResponse(agent_limits.view(tx), headers={'Cache-Control': 'private, no-store'})
+
+@app.put('/internal/v1/admin/agent-limits')
+async def admin_change_agent_limits(request: Request, actor: str = Depends(admin_settings_authority)):
+    from . import agent_limits
+    from .repository import Conflict
+    raw = await request.body()
+    if len(raw) > 16_384: raise Problem(413, 'INVALID_LIMITS', 'The limits change is too large.')
+    try: body = json.loads(raw)
+    except ValueError: raise Problem(422, 'INVALID_LIMITS', 'Send the limits as JSON.') from None
+    def write():
+        with repo.transaction() as tx:
+            return agent_limits.change(tx, body, actor)
+    try: result = await run_in_threadpool(write)
+    except agent_limits.LimitsError as exc: raise Problem(422, 'INVALID_LIMITS', str(exc)[:400]) from None
+    except Conflict as exc: raise Problem(409, 'LIMITS_CHANGED', str(exc)[:400]) from None
+    return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
+
+def admin_content_authority(request: Request):
+    """Reading what a job was asked and what it answered is its own authority: the admin_content purpose, and the
+    verified admin's email, which every read is recorded under. An assertion that names no admin is refused."""
+    service_authority(request.headers.get('authorization'))
+    claims = decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_content')
+    email = claims.get('admin_email')
+    if not isinstance(email, str) or not 0 < len(email) <= 254:
+        raise Problem(401, 'INVALID_IDENTITY_PROOF', 'The signed session does not name an admin.')
+    return email
+
+@app.get('/internal/v1/admin/jobs/{job_id}/run')
+def admin_job_run(job_id: str, admin: str = Depends(admin_content_authority)):
+    from .admin_run import job_run
+    return JSONResponse(job_run(repo, job_id, admin), headers={'Cache-Control': 'private, no-store'})
+
+@app.get('/internal/v1/admin/jobs/{job_id}/transcript')
+def admin_job_transcript(job_id: str, attempt: int | None = Query(None, ge=1, le=100000), after: int | None = Query(None, ge=0),
+                         limit: int = Query(100, ge=1, le=200), admin: str = Depends(admin_content_authority)):
+    from .admin_transcript import job_transcript
+    return JSONResponse(job_transcript(repo, job_id, admin, attempt=attempt, after=after, limit=limit),
+                        headers={'Cache-Control': 'private, no-store'})
 
 @app.get('/internal/v1/admin/jobs/{job_id}', dependencies=[Depends(admin_database_authority)])
 def admin_job(job_id: str, before: str | None = Query(None, max_length=12), limit: int = Query(100, ge=1, le=100)):
@@ -277,7 +321,7 @@ def admin_cell(table: str, key: str = Query(..., max_length=4096), column: str =
 @app.get('/readyz')
 @app.get('/health/ready')
 def ready():
-    from .api_keys import configuration as api_key_configuration
+    from .api_keys import keys as api_key_configuration
     from .admin_read_keys import configuration as admin_key_configuration
     api_key_configuration()
     admin_key_configuration()
@@ -292,6 +336,8 @@ def ready():
     # are observed from subscriber state; authoritative API writes survive a
     # notification outage and retain their durable publication intent.
     from .redis_notifications import configuration
+    # sources: the served release's last verified sources (from the monitor, or the catalog's cached readiness
+    # when no monitor runs); a probe never loads the catalog.
     return {'status': 'ready', **database, 'sources': sources,
         'execution_mode': os.getenv('REVEAL_EXECUTION_MODE','box'), 'job_transport':jobs.transport(),
         'notifications':{'transport':configuration()[0], 'delivery':'pubsub', 'polling':False}}
@@ -566,15 +612,17 @@ def search_mechanisms(q: str='', mode: str='hybrid', limit: int=20,source:str='a
         items+=contexts; items.sort(key=lambda item:(-item['ranking']['value'],item['record']['source_id']))
         for rank,item in enumerate(items,1): item['ranking']['rank']=rank
     provenance=catalog.provenance(q,mode,semantic,**index)
-    if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.mapping_run])
+    # The release id, not the run fields: those name the embedding space, which a release that changes factors keeps.
+    if source=='all': provenance['corpus_snapshot']=digest([catalog.dismech_import,catalog.release_id])
     # Order, ranking and exact record identities, never the per-item retrieval provenance (up to 1,000 candidate hits each).
+    # reference_generation_id is the served release id (the catalog keeps the field name).
     snapshot=['mechanism-snapshot-v2',provenance,getattr(catalog,'reference_generation_id',None),[[item['record'].get('source'),item['record']['source_id'],
         item['record'].get('source_revision'),(item['record'].get('object') or {}).get('id'),item['ranking']] for item in items]]
     return {**page(items,limit=limit,cursor=cursor,scope=digest(['mechanisms',q,mode,source,model]),snapshot_items=snapshot),'search':provenance}
 
 def pinned_index():
-    """{'index': the served semantic index}, resolved once per request so its hits, context inputs and provenance
-    share one snapshot; {} for catalogs without one (test stand-ins)."""
+    """{'index': the served release's semantic index}, resolved once per request so its hits, context inputs and
+    provenance share one index; {} for catalogs without one (test stand-ins)."""
     resolve=getattr(catalog,'retrieval_index',None)
     index=resolve() if resolve else None
     return {'index':index} if index is not None else {}
@@ -586,11 +634,43 @@ async def suggest(request: Request):
     # the entire synchronous path off the event loop, including cached results.
     return await asyncio.to_thread(build_suggestions,body)
 
+def rerank_status(body,remaining):
+    """None while the Jev rerank flag is off (responses and audit rows unchanged), else its initial status."""
+    if not gap_rerank.enabled(): return None
+    if body.get('subquery'): return {'status':'not_applicable','reason':'subquery'}
+    if body.get('mode','semantic')!='semantic': return {'status':'not_applicable','reason':'hybrid_mode'}
+    if not remaining: return {'status':'not_applicable','reason':'no_open_slots'}
+    model={'model':gap_rerank.MODEL,'rubric_version':gap_rerank.RUBRIC_VERSION}
+    return {**model,'status':'fallback','reason':'not_configured'} if not gap_rerank.api_key() else {**model,'status':'pending'}
+
+def reranked_suggestions(gap,contexts,remaining,exclude,rerank,index):
+    """(items, public rerank status, audit fields): Jev order over every eligible disease identity plus the
+    top cosine factors, or today's disease-then-cosine policy over that pool when Jev cannot answer."""
+    disease_items=getattr(catalog,'disease_factors',lambda *_: [])(gap,gap_rerank.DISEASE_POOL_SIZE,exclude)
+    # Rank the wide pool by the vector search's own similarities: exact re-scoring would download every candidate's vectors.
+    cosine_items=catalog.suggest_factors(contexts,'semantic',gap_rerank.POOL_SIZE,exclude,precomputed=True,search_scores=True,**index)
+    entries=gap_rerank.pool(disease_items,cosine_items)
+    mechanisms=[catalog.mechanisms[identity] for identity,_ in contexts if identity in catalog.mechanisms]
+    factors=[(entry['item']['record']['source_id'],gap_rerank.factor_view(entry['item']['record'])) for entry in entries]
+    public={**{k:v for k,v in rerank.items() if k!='reason'},'pool_size':len(entries)}; started=monotonic()
+    try:
+        scores,meta=gap_rerank.score_pool(gap_rerank.state(gap,mechanisms),factors,key=gap_rerank.api_key(),deadline=started+gap_rerank.timeout_seconds())
+        items,public['status']=gap_rerank.rank(entries,scores,remaining),'applied'
+    except Exception as error:
+        # Advisory ordering never fails a suggestion; known skips carry a short public code.
+        if not isinstance(error,gap_rerank.Skip):
+            import logging
+            logging.getLogger('reveal').error('Suggestion rerank failed (%s)', type(error).__name__)
+        scores,meta={},{}
+        items,public['status'],public['reason']=gap_rerank.fallback(entries,disease_items,remaining),'fallback',getattr(error,'reason','internal_error')
+    audit={**public,**meta,'pool_scores':'vector_search','elapsed_ms':round((monotonic()-started)*1000)}
+    return items,public,{'rerank':audit,'rerank_pool':gap_rerank.pool_rows(entries,scores)}
+
 def build_suggestions(body):
     validate(body,'SuggestInput'); gap=catalog.selected(body['source_gap'])
-    # Manual anchors must come from the served generation, so a draft never mixes generations.
+    # Manual anchors must be factors the served reference release still serves.
     if any(superseded_source(anchor['source_id']) for anchor in body['manual_eaggl_anchors']):
-        raise superseded('A kept anchor belongs to a superseded reference generation; remove it and select current factors.')
+        raise superseded('A kept anchor is no longer served by the current reference data; remove it and select current factors.')
     exclude=set(body['dismissed_source_ids']) | {s['source_id'] for s in body['manual_eaggl_anchors']}
     contexts=[(a['target']['source_id'],catalog.mechanisms[a['target']['source_id']]['object']['description']) for a in gap['attachments'] if a['target'] and a['target']['source_id'] in catalog.mechanisms]
     query=body.get('subquery') or ' '.join(text for _,text in contexts) or gap['object']['text']
@@ -598,32 +678,44 @@ def build_suggestions(body):
     if not contexts: contexts=[(gap['object']['id'],gap['object']['text'])]
     remaining=max(0,5-len(body['manual_eaggl_anchors']))
     precomputed=not bool(body.get('subquery'))
-    disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
-    excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
     index=pinned_index()  # the response's search provenance always needs it, so no request resolves it more than once
-    items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed,**index)
+    rerank=rerank_status(body,remaining); rerank_audit={'rerank':rerank} if rerank else {}
+    if rerank and rerank['status']=='pending':
+        items,rerank,rerank_audit=reranked_suggestions(gap,contexts,remaining,exclude,rerank,index)
+    else:
+        disease_candidates=getattr(catalog,'disease_factors',lambda *_: [])(gap,remaining,exclude)
+        excluded=exclude | {item['record']['source_id'] for item in disease_candidates}
+        items=disease_candidates+catalog.suggest_factors(contexts,body.get('mode','semantic'),remaining-len(disease_candidates),excluded,precomputed=precomputed,**index)
     for rank,item in enumerate(items,1):
         item['ranking']['rank']=rank
         item.setdefault('reason','Similarity to selected source context; inspect for relevance, not biological support.')
     context_provenance=catalog.context_embedding_provenance(contexts,**index) if precomputed else {'context_embedding_origin':'user_subquery'}
     suggestion_id=uid()
     # A new uuid-keyed audit row, committed before its id is returned; only a later fenced draft write reads it.
+    # Its run fields are the catalog's, which name the served release's embedding space, like the run fields of its bindings.
     repo.append('suggestion',suggestion_id,'catalog',{'mode':body.get('mode','semantic'),'embedding_run_id':catalog.embedding_run,'mapping_run_id':catalog.mapping_run,
-        **context_provenance,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
+        **context_provenance,**rerank_audit,'hits':{x['record']['source_id']:{'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason'],
             **({'retrieval':x['retrieval']} if 'retrieval' in x else {}),
-            **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {})} for x in items}})
+            **({'context_similarities':x['context_similarities']} if 'context_similarities' in x else {}),
+            **{key:x[key] for key in ('jev','cosine_rank','disease_identity') if key in x}} for x in items}})
+    limitations=['Retrieval similarity is not evidence of biological support.']
+    if rerank and rerank['status']=='applied':
+        limitations.append('Order reflects a Jev model rating of factor names against the knowledge gap text; it is not evidence.')
     return {'suggestion_id':suggestion_id,'automatic_anchors':[{'factor':x['record'],'ranking':x['ranking'],'matched_context_ids':x['contexts'],'reason':x['reason']} for x in items],
-        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':['Retrieval similarity is not evidence of biological support.']}
+        'automatic_target_count':5,'search':catalog.provenance(query,body.get('mode','semantic'),True,**index),'limitations':limitations,
+        **({'rerank':rerank} if rerank else {})}
 
 def archived_factor(source_id):
-    """(superseded, frozen snapshot|None) for a factor id the served generation does not serve.
+    """(superseded, frozen snapshot|None) for a factor id the served reference release does not serve.
 
-    Legacy mode has no superseded generation, so unknown ids stay 404 as before.
-    A same-model id with no captured snapshot is simply unknown.
+    The frozen snapshot is the latest captured for the source_id, whichever reference data captured it.
+    An id of another reference model is always superseded; an unknown id of the served model without
+    a captured snapshot is simply unknown.
     """
     if not superseded_source(source_id): return False,None
     lookup=getattr(catalog,'archived_for_source',None); archived=lookup(source_id) if lookup else None
-    return bool(archived) or reference_generation.model_of_source_id(source_id)!=getattr(catalog,'model',None),archived
+    model=getattr(catalog,'model',reference_generation.KPN_MODEL)
+    return bool(archived) or reference_generation.model_of_source_id(source_id)!=model,archived
 
 @app.get('/v1/reference-factors/{archive_id}')
 def reference_factor(archive_id:str):
@@ -640,15 +732,36 @@ def get_factor_detail(source_id:str,generation_id:str|None=None,source_revision:
 
 @app.get('/v1/factor-loadings')
 def get_factor_loadings(source_id:str,kind:str='gene',metric:str='joint',sort:str='loading',q:str='',limit:int=200,offset:int=0,
-                        generation_id:str|None=None,source_revision:str|None=None,gnomad_import_id:str|None=None):
+                        generation_id:str|None=None,source_revision:str|None=None,gnomad_import_id:str|None=None,library:str|None=None):
     from .factor_details import factor_loadings
     return factor_loadings(catalog,source_id,kind=kind,metric=metric,sort=sort,q=q,limit=limit,offset=offset,
-                           generation_id=generation_id,source_revision=source_revision,gnomad_import_id=gnomad_import_id)
+                           generation_id=generation_id,source_revision=source_revision,gnomad_import_id=gnomad_import_id,library=library)
 
 @app.get('/v1/catalog/gene-sets/{gene_set_id}')
 def get_catalog_gene_set(gene_set_id:str,generation_id:str|None=None):
     from .factor_details import gene_set_detail
     return gene_set_detail(catalog,gene_set_id,generation_id=generation_id)
+
+@app.get('/v1/traits/{kpn_trait_id}')
+def get_trait(kpn_trait_id:str):
+    from .trait_details import trait_detail
+    return trait_detail(kpn_trait_id)
+
+@app.get('/v1/trait-gene-sets')
+def list_trait_gene_sets(trait_id:str|None=None,gene_set_id:str|None=None,library:str|None=None,sort:str='beta_uncorrected',limit:int=50,offset:int=0):
+    from .trait_details import trait_gene_sets
+    return trait_gene_sets(trait_id=trait_id,gene_set_id=gene_set_id,library=library,sort=sort,limit=limit,offset=offset)
+
+@app.get('/v1/factor-trait-links')
+def list_factor_trait_links(source_id:str|None=None,trait_id:str|None=None,scope:str='all',sort:str='phewas_q',limit:int=50,offset:int=0):
+    from .trait_details import factor_trait_links
+    return factor_trait_links(source_id=source_id,trait_id=trait_id,scope=scope,sort=sort,limit=limit,offset=offset)
+
+# Registered before /v1/mechanisms/{source_id:path}, which must never shadow it.
+@app.get('/v1/mechanism-objects/{dapper_id:path}')
+def get_mechanism_object(dapper_id:str):
+    from .trait_details import mechanism_object
+    return mechanism_object(catalog,dapper_id)
 
 @app.get('/v1/mechanisms/{source_id:path}')
 def get_mechanism(source_id:str,source_revision:str|None=None):
@@ -656,7 +769,7 @@ def get_mechanism(source_id:str,source_revision:str|None=None):
     if not record and source_id.startswith('dismech:'): record=catalog.dismech_catalog().get(source_id)
     if not record:
         gone,archived=archived_factor(source_id)
-        if gone: raise superseded('This factor belongs to a superseded reference generation.',410,archived_reference_factor=archived)
+        if gone: raise superseded('This factor is no longer served by the current reference data.',410,archived_reference_factor=archived)
         raise Problem(404,'NOT_FOUND','The mapped mechanism is unavailable.')
     if source_revision and source_revision!=record['source_revision']: raise Problem(409,'SOURCE_REVISION_CHANGED','The exact requested source revision is unavailable.')
     return record
@@ -676,7 +789,7 @@ async def create_draft(request:Request):
         validate(body,'DraftCreate'); preload_catalog(body['composer'])
         key=request.headers.get('idempotency-key')
         with repo.transaction() as tx:
-            reads=[('draft',body.get('source_draft_id'))]+([(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID)] if body['composer'].get('eaggl_anchors') else [])
+            reads=[('draft',body.get('source_draft_id'))]
             user=principal_for(tx,request.headers.get('authorization'),'draft',key,reads)['user_id']
             def create():
                 draft={'id':uid(),'owner_user_id':user,'version':1,'composer':body['composer'],'created_at':now(),'updated_at':now()}
@@ -728,7 +841,7 @@ async def patch_draft(draft_id:str,request:Request):
         if 'composer' in body: preload_catalog(body['composer'])
         key=request.headers.get('idempotency-key')
         with repo.transaction() as tx:
-            reads=[('draft',draft_id)]+([('draft_binding',draft_id),(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID)] if 'composer' in body else [])
+            reads=[('draft',draft_id)]+([('draft_binding',draft_id)] if 'composer' in body else [])
             user=principal_for(tx,request.headers.get('authorization'),'draft:'+draft_id,key,reads)['user_id']
             def update():
                 row=owned(tx,'draft',draft_id,user); draft=user_inputs.available(row['data'])
@@ -892,8 +1005,8 @@ def freeze_research_request(tx, identity, body, *, retrieval_mode=None, write=Tr
     if not composer['source_gap'] or not composer['eaggl_anchors']: raise Problem(422,'ANCHOR_REQUIRED','Select a source question and at least one mechanism anchor.')
     catalog.selected(composer['source_gap'])
     saved=owned(tx,'draft_binding',draft['id'],user)['data']; gap=saved['source_gap']
-    if not all(current_binding(saved['selections'][s['reference']['source_id']]['binding']) for s in composer['eaggl_anchors']):
-        raise superseded('This draft uses factors from a superseded reference generation; start a new analysis on this gap with current factors.')
+    if not all(served_anchor(s['reference']['source_id']) for s in composer['eaggl_anchors']):
+        raise superseded('This draft uses factors the current reference data no longer serves; start a new analysis on this gap with current factors.')
     contexts=[a['target'] for a in gap['attachments'] if a['target']]
     # Freeze selected attachment bodies once. Old requests retain their original references.
     pinned_context=[]
@@ -931,6 +1044,44 @@ def check_job_quota(tx, identity, kind='analysis'):
         if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
 
 
+def admit_agent_job(identity):
+    """A general agent job runs any prompt with shell and web tools, so only operator-chosen workspaces may start one:
+    REVEAL_AGENT_JOB_USERS lists their user ids (any principal kind, e.g. an API-key workspace), and * admits every
+    registered user, never an anonymous guest. Unset, nobody can."""
+    allowed={value.strip() for value in os.getenv('REVEAL_AGENT_JOB_USERS','').split(',') if value.strip()}
+    if not (identity['user_id'] in allowed or '*' in allowed and identity['principal_kind']=='registered'):
+        raise Problem(403,'AGENT_JOBS_NOT_ENABLED','General agent jobs are not enabled for this workspace.')
+    if jobs.transport()!='workflow':
+        raise Problem(409,'AGENT_JOBS_UNAVAILABLE','General agent jobs need the durable workflow runtime.')
+
+
+def agent_job_rows(tx, identity, body):
+    """Freeze the prompt, tools and limits into the queued job. Each limit's default and ceiling come from the
+    admin console, then the environment, then the code (agent_limits). A scientific_account job also freezes its
+    question and claims as DAPPER nodes (agent_account) and, beside the input, who asked for it."""
+    from . import agent_account, agent_limits, agent_output
+    from .box_agent import DEFAULT_MODEL, AgentInputError, freeze_input
+    policy=agent_limits.policy(tx)
+    try:
+        frozen=freeze_input(body,policy=policy,default_model=os.getenv('REVEAL_AGENT_JOB_MODEL') or DEFAULT_MODEL,
+                            account_builder=agent_account.build,schema_checker=agent_output.check_schema)
+    except AgentInputError as exc:
+        raise Problem(422,'INVALID_REQUEST',str(exc)[:400]) from None
+    job,rows=jobs.new(identity['user_id'],'agent',inputs=frozen)
+    queue=next(data for kind,_,_,data in rows if kind=='queue')
+    # For the admin console's limits table (admin_run), beside the input and never in it: which limits the request
+    # named (freeze_input refused any other key) and each ceiling in force when the job was queued.
+    queue['requested_limits']=sorted(body.get('limits') or {})
+    queue['limit_ceilings']={key:entry['ceiling'] for key,entry in policy.items()}
+    if frozen['deliverable']=='scientific_account':
+        # Attribution of the account, as an analysis freezes it. It sits on the queue record beside the input, never
+        # in it: the input is copied into the Box, and the agent must not be able to read or choose who it writes as.
+        queue['attribution']={'user_id':identity['user_id'],'person_id':None,'display_name':identity.get('display_name'),
+            'orcid':identity.get('orcid'),'orcid_authenticated':identity.get('orcid_authenticated',False),'observed_at':now(),
+            'principal_kind':identity['principal_kind']}
+    return job,rows
+
+
 def analysis_job_rows(identity, frozen, binding, inputs):
     """Stage an analysis around an already authorized frozen request; no extra reads or writes."""
     from . import research_hosted
@@ -942,17 +1093,20 @@ def create_job_transaction(body,authorization,idempotency_key):
     analysis=body.get('kind')=='analysis'
     if analysis: preload_catalog()
     with repo.transaction() as tx:
-        reads=[(reference_generation.CONTROL_KIND,reference_generation.CONTROL_ID),('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
+        reads=[('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
         identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
+            if body['kind']=='agent': admit_agent_job(identity)
             check_job_quota(tx,identity,body['kind'])
+            if body['kind']=='agent': return agent_job_rows(tx,identity,body)
             if body['kind']=='paragraph':
-                # Research statements need no reference data: allowed on archived accounts and during reloads.
+                # Research statements need no reference data: allowed on archived accounts.
                 account=owned(tx,'account',body['account_id'],user)
                 job,rows=jobs.new(user,'paragraph',account_id=body['account_id'],inputs=body)
                 jobs.update_paragraph_state(tx,job)
                 return job,rows
-            reload_gate(tx)
+            # No reload gate: a release publish swaps the reference tables in one RENAME, and an anchor the
+            # served release no longer serves is refused by freeze_research_request (409).
             # The request is frozen as progressive and written once, with every other new row, in one statement.
             frozen,binding,rows=freeze_research_request(tx,identity,body,retrieval_mode='progressive',write=False)
             job,queued=analysis_job_rows(identity,frozen,binding,body)
@@ -1038,7 +1192,7 @@ def explorations(request:Request,limit:int=50,cursor:str|None=None):
 async def record_exploration(request:Request):
     body=await request.json(); validate(body,'ExplorationInput')
     def record():
-        # catalog.selected may reload the catalog after a reference cutover: keep it off the event loop.
+        # catalog.selected may cold-load the catalog: keep it off the event loop.
         gap=catalog.selected(body['source_gap'])
         with repo.transaction() as tx:
             user=principal(tx,request.headers.get('authorization'))['user_id']
@@ -1069,28 +1223,29 @@ def accounts(request:Request,limit:int=20,cursor:str|None=None,gap_id:str|None=N
         return page(items,(viewer or '') if scope=='public' else user,limit,cursor,listing_scope(['accounts',gap_id,query,scope,sort],reference_state))
 
 @app.get('/v1/leaderboard')
-def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',limit:int=20,cursor:str|None=None):
+def community_leaderboard(request:Request,view:str='researchers',sort:str|None=None,evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    sort=leaderboard.options(view,sort,evidence)
+    sort=leaderboard.options(view,sort,evidence,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)  # Invalid supplied credentials never downgrade to public.
-        projection=leaderboard.build(tx,evidence)
+        projection=leaderboard.build(tx,evidence,scope)
     items=leaderboard.ranking(projection,view,sort)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence}
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard',view,sort,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'sort':sort,'evidence':evidence,'scope':scope}
 
 @app.get('/v1/leaderboard/{view}/{entry_id}/records')
-def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',limit:int=20,cursor:str|None=None):
+def leaderboard_records(view:str,entry_id:str,request:Request,metric:str='accounts',evidence:str='all',scope:str='published',limit:int=20,cursor:str|None=None):
     from . import leaderboard
-    leaderboard.options(view,evidence=evidence,metric=metric)
+    leaderboard.options(view,evidence=evidence,metric=metric,scope=scope)
     if view!='datasets': evidence='all'
     with repo.read_transaction() as tx:
         optional_identity(tx,request)
-        projection=leaderboard.build(tx,evidence)
-    entry,items=leaderboard.details(projection,view,entry_id,metric)
-    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence]),snapshot_items=projection['revision'])
-    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'entry':entry,'total':len(items)}
+        projection=leaderboard.build(tx,evidence,scope)
+    entry,items,withheld=leaderboard.details(projection,view,entry_id,metric)
+    result=page(items,limit=limit,cursor=cursor,scope=digest(['leaderboard-records',view,entry_id,metric,evidence,scope]),snapshot_items=projection['revision'])
+    return {**result,**projection['metadata'],'view':view,'id':entry_id,'metric':metric,'evidence':evidence,'scope':scope,'entry':entry,
+        'total':len(items),'withheld':withheld}
 
 @app.get('/v1/accounts/{dapper_id}/publication')
 def account_publication(dapper_id:str,request:Request):
@@ -1149,64 +1304,94 @@ async def update_outcome_publication(outcome_id:str,request:Request):
                 lambda:analysis_outcomes.change(tx,outcome_id,user,body['visibility'],body['expected_version']))
     return await asyncio.to_thread(save)
 
+def scientific_source(tx,identity,user,kind='object',payload_sha256=None,*,verify_payload=False):
+    """Resolve the full authorized immutable source before any display pagination."""
+    public=None; snapshot=None; reference=None; publication_record=None
+    if kind not in ('account','object','paragraph'):
+        if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
+        row=owned(tx,kind,identity,user)['data']
+    else:
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
+            key=digest([user,identity])
+            keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
+            if kind=='account':
+                from .account_data_sources import KIND as DATA_SOURCES   # owner_key(user, identity) is this key
+                keys+=[('publication',key),(DATA_SOURCES,key)]
+            records=tx.get_records(keys)
+            row=require_owned(tx,kind,identity,user,records.get((kind,key)),
+                dependency=records.get(('scientific_dependencies',key)))['data']
+            reference=records.get(('object_document',key))
+            publication_record=records.get(('publication',key))
+        except Problem as error:
+            if error.status!=404: raise
+            public,snapshot=publication.find(tx,identity,kind)
+            from .acceptance import object_envelope
+            row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
+            if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
+    # Outdated-reference state lives beside the immutable result: summary.archive.
+    archive=((snapshot['summary'] if public is not None else row.get('summary')) or {}).get('archive') if kind=='account' else None
+    result=row.get('result',row)
+    if 'document' not in result: return {'legacy_result': result}
+    checksum=payload_sha256
+    if checksum and not any(p['object_id']==identity and p['payload_sha256']==checksum for p in result['payloads']):
+        raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+    from .acceptance import object_envelope
+    document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
+    full_document_available = public is not None or result.get('coverage', {}).get('complete') is not False
+    if public is None and kind not in ('account','object','paragraph'):
+        reference=tx.get('object_document',digest([user,identity]))
+    if reference and reference['owner'] != user: reference=None
+    document_sha=reference['data']['sha256'] if reference else None
+    if public is None and document_sha is None:
+        # Rows accepted before the direct document index retain their exact
+        # source observation and full immutable document under this owner.
+        observations=[r['data'] for r in tx.list('object_observation',user) if r['data']['object_id']==identity]
+        if observations: document_sha=observations[-1]['document_sha256']
+    if document_sha:
+        stored=tx.get('scientific_document',digest([user,document_sha]))
+        if stored and stored['owner']==user:
+            full_document_available = True
+            document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
+    from .evidence_package import canonical_json, sha256
+    expected_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
+    root_observations={sha256(canonical_json(node)) for rows in document.values() if isinstance(rows,list)
+        for node in rows if isinstance(node,dict) and node.get('id')==identity}
+    if verify_payload and root_observations != {expected_payload}:
+        if checksum:
+            raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+        raise Problem(409,'SCIENTIFIC_SOURCE_CONFLICT','The scientific source does not match its retained account observation.')
+    root_payload=next(iter(root_observations)) if verify_payload else expected_payload
+    withheld_dependencies = False
+    withheld_ids = set()
+    if public is not None:
+        document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
+    elif user:
+        from .scientific_reuse import readable_document
+        before_visibility = document
+        document = readable_document(tx, user, document)
+        withheld_dependencies = document != before_visibility
+        withheld_ids = {n['id'] for rows in before_visibility.values() if isinstance(rows, list)
+            for n in rows if isinstance(n, dict) and 'id' in n} - {n['id'] for rows in document.values()
+            if isinstance(rows, list) for n in rows if isinstance(n, dict) and 'id' in n}
+        visible = {n['id'] for rows in document.values() if isinstance(rows, list)
+            for n in rows if isinstance(n, dict) and 'id' in n}
+        metadata = [item for item in metadata if item['target_id'] in visible]
+        artifacts = {key: item for key, item in artifacts.items() if key in visible}
+    return {'user': user, 'public': public, 'snapshot': snapshot, 'publication_record': publication_record,
+            'result': result, 'document': document, 'metadata': metadata, 'artifacts': artifacts,
+            'full_document_available': full_document_available, 'document_sha256': document_sha if public is None else None,
+            'root_payload': root_payload, 'withheld_dependencies': withheld_dependencies, 'withheld_ids': withheld_ids, 'archive': archive}
+
 def scientific(identity,request,kind='object'):
     with repo.read_transaction() as tx:
-        user=optional_identity(tx,request); public=None; reference=None; publication_record=None
-        if kind not in ('account','object','paragraph'):
-            if user is None: raise Problem(401,'SESSION_EXPIRED','Continue with a registered or anonymous session.')
-            row=owned(tx,kind,identity,user)['data']
-        else:
-            try:
-                if not user: raise Problem(404,'NOT_FOUND','Scientific resource unavailable.')
-                key=digest([user,identity])
-                keys=[(kind,key),('object_document',key),('scientific_dependencies',key)]
-                if kind=='account': keys.append(('publication',key))
-                records=tx.get_records(keys)
-                row=require_owned(tx,kind,identity,user,records.get((kind,key)),
-                    dependency=records.get(('scientific_dependencies',key)))['data']
-                reference=records.get(('object_document',key))
-                publication_record=records.get(('publication',key))
-            except Problem as error:
-                if error.status!=404: raise
-                public,snapshot=publication.find(tx,identity,kind)
-                from .acceptance import object_envelope
-                row=object_envelope(snapshot['document'],identity,snapshot['citation_metadata'],snapshot['artifacts'])
-                if kind=='account': row['research_statement']=snapshot['summary']['research_statement']
-        # Outdated-reference state lives beside the immutable result: summary.archive.
-        archive=((snapshot['summary'] if public is not None else row.get('summary')) or {}).get('archive') if kind=='account' else None
-        result=row.get('result',row)
-        if 'document' not in result: return result
-        checksum=request.query_params.get('payload_sha256')
-        if checksum and not any(p['object_id']==identity and p['payload_sha256']==checksum for p in result['payloads']):
-            raise Problem(404,'PAYLOAD_NOT_FOUND','The exact requested payload observation is unavailable.')
+        user=optional_identity(tx,request)
+        source=scientific_source(tx,identity,user,kind,request.query_params.get('payload_sha256'))
+        if 'legacy_result' in source: return source['legacy_result']
+        public=source['public']; publication_record=source['publication_record']; result=source['result']
+        document=source['document']; metadata=source['metadata']; artifacts=source['artifacts']
+        root_payload=source['root_payload']; withheld_dependencies=source['withheld_dependencies']; archive=source['archive']
         from .acceptance import object_envelope
-        document=result['document']; metadata=result['citation_metadata']; artifacts={a['file']['id']:a for a in result['artifacts']}
-        if public is None and kind not in ('account','object','paragraph'):
-            reference=tx.get('object_document',digest([user,identity]))
-        if reference and reference['owner'] != user: reference=None
-        document_sha=reference['data']['sha256'] if reference else None
-        if public is None and document_sha is None:
-            # Rows accepted before the direct document index retain their exact
-            # source observation and full immutable document under this owner.
-            observations=[r['data'] for r in tx.list('object_observation',user) if r['data']['object_id']==identity]
-            if observations: document_sha=observations[-1]['document_sha256']
-        if document_sha:
-            stored=tx.get('scientific_document',digest([user,document_sha]))
-            if stored and stored['owner']==user:
-                document=stored['data']['document']; metadata=stored['data'].get('citation_metadata',metadata); artifacts=stored['data'].get('artifact_access',artifacts)
-        withheld_dependencies = False
-        if public is not None:
-            document=snapshot['document']; metadata=snapshot['citation_metadata']; artifacts=snapshot['artifacts']
-        elif user:
-            from .scientific_reuse import readable_document
-            before_visibility = document
-            document = readable_document(tx, user, document)
-            withheld_dependencies = document != before_visibility
-            visible = {n['id'] for rows in document.values() if isinstance(rows, list)
-                for n in rows if isinstance(n, dict) and 'id' in n}
-            metadata = [item for item in metadata if item['target_id'] in visible]
-            artifacts = {key: item for key, item in artifacts.items() if key in visible}
-        root_payload=next(p['payload_sha256'] for p in result['payloads'] if p['object_id']==identity)
         binding={'owner':user if public is None else 'publication:'+public['id']+':'+str(public['data']['version']),
             'kind':kind,'root':identity,'payload':root_payload,'document':digest(document)}
         depth=int(request.query_params.get('max_depth','5')); maximum=int(request.query_params.get('max_nodes','250')); offset=0
@@ -1232,13 +1417,24 @@ def scientific(identity,request,kind='object'):
             clipped['coverage']['complete'] = False
         if 'research_statement' in result: clipped['research_statement']=result['research_statement']
         if 'fixture_origin' in result: clipped['fixture_origin']=result['fixture_origin']
-        if kind=='account': clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
-            can_manage=public is None,record=public if public else publication_record,account_result=result)
+        if kind=='account':
+            clipped['publication']=publication.state(tx,public['owner'] if public else user,identity,
+                can_manage=public is None,record=public if public else publication_record,account_result=result)
+            from .account_data_sources import response as data_sources
+            clipped['data_sources']=data_sources(tx,identity,source)
         if archive: clipped['archive']=archive
         return clipped
 
 @app.get('/v1/accounts/{dapper_id}')
 def account(dapper_id:str,request:Request): return scientific(dapper_id,request,'account')
+
+@app.get('/v1/accounts/{account_id}/provenance')
+async def account_provenance(account_id:str,request:Request):
+    # Three phases (provenance_api.trace): no database lease is held while the portal is awaited.
+    from .provenance_api import trace
+    def resolve(tx):
+        return scientific_source(tx,account_id,optional_identity(tx,request),'account',request.query_params.get('payload_sha256'),verify_payload=True)
+    return await trace(repo,account_id,resolve,request.query_params,archived=getattr(catalog,'archived_for_mechanism',None))
 
 @app.get('/v1/claims/{dapper_id}')
 @app.get('/v1/objects/{dapper_id}')
@@ -1268,21 +1464,9 @@ def citation(dapper_id:str,request:Request,revision:int|None=None,format:str='na
 @app.get('/v1/jobs/{job_id}/evidence-package')
 def evidence(job_id:str,request:Request): return scientific(job_id,request,'evidence')
 
-@app.get('/v1/artifacts/{sha256}')
-def artifact_bytes(sha256:str,request:Request):
-    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
-    with repo.read_transaction() as tx:
-        user=optional_identity(tx,request)
-        try:
-            if not user: raise Problem(404,'NOT_FOUND','Artifact unavailable.')
-            row=owned(tx,'artifact',digest([user,sha256]),user)['data']
-        except Problem as error:
-            if error.status!=404: raise
-            try:
-                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
-            except Problem as error:
-                if error.status!=404: raise
-                row=analysis_outcomes.published_artifact(tx,sha256)
+def serve_retained(row,sha256):
+    """Retained bytes named by checksum: a short-lived object-storage link, or the checked local file. `row`
+    holds where they are kept (`storage` or `path`) and the `file` they are (filename, mime_type)."""
     from .artifact_store import s3_enabled, store, StorageUnavailable
     if row.get('storage'):
         if row['storage'].get('sha256')!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','Artifact identity differs.')
@@ -1299,6 +1483,70 @@ def artifact_bytes(sha256:str,request:Request):
     if hashlib.sha256(data).hexdigest()!=sha256: raise Problem(503,'ARTIFACT_CHECKSUM_MISMATCH','The source artifact failed checksum verification.')
     filename=quote(row['file'].get('filename','source-artifact'),safe='')
     return Response(data,media_type=row['file'].get('mime_type','application/octet-stream'),headers={'Content-Disposition':"attachment; filename*=UTF-8''"+filename,'X-Content-Type-Options':'nosniff','Cache-Control':'private, no-store'})
+
+@app.get('/v1/artifacts/{sha256}')
+def artifact_bytes(sha256:str,request:Request):
+    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The source artifact is unavailable.')
+    with repo.read_transaction() as tx:
+        user=optional_identity(tx,request)
+        try:
+            if not user: raise Problem(404,'NOT_FOUND','Artifact unavailable.')
+            row=owned(tx,'artifact',digest([user,sha256]),user)['data']
+        except Problem as error:
+            if error.status!=404: raise
+            try:
+                _,snapshot=publication.find(tx,sha256,'artifact'); row=snapshot['artifact_records'][sha256]
+            except Problem as error:
+                if error.status!=404: raise
+                row=analysis_outcomes.published_artifact(tx,sha256)
+    return serve_retained(row,sha256)
+
+@app.get('/v1/jobs/{job_id}/account')
+def job_account(job_id:str,request:Request):
+    """The Scientific Account an agent job returned, in the form it was deposited. Only the job's owner reads it.
+    A deposited account is rebuilt from the claims repository and checked against the job's record (claims_read);
+    one the repository does not hold is the job's own kept copy (agent_account.kept_document). `source` says which."""
+    import logging
+    from . import agent_account, claims_read, job_metrics
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        row=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data']
+    account=row['account']; deposit=account['deposit']
+    if deposit.get('status')=='deposited':
+        # The network is read after the read transaction is returned.
+        try:
+            document=claims_read.account_document(deposit.get('deposit_id'),account['account_id'],account['document_sha256'])
+        except claims_read.Mismatch as error:
+            logging.getLogger('reveal').warning('Account of job %s does not rebuild from the claims repository (%s)',job_id,error.reason)
+            job_metrics.record(repo,{'id':job_id},serve=job_metrics.serve_metrics('mismatch',error.reason))
+            raise Problem(502,'CLAIMS_REPOSITORY_MISMATCH','The claims repository does not hold this account as it was deposited.')
+        except claims_read.Unavailable as error:
+            logging.getLogger('reveal').warning('Account of job %s could not be read from the claims repository (%s)',job_id,error)
+            job_metrics.record(repo,{'id':job_id},serve=job_metrics.serve_metrics('unavailable'))
+            raise Problem(502,'CLAIMS_REPOSITORY_UNAVAILABLE','The account is deposited, but the claims repository could not be read. Try again later.')
+        source='claims_repository'
+    else:
+        try: document=agent_account.kept_document(row)
+        except agent_account.Unkept as error:
+            logging.getLogger('reveal').warning('Account of job %s is not kept with the job (%s)',job_id,error)
+            raise Problem(503,'ARTIFACT_UNAVAILABLE','The account kept with this job is currently unavailable.')
+        source='job_artifact'
+    return JSONResponse({'job_id':job_id,'account':account,'source':source,'document':document},headers={'Cache-Control':'private, no-store'})
+
+@app.get('/v1/jobs/{job_id}/account/sources/{sha256}')
+def job_account_source(job_id:str,sha256:str,request:Request):
+    """One file the agent saved under output/sources/ and the account cites, exactly as saved: the bytes a
+    ValueLocator's byte span addresses, or the file a cited text was converted from. REVEAL keeps it for the job's
+    owner and does not publish it; the account names it by checksum and URL only."""
+    from . import agent_account
+    if not re.fullmatch('[a-f0-9]{64}',sha256): raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
+    with repo.read_transaction() as tx:
+        user=principal(tx,request.headers.get('authorization'))['user_id']
+        owned(tx,'job',job_id,user)
+        source=owned(tx,agent_account.ACCOUNT_KIND,job_id,user)['data'].get('sources',{}).get(sha256)
+    if not source: raise Problem(404,'NOT_FOUND','The requested resource is unavailable.')
+    return serve_retained({**source,'file':{'filename':source['filename'],'mime_type':source['media_type']}},sha256)
 
 @app.get('/v1/paragraphs/{dapper_id}/export')
 def export_paragraph(dapper_id:str,request:Request,format:str='markdown'):
@@ -1336,32 +1584,41 @@ async def render_citations(request:Request):
 
 from .workspace_events import register as register_workspace_events
 register_workspace_events(app, lambda: repo)
+# The reference release has no reload gate: a publish swaps the reference tables in one RENAME, and unserved
+# anchors are refused by freeze_research_request. Research and Lightning admission still take a gate hook,
+# so they get one that never closes.
+never_closed=lambda tx: None
 from .research_http import register as register_research
-register_research(app, lambda: repo, freeze=freeze_research_request, preload=preload_catalog, reload_gate=reload_gate)
+register_research(app, lambda: repo, freeze=freeze_research_request, preload=preload_catalog, reload_gate=never_closed)
 from .lightning_http import register as register_lightning
 register_lightning(app, lambda: repo, lambda: catalog, freeze=freeze_research_request,
-    reload_gate=reload_gate, check_job_quota=check_job_quota, analysis_job_rows=analysis_job_rows,
+    reload_gate=never_closed, check_job_quota=check_job_quota, analysis_job_rows=analysis_job_rows,
     deliver_after_response=deliver_after_response, paginate=page)
 from .workflow_routes import mount_workflow
 mount_workflow(app, repo)
-from .vector_workflow import mount_vector_workflow
-if jobs.transport() == 'workflow':
-    mount_vector_workflow(app, repo)
 
 _routes_lifespan = app.router.lifespan_context
 
 @asynccontextmanager
 async def background_lifespan(application):
     """The API process warms the catalog (REVEAL_CATALOG_WARMUP) and runs the readiness monitor
-    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off."""
-    from . import readiness
+    (REVEAL_READINESS_MONITOR) off the request path; both default on, and tests turn them off. Shutdown closes the
+    provenance portal client of this loop.
+
+    It also loads the deposit screen's prompt-injection model once, before any workflow step can need it. While its lock
+    is unpinned the classifier is off and the process starts; once pinned, a deployed process without a verified model
+    does not start (deposit_screen.startup)."""
+    from . import deposit_screen, provenance_portal, readiness
+    deposit_screen.startup()
     async with _routes_lifespan(application) as state:
         warmup = getattr(catalog, 'start_warmup', None)
         if warmup and os.getenv('REVEAL_CATALOG_WARMUP', '1') != '0': warmup()
         monitor = readiness.start(lambda: repo, lambda: catalog) if os.getenv('REVEAL_READINESS_MONITOR', '1') != '0' else None
         try: yield state
         finally:
-            if monitor: readiness.stop(monitor)
+            try:
+                if monitor: readiness.stop(monitor)
+            finally: await provenance_portal.aclose()
 
 app.router.lifespan_context = background_lifespan
 

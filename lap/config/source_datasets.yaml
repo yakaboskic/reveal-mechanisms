@@ -1,0 +1,182 @@
+# Curated source datasets for the raw input files the CFDE producers left without lineage.
+#
+# What: DAPPER Dataset nodes (and the Organizations behind them) that the reference release build links to the raw
+# input files of collection documents, as extra was_derived_from edges (raw File -> Dataset), and the raw inputs that
+# are run bookkeeping rather than data. The producer document itself is never changed: the build stores the curated
+# nodes and edges beside it (payload.curated_provenance).
+#
+# Why: in the 2026-10-05 snapshot only 146 of the 532 collection documents reach a Dataset through a was_derived_from
+# edge. The other 386 (LINCS_L1000 HZ3 and the 383 HZ4 collections, IDG HZ2, GlyGen HZ2) end at a raw file whose
+# name pigean's raw/cfde_source_datasets.yaml does not know, so their gene sets trace to no dataset or organization.
+# Three collections that do reach a Dataset also use raw inputs that reach none (GTEx all_detailed_tissues HZ2's TPM
+# matrix, RummaGEO HZ1/HZ2's two workflow manifests), so the lineage of their gene sets was incomplete too.
+#
+# How the release build applies it:
+#   * to every raw file the producer left without lineage, in any collection: a File or C2M2File node (sections files,
+#     c2m2_files) that is never generated (no was_generated_by), derives from nothing (no was_derived_from) and belongs
+#     to no Dataset; the producer's own nodes and edges are untouched;
+#   * a link or bookkeeping entry applies to the collections of its `libraries`; its `files` are regular expressions
+#     (anchored, so search and full match agree) tried on each raw file's `filename`, or its `name` when it has none;
+#   * a raw file matched by a link gets one was_derived_from edge to the link's dataset; one matched by a bookkeeping
+#     entry is listed in payload.curated_provenance.bookkeeping_inputs and left out of every gene set's lineage
+#     closure; a file matched by both refuses the build;
+#   * the build refuses while a referenced gene set's lineage closure reaches no Dataset or uses a raw input that
+#     reaches none. The manifest's curated block counts the edges per dataset and the inputs per bookkeeping entry.
+#
+# organizations: key -> an existing DAPPER Organization node, copied verbatim (id and every field) from a producer
+#   collection document.
+# datasets: key -> either an existing Dataset node copied verbatim (with its id; publisher and was_attributed_to are
+#   Organization ids), or a new node without an id, which the build mints (runtime.compute_id(node, 'Dataset', schema))
+#   from name, description, version, alternate_identifier, publisher (an organizations key) and attributed_to
+#   (organizations keys; -> was_attributed_to); location is not hashed.
+# links: which raw files of which libraries derive from which dataset.
+# bookkeeping: which raw files of which libraries record the run itself, not data a gene set was computed from; the
+#   note (required) says why.
+#
+# glygen_v1_12_1 is a patch, not lineage the producer recorded: GlyGen HZ2's raw files are cached api.glygen.org
+# glycan-detail responses, which the producer does not tie to a release.
+#
+# Checked 2026-10-14 against all 532 documents of the snapshot (provenance sections only): every raw file without
+# lineage that a referenced gene set's closure uses is matched (LINCS 384 collections / 384 files, IDG 1 / 1,
+# GlyGen 1 / 6,620, GTEx 1 / 1; RummaGEO bookkeeping 2 / 4), and no referenced gene set's closure is left with a raw
+# input that reaches no Dataset.
+
+organizations:
+  mount_sinai:
+    id: dapper:Organization.s7ZiFrRo5dASjGgt6Zm84Xpm0TGWWmKk
+    name: Icahn School of Medicine at Mount Sinai
+    ror: ror:04a9tmd77
+  maayan_lab:
+    id: dapper:Organization.gSVB_XHO-9R20bTxmgC5_UPAxvvV7qfP
+    name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
+  idg_consortium:
+    id: dapper:Organization.ic8Yn_vIpNAplGx72eTJpEjhXHYVmDqo
+    name: Illuminating the Druggable Genome Consortium
+  gwu:
+    id: dapper:Organization.vVagl1Seli0Dbd6efYzfOxM1w5ZHuTuj
+    name: George Washington University
+    ror: ror:00y4zzh67
+  glygen_consortium:
+    id: dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
+    name: GlyGen Consortium
+  broad:
+    id: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+    name: Broad Institute
+    ror: ror:05a0ya142
+  gtex_consortium:
+    id: dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+    name: GTEx Consortium
+
+datasets:
+  lincs_l1000_level5_cp_2020:
+    name: LINCS L1000 2020 Level-5 chemical-perturbation characteristic-direction coefficient signatures (cp_coeff_mat.gctx)
+    description: >-
+      The individual Level-5 chemical-perturbation signatures of the LINCS L1000 2020 data release as
+      characteristic-direction (CD) coefficient vectors over genes (718,157 signature columns, 718,055 unique LINCS
+      signature ids), distributed by the LINCS Data Coordination and Integration Center (Ma'ayan Laboratory) as the
+      SigCom LINCS release matrix cp_coeff_mat.gctx (LINCS-sigs-2021). The CFDE LINCS_L1000 HZ4 workflow writes, for
+      every signature, its top and bottom 250 gene symbols by CD coefficient to l1000_cp.gmt (383 collections, split
+      by a cell-line and time-point plan). Per the extractor's geneset.provenance.json, the HZ3 consensus-median GMT
+      (lincs_l1000_consensus_median.gmt: per perturbagen with at least 10 signatures, the top and bottom 200 genes of
+      the coordinate-wise median CD coefficients) is computed from the same matrix. Unlike the consensus mean
+      matrices (cp_mean_coeff_mat), this matrix holds every individual signature.
+    version: LINCS 2020 release
+    alternate_identifier:
+      - https://maayanlab.cloud/sigcom-lincs/
+      - https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/
+    publisher: mount_sinai
+    attributed_to: [maayan_lab]
+    location: https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/gctx/cd-coefficient/cp_coeff_mat.gctx
+
+  enrichr_archs4_idg_coexp:
+    name: Enrichr library ARCHS4_IDG_Coexp
+    description: >-
+      The Enrichr gene-set library "ARCHS4_IDG_Coexp" (Ma'ayan Laboratory): for each of 352 Illuminating the
+      Druggable Genome target genes (131 kinases, 111 ion channels, 110 GPCRs), the genes most co-expressed with it
+      across the ARCHS4 uniformly processed RNA-seq samples (299 per set). Served by the Enrichr geneSetLibrary API
+      and imported unchanged by the extractor (IDG HZ2), which recorded the sha256 of its copy as the version.
+    version: sha256:ef0b0ffa8e24412c31a8e8b0551b37359acafdfaccc1786292921592141ee995
+    alternate_identifier:
+      - https://maayanlab.cloud/Enrichr/#libraries
+    publisher: mount_sinai
+    attributed_to: [maayan_lab, idg_consortium]
+    location: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ARCHS4_IDG_Coexp
+
+  glygen_v1_12_1:
+    id: dapper:Dataset.24rIPEPqvvrf-YevTjjIC_T1plGhGrb6
+    name: GlyGen data release v1.12.1 (human glycosylation annotations and protein master list)
+    description: GlyGen's reviewed human proteoform glycosylation citation tables (UniCarbKB, Harvard, GlyConnect
+      sources) and the human protein master list from data release v1.12.1, grouped by GlyTouCan accession
+      into glycosylated-protein gene sets by the extractor.
+    version: v1.12.1
+    alternate_identifier:
+      - https://data.glygen.org/ln2data/releases/data/v1.12.1/
+      - https://glygen.org/
+    location: https://data.glygen.org/ln2data/releases/data/v1.12.1/reviewed/
+    publisher: dapper:Organization.vVagl1Seli0Dbd6efYzfOxM1w5ZHuTuj
+    was_attributed_to:
+      - dapper:Organization.9W12n8JlvVTtMn3IHVg9C512WzDUfm12
+
+  # Copied verbatim from GTEx all_detailed_tissues HZ2 (GeneSetCollection.cViAiotyF9vd3HGHyonQ9Ko2fAYOdfG9.yaml), whose
+  # producer already links its sample and subject tables to it; the GTEx HZ1 documents carry the same node.
+  gtex_v8:
+    id: dapper:Dataset.Lxt5b4zHcxDX53ePqpfSfsT8xC_xnCs5
+    name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)
+    description: >-
+      Genotype-Tissue Expression project release V8 (dbGaP phs000424.v8.p2; RNA-SeQC v1.1.9 gene read counts dated
+      2017-06-05) with the open-access sample attribute and subject phenotype tables, as distributed by the GTEx
+      Portal. The CFDE GTEx aging signatures were computed from these files.
+    version: v8
+    alternate_identifier:
+      - phs000424.v8.p2
+      - https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    publisher: dapper:Organization.q_gpmqin_UN18n6zvEDEaVW2XE9_Nto8
+    was_attributed_to:
+      - dapper:Organization.PJKHpp2fIgGgmIX6nmYcvMuyoJGfY3lQ
+
+links:
+  - dataset: lincs_l1000_level5_cp_2020
+    libraries: [LINCS_L1000]
+    files: ['^l1000_cp\.gmt$', '^lincs_l1000_consensus_median\.gmt$']
+    note: >-
+      LINCS_L1000 HZ4 (l1000_cp.gmt, one per collection) and HZ3 (lincs_l1000_consensus_median.gmt), both role
+      streamed_lincs_cp_gmt: 384 collections, one edge each. The existing consensus Dataset
+      (cp_mean_coeff_mat.tsv.gz) is the wrong upstream for these.
+  - dataset: enrichr_archs4_idg_coexp
+    libraries: [IDG]
+    files: ['^ARCHS4_IDG_Coexp\.gmt$']
+    note: IDG HZ2 (352 gene sets) reads the Enrichr library ARCHS4_IDG_Coexp (role enrichr_gmt); one edge.
+  - dataset: glygen_v1_12_1
+    libraries: [GlyGen]
+    files: ['^G\d{5}[A-Z]{2}\.json$']
+    note: "Patch: the producer provenance records cached api.glygen.org glycan-detail responses, not this release; linked so GlyGen HZ2 gene sets trace to GlyGen."
+  - dataset: gtex_v8
+    libraries: [GTEx]
+    files: ['^GTEx_Analysis_2017-06-05_v8_RNASeQCv1\.1\.9_gene_tpm\.gct\.gz$']
+    note: >-
+      GTEx all_detailed_tissues HZ2 (511 gene sets, role gtex_v8_tpm) reads the gene TPM matrix of the same GTEx V8
+      release and RNA-SeQC v1.1.9 run (2017-06-05) whose sample and subject tables its producer links to this Dataset;
+      the matrix is distributed beside the read counts on the GTEx Portal's V8 bulk tissue expression downloads
+      (https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct.gz,
+      the File's own location). The Dataset's name lists the read counts because pigean's map registered only those.
+
+# Raw inputs that record the run itself. RummaGEO HZ1 and HZ2 (all_signatures; 4,978 and 5,354 gene sets) each use
+# two such files besides the RummaGEO 2.5 GMTs and NCBI tables, which their producer already links to Datasets.
+# Both are the producer's own files under its S3 workflow folder, which no data provider publishes, so no Dataset covers
+# them; pigean's map registers neither.
+bookkeeping:
+  - libraries: [RummaGEO]
+    files: ['^source_manifest\.json$']
+    note: >-
+      Role input_provenance_manifest: by its role and size, the extractor's own 1,387-byte record of where the run's
+      inputs came from, kept in its workflow folder (access_level local_only in geneset.meta.json). It describes the
+      inputs (the GMTs and NCBI tables, each a File of its own with a Dataset) and contributes nothing to a gene set.
+  - libraries: [RummaGEO]
+    files: ['^selection_manifest\.tsv$']
+    note: >-
+      Role recorded_selection_manifest: the producer's recorded selection of which RummaGEO 2.5 signature terms to emit
+      (selection_method recorded_harmonizome_query_manifest; 1.46 MB for HZ1's 3,815 and 1.72 MB for HZ2's 4,482 selected
+      source terms, a per-term list, not memberships), kept in the producer's workflow/selection folder. Neither
+      RummaGEO nor Harmonizome publishes it. It chooses the signatures; every gene comes from the RummaGEO 2.5 GMTs and
+      NCBI tables, already linked to their Datasets.

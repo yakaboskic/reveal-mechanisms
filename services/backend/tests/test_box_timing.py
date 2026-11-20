@@ -1,5 +1,6 @@
 """Synthetic streams only: receipt intervals are not provider compute estimates."""
 import base64
+import gzip
 import io
 import json
 import os
@@ -243,7 +244,15 @@ def test_timeout_persists_safe_checkpoint_and_completion_without_terminal_usage(
     assert manifest['calls'][0]['status'] == 'failed'
     response = state / 'ledger' / manifest['calls'][0]['response']['path']
     assert json.loads(response.read_bytes()) == lint_result['message']['content'][0]
-    assert not any('stderr' in name or 'stream' in name for name in captured['files'])
-    for encoded in captured['files'].values():
+    # Claude Code's stream and stderr are captured only as the gzipped transcript under the ledger, for admins
+    # (admin_transcript): thinking included, the run's credential redacted. Nothing else carries them.
+    transcripts = {'ledger/claude-stream.jsonl.gz', 'ledger/claude-stderr.txt.gz'}
+    assert {name for name in captured['files'] if 'stderr' in name or 'stream' in name} == transcripts
+    stream_text = gzip.decompress(base64.b64decode(captured['files']['ledger/claude-stream.jsonl.gz']))
+    assert b'PRIVATE_THOUGHT [REDACTED_CREDENTIAL]' in stream_text and b'PRIVATE_CREDENTIAL' not in stream_text
+    assert gzip.decompress(base64.b64decode(captured['files']['ledger/claude-stderr.txt.gz'])) == b'PRIVATE_STDERR'
+    for name, encoded in captured['files'].items():
         content = base64.b64decode(encoded)
-        assert b'PRIVATE_THOUGHT' not in content and b'PRIVATE_STDERR' not in content and b'PRIVATE_PROMPT' not in content
+        assert b'PRIVATE_CREDENTIAL' not in content and b'PRIVATE_PROMPT' not in content
+        if name not in transcripts:
+            assert b'PRIVATE_THOUGHT' not in content and b'PRIVATE_STDERR' not in content

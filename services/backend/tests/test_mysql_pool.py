@@ -655,13 +655,12 @@ class ReferenceReadTests(RuntimePoolSettingsTests):
 
     def test_request_path_reference_readers_borrow_pooled_sessions(self):
         from types import SimpleNamespace
-        from reveal_backend import catalog, cfde_assessment_state, factor_details, research_execution, research_public, worker, evidence_database
+        from reveal_backend import catalog, cfde_assessment_state, factor_details, research_execution, research_public, worker
         self.assertIs(research_public._reader(SimpleNamespace(data_service=None)).connection_factory, runtime_config.reference_mysql_connection)
         for module in (research_execution, factor_details, catalog, cfde_assessment_state):
             self.assertIs(module.reference_mysql_connection, runtime_config.reference_mysql_connection, module.__name__)
         # Worker evidence collection and the catalog cold load keep their own direct connections.
         self.assertIs(worker.mysql_connection, runtime_config.mysql_connection)
-        self.assertIs(evidence_database.mysql_connection, runtime_config.mysql_connection)
 
     def test_unpooled_configurations_connect_directly(self):
         for size in ('0', '1'):

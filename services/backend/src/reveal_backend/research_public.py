@@ -17,7 +17,8 @@ from jsonschema import Draft202012Validator
 from .auth import Problem, owned
 from .evidence_package import canonical_json, sha256
 from .repository import digest, now, uid
-from .research_data import DESCRIPTIONS, OPERATIONS, READER_VERSION, CAPTURE_FORMAT, ReferenceQueryService, SmallModelBioIndex, phenotype_gate
+from .research_data import (DESCRIPTIONS, OPERATIONS, READER_VERSION, READER_VERSIONS, CAPTURE_FORMAT, ReferenceQueryService, SmallModelBioIndex,
+                            phenotype_gate)
 from .research_work import idempotent, public_base, valid_principal
 from .runtime_config import reference_mysql_connection, setting
 from . import user_inputs, research_graphs
@@ -162,8 +163,10 @@ def _verify(record):
         if (capture['format'] != CAPTURE_FORMAT or capture['operation'] != manifest['operation']
                 or capture['source_mode'] != manifest['source_mode']):
             raise ValueError()
+        # A reference capture is of a reload-era generation (READER_VERSION) or of a release (RELEASE_READER_VERSION).
         if (manifest['source_mode'] == 'imported_reference'
-                and capture['source'].get('generation_id') != manifest['reference_generation_id']):
+                and (capture['source'].get('generation_id') != manifest['reference_generation_id']
+                     or capture.get('reader_version') not in READER_VERSIONS)):
             raise ValueError()
         if manifest['source_mode'] == 'external_kg':
             if (manifest['reference_generation_id'] is not None or capture['source'].get('generation_id') is not None

@@ -161,6 +161,51 @@ def validate_response(response, questions):
     return warnings
 
 
+class JevCallError(Exception):
+    """A bounded live SystemOne failure. kind is timeout, too_large, unavailable or invalid; it never
+    carries provider text, echoed input or credentials."""
+    def __init__(self, kind):
+        super().__init__(kind)
+        self.kind = kind
+
+
+def post_systemone(content, *, api_key, deadline, max_response_bytes=64_000):
+    """One bounded HTTPS attempt for a product request: parsed JSON, or JevCallError.
+
+    content is the caller's exact serialized body. There are no retries or redirects, and
+    only the documented max_tokens_exceeded sizing error is recognized; other provider
+    diagnostics are never read beyond that check.
+    """
+    remaining = deadline - time.monotonic()
+    if remaining <= 0: raise JevCallError('timeout')
+    try:
+        with httpx.Client(timeout=httpx.Timeout(remaining, connect=min(5, remaining)), follow_redirects=False,
+                headers={'Authorization': 'Bearer '+api_key, 'Accept': 'application/json'}) as client:
+            with client.stream('POST', ENDPOINT, content=content, headers={'Content-Type': 'application/json'}) as response:
+                if response.status_code != 200:
+                    if response.status_code in (400, 413, 422):
+                        raw_error = bytearray()
+                        for chunk in response.iter_bytes():
+                            raw_error.extend(chunk)
+                            if len(raw_error) > 4096 or time.monotonic() >= deadline: break
+                        try: provider_error = json.loads(raw_error).get('detail', {})
+                        except (ValueError, TypeError, AttributeError): provider_error = {}
+                        if isinstance(provider_error, dict) and provider_error.get('error_type') == 'max_tokens_exceeded':
+                            raise JevCallError('too_large')
+                    raise JevCallError('unavailable')
+                raw = bytearray()
+                for chunk in response.iter_bytes():
+                    if time.monotonic() >= deadline: raise JevCallError('timeout')
+                    raw.extend(chunk)
+                    if len(raw) > max_response_bytes: raise JevCallError('invalid')
+    except httpx.TimeoutException:
+        raise JevCallError('timeout') from None
+    except httpx.HTTPError:
+        raise JevCallError('unavailable') from None
+    try: return json.loads(raw)
+    except ValueError: raise JevCallError('invalid') from None
+
+
 @contextmanager
 def run_lock(output):
     with (Path(output) / '.run.lock').open('a') as handle:

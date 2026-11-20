@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loadingAppearance, loadingColors, loadingLevel, loadingMembershipCounts, loadingNavigation, loadingValue, type LoadingCell } from "../src/lib/loading-visual";
+import { loadingAppearance, loadingColors, loadingLevel, loadingMembershipCounts, loadingNavigation, loadingRank, loadingValue, type LoadingCell } from "../src/lib/loading-visual";
 
 test("a loading keeps its color when filtering or paging changes the visible rows", () => {
   const complete = [0, 2, 4, 6, 8, 10];
@@ -87,4 +87,9 @@ test("Home and End support row navigation and Control supports whole-grid naviga
   assert.equal(loadingNavigation(8, "Home", 17, 6, true), 0);
   assert.equal(loadingNavigation(8, "End", 17, 6, true), 16);
   assert.equal(loadingNavigation(8, "Enter", 17, 6), null);
+});
+
+test("a gene-set rank names the library it is within; a factor-wide rank stays bare", () => {
+  assert.equal(loadingRank({ rank: 3, rankScope: "GTEx" }), "3 in GTEx");
+  assert.equal(loadingRank({ rank: 3 }), "3");
 });

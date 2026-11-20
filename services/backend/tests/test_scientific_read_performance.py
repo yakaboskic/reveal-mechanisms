@@ -42,7 +42,7 @@ class ScientificReadPerformanceTests(unittest.TestCase):
         selects = [(sql, params) for sql, params in statements if sql.startswith('SELECT')]
         self.assertEqual(len(selects), 4, selects)  # principal, batched headers, full document, batched current dependency authority
         self.assertIn('(kind,id) IN', selects[1][0])
-        self.assertEqual(set(selects[1][1][::2]), {'account', 'object_document', 'publication', 'scientific_dependencies'})
+        self.assertEqual(set(selects[1][1][::2]), {'account', 'object_document', 'publication', 'scientific_dependencies', 'account_data_sources'})
         self.assertTrue(response.json()['publication']['can_manage'])
 
     def test_owned_row_needs_no_grant_but_cross_owner_row_still_requires_one(self):

@@ -103,6 +103,8 @@ def change(tx, owner, account_id, visibility, expected_version):
     if visibility == 'public':
         snapshot = freeze(tx, owner, account_id); snapshot_id = uid()
         tx.put('publication_snapshot', snapshot_id, owner, snapshot)
+        from .account_data_sources import publish
+        publish(tx, owner, account_id, snapshot_id, snapshot)   # the traced data sources, frozen with this snapshot
         data.update(snapshot_id=snapshot_id, paragraph_id=snapshot['paragraph_id'], object_ids=sorted({node['id'] for rows in snapshot['document'].values() for node in rows if 'id' in node}),
             citation_keys=sorted(f"{row['target_id']}:{row['metadata_revision']}" for row in snapshot['citation_metadata']),
             artifact_sha256=sorted(snapshot['artifact_records']), summary=snapshot['summary'])

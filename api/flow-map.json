@@ -1,5 +1,5 @@
 {
-  "openapi_sha256": "a3834b0dd1fbebfc27a46a6040cc7ac2cdee0962dd5293bf99becae00051a962",
+  "openapi_sha256": "b40d40667d66db388317726dd4cb430771d45f15d7ccb5761cbb5087c909dd3d",
   "steps": [
     {
       "id": "gap",
@@ -108,9 +108,10 @@
       "route": "GET /v1/accounts/{id}",
       "action": "Read closing remarks; open associated claims on demand.",
       "incoming": "Exact account/claim/GeneSet/object ID and optional payload/traversal bounds.",
-      "outgoing": "DAPPER document, payload checksums, coverage, artifacts and research_statement state.",
+      "outgoing": "DAPPER document, payload checksums, coverage, artifacts and research_statement state; provenance wrappers, traces and distinct claim reuse totals.",
       "cases": [
         "getAccount.request",
+        "getAccountProvenance.request",
         "getClaim.request",
         "getGeneSet.request",
         "resolveDapperObject.request",
@@ -125,7 +126,8 @@
         "An account built on a superseded reference generation carries archive: show its original anchors from the frozen reference factors and offer a new analysis on the gap with current factors.",
         "Claims open inline; no auto-opened first claim. Dedicated claim page has Assessment, Proposition, Evidence and Provenance tabs.",
         "Partial provenance and unavailable downloads remain explicit.",
-        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes."
+        "Accounts remain private until the owner publishes a frozen snapshot with an optimistic version and idempotency key. Later accepted statements require an explicit publication update; unpublishing revokes public access. Public readers cannot access job telemetry or research writes.",
+        "Account provenance is a REST application view over unchanged scientific records. Trace pages repeat full-account totals; incomplete lineage produces explicit lower-bound counts."
       ]
     },
     {
@@ -377,6 +379,27 @@
       ]
     },
     {
+      "id": "trait-catalog",
+      "title": "Inspect traits, gene-set betas and factor-trait links",
+      "route": "GET /v1/traits/{kpn_trait_id}; GET /v1/trait-gene-sets; GET /v1/factor-trait-links; GET /v1/mechanism-objects/{dapper_id}",
+      "action": "Open a KPN trait, page its gene-set betas or a gene set's traits, page a factor's linked phenotypes or a trait's linked factors, and resolve a minted Mechanism id to its factor.",
+      "incoming": "KPN trait, gene set, factor or Mechanism id; library, scope and sort; offset and bounded page size.",
+      "outgoing": "Trait detail with portal GWAS links, beta and link pages with coverage, and the current factor of a Mechanism id, each with the published release id.",
+      "cases": [
+        "getTrait.request",
+        "listTraitGeneSets.trait",
+        "listTraitGeneSets.gene_set",
+        "listFactorTraitLinks.factor",
+        "listFactorTraitLinks.trait",
+        "getMechanismObject.request"
+      ],
+      "rules": [
+        "Every read is of the one published release; a release without the betas or links returns 404.",
+        "Only PIGEAN-kept gene sets have betas and only links at BH q <= 0.05 are stored: absent rows are not zeros or negatives.",
+        "A Mechanism id of a superseded release's factor returns 410 with the frozen factor; portal links are built from ids, never fetched."
+      ]
+    },
+    {
       "id": "local-research",
       "title": "Download and resume local research",
       "route": "/v1/local-work; /v1/local-work/{id}; /package; /setup-kit; /close",
@@ -524,8 +547,25 @@
         "Continuation preserves exact preliminary artifacts separately from original researcher instructions and eligible scientific evidence. Normal agent authorization and validation remain in force.",
         "Audits are private history independent of draft deletion. Retained superseded generations can be continued within the explicit retention window; parent and child pins release independently."
       ]
+    },
+    {
+      "id": "agent-account",
+      "title": "Read an agent job's Scientific Account",
+      "route": "GET /v1/jobs/{id}/account",
+      "action": "Fetch the account a deliverable scientific_account agent job returned, and the source files it saved and quotes.",
+      "incoming": "An owned, succeeded agent job whose result carries an account block.",
+      "outgoing": "The DAPPER document as deposited, its summary and deposit outcome; exact saved source bytes by checksum.",
+      "cases": [
+        "getJobAccount.request",
+        "downloadJobAccountSource.request"
+      ],
+      "rules": [
+        "Owner only; 404 until the job has succeeded and for every other job.",
+        "The document names each saved source file by checksum and URL and never carries it; the source download is owner-only.",
+        "A failed or unconfigured deposit is reported in the account block and does not fail the job."
+      ]
     }
   ],
-  "operation_count": 91,
-  "exchange_count": 114
+  "operation_count": 98,
+  "exchange_count": 123
 }

@@ -20,10 +20,15 @@ from reveal_backend.agent_execution import ExecutionRequest
 from reveal_backend.box_adapter import make_bundle
 from reveal_backend.box_literature import BASE, LiteratureClient, LiteratureInputError, NoRedirect, request_spec
 from reveal_backend.box_mcp import DraftValidationError, Ledger, PolicyError, ScopedTools
+from reveal_backend.worker import validate_execution_ledger
 from reveal_backend.evidence_package import EvidenceBuildError
 from reveal_backend.public_tool_activity import display_arguments
 from reveal_backend.research_outcome import FORMAT, validate_insufficient_outcome
 from reveal_backend.runtime_config import ROOT
+
+
+def canonical_text(ledger, index):
+    return (ledger.root / ledger.entries[index]['response']['path']).read_text()
 
 
 def encoded(value):
@@ -183,6 +188,29 @@ class CapturedPaperToolsTests(unittest.TestCase):
         (self.root / entry['response']['path']).write_bytes(b'changed')
         with self.assertRaises(EvidenceBuildError): ledger_sources(self.root / 'manifest.json')
 
+    def test_a_kit_that_cites_by_quotation_is_shown_the_paper_and_no_record_of_its_capture(self):
+        quoting = ScopedTools((), Ledger(self.root / 'quoting', 'literature-job', 1), literature=LiteratureClient(opener=self.http),
+                              capture_descriptor=False, lint=lambda filename: {}, write_draft=lambda filename, document: {})
+        search = quoting.call('search_papers', {'query': 'fixture', 'limit': 1})
+        read = quoting.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertFalse(read.get('isError'), read)
+        for result in (search, read):
+            self.assertEqual(len(result['content']), 1)          # the paper data and nothing appended
+            for internal in ('reveal.tool-capture', 'urn:reveal:tool-response', 'ledger_sequence', 'source_locator', '"file"'):
+                self.assertNotIn(internal, json.dumps({key: result[key] for key in ('content', 'structuredContent')}))
+        # The call is captured all the same: REVEAL ties a quote to it from the ledger.
+        captured = quoting.ledger.freeze()['calls']
+        self.assertEqual([(call['tool'], call['status']) for call in captured], [('search_papers', 'completed'), ('read_paper', 'completed')])
+        self.assertEqual(set(ledger_sources(self.root / 'quoting/manifest.json')), {captured[1]['response']['sha256']})
+        # Its draft and lint tools are described without Files, pointers or locators; the GeneSet is the one thing named.
+        offered = {tool['name']: tool for tool in quoting.definitions()}
+        told = json.dumps([offered['lint_account'], offered['write_account_draft']])
+        for internal in ('File', 'locator', 'pointer', 'checksum', 'capture'):
+            self.assertNotIn(internal, told)
+        evidence = offered['write_account_draft']['inputSchema']['properties']['document']['properties']['evidence_items']['items']['properties']
+        self.assertEqual(set(evidence), {'id', 'target_proposition', 'direction', 'snippet', 'context', 'explanation', 'was_derived_from', 'source_claims'})
+        self.assertIn('GeneSet', evidence['was_derived_from']['description'])
+
     def test_empty_and_failed_papers_retained_but_not_promoted(self):
         self.http.raw = paper_response('')
         self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})
@@ -201,6 +229,55 @@ class CapturedPaperToolsTests(unittest.TestCase):
         self.assertEqual(self.ledger.entries[8]['status'], 'failed')
         self.assertEqual(self.ledger.entries[9]['status'], 'failed')
         self.assertTrue(self.ledger.freeze()['complete'])
+
+    def agent_tools(self, name='agent', **limits):
+        ledger = Ledger(self.root / name, 'agent-job', 1)
+        bounds = {'max_calls': 30, 'max_searches': 3, **limits}
+        return ledger, ScopedTools((), ledger, soft_budget=True, literature=LiteratureClient(opener=self.http, max_results=9, guidance=True), **bounds)
+
+    def test_research_tool_descriptions_and_allowances_are_unchanged(self):
+        described = {tool['name']: tool for tool in self.tools.definitions()}
+        self.assertIn('(maximum three searches per attempt)', described['search_papers']['description'])
+        self.assertIn('(maximum four reads)', described['read_paper']['description'])
+        self.assertEqual(described['search_papers']['inputSchema']['properties']['limit']['maximum'], 5)
+        read = self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertNotIn('full_text', read['structuredContent']['data'])
+        self.assertNotIn('run_budget', json.loads(read['content'][-1]['text']))
+        self.assertTrue(self.tools.call('search_papers', {'query': 'fixture', 'limit': 6})['isError'])
+        refused = self.tools.call('read_paper', {'source': 'MED', 'id': '12345', 'section': 'full_text'})
+        self.assertEqual(refused['content'][0]['text'], 'Open-access full text requires the exact PMC identifier from a paper record')
+        # Four reads, then the fixed refusal; the third call above was refused before it counted.
+        for _ in range(3): self.assertFalse(self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})['isError'])
+        fifth = self.tools.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertEqual(fifth['content'][0]['text'], 'Bounded literature read budget exhausted; report the remaining limitation')
+
+    def test_agent_job_spent_tool_calls_are_an_error_the_run_survives(self):
+        ledger, tools = self.agent_tools(max_calls=2)
+        for _ in range(2): self.assertFalse(tools.call('read_paper', {'source': 'MED', 'id': '12345'})['isError'])
+        requests = len(self.http.requests)
+        spent = tools.call('search_papers', {'query': 'fixture'})
+        self.assertTrue(spent['isError'])
+        self.assertIn('All 2 REVEAL tool calls for this run are used', spent['content'][0]['text'])
+        self.assertEqual(len(self.http.requests), requests)
+        self.assertEqual([entry['status'] for entry in ledger.entries], ['completed', 'completed', 'failed'])
+        # The ledger check that fails a job on a denied call accepts this run.
+        output = self.root / 'agent'
+        package = self.root / 'agent-input.json'; package.write_bytes(b'{}')
+        (output / 'manifest.json').write_bytes(json.dumps(ledger.freeze()).encode())
+        (output / 'runtime.json').write_bytes(encoded({'job_id': 'agent-job', 'attempt': 1, 'model': 'claude-test',
+                                                       'input_sha256': hashlib.sha256(b'{}').hexdigest()}))
+        request = ExecutionRequest(job_id='agent-job', attempt=1, kind='agent', input_path=package, output_dir=output)
+        result = SimpleNamespace(runtime_manifest_path=output / 'runtime.json', ledger_manifest_path=output / 'manifest.json')
+        validate_execution_ledger(result, request, 'claude-test')
+        # A research run keeps the fatal denial.
+        strict_ledger = Ledger(self.root / 'strict', 'job', 1)
+        strict = ScopedTools((), strict_ledger, max_calls=1, literature=LiteratureClient(opener=self.http))
+        strict.call('read_paper', {'source': 'MED', 'id': '12345'}); strict.call('read_paper', {'source': 'MED', 'id': '12345'})
+        self.assertEqual([entry['status'] for entry in strict_ledger.entries], ['completed', 'denied'])
+
+    def test_literature_limits_must_be_positive(self):
+        for bounds in ({'max_searches': 0}, {'max_reads': 0}, {'max_reads': '4'}):
+            with self.assertRaises(ValueError): ScopedTools((), self.ledger, **bounds)
 
     def test_credentials_not_sent_and_raw_body_redacted_before_durable_capture(self):
         secret = 'fixture-sensitive-key'

@@ -14,17 +14,14 @@ concurrency: the number of requests in flight backs off when the service answers
 """
 
 import json
-import ipaddress
 import logging
 import os
 import random
-import re
 import ssl
 import threading
 import time
 import urllib.request
 import urllib.error
-from urllib.parse import urlsplit
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 
@@ -48,7 +45,7 @@ def _make_ssl_context() -> ssl.SSLContext:
 
 BATCH_SIZE = 100
 DEFAULT_MODEL = "pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb"
-DEFAULT_SERVICE_URL = "https://embedding-service-27386110942.us-east1.run.app"
+DEFAULT_SERVICE_URL = "https://embedding-service-848707719401.us-east1.run.app"
 DEFAULT_MAX_WORKERS = 1
 MAX_RETRIES = 15           # with the capped backoff below this tolerates ~6-7 minutes of 429/503
 BACKOFF_CAP_SECONDS = 30
@@ -56,33 +53,6 @@ RETRY_STATUSES = {408, 425, 429, 500, 502, 503, 504}
 MIN_CONCURRENCY = 1
 STATUS_EVERY_SECONDS = 30
 WARN_FROM_ATTEMPT = 6      # retries below this are logged at DEBUG; the status line carries the counts
-
-
-def query_embedding_service_url(pinned_url: str) -> str:
-    """Optional local/QA query transport alias; never changes a frozen embedding-space identity.
-
-    Enable only after comparing the replacement service against the stored vectors. Model,
-    provider and dimensions still come from the pinned run at the query call sites.
-    """
-    override = os.getenv('REVEAL_QUERY_EMBEDDING_SERVICE_URL')
-    if not override: return pinned_url
-    if os.getenv('REVEAL_APPLICATION_TABLE_PREFIX') not in ('reveal_workflow_local', 'reveal_workflow_qa'):
-        raise ValueError('REVEAL_QUERY_EMBEDDING_SERVICE_URL is allowed only for reveal_workflow_local or reveal_workflow_qa')
-    try:
-        parsed = urlsplit(override)
-        host = parsed.hostname or ''
-        try: ipaddress.ip_address(host); valid_host = True
-        except ValueError:
-            valid_host = len(host) <= 253 and all(re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?', label)
-                                                for label in host.rstrip('.').split('.'))
-        valid = (override.startswith('https://') and not any(char.isspace() or ord(char) < 32 or ord(char) == 127 for char in override)
-                 and valid_host and parsed.username is None and parsed.password is None
-                 and '?' not in override and '#' not in override and parsed.port != 0)
-    except ValueError:
-        valid = False
-    if not valid:
-        raise ValueError('REVEAL_QUERY_EMBEDDING_SERVICE_URL must be an HTTPS base URL without credentials, query or fragment') from None
-    return override.rstrip('/')
 
 
 def _backoff(attempt: int) -> float:

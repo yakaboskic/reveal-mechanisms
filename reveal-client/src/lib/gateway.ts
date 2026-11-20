@@ -58,6 +58,17 @@ export async function resolvePrincipal(identity: { issuer: string; subject: stri
   return readMe(principal, config, fetcher);
 }
 
+/** Browser-provided identity and retry keys never select an anonymous workspace. */
+export async function createAnonymousPrincipal(config: GatewayConfiguration, fetcher: Fetcher = fetch): Promise<Me> {
+  const response = await fetcher(`${config.backendUrl}/internal/v1/principals/anonymous`, {
+    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.serviceToken}`, "Idempotency-Key": crypto.randomUUID() },
+    body: "{}", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(20000),
+  });
+  const principal = await jsonResult<Principal>(response);
+  if (principal.principal_kind !== "anonymous" || !/^[a-f0-9-]{36}$/.test(principal.user_id)) throw new GatewayError(502, "IDENTITY_UNAVAILABLE", "The research API returned an invalid guest identity.");
+  return readMe(principal, config, fetcher);
+}
+
 export function allowedArtifactRedirect(path: string[], location: string, bases?: string): boolean {
   if (path.length !== 3 || path[0] !== "v1" || path[1] !== "artifacts" || !/^[a-f0-9]{64}$/.test(path[2]) || !bases) return false;
   return bases.split(",").some(value => {
@@ -79,6 +90,9 @@ export function errorResponse(error: unknown): Response {
 export async function proxyRequest(request: Request, path: string[], principal: Principal | null, config: GatewayConfiguration, fetcher: Fetcher = fetch): Promise<Response> {
   if (path[0] !== "v1" || path.some(part => !part || [".", ".."].includes(part) || /[/\\]/.test(part))) return gatewayProblem(404, "NOT_FOUND", "Unknown API route.");
   if (!["GET", "HEAD"].includes(request.method) && request.headers.get("origin") !== config.appOrigin) return gatewayProblem(403, "CSRF_REJECTED", "The request must come from this application.");
+  if (principal?.principal_kind === "anonymous" && !["GET", "HEAD"].includes(request.method) && request.headers.get("x-reveal-workspace-id") !== principal.user_id) {
+    return gatewayProblem(409, "WORKSPACE_CHANGED", "This browser's workspace changed. Reload before saving or starting research.");
+  }
   try {
     const headers = new Headers();
     for (const name of ["accept", "content-type", "idempotency-key", "last-event-id"]) {

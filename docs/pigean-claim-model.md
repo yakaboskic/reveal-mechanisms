@@ -153,14 +153,14 @@ The claim can summarize additional evidence lines from other methods or knowledg
 
 Lint reports how closely an account follows this structure as advisory `claim_structure` suggestions; it never blocks on them.
 
-**Legacy single-Claim pattern.** Accounts written before the atomic structure, and agents running a historical authoring kit, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. The EvidenceItem links directly to the retained DAPPER File through `was_derived_from`, with the exact named-artifact/row locator in `context` and a verbatim source excerpt in `snippet`; the original JSON retains the structured metric names and values. This pattern remains valid and lint accepts it. The rest of this section and Appendix B describe it.
+**Legacy single-Claim pattern.** Accounts written before the atomic structure, and agents running a historical authoring kit, use **one biological Proposition and one Claim assessing it**, with an EvidenceItem containing the observed result and its interpretation. The EvidenceItem quotes the source row verbatim in `snippet` and says in `context` what was asked; REVEAL finds the retained source that holds the row and records the link itself (an author names no file or pointer); the original JSON retains the structured metric names and values. This pattern remains valid and lint accepts it. The rest of this section and Appendix B describe it.
 
 ```text
 Biological Proposition ← assessed by Claim
                             │
                             └─ has_evidence → EvidenceItem
                                                ├─ target_proposition → biological Proposition
-                                               ├─ was_derived_from → retained source File
+                                               ├─ snippet quotes → the source row (REVEAL records the source)
                                                ├─ snippet + context → observation and exact row locator
                                                └─ explanation → how they bear on this Proposition
 ```
@@ -175,7 +175,7 @@ Biological Proposition ← assessed by Claim
 
 ### Template 1: pre-mint DAPPER fragment
 
-This is a **schematic supporting-assessment template** with symbolic G/M/T/V; F is the source identifier for M. The source File and row locator must resolve to the actual result before it can be instantiated. Mechanism identity is supplied by the source mapping, not another evidence Claim.
+This is a **schematic supporting-assessment template** with symbolic G/M/T/V; F is the source identifier for M. The quoted row must be the actual result before it can be instantiated. Mechanism identity is supplied by the source mapping, not another evidence Claim.
 
 ```yaml
 propositions:
@@ -207,9 +207,8 @@ evidence_items:
       in mechanism M for T. F is the source identity of that same mechanism.
       State the inferential assumptions and material counterevidence.
     context: >-
-      Name the exact factor F, trait fit, model V, source artifact and
-      JSON pointer/row locator, and the biological setting of this use.
-    was_derived_from: [urn:example:source-response-file]
+      Name the exact factor F, trait fit and model V, what was asked of
+      which tool, and the biological setting of this use.
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -242,14 +241,15 @@ Different model versions change evidence/assessment provenance. For factor-defin
 
 ## 9. Source adapter and review rules
 
-The available source families remain the same:
+The available source families are:
 
 - Gene–factor: BioIndex `pigean-gene-factor`; interactive `factor_gene_direct` where returned.
 - Gene-set–factor: BioIndex `pigean-gene-set-factor`; interactive `factor_gene_set_direct` where returned.
 - Gene–trait: BioIndex `pigean-gene-phenotype` and gene-centered results; captured factor rows can also contain these metrics.
-- Gene-set–trait: BioIndex `pigean-gene-set-phenotype` and gene-set-centered results; captured factor rows can also contain these metrics.
+- Gene-set–trait: BioIndex `pigean-gene-set-phenotype` and gene-set-centered results; captured factor rows can also contain these metrics. Where the seed's capability catalog lists them, `get_trait_gene_sets` and `get_gene_set_traits` serve the reference release's PIGEAN betas mode, which is distinct from the BioIndex small-model values.
+- Factor–trait: where the seed's capability catalog lists them, `get_factor_trait_links` and `get_trait_factor_links` serve the release's eaggl trait linkage and factor-PheWAS links at q ≤ 0.05.
 
-Record each source relationship faithfully, without interpreting unavailable values as zero or repeated retrievals as independent evidence. `factor_value` is a LOADING; `combined` is a method-specific SCORE; `beta` and `beta_uncorrected` are separately named EFFECT_ESTIMATE values. Retain unknown metric semantics in raw artifacts. Pin any normalization, score interpretation or threshold used by an assessment, and retain the mechanism's exact factor source identity and label revision.
+The [evidence claim structure](evidence-claim-structure.md) gives each family's triple and ClaimScores. Record each source relationship faithfully, without interpreting unavailable values as zero or repeated retrievals as independent evidence. `factor_value` is a LOADING; `combined` is a method-specific SCORE; `beta` and `beta_uncorrected` are separately named EFFECT_ESTIMATE values; release `avg_postp` is a POSTERIOR_PROBABILITY; factor–trait `nnls_loading` is a LOADING, `phewas_beta` an EFFECT_ESTIMATE, and `phewas_q` and `phewas_p_onesided` are SCOREs. Retain unknown metric semantics in raw artifacts. Pin any normalization, score interpretation or threshold used by an assessment, and retain the mechanism's exact factor source identity and label revision.
 
 Review must separately check (a) the faithful recording of each source observation, (b) the explanation of its relevance to the biological target, and (c) whether the Claim statement accurately summarizes all its evidence. Mechanism identity is supplied directly by the EAGGL factor. Missing descriptive labels do not block involvement claims; scope mismatches or missing evidence for more specific process/readout/regulatory relationships remain explicit.
 
@@ -327,7 +327,7 @@ Source: [gene-set-factor capture](../data/cfde/cad-in-t2d/pigean-gene-set-factor
 
 A complete multi-claim [ScientificAccount YAML packet](../design/data/cad-account/scientific-account.yaml) now instantiates this approach for the HTML design. See its [source boundaries and reproduction guide](../design/data/cad-account/README.md). The fragments below explain the four core templates individually; the full packet also includes explicitly illustrative gene-set membership and KG evidence.
 
-These examples use the legacy single-Claim pattern of §7; [Evidence claim structure](evidence-claim-structure.md) shows the same observations as atomic Claims with a synthesis. Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and points directly to the captured source File. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
+These examples use the legacy single-Claim pattern of §7; [Evidence claim structure](evidence-claim-structure.md) shows the same observations as atomic Claims with a synthesis. Each example below contains **one biological Proposition, one Claim, and one EvidenceItem**. The EvidenceItem retains the observation, explains its bearing on the Proposition, and quotes the source row; REVEAL records which source holds it. The first two assess involvement in the EAGGL mechanism itself. The other two assess involvement in the trait's biology. None introduces a second Claim merely to restate the observed score.
 
 The numbers and row locators come from the captures in Appendix A. The biological Claim statements, `SUPPORTS` directions and evidence explanations are **illustrative authored assessments**, not fields returned by CFDE or output from an executed agent. They show the intended modeling without inventing a score threshold or probability. These are unminted design fragments: File, Activity, agent and imported GeneSet dependencies must be supplied before validation and minting.
 
@@ -398,7 +398,6 @@ evidence_items:
       urn:example:gene-factor-response-file; factor_value is a loading.
       The same direct edge in the contextual response is the same
       observation, not independent corroboration.
-    was_derived_from: [urn:example:gene-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -456,7 +455,6 @@ evidence_items:
       urn:example:geneset-factor-response-file; factor_value is a loading.
       The mechanism's current catalog label repeats G1's source name;
       that repeated label is not an additional observation.
-    was_derived_from: [urn:example:geneset-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -509,7 +507,6 @@ evidence_items:
       The row also reports log_bf=2.14 and prior=1.72. These source
       quantities are retained without an invented transformation or
       treatment as independent corroborating observations.
-    was_derived_from: [urn:example:gene-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
@@ -568,13 +565,12 @@ evidence_items:
       GeneSet identity currently establishes catalog/import provenance;
       membership and original construction history are not supplied here.
       The source rs_score is retained without an unverified interpretation.
-    was_derived_from: [urn:example:geneset-factor-response-file]
     was_generated_by: urn:example:interpretation-activity
     was_attributed_to: [urn:example:responsible-agent]
 ```
 
 ### Using these examples in a ScientificAccount
 
-The four `*-involvement` Claims are the biological assessments available for `component_claims`. Their numerical observations remain inspectable through EvidenceItems and retained source Files, with no additional source-result Claims in these examples. B1/B2 describe involvement in the same mechanism; B3/B4 assess the gene and gene program at trait level. The account synthesis explains how the selected assessments address the exact selected KnowledgeGap, as described in [ScientificAccount construction](scientific-account-construction.md). These captures alone do not supply a matching gap or the more specific inhibition/amplification and process/readout assessments from the schematic account.
+The four `*-involvement` Claims are the biological assessments available for `component_claims`. Their numerical observations remain inspectable through EvidenceItems and the sources REVEAL retains, with no additional source-result Claims in these examples. B1/B2 describe involvement in the same mechanism; B3/B4 assess the gene and gene program at trait level. The account synthesis explains how the selected assessments address the exact selected KnowledgeGap, as described in [ScientificAccount construction](scientific-account-construction.md). These captures alone do not supply a matching gap or the more specific inhibition/amplification and process/readout assessments from the schematic account.
 
 The same source artifact/row can inform other Propositions through separate target-specific EvidenceItems. The agent can choose the optional source-Claim pattern when separately addressable source assessments are useful, including for selected Proto-OKN assertions. Either form can supply additional evidence targeting an existing biological Proposition; the owning Claim's statement then summarizes the combined assessment. No external-KG result is fabricated in these captured-data examples.

@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 
 from .artifact_store import StorageUnavailable
 from .box_adapter import CAPTURE_MARKER, BoxTransportError, TERMINAL_STATUSES
-from .box_upload import MAX_TOTAL, MAX_FILES, capture_file_limit
+from .box_stream import Inflater
+from .box_upload import MAX_TOTAL, MAX_FILES, MAX_TRANSCRIPT_EXPANDED, TRANSCRIPT_FILES, capture_file_limit, counts_toward_total
 from .runtime_config import setting
 
 MAX_CONTROL = 16_000_000
@@ -48,7 +49,8 @@ def validate_inventory(value, binding, state):
             and name not in names, 'Unsafe direct capture path')
         size = item.get('size_bytes'); sha = item.get('sha256')
         require(type(size) is int and 0 <= size <= capture_file_limit(name) and isinstance(sha, str) and re.fullmatch('[a-f0-9]{64}', sha), 'Invalid direct capture size or checksum')
-        total += size; names.add(name)
+        if counts_toward_total(name): total += size
+        names.add(name)
         require(total <= MAX_TOTAL, 'Direct capture exceeds byte budget')
     require('ledger/manifest.json' in names, 'Direct capture ledger is missing')
     require(not any(str(parent) in names for name in names for parent in PurePosixPath(name).parents if str(parent) != '.'),
@@ -108,6 +110,9 @@ def verify_uploaded(storage, item, receipt, secrets):
         response = storage.client.get_object(**storage.validate(ref))
         digest = hashlib.sha256(); count = 0; overlap = b''; saved = []
         maximum_secret = max([len(secret) for secret in secrets] + [1])
+        # A gzipped transcript is scanned as stored and as inflated: compression hides a credential from a byte match.
+        inflater = Inflater(MAX_TRANSCRIPT_EXPANDED) if item['path'] in TRANSCRIPT_FILES else None
+        inflated_overlap = b''
         with response['Body'] as body:
             while chunk := body.read(65536):
                 count += len(chunk)
@@ -116,6 +121,13 @@ def verify_uploaded(storage, item, receipt, secrets):
                 joined = overlap + chunk
                 require(not any(secret in joined for secret in secrets), 'Output contains credential material')
                 overlap = joined[-(maximum_secret - 1):] if maximum_secret > 1 else b''
+                if inflater is not None:
+                    try: inflated = inflater.feed(chunk)
+                    except ValueError: inflated = None
+                    require(inflated is not None, 'A captured transcript is not a bounded gzip file')
+                    joined = inflated_overlap + inflated
+                    require(not any(secret in joined for secret in secrets), 'Output contains credential material')
+                    inflated_overlap = joined[-(maximum_secret - 1):] if maximum_secret > 1 else b''
                 if item['path'] == 'ledger/manifest.json': saved.append(chunk)
         require(count == item['size_bytes'] and digest.hexdigest() == sha, 'Direct object bytes differ from inventory')
         # The same proof a put's HEAD gives, so the closing checkpoint does not HEAD every captured file again.
@@ -227,7 +239,7 @@ async def capture_to_store(adapter, binding, handle, storage, workspace_ref):
     require(binding.get('box_id') == handle['box_id'] and binding.get('job_id') == handle['job_id']
         and type(binding.get('attempt')) is int and binding['attempt'] == handle['attempt'] and binding['attempt'] > 0,
         'Direct capture handle binding differs')
-    require(binding.get('kind') in ('research', 'paragraph') and isinstance(binding.get('selected_graphs'), list)
+    require(binding.get('kind') in ('research', 'paragraph', 'agent') and isinstance(binding.get('selected_graphs'), list)
         and all(isinstance(graph, str) for graph in binding['selected_graphs'])
         and isinstance(binding.get('input_sha256'), str) and re.fullmatch('[a-f0-9]{64}', binding['input_sha256']),
         'Direct capture input binding is invalid')

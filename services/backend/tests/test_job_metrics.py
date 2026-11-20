@@ -81,6 +81,20 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual((data['kind'], data['parent_job_id']), ('paragraph', 'research-job'))
         self.assertEqual(data['agent']['cost_usd'], 3.1378407); self.assertEqual(data['error']['error_type'], 'RuntimeError')
 
+    def test_an_account_jobs_deposit_and_serve_back_failures_are_recorded_without_the_document(self):
+        from reveal_backend.job_metrics import serve_metrics
+        with self.repo.transaction() as tx:
+            job = jobs.enqueue(tx, 'owner', 'agent')
+        receipt = {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_' + '1' * 32, 'objects': 9, 'stored_differs': 1,
+                   'unresolved_references': 0, 'document': {'claims': []}}
+        self.assertTrue(record(self.repo, job, deposit=receipt))
+        self.assertTrue(record(self.repo, {'id': job['id']}, serve=serve_metrics('mismatch', 'sha256')))
+        with self.repo.read_transaction() as tx:
+            data = tx.get('job_metrics', job['id'])['data']
+        self.assertEqual(data['deposit'], {'status': 'failed', 'reason': 'inconsistent', 'deposit_id': 'dep_' + '1' * 32, 'http_status': None,
+                                           'objects': 9, 'stored_differs': 1, 'unresolved_references': 0})
+        self.assertEqual((data['serve']['outcome'], data['serve']['reason']), ('mismatch', 'sha256'))
+
     def test_recording_never_raises_and_ignores_unknown_jobs(self):
         self.assertFalse(record(self.repo, {'id': 'missing'}, agent={}))
         with patch.object(self.repo, 'transaction', side_effect=OSError('database unavailable')):
@@ -154,6 +168,27 @@ class CostTelemetryTests(unittest.TestCase):
         self.assertIsNone(rows['a4']['started_at'])  # No execution and no attempt rows: never invented.
 
 
+    def test_agent_jobs_have_their_own_spend_series_and_distribution(self):
+        stamp = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.now - 3600))
+        with self.repo.transaction() as tx:
+            for identity, status, cost in (('g1', 'succeeded', 0.13), ('g2', 'succeeded', 0.41), ('g3', 'failed', 0.02)):
+                tx.put('job', identity, 'person', {'id': identity, 'kind': 'agent', 'status': status, 'stage': 'complete',
+                                                   'created_at': stamp, 'updated_at': stamp, 'completed_at': stamp,
+                                                   'failure': {'code': 'AGENT_EXECUTION_FAILED'} if status == 'failed' else None})
+                tx.put('job_metrics', identity, 'person', {'job_id': identity, 'kind': 'agent', 'created_at': stamp,
+                    'agent': {'cost_usd': cost, 'cost_source': 'provider', 'subtype': 'success'}})
+        with self.repo.read_transaction(utc=True) as tx:
+            costs = cost_summary(tx, current=self.now)
+        self.assertEqual(costs['agents'], {'succeeded': 2, 'p50_usd': 0.41, 'p90_usd': 0.41, 'max_usd': 0.41, 'mean_usd': 0.27})
+        # Research figures are unchanged by agent jobs.
+        self.assertEqual(costs['research'], {'succeeded': 3, 'p50_usd': 1.36, 'p90_usd': 1.48, 'max_usd': 1.48, 'mean_usd': 1.3633})
+        today = next(d for d in costs['daily'] if d['date'] == stamp[:10])
+        self.assertEqual(today['agent_usd'], 0.56)
+        # Research keeps its own runs only (including the cancelled run's $0.90 estimate), none of the agent spend.
+        self.assertAlmostEqual(sum(d['analysis_usd'] for d in costs['daily']), 1.48 + 3.14 + 1.25 + 0.9)
+        self.assertEqual(costs['totals']['day']['jobs'], 6)
+
+
 class WorkflowJobDetailTests(unittest.TestCase):
     def test_workflow_job_detail_shows_metrics_and_its_saved_failure(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -171,6 +206,23 @@ class WorkflowJobDetailTests(unittest.TestCase):
         self.assertEqual(detail['metrics']['error']['error_type'], 'EvidenceBuildError')
         self.assertEqual(detail['attempts'], [])
         self.assertIn('attempt-1/failure.json', [item['path'] for item in detail['diagnostics'] if item['available']])
+
+
+    def test_agent_job_detail_shows_its_response_record(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            repo = Repository(str(root / 'app.sqlite')); repo.migrate()
+            with patch.dict(os.environ, {'REVEAL_JOB_TRANSPORT': 'database'}), repo.transaction() as tx:
+                job, rows = jobs.new('owner', 'agent', inputs={'format': 'reveal.agent-input/1'})
+                tx.insert_many(rows)
+                tx.put('execution', job['id'], 'owner', {'created_at': job['created_at'], 'authoring_attempt': 1})
+            record = root / 'artifacts' / job['id'] / 'attempt-1/output/ledger/agent-response.json'
+            record.parent.mkdir(parents=True)
+            record.write_text(json.dumps({'format': 'reveal.agent-response/1', 'response': 'Invalid API key', 'is_error': True}))
+            with patch.dict(os.environ, {'REVEAL_ARTIFACTS_DIR': str(root / 'artifacts'), 'REVEAL_ARTIFACT_STORE': 'filesystem'}):
+                detail = job_detail(repo, job['id'])
+        shown = {item['path']: item for item in detail['diagnostics'] if item['available']}
+        self.assertEqual(shown['attempt-1/output/ledger/agent-response.json']['data']['response'], 'Invalid API key')
 
 
 if __name__ == '__main__':

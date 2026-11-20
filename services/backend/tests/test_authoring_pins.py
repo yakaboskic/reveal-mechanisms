@@ -5,8 +5,8 @@ import unittest
 from unittest.mock import patch
 
 from reveal_backend.dapper_release import prepare_agent_workspace
-from reveal_backend.dispatch_view import (CLAIM_STRUCTURE_PATH, KIT_V2, KIT_V3, file_input_manifest, pinned_claim_structure_sha256,
-                                          pinned_contract_sha256, pinned_skeleton_sha256, research_prompt, validate_file_input)
+from reveal_backend.dispatch_view import (CLAIM_STRUCTURE_PATH, KIT_V2, KIT_V3, KIT_V3_1, KIT_V4, KIT_V5, QUOTE_WORDING, file_input_manifest, pinned_claim_structure_sha256,
+                                          pinned_contract_sha256, pinned_kit_version, pinned_skeleton_sha256, research_prompt, validate_file_input)
 from reveal_backend.authoring_contract import SKELETON_PATH
 from reveal_backend.evidence_package import canonical_json, EvidenceBuildError, sha256
 from reveal_backend.research_seed import prepare_research_seed
@@ -41,7 +41,7 @@ class AuthoringPinTests(unittest.TestCase):
         with self.changed_runtime():
             self.assertEqual(file_input_manifest(raw), manifest)
             prompt = research_prompt([], progressive=True, contract_sha256=contract, skeleton_sha256=pinned_skeleton_sha256(self.built.package),
-                                     claim_structure_sha256=pinned_claim_structure_sha256(self.built.package))
+                                     claim_structure_sha256=pinned_claim_structure_sha256(self.built.package), kit_version=pinned_kit_version(self.built.package))
             validate_file_input(raw, manifest, prompt)
             self.assertIn(contract, prompt)
             self.assertIn(pinned_claim_structure_sha256(self.built.package), prompt)
@@ -141,7 +141,8 @@ class AuthoringPinTests(unittest.TestCase):
     def test_new_seed_pins_claim_structure_reference_prefixes_and_prompt(self):
         from reveal_backend.research_seed import CLAIM_PREFIXES
         package = self.built.package
-        self.assertEqual(package['authoring_kit']['version'], KIT_V3)
+        self.assertEqual(package['authoring_kit']['version'], KIT_V5)
+        self.assertEqual(pinned_kit_version(package), KIT_V5)
         pin = pinned_claim_structure_sha256(package)
         self.assertEqual(pin, sha256((ROOT/CLAIM_STRUCTURE_PATH).read_bytes()))
         self.assertIn(CLAIM_STRUCTURE_PATH, [entry['path'] for entry in package['authoring']['references']])
@@ -149,18 +150,79 @@ class AuthoringPinTests(unittest.TestCase):
             self.assertEqual({name: prefixes[name] for name in CLAIM_PREFIXES}, CLAIM_PREFIXES)
         skeleton = pinned_skeleton_sha256(package)
         for progressive in (False, True):
-            prompt = research_prompt([], progressive=progressive, skeleton_sha256=skeleton, claim_structure_sha256=pin)
+            prompt = research_prompt([], progressive=progressive, skeleton_sha256=skeleton, claim_structure_sha256=pin, kit_version=KIT_V5)
             self.assertIn(CLAIM_STRUCTURE_PATH + ' (SHA-256 ' + pin + ')', prompt)
             self.assertIn('atomic RESULT Claim: a Proposition with subject_entity, relation and object_entity', prompt)
             self.assertIn('through EvidenceItem.source_claims', prompt)
             self.assertIn('has_score referencing claim_scores', prompt)
-            self.assertIn('put the exact locator in EvidenceItem.context', prompt)
+            self.assertIn('copy the source row or passage verbatim into snippet, and say in context what you asked', prompt)
             self.assertIn('Soft targets, not quotas', prompt)
             self.assertNotIn('separate source-result Claims are optional', prompt)
             self.assertNotIn('a Claim per row', prompt)
-        work = self.workspace('v3-workspace')
+            v4 = research_prompt([], progressive=progressive, skeleton_sha256=skeleton, claim_structure_sha256=pin, kit_version=KIT_V4)
+            self.assertIn('put the exact locator in EvidenceItem.context', v4)
+
+            # v4: the release gene set-trait betas and factor-trait links, their exclusions and the posterior-probability kind.
+            for text in ('gene set–trait or factor–trait fact', 'get_trait_gene_sets and get_gene_set_traits', 'get_factor_trait_links and get_trait_factor_links',
+                         'beta_uncorrected of exactly 0', 'without a KPN trait id', "within the factor's fit", 'EFFECT_ESTIMATE|POSTERIOR_PROBABILITY'):
+                self.assertIn(text, prompt)
+            self.assertNotIn('trace_provenance', prompt)
+        work = self.workspace('v4-workspace')
         source = package['source_artifacts'][next(entry['artifact_id'] for entry in package['authoring_kit']['files'] if entry['path'] == CLAIM_STRUCTURE_PATH)]
         self.assertEqual((work/CLAIM_STRUCTURE_PATH).read_bytes(), self.built.files[source['path']])
+
+
+    V4_PROMPTS = {(False, False, False): '3397f6e1f785f530c49e62a672472a24a2aae920448ab75c9b2e6c545166e427',
+                  (False, True, False): 'b5d0519462f40d0f841348f24f52dde77397bcec61c94e62a5bcca6497a7a308',
+                  (True, False, False): '04922b04cf16a4ead1f4fa5d2caf1b03a15d52ed9ceed37cf79b286ab4d9ad92',
+                  (True, False, True): 'a5d0bef88dabbe26f9d1f1cc07c4a69d7a56e3c3d2fd9f816c0c6992a3d8a456',
+                  (True, True, False): 'e4ed3cd85697a63e555e3b4125c081026e696f989b042da812ad941733bd6108',
+                  (True, True, True): '9da71357f6b3a137b304f7592c70a42f1ba55e96744fdb7da88fb45f588c1181'}
+
+    def test_v4_kit_keeps_its_exact_prompt_bytes_and_v5_asks_for_no_file_checksum_or_locator(self):
+        # v4 prompts as generated before the v5 kit existed: a frozen v4 dispatch validates against these bytes.
+        arguments = dict(skeleton_sha256='e'*64, claim_structure_sha256='c'*64,
+                         contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
+        every_v4 = ''
+        for (progressive, graph, audit), expected in self.V4_PROMPTS.items():
+            v4 = research_prompt(['prokn'] if graph else [], kit_version=KIT_V4, progressive=progressive, lightning_audit=audit, **arguments)
+            self.assertEqual(sha256(v4.encode()), expected)
+            every_v4 += v4
+            v5 = research_prompt(['prokn'] if graph else [], kit_version=KIT_V5, progressive=progressive, lightning_audit=audit,
+                                 feedback=['Reviewer feedback is passed through as written: File, locator.'], **arguments)
+            self.assertNotEqual(sha256(v5.encode()), expected)
+            self.assertTrue(v5.count('Reviewer feedback is passed through as written: File, locator.') == 1)
+            authored = v5.replace('Reviewer feedback is passed through as written: File, locator.', '')
+            # The author is never told to track a source File, a checksum, a locator or the ledger. What is left names
+            # the reading tool's own arguments (the eager reader) and the GeneSet, a scientific object.
+            for banned in ('TRUSTED_CAPTURE_FILE_ID', 'EXACT_CAPTURE_LOCATOR', 'capture descriptor', 'source-File', 'source Files',
+                           'captured Files', 'source locator', 'exact locator', 'evidence File', 'extraction File', 'ledger records'):
+                self.assertNotIn(banned, authored)
+            self.assertEqual(authored.count('was_derived_from'), 1 if 'has_score referencing claim_scores' in authored else 0)
+            self.assertIn('list the exact trusted GeneSet in was_derived_from', authored)
+            self.assertIn('"snippet":"VERBATIM_SOURCE_ROW_OR_PASSAGE"', authored)
+        # Every v5 rewording replaces text a v4 prompt really contains, so none has gone stale.
+        for old, new in QUOTE_WORDING:
+            self.assertIn(old, every_v4)
+            self.assertNotIn(old, new)
+
+    # The QA release branch has no v4: its quotation kit is v3.1. The same hashes are pinned there, so the name means
+    # one prompt on both branches and a seed frozen on QA still validates when this branch is released.
+    V3_1_PROMPTS = {(False, False, False): '85bf2a500b47fb9f9bfcbcc3b8e5e2f850953f3c266206fb43fc3e193e5d93f5',
+                    (False, True, False): 'b9572be783fe43adc4f6be14c1086e20521587077f7fc9372d5ae1c0b863995e',
+                    (True, False, False): '263e221ac09187e6ded636f43437b2a7680949fb472bef88942633ef11c2f3f2',
+                    (True, False, True): '05e1bec0ff03220b196f91600fc00343adf066e8e4478af9e49bb0ddb1bf4b6a',
+                    (True, True, False): '641e0005e7858777a13668dc93dc5a1f8162bedc356e1923c9642ac554cb3808',
+                    (True, True, True): 'c801eebaf68a22e59798e62bbd18a8c1ff6ad5c5f198fe60109965196962467c'}
+
+    def test_v3_1_kit_is_the_v3_prompt_citing_by_quotation_with_the_bytes_the_release_branch_pins(self):
+        arguments = dict(skeleton_sha256='e'*64, claim_structure_sha256='c'*64,
+                         contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
+        for (progressive, graph, audit), expected in self.V3_1_PROMPTS.items():
+            prompt = research_prompt(['prokn'] if graph else [], kit_version=KIT_V3_1, progressive=progressive, lightning_audit=audit, **arguments)
+            self.assertEqual(sha256(prompt.encode()), expected)
+            self.assertNotIn('get_trait_gene_sets', prompt)                  # no v4 release tools
+            self.assertIn('"snippet":"VERBATIM_SOURCE_ROW_OR_PASSAGE"', prompt)
 
     def test_v2_kit_still_installs_without_the_reference_and_keeps_exact_prompt_bytes(self):
         package = self.frozen_kit(KIT_V2, drop_claim_structure=True)
@@ -181,6 +243,31 @@ class AuthoringPinTests(unittest.TestCase):
             prompt=research_prompt(['prokn'] if graph else [],progressive=progressive,skeleton_sha256='e'*64,
                 contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
             self.assertEqual(sha256(prompt.encode()),expected)
+
+    def test_v3_kit_keeps_its_exact_prompt_bytes(self):
+        # v3 prompts (claim-structure pin, no release families), as generated before the v4 kit existed.
+        hashes = {(False, False): '1d5bba0541431e9c783d25b2699b76278e73a35b54df86cec048571a90dd4f74',
+                  (False, True): 'e2b0e641513ae612fa2874bc55cdfa325ffaa4978b08f6909648421ff453c45f',
+                  (True, False): '8d4e45786f89a39e54c2041448a1f235c3dc3b50222da2dc9828f6098545cd64',
+                  (True, True): 'a76df600951d4dd8bba230c11facf1d24e6ff71ba8b39565c28a55885d6027d6'}
+        for (progressive, graph), expected in hashes.items():
+            arguments = dict(progressive=progressive, skeleton_sha256='e'*64, claim_structure_sha256='c'*64,
+                             contract_sha256='f82a9c846c6f2681851ed9fa41f7845619d5a261dde88d46bf77460a6285c50c')
+            for version in (None, KIT_V2, KIT_V3):
+                self.assertEqual(sha256(research_prompt(['prokn'] if graph else [], kit_version=version, **arguments).encode()), expected)
+            self.assertNotEqual(sha256(research_prompt(['prokn'] if graph else [], kit_version=KIT_V4, **arguments).encode()), expected)
+        # A frozen v3 seed validates against the prompt it was measured with, which names no release tool.
+        package = self.frozen_kit(KIT_V3, drop_claim_structure=False)
+        self.assertEqual((pinned_kit_version(package), pinned_claim_structure_sha256(package)), (KIT_V3, sha256((ROOT/CLAIM_STRUCTURE_PATH).read_bytes())))
+        raw = self.package.read_bytes(); manifest = file_input_manifest(raw)
+        prompt = research_prompt([], progressive=True, contract_sha256=pinned_contract_sha256(package), skeleton_sha256=pinned_skeleton_sha256(package),
+                                 claim_structure_sha256=pinned_claim_structure_sha256(package))
+        validate_file_input(raw, manifest, prompt)
+        self.assertNotIn('get_trait_gene_sets', prompt)
+        with self.assertRaises(EvidenceBuildError):
+            validate_file_input(raw, manifest, research_prompt([], progressive=True, contract_sha256=pinned_contract_sha256(package),
+                skeleton_sha256=pinned_skeleton_sha256(package), claim_structure_sha256=pinned_claim_structure_sha256(package), kit_version=KIT_V4))
+        self.assertIsNone(pinned_kit_version({'authoring_kit': {'version': 'reveal.research-authoring-kit/1'}}))
 
     def test_v3_kit_without_or_with_a_tampered_reference_fails_closed(self):
         from copy import deepcopy

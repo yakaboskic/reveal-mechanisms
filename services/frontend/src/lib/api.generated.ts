@@ -227,7 +227,7 @@ export interface paths {
         put?: never;
         /**
          * Suggest five EAGGL anchors total
-         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
+         * @description Resolve linked DisMech context server-side from source_gap. Search existing EAGGL label embeddings and join the configured completed exact-trait/factor-number CFDE crosswalk before the top-five cutoff. Rank mapped factors by maximum per-mechanism cosine, deduplicate full native identity, stable ID tie-break, at most five total excluding manual anchors and dismissals. Where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev), semantic requests without a subquery instead pool every eligible disease identity with the top 100 cosine factors, ask Jev to rate the label and trait of each factor (no genes or loadings) for relevance to the gap and ability to help answer it, and return the top five by that rating; any provider failure falls back to the disease-then-cosine policy, and the rerank field of the response reports which order was used. Return fewer if needed; no silent refill on removal. With no linked mechanisms use the exact gap text/subquery and require user anchor selection. Ignore label/gene differences for routing; pin mapping/source/embedding runs in server-owned selection provenance. Suggestions come from the active reference generation; manual anchors from a superseded generation return 409 REFERENCE_GENERATION_SUPERSEDED.
          */
         post: operations["suggestMechanisms"];
         delete?: never;
@@ -250,8 +250,8 @@ export interface paths {
         get: operations["listJobs"];
         put?: never;
         /**
-         * Start an analysis or paragraph job
-         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected.
+         * Start an analysis, paragraph or general agent job
+         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected. kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.
          */
         post: operations["createJob"];
         delete?: never;
@@ -637,7 +637,7 @@ export interface paths {
         };
         /**
          * Rank public community contributions
-         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store.
+         * @description All-time contribution rankings computed over the complete currently public frozen population before pagination. Original registered actor attribution uses opaque contributor keys; missing/anonymous/conflicting attribution is uncredited. Exclude fixtures before projection, deduplicate canonical accounts, exclude own ballots from researcher recognition, and retain all canonical votes for account ranking. Researchers sort by overall (default), accounts, votes, gaps or explored; accounts sort only by votes; datasets sort by accounts (default), claims, gaps or researchers. evidence=all|supporting affects datasets only. Positive metric percentiles use midrank, weighted 30/40/30; exact score ties share ranks before display rounding. Invalid supplied credentials are rejected. No private metadata, jobs, requests or voter identities are exposed. Cursors bind the whole current projection and query; publication or vote changes expire them. Responses are private, no-store. The datasets view also ranks by traced_claims: distinct claims whose stored provenance trace reaches the dataset (lineage, not evidence). scope=all (datasets only, traced_claims sort only) adds every saved account as anonymous totals; private accounts and claims are never listed.
          */
         get: operations["getLeaderboard"];
         put?: never;
@@ -997,7 +997,7 @@ export interface paths {
         };
         /**
          * Search and page factor loadings
-         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
+         * @description Search literal gene symbols or gene-set names, library and identifier. Gene scores are nonzero EAGGL weights; gene-set scores are joint/marginal projections retained in the top 50 of their library by either rank. Gene scores and set scores have separate scales. Missing legacy set scores stay null.
          */
         get: operations["getFactorLoadings"];
         put?: never;
@@ -1597,6 +1597,146 @@ export interface paths {
          * @description Requires the owning registered or anonymous workspace principal. All results are private, no-store. A Lightning audit assesses a bounded stored-evidence snapshot; it creates no accepted scientific account and performs no connected-graph or literature retrieval. Inputs and generated guidance are not instructions or scientific acceptance. Examples are synthetic contract fixtures. Requires REVEAL_LIGHTNING_ENABLED, a completed audit and an unexpired continuation window. All assessment categories may continue. Clones a new frozen request and independent generation pin, preserving original inputs separately from the edited direction. Uses ordinary online/local quotas and authorization. Retained superseded generations are allowed; unavailable generations require a fresh audit. Audit artifacts enter the agent seed as preliminary context, never eligible evidence.
          */
         post: operations["continueLightningAudit"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/accounts/{account_id}/provenance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Expand scientific account provenance and dataset reuse
+         * @description Read the full authorized account and annotate its propositions and evidence with dataset and organization lineage. Totals count distinct claims, before trace pagination. Stored factor projections are distinguished from direct lineage; no complete model-input provenance is implied. A reached KPN trait (a factor's fitted trait or one a proposition cites) adds its published GWAS: route trait_gwas to the bottom-line Dataset of the Translator provenance portal, read within a 15 s budget (an unreachable portal is coverage external_provenance_unavailable, never an error); the GWAS raw inputs are shown on reveal:portalTransitiveInput edges and never traversed. An activity's inputs sharing one onward lineage are followed through one representative past 25 (collapsed_inputs). Source gaps produce explicit lower bounds. The processing bounds are 10,000 nodes, 50,000 edges and depth 128; responses are capped at 8 MiB. Exceeding bounds returns PROVENANCE_LIMIT_EXCEEDED without rankings. Cursors bind authorization, immutable observations and tracing policy. Public reads use frozen publication records and public reference sources only. The example uses the existing illustrative scientific-account fixture and does not claim historical provenance recovery.
+         */
+        get: operations["getAccountProvenance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/traits/{kpn_trait_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect a reference trait
+         * @description Public reference data of the published release: an atlas trait with its fitted factors, per-library gene-set beta counts and linked factors of other traits, or a non-atlas phenotype the factor-trait linkage reached (is_atlas false). GWAS links point to the Translator provenance portal and are built from stored ids; the portal is never called. Unknown or malformed ids return 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["getTrait"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/trait-gene-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page gene-set betas of a trait or of a gene set
+         * @description Give exactly one of trait_id (the trait's gene sets) or gene_set_id (the traits of one gene set); otherwise 422. Values are the release's PIGEAN betas mode, distinct from the BioIndex small-model values. A release without betas returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["listTraitGeneSets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/factor-trait-links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Page factor-trait links of a factor or of a trait
+         * @description Give exactly one of source_id (the phenotypes a factor is linked to) or trait_id (the factors linked to a trait: the gap use case); otherwise 422. Only links at BH q <= 0.05 are stored: an absent phenotype is unlinked at this threshold, not a negative result. An unknown source_id, or a release without links, returns 404. Examples are illustrative: no release build, linkage or portal read was performed for them.
+         */
+        get: operations["listFactorTraitLinks"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/mechanism-objects/{dapper_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Resolve a minted Mechanism id to its factor
+         * @description A DAPPER Mechanism id the catalog minted for a served factor resolves to that factor's source_id. A Mechanism of a factor a superseded release served returns 410 REFERENCE_GENERATION_SUPERSEDED with the frozen archived_reference_factor; other ids return 404. The example factor is from an illustrative eaggl-capped-v1 release.
+         */
+        get: operations["getMechanismObject"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/account": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the ScientificAccount an agent job returned
+         * @description Owner-only, private no-store caching. The account of a deliverable scientific_account job, in the form REVEAL deposits it: one DAPPER document with every object the account needs, quoted passages as ValueLocators over the saved source files, named by checksum and URL, and the commands that saved them. A deposited account is read back from the claims repository (source claims_repository; REVEAL keeps no copy of it); any other is the copy kept with the job (source job_artifact), with the deposit status in account.deposit. A deposited account the repository cannot serve, or no longer holds as sent, is a 502, never a local copy. Returns 404 until the job has succeeded, and for any other job. The document names the requester as the Person the account is attributed to only when the job asked for that with attribute_requester.
+         */
+        get: operations["getJobAccount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/jobs/{job_id}/account/sources/{sha256}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a source file an agent job account records
+         * @description Owner-only. One file the agent saved under output/sources/ (sha256 in the account block papers), exactly as saved: the bytes a ValueLocator of the account addresses, or the file a quoted text was converted from. REVEAL keeps it for the owner and does not publish it. Attachment disposition, private no-store caching and nosniff, like a captured source.
+         */
+        get: operations["downloadJobAccountSource"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4167,7 +4307,7 @@ export interface components {
         Rank: {
             value: number;
             /** @enum {string} */
-            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion" | "eligible_disease_identity";
+            metric: "cosine_similarity" | "lexical_rank" | "fuzzy_similarity" | "reciprocal_rank_fusion" | "eligible_disease_identity" | "jev_gap_relevance";
             rank: number;
         };
         SearchProvenance: {
@@ -4226,6 +4366,16 @@ export interface components {
             automatic_target_count: 5;
             search: components["schemas"]["SearchProvenance"];
             limitations: string[];
+            /** @description Present only where the Jev rerank is configured (REVEAL_SUGGEST_RERANK=jev). applied: automatic anchors are ordered by Jev ratings (metric jev_gap_relevance) of factor names against the gap, over every eligible disease identity plus the top cosine factors. fallback: the provider could not answer, so the disease-identity-then-cosine policy was used over the same pool (not_configured: no provider key, retrieval was unchanged). not_applicable: subquery or hybrid requests, or no open anchor slots. Ratings order candidates for inspection; they are not evidence. */
+            rerank?: {
+                /** @enum {string} */
+                status: "applied" | "fallback" | "not_applicable";
+                /** @enum {string} */
+                reason?: "not_configured" | "timeout" | "too_large" | "unavailable" | "invalid" | "internal_error" | "subquery" | "hybrid_mode" | "no_open_slots";
+                model?: string;
+                rubric_version?: string;
+                pool_size?: number;
+            };
         };
         JobBudgets: {
             /** @default 3 */
@@ -4271,7 +4421,7 @@ export interface components {
             target_words: number;
             additional_citations?: components["schemas"]["CitationTarget"][];
         };
-        JobCreate: components["schemas"]["AnalysisJobInput"] | components["schemas"]["ParagraphJobInput"];
+        JobCreate: components["schemas"]["AnalysisJobInput"] | components["schemas"]["ParagraphJobInput"] | components["schemas"]["AgentJobInput"];
         CitationTarget: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             target_id: string;
@@ -4314,13 +4464,13 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "analysis" | "paragraph";
+            kind: "analysis" | "paragraph" | "agent";
             /** Format: uuid */
             owner_user_id: string;
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output" | "running_agent";
             research_request_id: string | null;
             input_account_id: string | null;
             /** Format: date-time */
@@ -4328,7 +4478,7 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             completed_at: string | null;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"] | components["schemas"]["AgentResult"]) | null;
             failure: components["schemas"]["JobFailure"] | null;
             warnings: string[];
             last_event_id: string;
@@ -4340,7 +4490,7 @@ export interface components {
                 /** Format: uri-reference */
                 cancel: string;
             };
-        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown);
+        } & (unknown & unknown & unknown & unknown & unknown & unknown & unknown & unknown);
         JobEvent: {
             id: string;
             /** Format: uuid */
@@ -4352,9 +4502,9 @@ export interface components {
             /** @enum {string} */
             status: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
             /** @enum {string} */
-            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output";
+            stage: "queued" | "freezing_inputs" | "retrieving_cfde" | "authoring_account" | "enriching_okn" | "authoring_paragraph" | "validating" | "persisting" | "complete" | "preparing_evidence" | "starting_agent" | "collecting_output" | "running_agent";
             message: string;
-            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"]) | null;
+            result: (components["schemas"]["AnalysisResult"] | components["schemas"]["ParagraphResult"] | components["schemas"]["AnalysisOutcomeResult"] | components["schemas"]["AgentResult"]) | null;
             detail: components["schemas"]["ActivityDetail"] | null;
         };
         JobEvents: {
@@ -4409,6 +4559,7 @@ export interface components {
             publication?: components["schemas"]["PublicationState"];
             coverage: components["schemas"]["TraversalCoverage"];
             archive?: components["schemas"]["ReferenceArchive"];
+            data_sources?: components["schemas"]["AccountDataSources"];
         };
         ClaimResult: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
@@ -4581,7 +4732,7 @@ export interface components {
             coverage: string;
             available: boolean;
         };
-        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank, unchanged by search/pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks. Legacy gene-set weights are null. */
+        /** @description One retained gene weight or gene-set projection. rank is the full factor gene rank or the original selected-metric gene-set projection rank within its library, unchanged by search, library filter or pagination; legacy sets preserve imported rank. joint_rank and marginal_rank are original projection ranks within the library. Legacy gene-set weights are null. */
         FactorLoading: {
             id: string;
             label: string;
@@ -4599,6 +4750,7 @@ export interface components {
         FactorDetail: {
             factor: components["schemas"]["EagglFactor"];
             generation_id: string | null;
+            /** @description eaggl_import_id is the reference release id: a release holds the EAGGL fit with no separate import id. */
             provenance: {
                 eaggl_import_id: string;
                 factor_id: string;
@@ -4608,6 +4760,20 @@ export interface components {
             genes: components["schemas"]["LoadingSummary"];
             gene_sets: components["schemas"]["LoadingSummary"];
             gnomad?: components["schemas"]["GnomadImport"] | null;
+            /** @description Present when the release carries factor-trait links (eaggl trait linkage + factor-PheWAS, BH q <= 0.05 over all tests): n_phenotypes tested and n_linked linked, the factor's own trait included; n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the linked phenotypes other than the factor's own trait. own_trait_q is the q of its own trait (null when none was reported) and top_linked its best other links by phewas_q. A phenotype without a KPN trait id has a null kpn_trait_id. An absent phenotype is unlinked at this threshold, not a negative. */
+            trait_links?: {
+                n_phenotypes: number;
+                n_linked: number;
+                n_linked_kpn_traits: number;
+                n_linked_atlas_traits: number;
+                own_trait_q: number | null;
+                top_linked: {
+                    phenotype: string;
+                    kpn_trait_id: string | null;
+                    name: string;
+                    phewas_q: number;
+                }[];
+            };
         };
         /** @description Bounded loading page. sort=loading (default) orders by descending score; alphabetical orders case-insensitive labels. Gene-only gnomad_pli and gnomad_mis_z sort descending; gnomad_loeuf sorts ascending, all with missing values last and stable symbol ties. Sorting applies globally before pagination. Ranks and heatmap score ranges always remain original factor loadings. Pin generation_id, source_revision, and gnomad_import_id returned by FactorDetail. */
         FactorLoadings: {
@@ -4627,7 +4793,7 @@ export interface components {
             summary: components["schemas"]["LoadingSummary"];
             gnomad?: components["schemas"]["GnomadImport"] | null;
         };
-        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null; provenance preserves imported collection prefixes, organizations, datasets, files and activities. Unknown/derived account aliases return 404. */
+        /** @description Imported public reference data, never an owner account graph. object is the exact stored GeneSet or null. provenance is this gene set's own lineage in its collection's provenance (prefixes kept whole): its generating activities, their inputs, the datasets those derive from (including links from REVEAL's curated source-dataset map) and their organizations; inputs of one activity that share one upstream lineage are represented by one of them, and limitations say so. Gene sets the release does not reference (by a projection or a beta) and unknown/derived account aliases return 404. */
         CatalogGeneSet: {
             /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
             id: string;
@@ -4657,6 +4823,14 @@ export interface components {
                 payload_sha256: string | null;
             } | null;
             limitations: string[];
+            /** @description Translator artifact-provenance portal pages of the gene set and of its collection (the portal's collection id), built from ids and never fetched. */
+            external_links?: {
+                label: string;
+                /** Format: uri */
+                href: string;
+                /** @enum {string} */
+                kind: "portal_gene_set" | "portal_collection";
+            }[];
         };
         /** @description Committed invalidation event. SSE id is an opaque signed cursor bound to the principal and notification namespace; the envelope cursor is scope-local. Replay requires current authorization. */
         WorkspaceEvent: {
@@ -4962,11 +5136,16 @@ export interface components {
         /** @enum {string} */
         LeaderboardView: "researchers" | "accounts" | "datasets";
         /** @enum {string} */
-        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+        LeaderboardSort: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
         /** @enum {string} */
-        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+        LeaderboardMetric: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
         /** @enum {string} */
         LeaderboardEvidence: "all" | "supporting";
+        /**
+         * @description Accounts counted by the datasets view. published (default): currently public frozen accounts. all: also every other saved account, as anonymous totals of its stored trace (traced_claims/traced_accounts only); private units are never listed.
+         * @enum {string}
+         */
+        LeaderboardScope: "published" | "all";
         LeaderboardAttribution: {
             id: string;
             label: string;
@@ -4979,6 +5158,13 @@ export interface components {
             NEUTRAL: number;
             UNKNOWN: number;
         };
+        /** @description An organization credited for a dataset in its traced reference lineage. Roles are recorded credit (publisher, attribution, ...), not data production. */
+        LeaderboardOrganization: {
+            id: string;
+            name: string;
+            ror: string | null;
+            roles: string[];
+        };
         LeaderboardMetrics: {
             account_count: number;
             upvotes: number;
@@ -4988,6 +5174,8 @@ export interface components {
             explored_gap_count: number;
             claim_count: number;
             researcher_count: number;
+            traced_claim_count: number;
+            traced_account_count: number;
             net_votes: number;
             overall_score: number;
         };
@@ -5012,8 +5200,16 @@ export interface components {
             } | null;
             attribution: components["schemas"]["LeaderboardAttribution"] | null;
             directions: components["schemas"]["LeaderboardDirections"];
+            /** @description Datasets: the organizations credited for the dataset in its traced reference lineage (publisher, attribution, ...). Empty for other views. */
+            organizations: components["schemas"]["LeaderboardOrganization"][];
+            url: string | null;
+            /**
+             * @description Datasets: present for a KPN trait's GWAS bottom-line artifact that traced claims reach (stored data sources kind gwas_bottom_line); url is then its portal artifact page. Absent for a DAPPER Dataset.
+             * @enum {string}
+             */
+            source_kind?: "gwas_bottom_line";
         };
-        /** @description Only public eligibility/exclusion totals. No counts of private work. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
+        /** @description Only public eligibility/exclusion totals. Private work is counted only by the datasets view with scope=all, as anonymous traced totals, and is never listed. Observation time is not a cursor revision. Original actors are represented by opaque public keys; no job, request, private email or voter identity is exposed. */
         LeaderboardMetadata: {
             /** Format: date-time */
             as_of: string;
@@ -5045,6 +5241,7 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
         };
         LeaderboardList: {
@@ -5078,10 +5275,12 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             sort: components["schemas"]["LeaderboardSort"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             items: components["schemas"]["LeaderboardEntry"][];
             page: components["schemas"]["Page"];
         };
@@ -5098,6 +5297,7 @@ export interface components {
             directions: components["schemas"]["LeaderboardDirections"];
             value: number;
         };
+        /** @description total counts the listed public records; withheld counts the private units a scope=all traced metric also counts, which are never listed. */
         LeaderboardRecords: {
             /** Format: date-time */
             as_of: string;
@@ -5129,13 +5329,16 @@ export interface components {
                 score: string;
                 own_votes: string;
                 evidence: string;
+                traced: string;
             };
             view: components["schemas"]["LeaderboardView"];
             id: string;
             metric: components["schemas"]["LeaderboardMetric"];
             evidence: components["schemas"]["LeaderboardEvidence"];
+            scope: components["schemas"]["LeaderboardScope"];
             entry: components["schemas"]["LeaderboardEntry"];
             total: number;
+            withheld: number;
             items: components["schemas"]["LeaderboardRecord"][];
             page: components["schemas"]["Page"];
         };
@@ -6032,12 +6235,25 @@ export interface components {
             data_use_terms?: components["schemas"]["PackageDataUseTerm"][] | null;
             datasets?: components["schemas"]["PackageDataset"][] | null;
             drs_objects?: components["schemas"]["PackageDrsObject"][] | null;
+            drs_representation_edges?: components["schemas"]["PackageDrsRepresentation"][] | null;
             embeddings?: components["schemas"]["PackageEmbedding"][] | null;
             evidence_items?: components["schemas"]["PackageEvidenceItem"][] | null;
             files?: components["schemas"]["PackageFile"][] | null;
+            funded_by_edges?: components["schemas"]["PackageFundedBy"][] | null;
             gene_programs?: components["schemas"]["PackageGeneProgram"][] | null;
             gene_set_collections?: components["schemas"]["PackageGeneSetCollection"][] | null;
             gene_sets?: components["schemas"]["PackageGeneSet"][] | null;
+            has_agentic_workspace_edges?: components["schemas"]["PackageHasAgenticWorkspace"][] | null;
+            has_contributor_edges?: components["schemas"]["PackageHasContributor"][] | null;
+            has_creator_edges?: components["schemas"]["PackageHasCreator"][] | null;
+            has_data_use_term_edges?: components["schemas"]["PackageHasDataUseTerm"][] | null;
+            has_drs_object_edges?: components["schemas"]["PackageHasDrsObject"][] | null;
+            has_file_edges?: components["schemas"]["PackageHasFile"][] | null;
+            has_lineage_step_edges?: components["schemas"]["PackageHasLineageStep"][] | null;
+            has_mirror_provenance_edges?: components["schemas"]["PackageHasMirrorProvenance"][] | null;
+            has_recommended_citation_edges?: components["schemas"]["PackageHasRecommendedCitation"][] | null;
+            has_workflow_provenance_edges?: components["schemas"]["PackageHasWorkflowProvenance"][] | null;
+            is_described_by_edges?: components["schemas"]["PackageIsDescribedBy"][] | null;
             knowledge_gaps?: components["schemas"]["PackageKnowledgeGap"][] | null;
             licenses?: components["schemas"]["PackageLicense"][] | null;
             lineage_steps?: components["schemas"]["PackageLineageStep"][] | null;
@@ -6050,6 +6266,7 @@ export interface components {
             nanopub_signatures?: components["schemas"]["PackageNanopubSignature"][] | null;
             nanopublications?: components["schemas"]["PackageNanopublication"][] | null;
             organizations?: components["schemas"]["PackageOrganization"][] | null;
+            packaged_as_edges?: components["schemas"]["PackagePackagedAs"][] | null;
             paragraphs?: components["schemas"]["PackageParagraph"][] | null;
             persons?: components["schemas"]["PackagePerson"][] | null;
             prefixes: {
@@ -6062,6 +6279,10 @@ export interface components {
             ro_crate_packages?: components["schemas"]["PackageRoCratePackage"][] | null;
             scientific_accounts?: components["schemas"]["PackageScientificAccount"][] | null;
             sets?: components["schemas"]["PackageSet"][] | null;
+            used_edges?: components["schemas"]["PackageUsed"][] | null;
+            was_attributed_to_edges?: components["schemas"]["PackageWasAttributedTo"][] | null;
+            was_derived_from_edges?: components["schemas"]["PackageWasDerivedFrom"][] | null;
+            was_generated_by_edges?: components["schemas"]["PackageWasGeneratedBy"][] | null;
         };
         /**
          * EPDapperPin
@@ -8349,6 +8570,74 @@ export interface components {
                 outcome_id: string | null;
             };
         };
+        /** @description One claim reaching one Dataset. input_roles: data_input (primary data), metadata_input (identifier mapping) or unknown. routes: how the claim reaches it (its proposition names the object, its evidence derives from it, a source claim does, a mechanism projects onto gene sets built from it, or a KPN trait the claim reaches, cited or a mechanism's fitted trait, has a GWAS bottom line: trait_gwas). via_ids: the cited gene set, mechanism, trait, file or source claim. curation_ids: hard-coded lineage steps on the way (curated_lineage: the release's lap/config/source_datasets.yaml, or a reload-era collection-lineage curation). Organization roles are recorded credit (publisher, attribution, ...), not data production. */
+        AccountDataSourceConnection: {
+            dataset_id: string;
+            input_roles: string[];
+            routes: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas")[];
+            via_ids: string[];
+            organizations: {
+                organization_id: string;
+                roles: string[];
+            }[];
+            curation_ids: string[];
+            trace_count: number;
+        };
+        /** @description The Datasets each claim reaches through the account provenance trace, and the Organizations credited for them, traced once when the account was saved and stored with it, from the published reference release without the portal (no remote fetch): a reached KPN trait's GWAS route ends at its bottom-line artifact (datasets kind gwas_bottom_line). A point-in-time observation of the reference lineage (re-traced by an operator after a release or lineage change); GET /v1/accounts/{account_id}/provenance returns the full witness paths, with the portal's GWAS lineage. not_traced: no stored trace matches this exact account source and tracing policy; unavailable: tracing failed (error.code) and the account is unaffected; incomplete: some sources lack recorded lineage, so the datasets are a lower bound. */
+        AccountDataSources: {
+            /** @enum {string} */
+            status: "complete" | "incomplete" | "unavailable" | "not_traced";
+            /** Format: date-time */
+            traced_at?: string;
+            error?: {
+                code: string;
+            };
+            reference_generation_ids?: string[];
+            coverage?: {
+                trace_count: number;
+                counts_are_lower_bounds: boolean;
+                issue_counts: {
+                    [key: string]: number;
+                };
+            };
+            claims?: {
+                claim_id: string;
+                /** @enum {string} */
+                resolution: "complete" | "incomplete" | "not_applicable";
+                datasets: components["schemas"]["AccountDataSourceConnection"][];
+            }[];
+            datasets?: {
+                id: string;
+                name?: string;
+                version?: string;
+                description?: string;
+                /** Format: uri */
+                location?: string;
+                /**
+                 * @description Absent for a DAPPER Dataset. gwas_bottom_line: a KPN trait's GWAS bottom-line artifact on the Translator provenance portal, named by the published release (its metadata.bottom_line.gwas_artifact); the id is gwas-bottom-line:<artifact_id> and location the portal's artifact page, built from ids and never fetched.
+                 * @enum {string}
+                 */
+                kind?: "gwas_bottom_line";
+                /** @description gwas_bottom_line: the portal artifact id. */
+                artifact_id?: string;
+                ancestry_code?: string;
+                ancestry_name?: string;
+                /** @description gwas_bottom_line: the KPN trait whose GWAS this is. */
+                kpn_trait_id?: string;
+                portal_trait_id?: string;
+            }[];
+            organizations?: {
+                id: string;
+                name?: string;
+                ror?: string;
+            }[];
+            via?: {
+                id: string;
+                kind: string;
+                name?: string;
+                filename?: string;
+            }[];
+        };
         /** @description Immutable snapshot of an EAGGL factor referenced by archived work, kept after its reference generation is purged. Public reference data. metadata is the source factor metadata; top_genes (by loading) and top_gene_sets (by rank) hold at most 50 entries each. Legacy cfde-inc-v2 snapshots have a null kpn_trait_id and null gene-set loadings. mechanism.id is the DAPPER Mechanism the catalog served, or null when it could not be minted. */
         ArchivedReferenceFactor: {
             /** @constant */
@@ -9081,6 +9370,539 @@ export interface components {
                 has_more: boolean;
                 snapshot_id?: string;
             };
+        };
+        /** @description trace_count and reached IDs cover the entire account; trace_ids and page_trace_count cover this page. Scientific records are never rewritten. */
+        ProvenanceAnnotation: {
+            trace_count: number;
+            page_trace_count: number;
+            trace_ids: string[];
+            dataset_ids: string[];
+            organization_ids: string[];
+            /** @enum {string} */
+            resolution: "complete" | "incomplete" | "not_applicable";
+        };
+        AnnotatedScientificAccount: {
+            record: components["schemas"]["DapperScientificAccount"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedClaim: {
+            record: components["schemas"]["DapperClaim"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedProposition: {
+            record: components["schemas"]["DapperProposition"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        AnnotatedEvidenceItem: {
+            record: components["schemas"]["DapperEvidenceItem"];
+            provenance: components["schemas"]["ProvenanceAnnotation"];
+        };
+        /** @description Deterministic witness path for an originating scientific use. Direction is present only for evidence-origin traces and is not multiplied through source claims. Alternative recorded branches remain in the shared graph. */
+        ProvenanceTrace: {
+            id: string;
+            claim_id: string | null;
+            proposition_id: string | null;
+            evidence_item_id: string | null;
+            origin_id: string;
+            source_field: string;
+            source_id: string;
+            dataset_id: string;
+            route_classifications: ("proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas")[];
+            input_roles: string[];
+            organization_ids: string[];
+            organization_attributions: {
+                organization_id: string;
+                role: string;
+                path_steps: {
+                    edge_id: string;
+                    /** @enum {string} */
+                    direction: "forward" | "reverse";
+                }[];
+            }[];
+            path_steps: {
+                edge_id: string;
+                /** @enum {string} */
+                direction: "forward" | "reverse";
+            }[];
+            path_edge_ids: string[];
+            /** @enum {string} */
+            direction?: "SUPPORTS" | "DISPUTES" | "MIXED" | "NEUTRAL" | "UNKNOWN";
+        };
+        ProvenanceNode: {
+            id: string;
+            /** @description The node's kind: dataset, file, activity, organization, gene_set, mechanism, trait, ..., or capture (a cited research or Box capture file whose retained bytes verify: a lineage endpoint, never missing lineage). */
+            kind: string;
+            /** @enum {string} */
+            status: "resolved" | "unresolved" | "conflicting";
+            name?: string | null;
+            sha256?: string | null;
+            filename?: string | null;
+            ror?: string | null;
+            href?: string | null;
+        };
+        ProvenanceEdge: {
+            id: string;
+            subject: string;
+            predicate: string;
+            object: string;
+            relation: string;
+            input_role?: string;
+            observations?: {
+                [key: string]: unknown;
+            }[];
+            provenance_source?: {
+                [key: string]: unknown;
+            }[];
+        };
+        /** @description Distinct claims reaching an exact dataset. Route classifications overlap and must not be added. This measures reuse/reference lineage, not evidentiary strength. */
+        DatasetReuse: {
+            dataset_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            trace_count: number;
+            classification_claim_counts: {
+                proposition_reference: number;
+                evidence_derivation: number;
+                inherited_source_claim: number;
+                factor_projection: number;
+                trait_gwas: number;
+            };
+            classification_claim_ids: {
+                proposition_reference: string[];
+                evidence_derivation: string[];
+                inherited_source_claim: string[];
+                factor_projection: string[];
+                trait_gwas: string[];
+            };
+            input_roles: string[];
+        };
+        /** @description Distinct claims, datasets and claim-dataset pairs, grouped by recorded organization roles; publisher and funder do not imply data producer. */
+        OrganizationReuse: {
+            organization_id: string;
+            claim_count: number;
+            claim_ids: string[];
+            dataset_count: number;
+            dataset_ids: string[];
+            claim_dataset_count: number;
+            roles: {
+                [key: string]: {
+                    claim_count: number;
+                    claim_ids: string[];
+                    dataset_count: number;
+                    dataset_ids: string[];
+                    claim_dataset_count: number;
+                };
+            };
+        };
+        /** @description Independent lineage, retained projection and source-recovery coverage. A release Mechanism's retained_projection_coverage entry states its sample: retained_rows (all retained projections), traced_rows (those followed) and trace_bound ({per_library, order, plus}: the top gene sets per library by joint rank, the account's own gene sets, and each further gene set reaching a Dataset not yet reached). Complete retained projection rows do not establish complete model-construction lineage. Missing or withheld sources make counts lower bounds. Issue codes include external_provenance_unavailable (a trait's portal GWAS graph could not be read: object_id is the trait), reference_release_superseded (the account's captures pin a release that is no longer published; only capture bytes and archived snapshots were read), trait_unavailable and unlinked_inputs ({activity, count}: more inputs of one activity than the fan-out bound, none with recorded lineage). */
+        ProvenanceCoverage: {
+            /** @enum {string} */
+            status: "complete" | "incomplete";
+            counts_are_lower_bounds: boolean;
+            claim_count: number;
+            resolved_claim_count: number;
+            trace_count: number;
+            lineage_resolution: {
+                /** @enum {string} */
+                status: "complete" | "incomplete";
+                issue_count: number;
+            };
+            retained_projection_coverage: {
+                [key: string]: unknown;
+            }[];
+            recovery_status: {
+                [key: string]: unknown;
+            }[];
+            issues: {
+                [key: string]: unknown;
+            }[];
+            /** @description Gaps of the upstream sources themselves: absent, never inferred. They do not make the trace incomplete. */
+            upstream_gaps?: {
+                /** @enum {string} */
+                route: "proposition_reference" | "evidence_derivation" | "inherited_source_claim" | "factor_projection" | "trait_gwas";
+                /** @description not_a_gwas_trait (a rare-disease list), not_on_portal (no bottom-line GWAS listed), no_gwas_ancestry_artifact (artifacts, but none of the release's GWAS ancestry), or no_upstream_organizations (the reached Dataset names no organization). */
+                code: string;
+                object_ids: string[];
+            }[];
+        };
+        ProvenanceSnapshot: {
+            id: string;
+            policy_version: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            account_id: string;
+            account_payload_sha256: string;
+            document_sha256: string;
+            publication_version: number;
+            reference_generation_ids: string[];
+            supplement_ids: string[];
+            /** @description Hashes of every source read. kind portal_bottom_line: key is the portal URL read, sha256 that of the compacted GWAS graph (canonical JSON); a changed portal graph expires cursors. */
+            source_observations: {
+                kind: string;
+                key: string;
+                sha256: string;
+            }[];
+        };
+        AccountProvenance: {
+            account: components["schemas"]["AnnotatedScientificAccount"];
+            claims: components["schemas"]["AnnotatedClaim"][];
+            propositions: components["schemas"]["AnnotatedProposition"][];
+            evidence_items: components["schemas"]["AnnotatedEvidenceItem"][];
+            traces: components["schemas"]["ProvenanceTrace"][];
+            nodes: components["schemas"]["ProvenanceNode"][];
+            edges: components["schemas"]["ProvenanceEdge"][];
+            dataset_reuse: components["schemas"]["DatasetReuse"][];
+            organization_reuse: components["schemas"]["OrganizationReuse"][];
+            coverage: components["schemas"]["ProvenanceCoverage"];
+            snapshot: components["schemas"]["ProvenanceSnapshot"];
+            page: {
+                limit: number;
+                offset: number;
+                total: number;
+                next_cursor: string | null;
+            };
+        };
+        /** @description A KPN trait of the published reference release. Atlas traits (is_atlas) have fitted EAGGL factors; a non-atlas phenotype is one the factor-trait linkage linked factors to, with no factors, betas or trait group of its own. phenotype is the PIGEAN phenotype id (an atlas trait without a phenotype row falls back to its EAGGL phenotype code). factors are fitted on this trait, in factor order; gene_set_libraries count its PIGEAN-kept gene sets per library and those with a nonzero beta_uncorrected, with its best 5 nonzero gene sets of each library by library_rank (page the rest at /v1/trait-gene-sets); linked_factors counts factors of other traits linked to this trait. */
+        TraitDetail: {
+            kpn_trait_id: string;
+            phenotype: string;
+            name: string;
+            category: string | null;
+            is_atlas: boolean;
+            legacy_phenotype_id: string | null;
+            trait_group: string | null;
+            trait_type: string | null;
+            description: string | null;
+            /** Format: uri */
+            kpn_url: string;
+            /** @description The Translator provenance portal's bottom-line GWAS of the trait, as links built from stored ids (never fetched). gwas_artifact_id is the one artifact the account trace's GWAS route uses. Rare-disease gene lists have no GWAS (not_a_gwas_trait); other traits without artifacts are not_on_portal; a trait with artifacts but none of the release's GWAS ancestry (Mixed) is no_gwas_ancestry_artifact. */
+            gwas: {
+                /** @enum {string} */
+                status: "available" | "not_a_gwas_trait" | "not_on_portal" | "no_gwas_ancestry_artifact";
+                portal_trait_id: string | null;
+                gwas_artifact_id: string | null;
+                portal_href: string | null;
+                artifacts: {
+                    ancestry_code: string;
+                    ancestry_name: string;
+                    artifact_id: string;
+                    /** Format: uri */
+                    href: string;
+                }[];
+            };
+            factors: {
+                source_id: string;
+                label: string;
+                factor_number: number;
+            }[];
+            gene_set_libraries: {
+                library: string;
+                n_gene_sets: number;
+                n_nonzero: number;
+                top_gene_sets: components["schemas"]["TraitGeneSet"][];
+            }[];
+            linked_factors: {
+                n_factors: number;
+            };
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description One trait x gene-set row of the release's PIGEAN betas mode (one fit per CFDE library on the trait's PIGEAN gene statistics, no outer Gibbs). beta_uncorrected is the gene set's uncorrected effect, beta its effect corrected for the library's other gene sets, avg_postp its average posterior inclusion probability; library_rank orders the trait's gene sets within the library by beta_uncorrected. These are not the BioIndex small-model values. */
+        TraitGeneSet: {
+            kpn_trait_id: string;
+            trait_name: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            gene_set_id: string;
+            gene_set_name: string;
+            library: string;
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            collection_id: string;
+            n_genes: number;
+            beta_uncorrected: number;
+            beta: number;
+            avg_postp: number;
+            library_rank: number;
+        };
+        /** @description Bounded page of gene-set betas for one trait (trait_id) or of one gene set across traits (gene_set_id). Sorted descending by sort with zero values last (below the few negative corrected betas), ties by library_rank then gene_set_id, before pagination. Only gene sets PIGEAN kept have rows: an absent pair is not a zero beta, and some kept rows are exactly 0. */
+        TraitGeneSets: {
+            trait_id: string | null;
+            gene_set_id: string | null;
+            library: string | null;
+            /** @enum {string} */
+            sort: "beta_uncorrected" | "beta" | "avg_postp";
+            items: components["schemas"]["TraitGeneSet"][];
+            total: number;
+            next_offset: number | null;
+            coverage: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description A factor linked to a PIGEAN phenotype at BH q <= 0.05. nnls_loading is the factor's non-negative least-squares loading in eaggl's trait linkage; phewas_beta, phewas_p_onesided and phewas_q are the factor-PheWAS effect, its one-sided p value and its Benjamini-Hochberg q over all factor x phenotype tests. is_own_trait marks the phenotype the factor was fitted on; is_atlas_trait a phenotype that is an atlas trait. phenotype_name is the display name; phenotypes without a KPN id have a null phenotype_kpn_trait_id. */
+        FactorTraitLink: {
+            source_id: string;
+            factor_label: string;
+            fitted_kpn_trait_id: string;
+            fitted_trait_name: string;
+            phenotype: string;
+            phenotype_kpn_trait_id: string | null;
+            phenotype_name: string;
+            is_own_trait: boolean;
+            is_atlas_trait: boolean;
+            nnls_loading: number;
+            phewas_beta: number;
+            phewas_p_onesided: number;
+            phewas_q: number;
+        };
+        /** @description Bounded page of the phenotypes linked to one factor (source_id), or of the factors linked to one trait (trait_id; the trait's own factors are flagged is_own_trait). scope=atlas keeps links whose phenotype is an atlas trait. phewas_q sorts ascending, phewas_beta and nnls_loading descending, ties by phenotype then factor, before pagination. summary (source_id only) is the factor's linkage over every phenotype tested: n_linked includes its own trait, n_linked_kpn_traits (distinct KPN trait ids) and n_linked_atlas_traits count the other linked phenotypes, and own_trait_q is null when its own trait was not tested. */
+        FactorTraitLinks: {
+            source_id: string | null;
+            trait_id: string | null;
+            /** @enum {string} */
+            scope: "atlas" | "all";
+            /** @enum {string} */
+            sort: "phewas_q" | "phewas_beta" | "nnls_loading";
+            summary: {
+                n_phenotypes: number;
+                n_linked: number;
+                n_linked_kpn_traits: number;
+                n_linked_atlas_traits: number;
+                own_trait_q: number | null;
+            } | null;
+            items: components["schemas"]["FactorTraitLink"][];
+            total: number;
+            next_offset: number | null;
+            coverage: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description The served factor whose minted DAPPER Mechanism this id is. Resolve the factor at /v1/mechanisms/{source_id}. */
+        MechanismObject: {
+            /** @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values. */
+            dapper_id: string;
+            /** @constant */
+            status: "current";
+            source_id: string;
+            /** @description The published reference release these rows were read from. */
+            release_id: string;
+        };
+        /** @description Per-run limits. The run stops at the first of timeout_seconds, max_turns and max_budget_usd, or when one response exceeds max_output_tokens (CLAUDE_CODE_MAX_OUTPUT_TOKENS). Each limit has a default, used when the request leaves it out, and a ceiling, the most a request may ask for; a value above the ceiling is refused with 422 and the message names the ceiling. Operators set both per deployment, so the defaults and maximums shown here are the built-in ones and the range the service supports. */
+        AgentJobLimits: {
+            /**
+             * @description Wall-clock seconds for the run.
+             * @default 900
+             */
+            timeout_seconds: number;
+            /**
+             * @description Claude Code turns.
+             * @default 50
+             */
+            max_turns: number;
+            /**
+             * @description Provider cost of the run in US dollars.
+             * @default 2
+             */
+            max_budget_usd: number;
+            /**
+             * @description Calls to the scoped REVEAL tools (the graph tools and query_claims), counted together. When they are used up the agent is told and can still finish.
+             * @default 30
+             */
+            tool_calls: number;
+            /**
+             * @description The most Claude Code may generate in one model response, thinking included; passed to Claude Code as CLAUDE_CODE_MAX_OUTPUT_TOKENS. A response that reaches it (after Claude Code's own attempts to continue) fails the job, and the failure names this limit and the ceiling. For long output, raise it or have the agent write files under output/.
+             * @default 128000
+             */
+            max_output_tokens: number;
+        };
+        /** @description Runs a prompt as a general-purpose Claude Code agent in an isolated, disposable sandbox. No scientific validation or DAPPER objects; the result is the final answer and a list of the files the agent wrote to output/. Only workspaces named in REVEAL_AGENT_JOB_USERS (or, with *, any registered user) may start one (403 AGENT_JOBS_NOT_ENABLED), and only on the durable workflow runtime (409 AGENT_JOBS_UNAVAILABLE). Watch progress on the job events stream. */
+        AgentJobInput: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agent";
+            /** @description The task. Sent to the agent as its first message. */
+            prompt: string;
+            /** @description Appended to Claude Code's own system prompt, after a short note on the sandbox. */
+            system_prompt?: string;
+            /**
+             * @description Claude Code built-in tools the agent may use. WebFetch needs network open. The default shown is for deliverable answer; deliverable scientific_account defaults to Read, Write, Edit, Glob, Grep, Bash, WebSearch, WebFetch (without WebFetch when the request sets network restricted).
+             * @default [
+             *       "Read",
+             *       "Write",
+             *       "Edit",
+             *       "Glob",
+             *       "Grep",
+             *       "Bash",
+             *       "WebSearch"
+             *     ]
+             */
+            tools: ("Read" | "Write" | "Edit" | "Glob" | "Grep" | "Bash" | "WebSearch" | "WebFetch")[];
+            /**
+             * @description OKN knowledge graphs the agent may query through the scoped graph tools.
+             * @default []
+             */
+            graphs: ("biomarkerkg" | "prokn")[];
+            /**
+             * @description restricted reaches only the Anthropic API, the services of the selected graph tools and query_claims, and the hosts in allowed_domains; open reaches the internet (package installs, downloads, WebFetch). The default shown is for deliverable answer; deliverable scientific_account defaults to open. Either way the agent never holds the API key.
+             * @default restricted
+             * @enum {string}
+             */
+            network: "restricted" | "open";
+            /**
+             * @description Extra exact hostnames the restricted network may reach over HTTPS, for example eutils.ncbi.nlm.nih.gov or api.platform.opentargets.org. No wildcards or IP addresses. Not used with network open.
+             * @default []
+             */
+            allowed_domains: string[];
+            /**
+             * @default medium
+             * @enum {string}
+             */
+            effort: "low" | "medium" | "high";
+            /** @description Claude model id. Default claude-opus-5-5 (or REVEAL_AGENT_JOB_MODEL). */
+            model?: string;
+            limits?: components["schemas"]["AgentJobLimits"];
+            /**
+             * @description What the job returns. answer: the final message. scientific_account: a DAPPER ScientificAccount the agent authors from papers it fetches with its own commands and saves under output/sources/; REVEAL then checks and mints it. Such a job needs question. It takes the same tools, network, allowed_domains and graphs as an answer job, defaults to Bash, WebSearch and WebFetch on the open network so it can reach the papers, and by default gets the run-time and turn ceilings.
+             * @default answer
+             * @enum {string}
+             */
+            deliverable: "answer" | "scientific_account";
+            /** @description Only with deliverable scientific_account, where it is required: the question the account addresses. It is recorded in the account as a requester-supplied question, not a curated knowledge gap. */
+            question?: string;
+            /**
+             * @description Only with deliverable scientific_account: name the requester in the account as the Person it is attributed to (display name, and the ORCID iD when it was authenticated). Default false: the account and its deposit say what made it and not who asked.
+             * @default false
+             */
+            attribute_requester: boolean;
+            /** @description Offer the query_claims tool: read-only lookups in the claims repository (Propositions, Claims and evidence that earlier runs and other groups deposited). Default true for deliverable scientific_account, false otherwise. The tool is offered only on a deployment that has a claims repository configured; what it returns cannot be cited as evidence. */
+            claims_repository?: boolean;
+            /** @description Only with deliverable answer: a JSON Schema (Draft 2020-12 unless it names another draft with $schema) that the final answer must satisfy. Its top level must be "type": "object"; it may use only local references ($ref "#/..."); it is at most 32,000 bytes. Claude Code is run with it as --json-schema, the mechanism behind Upstash Box's response_schema, and returns the object as structured output; REVEAL checks the object against the schema again and returns it as result.structured_output. A run that returns no such object, or one that does not satisfy the schema, fails with VALIDATION_FAILED. An invalid schema is refused with 422. */
+            output_schema?: {
+                [key: string]: unknown;
+            };
+            /**
+             * @description Only with deliverable scientific_account: what the requester wants assessed. Each item is a statement, or an object that adds the statement's structured form (subject_entity, relation, object_entity). Each becomes a fixed DAPPER Proposition; the agent assesses it from literature (supporting or disputing) and cannot reword it. Statements must be distinct. A claim the agent found no literature for is reported in the result, not included in the account.
+             * @default []
+             */
+            claims: (string | components["schemas"]["AgentAccountClaim"])[];
+        };
+        AgentFile: {
+            path: string;
+            size_bytes: number;
+            sha256: string;
+        };
+        AgentAccountDeposit: {
+            /**
+             * @description deposited: the claims repository stored every object of the account as sent; GET /v1/jobs/{job_id}/account rebuilds it from there. not_configured: this deployment has no claims repository. failed: the attempt did not succeed, or (reason inconsistent) the repository took it but holds some object otherwise than sent; the account itself is unaffected and stays with the job. withheld_unsafe: REVEAL's prompt-injection screen found text in the account, or in what the run read, that could be an attack, so the account was never sent; the job still succeeds and the account stays with the job. The screen looks for attacks, not scientific quality; detail says why in one line, and there is no review or retry.
+             * @enum {string}
+             */
+            status: "deposited" | "failed" | "not_configured" | "withheld_unsafe";
+            deposit_id?: string | null;
+            /** @description Objects the repository accepted, counting ones it already held. */
+            objects?: number;
+            /** @description Objects the repository already held under the same id with different unhashed content. Its stored copy stands. */
+            stored_differs?: number;
+            /** @description References the deposit left unresolved in the repository. */
+            unresolved_references?: number;
+            /** @description The collection the deposit went into, when it named one. Accounts name none. */
+            collection?: string;
+            /** @description The release of that collection. */
+            release?: string;
+            /**
+             * @description Why no deposit was made. For failed: too_large, rejected, unauthorized or unavailable; or inconsistent, when the receipt shows an object the repository already held with different unhashed content (stored_differs) or an unresolved reference: deposit_id and the counts are kept, and the account is served from the job. For withheld_unsafe, the screen check that withheld the account: oversized_field (a field over its size limit), unsafe_text (a link, code, markup, hidden characters or text addressed to a model in the account), unsafe_command (a recorded command that is not a plain fetch or conversion writing under output/), unrequested_claim (claims beyond those asked about), unknown_entity (a triple term not in the request, an allowed namespace or a cited source), screen_too_large (more text than the screen checks) or prompt_injection (the classifier flagged text the run read or wrote).
+             * @enum {string}
+             */
+            reason?: "too_large" | "rejected" | "unauthorized" | "unavailable" | "inconsistent" | "oversized_field" | "unsafe_text" | "unsafe_command" | "unrequested_claim" | "unknown_entity" | "screen_too_large" | "prompt_injection";
+            http_status?: number;
+            /** @description For rejected, the repository's own reason for refusing the document. For withheld_unsafe, one plain line saying the account was not stored in the claims repository, why, and where (a saved source file and lines, a tool call, or an account field); never the text itself. */
+            detail?: string;
+        };
+        /** @description One file the agent saved under output/sources/ and recorded in the account. The account names it by checksum and URL and does not carry it; the owner downloads the exact bytes a ValueLocator addresses from /v1/jobs/{job_id}/account/sources/{sha256}. */
+        AgentAccountPaper: {
+            /** @description Where the agent saved the file, relative to output/ (for example sources/PMC3491803.xml). */
+            path: string;
+            url: string | null;
+            sha256: string;
+            /** @description Size of the saved file, measured by REVEAL. */
+            size_bytes: number;
+            /** @description Media type REVEAL read from the bytes. */
+            media_type: string;
+            /** @description The command the agent recorded on the Activity that saved the file. */
+            command: string;
+            /** @description The successful Bash call REVEAL saw run, which contains the recorded command and names the file. */
+            observed_command: string;
+            derived_from: string | null;
+            /** @description EvidenceItems that quote this file. */
+            evidence_items: number;
+            file_id: string;
+        };
+        /** @description A requested claim with the structured form of its Proposition. subject_entity, relation and object_entity go together: give all three or none. A CURIE prefix must be one the pinned DAPPER release declares (MONDO, HGNC, KPN.TRAIT, obo, CL, ...) or HGNC.SYMBOL or biolink; anything else must be an absolute URI. The three are stored on the Proposition as given, so the account can be found by them in the claims repository. A claim sent as a plain statement has no structured form unless the agent can supply one from what it was given and read. */
+        AgentAccountClaim: {
+            /** @description The claim in words. */
+            statement: string;
+            /** @description Subject of the structured form, as a CURIE or absolute URI, for example HGNC.SYMBOL:LEPR. */
+            subject_entity?: string;
+            /** @description Predicate, for example biolink:genetically_associated_with. */
+            relation?: string;
+            /** @description Object, for example KPN.TRAIT:0000505 or MONDO:0005265. */
+            object_entity?: string;
+        };
+        AgentAccountRequestedClaim: {
+            statement: string;
+            /** @description False when the agent made no Claim on it. */
+            assessed: boolean;
+            claim_ids: string[];
+        };
+        /** @description The ScientificAccount a deliverable scientific_account job returned. Fetch the document itself from /v1/jobs/{job_id}/account. */
+        AgentAccount: {
+            account_id: string;
+            /** @description DAPPER version the returned and deposited document is minted with. */
+            dapper_version: string;
+            document_sha256: string;
+            document_bytes: number;
+            objects: number;
+            edges: number;
+            claims: number;
+            /** @description Quoted passages located by exact byte span in a saved source file. */
+            value_locators: number;
+            lint_warnings: number;
+            /** @description What became of each claim in the request. */
+            requested_claims: components["schemas"]["AgentAccountRequestedClaim"][];
+            /** @description Every source file the account records, fetched or converted. */
+            papers: components["schemas"]["AgentAccountPaper"][];
+            deposit: components["schemas"]["AgentAccountDeposit"];
+        };
+        AgentAccountDocument: {
+            /** Format: uuid */
+            job_id: string;
+            account: components["schemas"]["AgentAccount"];
+            /**
+             * @description claims_repository: account.deposit.status is deposited, and the document was rebuilt from the claims repository (the deposit, its objects and its edges in stored order) and checked to be the account the job sent: the same account_id and the same sha256 as account.document_sha256. job_artifact: the repository does not hold the account (account.deposit.status withheld_unsafe, failed or not_configured), so this is the copy REVEAL kept with the job, checked against the same sha256.
+             * @enum {string}
+             */
+            source: "claims_repository" | "job_artifact";
+            /** @description The DAPPER document: plural arrays of objects (scientific_accounts, claims, propositions, evidence_items, value_locators, files, publications, ...) each ordered by id, and edges, every id a DAPPER-ID-1 address. Its canonical JSON (sorted keys, compact, UTF-8, final newline) hashes to account.document_sha256. */
+            document: {
+                [key: string]: unknown;
+            };
+        };
+        AgentResult: {
+            /** @constant */
+            kind: "agent";
+            /** @description The agent's final message. */
+            response: string;
+            /** @description True when the final message exceeded 50,000 characters. */
+            response_truncated: boolean;
+            response_sha256: string;
+            turns: number | null;
+            cost_usd: number | null;
+            duration_seconds: number | null;
+            /** @description Files the agent wrote to output/, retained with the job capture. */
+            files: components["schemas"]["AgentFile"][];
+            /** @description Present only when the request sent output_schema: the object the agent returned, checked against that schema. At most 100,000 bytes; a larger one fails the job. */
+            structured_output?: {
+                [key: string]: unknown;
+            };
+            account?: components["schemas"]["AgentAccount"];
         };
     };
     responses: never;
@@ -10110,7 +10932,7 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example analysis */
-                kind?: "analysis" | "paragraph";
+                kind?: "analysis" | "paragraph" | "agent";
                 /** @example succeeded */
                 status?: "queued" | "running" | "cancel_requested" | "cancelled" | "succeeded" | "insufficient_evidence" | "failed";
                 /** @example 33333333-3333-4333-8333-333333333333 */
@@ -11726,9 +12548,11 @@ export interface operations {
                 /** @example researchers */
                 view?: "researchers" | "accounts" | "datasets";
                 /** @example overall */
-                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers";
+                sort?: "overall" | "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "traced_claims";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -11807,9 +12631,11 @@ export interface operations {
         parameters: {
             query?: {
                 /** @example votes */
-                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files";
+                metric?: "accounts" | "votes" | "gaps" | "explored" | "claims" | "researchers" | "files" | "traced_claims" | "traced_accounts";
                 /** @example all */
                 evidence?: "all" | "supporting";
+                /** @example published */
+                scope?: "published" | "all";
                 /** @example 20 */
                 limit?: number;
                 /**
@@ -13362,6 +14188,11 @@ export interface operations {
                 gnomad_import_id?: string;
                 /** @example LEPR */
                 q?: string;
+                /**
+                 * @description Gene-set rows of one library only (ranks are within libraries); total counts the matching rows and summary stays over every library. Genes have no library, so kind=gene ignores it.
+                 * @example GO_BP
+                 */
+                library?: string;
                 /** @example 200 */
                 limit?: number;
                 /** @example 0 */
@@ -16060,6 +16891,473 @@ export interface operations {
                     "Cache-Control"?: string;
                     /** @example Authorization */
                     Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getAccountProvenance: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Optional exact account payload observation; a mismatch returns 404.
+                 * @example 9c4cdd23451a6ec0c04ec47539387b4d78a3db81ca707eba62f7a97e34619d66
+                 */
+                payload_sha256?: string;
+                /** @example 100 */
+                limit?: number;
+                /**
+                 * @description Opaque trace continuation. Changed sources, visibility, or explicit limit return 409.
+                 * @example opaque-signed-cursor
+                 */
+                cursor?: string;
+            };
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:ScientificAccount.vp5Cf6LUg2TEzZLLzwLnQWiT9HtnMshd
+                 */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountProvenance"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Version Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getTrait: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example KPN.TRAIT:0000398 */
+                kpn_trait_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraitDetail"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listTraitGeneSets: {
+        parameters: {
+            query?: {
+                /**
+                 * @description A KPN trait id: list its gene sets. Exclusive with gene_set_id.
+                 * @example KPN.TRAIT:0000398
+                 */
+                trait_id?: string;
+                /**
+                 * @description A gene set: list the traits it has a beta for. Exclusive with trait_id.
+                 * @example dapper:GeneSet.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+                 */
+                gene_set_id?: string;
+                /**
+                 * @description Keep one CFDE library.
+                 * @example GTEx
+                 */
+                library?: string;
+                /**
+                 * @description Descending with zero values last; ties by library_rank, then gene_set_id.
+                 * @example beta_uncorrected
+                 */
+                sort?: "beta_uncorrected" | "beta" | "avg_postp";
+                /** @example 50 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraitGeneSets"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    listFactorTraitLinks: {
+        parameters: {
+            query?: {
+                /**
+                 * @description A served factor: list its linked phenotypes. Exclusive with trait_id.
+                 * @example factor:kpn:0000398:eaggl-capped-v1:Factor1
+                 */
+                source_id?: string;
+                /**
+                 * @description A KPN trait id: list the factors linked to it. Exclusive with source_id.
+                 * @example KPN.TRAIT:0001360
+                 */
+                trait_id?: string;
+                /**
+                 * @description atlas keeps links whose phenotype is an atlas trait.
+                 * @example all
+                 */
+                scope?: "atlas" | "all";
+                /**
+                 * @description phewas_q ascends; phewas_beta and nnls_loading descend; ties by phenotype, then factor.
+                 * @example phewas_q
+                 */
+                sort?: "phewas_q" | "phewas_beta" | "nnls_loading";
+                /** @example 50 */
+                limit?: number;
+                /** @example 0 */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FactorTraitLinks"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Invalid Input */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMechanismObject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Exact, case-sensitive, compact DAPPER-ID-1 identifier. URL-encode path values.
+                 * @example dapper:Mechanism.DDGbWvsSn5KPwztUH_htX778WdrO5Zan
+                 */
+                dapper_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MechanismObject"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Reference Generation Superseded */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getJobAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccountDocument"];
+                };
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Rate Limited */
+            429: {
+                headers: {
+                    /** @example 30 */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description The claims repository could not serve the deposited account as it was sent. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    downloadJobAccountSource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @example 77777777-7777-4777-8777-777777777777 */
+                job_id: string;
+                /** @example 0000000000000000000000000000000000000000000000000000000000000002 */
+                sha256: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful response. */
+            200: {
+                headers: {
+                    /** @description Correlation ID for this HTTP request. */
+                    "X-Request-ID"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "*/*": string;
+                };
+            };
+            /** @description After authorization, redirect to the exact stored object. The private URL expires after 60 seconds. */
+            307: {
+                headers: {
+                    /** @description Short-lived download URL. Never cache or persist as an identifier. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication Required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Dependency Unavailable */
+            503: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

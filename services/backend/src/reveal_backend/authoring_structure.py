@@ -270,15 +270,16 @@ def _normalized_finding(finding):
             rule = check
             message = {
                 'prefixes': 'Use an absolute URI or a declared, non-conflicting CURIE.',
-                'claim-evidence': 'Link the Claim to target-matched EvidenceItems with eligible source observations.',
-                'source-ancestry': 'Preserve the exact eligible source and upstream provenance path.',
-                'source-locator': 'Use an exact locator in the captured source artifact.',
+                'claim-evidence': 'Give the Claim target-matched EvidenceItems that quote eligible source observations.',
+                'source-ancestry': 'This Claim has no evidence that traces to an eligible source this run retrieved. Give it an EvidenceItem whose snippet is the source row or passage, copied verbatim, and whose context says what was asked; or cite assessed Claims through source_claims.',
+                'source-locator': 'context holds a data path that does not resolve in the source this evidence quotes. Remove the path and say in words what was asked.',
                 'source-snippet': 'Copy the exact observed source text at the stated locator.',
                 'evidence-snippet': 'Replace snippet with a verbatim excerpt of repair.source_excerpt, the cited source text at this EvidenceItem locator; put summaries in explanation.',
                 'source-metric': 'Set this ClaimScore value to its cited row value in repair.source_values (repair.source_metrics lists the numeric fields when the metric is absent); keep metric and score_kind, and fix the EvidenceItem locator if it cites the wrong row.',
                 'refs': 'repair.unresolved names no node in this draft: reference an object present in the draft or an exact trusted id, or add it with write_account_draft so its dependencies are copied.',
                 'source-metric-kind': 'Keep the source metric mathematical meaning: loading is LOADING, beta is EFFECT_ESTIMATE, combined is SCORE.',
-                'source-file': 'Use the unchanged trusted capture File with its exact checksum and size; do not author replacement source bytes.',
+                'source-binding': 'REVEAL could not find the source of this evidence. Put the exact source row or passage in snippet, copied verbatim from the tool result, and say in context what you asked: the tool and the identifier of the factor, trait, gene or gene set, as you passed it. If the same row is in several results, those words decide which one is meant.',
+                'source-file': 'This draft holds a files entry that is not a source this run retrieved. Remove it and every reference to it: quote the source in snippet instead.',
                 'evidence-target': 'Set EvidenceItem.target_proposition to the owning Claim.proposition.',
                 'evidence-interpretation': 'Supply nonempty EvidenceItem.direction, context and explanation.',
                 'selected-gap': 'Reference the exact selected KnowledgeGap in ScientificAccount.question and preserve its trusted body.',
@@ -290,7 +291,7 @@ def _normalized_finding(finding):
                 'references': 'Supply or reference the exact trusted dependency.',
                 'linter-runtime': 'The linter did not complete; retry without changing scientific claims.',
                 'cfde-grounding-missing': 'Seek relevant CFDE grounding when defensible and explain its absence; supported independent evidence remains eligible.',
-                'geneset-provenance-missing': 'Preserve a structural path to the exact trusted GeneSet alongside the captured source File.',
+                'geneset-provenance-missing': 'Preserve a structural path to the exact trusted GeneSet: name it in the Proposition triple or in was_derived_from.',
                 'entity-reference-missing': 'Use supported structured Proposition entity references; names in prose do not establish identity.',
                 'membership-identity-unverified': 'Verify exact gene identity and GeneSet membership; co-loading and perturbation names do not establish membership.',
                 'relationship-support-missing': 'Retain an exact source observation supporting this relationship and its biological scope.',
@@ -338,7 +339,8 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
         used = sum(os.stat(item, dir_fd=report_fd, follow_symlinks=False).st_size for item in existing)
         if name not in existing and used + len(raw) > MAX_REPORT_TOTAL: raise ValueError('report_total_budget')
         if name not in existing and capture_roots:
-            from reveal_backend.box_upload import MAX_TOTAL
+            from reveal_backend.box_upload import MAX_TOTAL, TRANSCRIPT_FILES
+            transcript = {Path(name).name for name in TRANSCRIPT_FILES}   # their own allowance, beside MAX_TOTAL
             captured = 0
             for root in map(Path, capture_roots):
                 if not root.exists(): continue
@@ -346,7 +348,7 @@ def diagnostic_response(report, *, output, filename, capture_roots=()):
                 for path in paths:
                     info = path.lstat()
                     if stat.S_ISLNK(info.st_mode): raise ValueError('unsafe_capture_path')
-                    if stat.S_ISREG(info.st_mode): captured += info.st_size
+                    if stat.S_ISREG(info.st_mode) and path.name not in transcript: captured += info.st_size
             # Leave room for the bounded tool response, its duplicate ledger
             # projection and the final runtime timing/usage update.
             if captured + len(raw) + 100_000 > MAX_TOTAL: raise ValueError('capture_total_budget')

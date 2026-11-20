@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { overlayMembers, appendLoadings, firstGenePage, prefetchedLoadings } from "../src/lib/factor-explorer";
+import { overlayMembers, appendLoadings, firstGenePage, loadingLibraries, prefetchedLoadings } from "../src/lib/factor-explorer";
 import type { Schema } from "../src/lib/client";
 
 test("overlay matches exact HGNC symbols, deduplicates members and never guesses another namespace", () => {
@@ -57,4 +57,10 @@ test("a factor page starts its first gene page before awaiting the detail and ha
   assert.ok(view.indexOf("factorApi.loadings({ source_id: sourceId, source_revision: revision, ...firstGenePage }") < view.indexOf("await factorApi.detail("));
   assert.match(explorer, /kind="gene" self=\{self\} overlay=\{overlay\} initial=\{genes\}/);
   assert.doesNotMatch(explorer, /kind="gene_set"[^>]*initial=/);
+});
+
+test("the library filter lists each retained library once, in order, and skips rows without one", () => {
+  const row = (id: string, library?: string): Schema<"FactorLoading"> => ({ id, label: id, rank: 1, loading: 0.1, ...(library ? { library } : {}) });
+  assert.deepEqual(loadingLibraries([row("a", "MoTrPAC"), row("b", "GTEx"), row("c", "MoTrPAC"), row("d")]), ["GTEx", "MoTrPAC"]);
+  assert.deepEqual(loadingLibraries([]), []);
 });

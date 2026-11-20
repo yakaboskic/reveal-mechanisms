@@ -7,6 +7,7 @@ import os
 import re
 import time
 from .auth import Problem
+from .repository import application_sql
 from .runtime_config import ROOT
 
 PREVIEW = 400
@@ -74,10 +75,11 @@ def identifier(name):
 def schema_for(tx, name):
     schema = tables().get(name)
     if not schema: raise Problem(404, 'TABLE_NOT_FOUND', 'This table is not in the application schema.')
+    actual = application_sql(name, tx.table_prefix)  # the environment's own records and reference release tables
     if tx.sqlite:
-        present = tx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s", (name,)).fetchone()
+        present = tx.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=%s", (actual,)).fetchone()
     else:
-        present = tx.execute('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s', (name,)).fetchone()
+        present = tx.execute('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s', (actual,)).fetchone()
     if not present: raise Problem(404, 'TABLE_NOT_FOUND', 'This table is not present in the database.')
     if not schema['primary_key']: raise Problem(422, 'PRIMARY_KEY_REQUIRED', 'This table needs a primary key for stable inspection.')
     return schema
