@@ -327,7 +327,7 @@ Before sending, REVEAL screens the account for prompt injection. The screen look
 Fixed checks require that the account's prose carries no links, code, markup, hidden characters or text addressed to
 a model; that each recorded command is a plain `curl`, `wget`, `pdftotext` or `xmllint` call writing only under
 `output/`, using only the options listed for its program (`deposit_screen.OPTIONS`: fetching with GET, converting,
-choosing the output) and naming no local file outside `output/` and no URL that is not http(s); that its claims are about the claims you asked about (or, if you named none, its own, at most 20); that
+choosing the output) and naming no local file outside `output/` and no URL that is not http(s); that its claims are about the claims you asked about (or, if you named none, its own, as many as it makes); that
 each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
 size limit. A classifier, Llama Prompt Guard 2 22M, will also score the saved papers, the other tool results and the
 account's text, but it is off until an operator pins its model in

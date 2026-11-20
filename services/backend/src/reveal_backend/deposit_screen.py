@@ -22,8 +22,7 @@ account cannot carry it out unless it gets past them.
                  DAPPER release's), or a string printed in a cited source.
   claims         With requested claims, every Claim and every Proposition is about one of them: the requested
                  Proposition itself, or one with exactly its statement plus a triple. Without any, the agent's own
-                 claims are allowed, each Proposition is the subject of a Claim, and there are at most
-                 MAX_ACCOUNT_CLAIMS of them. Never more than MAX_CLAIMS Claims in all.
+                 claims are allowed, as many as it makes, and each Proposition is the subject of a Claim.
   commands       Each source Activity's `command` is one plain fetch or conversion (FETCH_PROGRAMS, the first word),
                  with no command substitution, nothing written outside output/, only the options OPTIONS lists for
                  its program, no argument naming a local file outside output/ (absolute, ~, .., @file) and no URL
@@ -107,7 +106,6 @@ WHY = {
 MAX_FREE_TEXT = 200_000
 DEFAULT_TEXT_CAP = 2_000
 IDENTIFIER_CAP = 300
-MAX_CLAIMS = 40
 # Characters per field. A quote is capped by source_evidence (400); a requested statement by box_agent (1,000).
 FIELD_CAPS = {
     ('scientific_accounts', 'name'): 300, ('scientific_accounts', 'context'): 4_000,
@@ -526,7 +524,7 @@ def _term_allowed(value, requested_terms, prefixes, source_texts):
 def fixed_checks(document, account, source_texts):
     """Raise Finding for the first fixed check the deposit-form `document` fails. `account` is the job's frozen
     account block (question, claims, package); `source_texts` the decoded text of every cited source file."""
-    from .box_agent import MAX_ACCOUNT_CLAIMS, TRIPLE_SLOTS
+    from .box_agent import TRIPLE_SLOTS
     requested = account.get('claims') or []
     requested_terms = {claim[slot] for claim in requested for slot in TRIPLE_SLOTS if isinstance(claim.get(slot), str)}
     revealed = reveal_activities(document)
@@ -563,12 +561,10 @@ def fixed_checks(document, account, source_texts):
             raise Finding('unsafe_command', 'account ' + _place('activities', index, 'command'))
         if 'observed_command' in node and not check_observed(node['observed_command']):
             raise Finding('unsafe_command', 'account ' + _place('activities', index, 'observed_command'))
-    # Claims: what the job asked about, or (when it asked about none) the agent's own, bounded.
+    # Claims: what the job asked about, or (when it asked about none) the agent's own.
     listed = [node for node in document.get('propositions', []) if isinstance(node, dict)]
     propositions = {node.get('id'): node for node in listed}
     claims = [node for node in document.get('claims', []) if isinstance(node, dict)]
-    if len(claims) > MAX_CLAIMS:
-        raise Finding('unrequested_claim', 'account claims')
     if requested:
         ids = {claim.get('proposition_id') for claim in requested}
         statements = {claim.get('statement') for claim in requested}
@@ -580,8 +576,6 @@ def fixed_checks(document, account, source_texts):
             if node.get('proposition') not in ids and (target is None or target.get('statement') not in statements):
                 raise Finding('unrequested_claim', 'account ' + _place('claims', index, 'proposition'))
     else:
-        if len(claims) > MAX_ACCOUNT_CLAIMS:
-            raise Finding('unrequested_claim', 'account claims')
         about = {node.get('proposition') for node in claims}
         for index, node in enumerate(listed):
             if node.get('id') not in about:

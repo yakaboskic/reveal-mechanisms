@@ -315,15 +315,15 @@ def test_claims_are_only_about_what_the_job_asked_for(deposited):
     assert (verdict(deposited, document=other)['location']) == 'account propositions[0].statement'
 
 
-def test_without_requested_claims_the_agents_own_are_allowed_up_to_the_limit(deposited):
+def test_without_requested_claims_the_agents_own_are_allowed_without_a_cap(deposited):
     own = {**deposited['account'], 'claims': []}
     assert verdict(deposited, account=own)['outcome'] == 'passed'
     document = deepcopy(deposited['document'])
     document['propositions'].append({'id': 'dapper:Proposition.' + 'Y' * 32, 'statement': 'An unused Proposition.'})
     assert verdict(deposited, document=document, account=own)['check'] == 'unrequested_claim'
     many = deepcopy(deposited['document'])
-    many['claims'] = [{**many['claims'][0], 'id': f'dapper:Claim.{n:032d}'} for n in range(21)]
-    assert verdict(deposited, document=many, account=own)['check'] == 'unrequested_claim'
+    many['claims'] = [{**many['claims'][0], 'id': f'dapper:Claim.{n:032d}'} for n in range(60)]
+    assert verdict(deposited, document=many, account=own)['outcome'] == 'passed'
 
 
 def test_every_field_has_a_size_cap(deposited):
