@@ -44,7 +44,7 @@ Interactive contract: https://api-qa.hugeampkpnbi.org/api/reveal/docs
 The shared gateway values stay in the frontend server environment, outside Git
 and browser bundles. No database, Redis, Vector, Box or model credentials are
 needed by a frontend. Registered workspaces persist without a daily analysis
-cap. QA permits ten outstanding jobs per workspace and executes at most two Box
+cap. QA permits five outstanding jobs per workspace and executes at most 25 Box
 jobs at once. Existing per-job model budgets apply.
 
 Progress uses job/workspace event streams. The proxy streams bytes immediately,
