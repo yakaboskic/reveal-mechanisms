@@ -3,6 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { deliverableLabel, depositFilter, depositOutcome, jobKindLabel, screenSummary, type AgentJob, type AgentJobs, type AgentRun, type DepositFilter } from "@/lib/admin-job";
+import { ownerLine, ownerName, type Owners } from "@/lib/admin-telemetry";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
 import type { UrlUpdate } from "./admin/use-url-state";
 import { Age, asTone, CopyButton, Empty, FilterRow, Metric, MetricGrid, PageHeading, Pagination, Panel, SearchFilter, SelectFilter, StateStatus, Status, Table } from "./admin/ui";
@@ -39,11 +40,11 @@ const DEPOSIT_FILTERS: [DepositFilter, string][] = [["deposited", "Deposited"], 
 const noUpdate: UrlUpdate = () => {};
 
 /** The agent jobs window: per-type cards, then the list filtered by type, deposit and free text, a page at a time. */
-export function AdminAgentJobsView({ agents, kinds, params = new URLSearchParams(), update = noUpdate }: { agents: AgentJobs; kinds?: { kind: string; count: number }[]; params?: UrlParams; update?: UrlUpdate }) {
+export function AdminAgentJobsView({ agents, kinds, owners = {}, params = new URLSearchParams(), update = noUpdate }: { agents: AgentJobs; kinds?: { kind: string; count: number }[]; owners?: Owners; params?: UrlParams; update?: UrlUpdate }) {
   const type = params.get("type") || "", deposit = params.get("deposit") || "", filter = params.get("q") || "";
   const jobs = agents.jobs.filter(j => (!type || (j.agent.deliverable || "unknown") === type)
     && (!deposit || depositFilter(j) === deposit)
-    && `${j.id} ${j.owner} ${j.status} ${deliverableLabel(j.agent.deliverable)} ${j.agent.model || ""} ${depositOutcome(j)?.text || ""}`.toLowerCase().includes(filter.toLowerCase()));
+    && `${j.id} ${j.owner} ${ownerName(owners[j.owner]) || ""} ${owners[j.owner]?.email || ""} ${j.status} ${deliverableLabel(j.agent.deliverable)} ${j.agent.model || ""} ${depositOutcome(j)?.text || ""}`.toLowerCase().includes(filter.toLowerCase()));
   const shown = pageOf(jobs, pageNumber(params.get("page")), AGENT_PAGE_SIZE);
   const set = (key: string, push = true) => (value: string) => update({ [key]: value, page: null }, { push });
   const filtered = !!(type || deposit || filter);
@@ -66,7 +67,7 @@ export function AdminAgentJobsView({ agents, kinds, params = new URLSearchParams
       footer={shown.total > AGENT_PAGE_SIZE ? <Pagination page={shown.page} pages={shown.pages} total={shown.total} noun="agent job" href={page => urlWith("/admin/agent-jobs", params, { page })} /> : undefined}>
       {shown.items.length ? <Table label="Agent jobs" className="admin-agent-jobs" headings={AGENT_HEADINGS}>
       {shown.items.map(j => { const run = j.agent; const outcome = depositOutcome(j); const limits = run.limits; const account = run.deliverable === "scientific_account"; return <tr key={j.id}>
-        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View how job ${j.id} was run`} title={j.id}>{j.id.slice(0, 8)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{j.owner}</small></td>
+        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View how job ${j.id} was run`} title={j.id}>{j.id.slice(0, 8)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{ownerLine(j.owner, owners)}</small></td>
         <td>{deliverableLabel(run.deliverable)}</td>
         <td><StateStatus value={j.status} />{j.failure_code && <small>{j.failure_code}</small>}{!terminal.has(j.status) && j.stage !== j.status && <small>{j.stage.replaceAll("_", " ")}</small>}</td>
         <td>{[run.model, run.effort && `${run.effort} effort`].filter(Boolean).join(" · ") || "—"}<small>{sources(run)}</small><small>{run.tools == null ? "Tools not recorded" : run.tools.length ? `Tools: ${run.tools.join(", ")}` : "No built-in tools"}</small>{claimsAsked(run) && <small>{claimsAsked(run)}</small>}<small>Prompt {count(run.prompt_characters)} characters</small></td>

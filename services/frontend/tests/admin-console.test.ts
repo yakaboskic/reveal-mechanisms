@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { filterJobs, totals, type Snapshot } from "../src/lib/admin-telemetry";
+import { filterJobs, ownerLine, ownerName, ownerNote, totals, type Owners, type Snapshot } from "../src/lib/admin-telemetry";
 import { depositFilter, type AdminJob, type AgentJob, type AgentRun } from "../src/lib/admin-job";
 import { ADMIN_NAV, activeSection, AdminSidebar } from "../src/components/admin/AdminNav";
 import { ConsoleNotices } from "../src/components/admin/Telemetry";
@@ -11,6 +11,7 @@ import { JOB_HEADINGS, JobsView } from "../src/components/admin/JobsView";
 import { ActivityView } from "../src/components/admin/ActivityView";
 import { DatabaseView } from "../src/components/admin/DatabaseView";
 import { AdminAgentJobsView, AGENT_HEADINGS } from "../src/components/AdminAgentJobs";
+import { AdminCostsView, type AdminCosts } from "../src/components/AdminCosts";
 
 const render = <P extends object>(component: React.ComponentType<P>, props: P) => renderToStaticMarkup(React.createElement(component, props));
 const params = (query = "") => new URLSearchParams(query);
@@ -70,6 +71,43 @@ test("the overview's five totals link to the lists they count", () => {
     assert.ok(html.includes(`href="${href}"><span class="admin-metric-title">${title}</span>`), title);
   assert.ok(html.includes('href="/admin/jobs?status=queued"><span class="admin-status info">queued</span> 1</a>'));
   assert.ok(html.includes('href="/admin/jobs/f1000000"') && html.includes("AGENT_EXECUTION_FAILED") && html.includes('href="/admin/jobs/r1000000"'));
+});
+
+test("an owner is shown by name wherever an owner id is, and an anonymous workspace is said to have none", () => {
+  const ada = "13b86465-2324-43c7-9f13-de73e1d27256", key = "7c363256-ce39-464a-a323-c0d11a279b58", guest = "9d9f0eec-6a2f-4aec-a3da-98ad1237113b", system = "gateway";
+  const owners: Owners = {
+    [ada]: { kind: "registered", name: "Ada Lovelace", email: "ada@example.org", sign_in: "Google" },
+    [key]: { kind: "api_key", name: "Lab colleague (API key)", email: null, sign_in: null },
+    [guest]: { kind: "anonymous", name: null, email: null, sign_in: null } };
+  assert.deepEqual([ada, key, guest, system].map(id => ownerName(owners[id])), ["Ada Lovelace", "Lab colleague (API key)", "Anonymous workspace", null]);
+  assert.deepEqual([ada, key, guest].map(id => ownerNote(owners[id])), ["ada@example.org · Google", "API key", null]);
+  assert.equal(ownerName({ kind: "registered", name: null, email: "only@example.org", sign_in: "ORCID" }), "only@example.org");
+  assert.equal(ownerNote({ kind: "registered", name: "Ada Lovelace", email: "ada@example.org", sign_in: "Google", api_key: true }), "ada@example.org · Google · has an API key");
+  assert.equal(ownerName({ kind: "api_key", name: null, email: null, sign_in: null, api_key: true }), "API key workspace");
+  assert.equal(ownerName({ kind: "registered", name: null, email: null, sign_in: null }), "Signed in, no name on record");
+  assert.equal(ownerLine(ada, owners), "Ada Lovelace · 13b86465");
+  assert.equal(ownerLine(system, owners), system);
+  const jobs = [job("a1", "succeeded", { owner: ada }), job("k1", "failed", { owner: key }), job("g1", "succeeded", { owner: guest }), job("s1", "succeeded", { owner: system })];
+  assert.deepEqual(filterJobs(jobs, { q: "lovelace" }, owners).map(j => j.id), ["a1"]);
+  assert.deepEqual(filterJobs(jobs, { q: "ada@example.org" }, owners).map(j => j.id), ["a1"]);
+  assert.deepEqual(filterJobs(jobs, { q: "lovelace" }).map(j => j.id), []);
+  const list = render(JobsView, { data: snapshot(jobs, { owners }), params: params(), update: noUpdate });
+  for (const text of [`<small title="${ada}">Ada Lovelace · 13b86465</small>`, `<small title="${key}">Lab colleague (API key) · 7c363256</small>`,
+    `<small title="${guest}">Anonymous workspace · 9d9f0eec</small>`, `<small title="gateway">gateway</small>`,
+    `<option value="${key}">Lab colleague (API key) · 7c363256</option>`]) assert.ok(list.includes(text), text);
+  const recent = [ada, guest, system].map((owner, i) => ({ kind: "draft", id: `record-${i}`, owner, version: 1, updated_at: "2026-11-19T09:00:00Z" }));
+  const activity = render(ActivityView, { data: snapshot([], { recent, owners }), params: params(), update: noUpdate });
+  for (const text of ['<span class="admin-owner-name">Ada Lovelace</span><small>ada@example.org · Google</small>',
+    '<span class="admin-owner-name admin-muted">Anonymous workspace</span>', `<code title="${ada}">13b86465-232</code>`, '<code title="gateway">gateway</code>']) assert.ok(activity.includes(text), text);
+  // A backend that reports no owners still shows every id.
+  assert.ok(render(ActivityView, { data: snapshot([], { recent }), params: params(), update: noUpdate }).includes(`<code title="${ada}">13b86465-232</code>`));
+  const bucket = { spend_usd: 1, jobs: 1, estimated: 0, unreported: 0, failed: 0 };
+  const costs: AdminCosts = { window_jobs: 2, window_limit: 1000, totals: { day: bucket, week: bucket, month: bucket, window: bucket }, daily: [],
+    research: { succeeded: 0, p50_usd: null, p90_usd: null, max_usd: null, mean_usd: null },
+    owners: [{ owner: key, ...bucket }, { owner: system, ...bucket }], failures: [], budget: { exceeded: 0, near_limit: 0 } };
+  const spend = render(AdminCostsView, { costs, jobs: [], owners });
+  assert.ok(spend.includes('<span class="admin-owner-name">Lab colleague (API key)</span><small>API key</small>') && spend.includes('<code title="gateway">gateway</code>'));
+  assert.ok(!spend.includes("opaque"));
 });
 
 test("the jobs list filters by kind, state, owner and text, pages through the latest 100, and links each job to its own page", () => {

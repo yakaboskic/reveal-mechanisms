@@ -6,7 +6,7 @@ from uuid import UUID
 
 from .auth import Problem
 from .runtime_config import artifacts_root
-from .telemetry import account_sources, agent_runs, job_timings, records
+from .telemetry import account_sources, agent_runs, job_timings, owner_directory, records
 
 MAX_DIAGNOSTIC_BYTES = 128 * 1024
 MAX_DIAGNOSTICS = 20
@@ -100,6 +100,8 @@ def job_detail(repository, job_id, *, before=None, limit=100):
         if not timings: raise Problem(404, 'JOB_NOT_FOUND', 'This job does not exist.')
         metadata = records(tx, 'job', ('failure', 'warnings', 'research_request_id', 'input_account_id'), [job_id])[job_id]['data']
         job = {**timings[0], **redact(metadata)}
+        # Who the owner is (name, email, kind of workspace), as in the telemetry snapshot; null for a system owner.
+        job['owner_label'] = owner_directory(tx, [job['owner']]).get(job['owner'])
         # How an agent job was asked to run: settings, limits and sizes, never the prompt, question or claims.
         agent = agent_runs(tx, [job_id])[job_id] if job['kind'] == 'agent' else None
         # An account job's saved sources: paths, URLs, commands, sizes and checksums, never a file's content. Commands

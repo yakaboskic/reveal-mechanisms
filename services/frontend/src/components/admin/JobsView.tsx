@@ -3,7 +3,7 @@
 import React from "react";
 import Link from "next/link";
 import { jobKindLabel, jobLabel } from "@/lib/admin-job";
-import { distinct, filterJobs, isActive, TERMINAL, type Snapshot } from "@/lib/admin-telemetry";
+import { distinct, filterJobs, isActive, ownerLine, TERMINAL, type Snapshot } from "@/lib/admin-telemetry";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
 import { JobCost } from "../AdminCosts";
@@ -17,7 +17,8 @@ export const JOB_HEADINGS = ["Job / owner", "State", "Started", "Finished", "Att
 /** Today's Execution table, filtered by kind, state, owner and free text, a page at a time; each job opens its own page. */
 export function JobsView({ data, params, update }: { data: Snapshot; params: UrlParams; update: UrlUpdate }) {
   const filter = { q: params.get("q"), kind: params.get("kind"), status: params.get("status"), owner: params.get("owner") };
-  const jobs = filterJobs(data.jobs, filter);
+  const owners = data.owners ?? {};
+  const jobs = filterJobs(data.jobs, filter, owners);
   const shown = pageOf(jobs, pageNumber(params.get("page")), JOBS_PAGE_SIZE);
   const filtered = !!(filter.q || filter.kind || filter.status || filter.owner);
   const set = (key: string, push = true) => (value: string) => update({ [key]: value, page: null }, { push });
@@ -30,13 +31,13 @@ export function JobsView({ data, params, update }: { data: Snapshot; params: Url
       <SearchFilter label="Filter jobs" placeholder="Filter by job, owner, type, worker or status" value={filter.q || ""} onChange={set("q", false)} />
       <SelectFilter label="Kind" value={filter.kind || ""} all="All kinds" options={distinct(data.jobs, j => j.kind).map(k => [k, jobKindLabel(k)])} onChange={set("kind")} />
       <SelectFilter label="State" value={filter.status || ""} all="All states" options={[["active", "Not finished"], ...distinct(data.jobs, j => j.status).map(s => [s, s.replaceAll("_", " ")] as [string, string])]} onChange={set("status")} />
-      <SelectFilter label="Owner" value={filter.owner || ""} all="All owners" options={distinct(data.jobs, j => j.owner)} onChange={set("owner")} />
+      <SelectFilter label="Owner" value={filter.owner || ""} all="All owners" options={distinct(data.jobs, j => j.owner).map(o => [o, ownerLine(o, owners)])} onChange={set("owner")} />
       {filtered && <Link className="text-button" href={urlWith("/admin/jobs", params, { q: null, kind: null, status: null, owner: null, page: null })}>Clear filters</Link>}
     </FilterRow>
     <Panel title="Jobs and Box agents" description="State counts above are all time; this list holds the latest 100 jobs. Open a job for its logs, diagnostics, attempts and timings."
       footer={shown.total > JOBS_PAGE_SIZE ? <Pagination page={shown.page} pages={shown.pages} total={shown.total} noun="job" href={page => urlWith("/admin/jobs", params, { page })} /> : undefined}>
       {shown.items.length ? <Table label="Jobs" headings={JOB_HEADINGS}>{shown.items.map(j => <tr key={j.id}>
-        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View logs for ${jobLabel(j)} job ${j.id}`} title={j.id}>{j.id.slice(0, 8)} · {jobLabel(j)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{j.owner}</small></td>
+        <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View logs for ${jobLabel(j)} job ${j.id}`} title={j.id}>{j.id.slice(0, 8)} · {jobLabel(j)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{ownerLine(j.owner, owners)}</small></td>
         <td><StateStatus value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}</td>
         <td className="admin-date"><Age value={j.started_at} /></td>
         <td className="admin-date"><Age value={j.completed_at} /></td>

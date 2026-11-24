@@ -4,7 +4,7 @@ import React from "react";
 import type { Snapshot } from "@/lib/admin-telemetry";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
 import type { UrlUpdate } from "./use-url-state";
-import { Age, Empty, FilterRow, PageHeading, Pagination, Panel, SelectFilter, ShortId, StateStatus, Table } from "./ui";
+import { Age, Empty, FilterRow, Owner, PageHeading, Pagination, Panel, SelectFilter, ShortId, StateStatus, Table } from "./ui";
 
 export const ACTIVITY_PAGE_SIZE = 25;
 
@@ -22,7 +22,7 @@ export function ActivityView({ data, params, update }: { data: Snapshot; params:
     <Panel title="Recent record changes" description="Latest 100 currently stored records, ordered by last update. This is a snapshot, not a historical audit log; deleted records are not included."
       footer={records.total > ACTIVITY_PAGE_SIZE ? <Pagination page={records.page} pages={records.pages} total={records.total} noun="record" href={page => urlWith("/admin/activity", params, { records: page })} /> : undefined}>
       {records.items.length ? <Table label="Recent record changes" headings={["Type", "Record", "Owner", "Version", "Updated"]}>{records.items.map(r => <tr key={`${r.kind}-${r.id}`}>
-        <td>{r.kind}</td><td><ShortId value={r.id} length={12} /></td><td><ShortId value={r.owner} length={12} /></td><td>{r.version}</td><td><Age value={r.updated_at} /></td>
+        <td>{r.kind}</td><td><ShortId value={r.id} length={12} /></td><td><Owner id={r.owner} owners={data.owners} length={12} /></td><td>{r.version}</td><td><Age value={r.updated_at} /></td>
       </tr>)}</Table> : <Empty>{kind ? "No recent change to this record type." : "No records are stored yet."}</Empty>}
     </Panel>
     <Panel title="Job event stream" description="Latest 100 event envelopes. Scientific content, tool arguments and credentials are excluded. A job id opens that job."

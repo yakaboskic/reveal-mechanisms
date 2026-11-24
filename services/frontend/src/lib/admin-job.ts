@@ -1,4 +1,5 @@
 import type { Schema } from "./client";
+import type { OwnerLabel } from "./admin-telemetry";
 
 /** deliverable: what an agent job was asked to return ("answer" or "scientific_account"); null for other kinds of
  * job, and absent from backends older than this field. */
@@ -125,7 +126,7 @@ export type JobAttempt = { attempt: number; started_at: string | null; worker_id
 /** One job's logs and diagnostics (GET /api/admin/jobs/{id}), read under the telemetry assertion and refreshed while the
  * job runs. `agent` is how an agent job was asked to run; null for other kinds. */
 export type JobDetail = {
-  job: AdminJob & { failure: { code: string; message: string; retryable: boolean; budget?: { limit_usd: number; spent_usd: number | null } } | null; warnings: string[]; research_request_id: string | null; input_account_id: string | null };
+  job: AdminJob & { failure: { code: string; message: string; retryable: boolean; budget?: { limit_usd: number; spent_usd: number | null } } | null; warnings: string[]; research_request_id: string | null; input_account_id: string | null; owner_label?: OwnerLabel | null };
   events: Schema<"JobEvent">[]; next_before: string | null;
   attempts: JobAttempt[]; attempts_limited: boolean; diagnostics: JobDiagnostic[]; diagnostics_limited: boolean;
   metrics?: JobRunMetrics | null; agent?: AgentRun | null;

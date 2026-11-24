@@ -1,4 +1,5 @@
-"""Read-only, bounded admin projections. Never expose record payloads or credentials."""
+"""Read-only, bounded admin projections. Never expose record payloads or credentials. The one personal
+projection is owner_directory: the name and email a sign-in supplied, so an admin can see who an owner is."""
 from datetime import datetime
 import json
 import re
@@ -6,6 +7,7 @@ import time
 from .runtime_config import ROOT
 from .repository import now
 from .jobs import TERMINAL
+from .auth import Problem
 
 
 def seconds(start, end=None):
@@ -271,14 +273,56 @@ def agent_jobs(tx, limit=AGENT_JOB_WINDOW):
 COST_WINDOW = 1000
 
 
-def owner_labels(tx):
-    """Name only client principals (e.g. a partner frontend's shared demo identity); people stay opaque ids."""
-    labels = {}
-    for row in records(tx, 'identity', ('issuer', 'subject', 'user_id'), limit=COST_WINDOW).values():
-        issuer, subject, user = (row['data'].get(name) for name in ('issuer', 'subject', 'user_id'))
-        if isinstance(issuer, str) and issuer.startswith('urn:reveal:client:') and isinstance(subject, str) and user:
-            labels[user] = issuer.removeprefix('urn:reveal:client:') + '/' + subject
-    return labels
+OWNER_WINDOW = 500
+INTERNAL_ISSUERS = {'urn:reveal:client:': 'client', 'urn:reveal:application:': 'application'}
+SIGN_IN = {'https://accounts.google.com': 'Google', 'https://orcid.org': 'ORCID', 'https://sandbox.orcid.org': 'ORCID'}
+
+
+def key_owners(environ=None):
+    """The workspace ids this deployment has an API key configured for; none when the configuration is unusable."""
+    from . import api_keys
+    try: return {user_id for _, user_id in api_keys.keys(environ)}
+    except Problem: return set()
+
+
+def owner_directory(tx, owners):
+    """Who each of these owner ids is: {owner id: {'kind', 'name', 'email', 'sign_in', 'api_key'}}.
+
+    kind is 'registered' (a person who signed in), 'api_key' (a workspace that exists only to hold an operator-issued
+    key: named when an operator registered it under a name, otherwise nameless), 'client' or 'application' (a partner
+    frontend's shared identity, named <client>/<subject>), or 'anonymous' (a browser workspace nobody signed in to:
+    there is no name to show). name and email are the profile the sign-in supplied and may be null. api_key says
+    whether this deployment has a key configured for the workspace, whatever its kind. An id that is no principal,
+    such as a system owner, is left out. Only these allowlisted profile fields are read, by exact key."""
+    owners = sorted({owner for owner in owners if isinstance(owner, str) and owner})[:OWNER_WINDOW]
+    if not owners: return {}
+    principals = records(tx, 'principal', ('me.principal_kind', 'me.display_name', 'me.email'), owners)
+    marks = ','.join(['%s'] * len(owners))
+    projection = "JSON_OBJECT('issuer',JSON_EXTRACT(payload,'$.issuer'),'subject',JSON_EXTRACT(payload,'$.subject'))"
+    issued = {}
+    for owner, identity in tx.execute('SELECT owner_id,' + projection + ' FROM reveal_records WHERE kind=%s AND owner_id IN ('
+                                      + marks + ') ORDER BY id', ('identity', *owners)).fetchall():
+        issued.setdefault(owner, []).append(json.loads(identity))
+    def text(value): return value.strip() if isinstance(value, str) and value.strip() else None
+    keyed = key_owners()
+    directory = {}
+    for owner, row in principals.items():
+        profile = row['data']
+        entry = {'kind': 'anonymous' if profile.get('me.principal_kind') == 'anonymous' else 'registered',
+                 'name': text(profile.get('me.display_name')), 'email': text(profile.get('me.email')), 'sign_in': None,
+                 'api_key': owner in keyed}
+        # A key issued without registering its workspace leaves an anonymous principal: say it is a key, not a guest.
+        if entry['api_key'] and entry['kind'] == 'anonymous': entry['kind'] = 'api_key'
+        for identity in issued.get(owner, ()):
+            issuer, subject = text(identity.get('issuer')), text(identity.get('subject'))
+            if not issuer: continue
+            shared = next((prefix for prefix in INTERNAL_ISSUERS if issuer.startswith(prefix)), None)
+            if shared and subject:
+                entry.update(kind=INTERNAL_ISSUERS[shared], name=entry['name'] or issuer.removeprefix(shared) + '/' + subject)
+            elif issuer == 'urn:reveal:operator-api-key': entry['kind'] = 'api_key'
+            elif issuer in SIGN_IN: entry['sign_in'] = SIGN_IN[issuer]
+        directory[owner] = entry
+    return directory
 
 
 def cost_summary(tx, current=None):
@@ -291,7 +335,6 @@ def cost_summary(tx, current=None):
     metrics = records(tx, 'job_metrics', ('kind', 'created_at', 'parent_job_id', 'agent.cost_usd', 'agent.estimated_cost_usd', 'agent.cost_source',
                                           'agent.budget_used', 'agent.subtype', 'error.error_type', 'error.phase'), limit=COST_WINDOW)
     jobs = records(tx, 'job', ('status', 'failure.code', 'created_at'), list(metrics))
-    labels = owner_labels(tx)
     current = time.time() if current is None else current
     def age(value):
         try: return (current - datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()) / 86400
@@ -319,7 +362,7 @@ def cost_summary(tx, current=None):
                                                   'jobs': 0, 'failed': 0})
             day['jobs'] += 1; day['failed'] += status == 'failed'
             day[{'paragraph': 'paragraph_usd', 'agent': 'agent_usd'}.get(data.get('kind'), 'analysis_usd')] += cost or 0
-        owner = owners.setdefault(row['owner'], {'owner': row['owner'], 'label': labels.get(row['owner']), **bucket()})
+        owner = owners.setdefault(row['owner'], {'owner': row['owner'], **bucket()})
         owner['jobs'] += 1; owner['spend_usd'] += cost or 0; owner['estimated'] += estimated
         owner['unreported'] += unreported; owner['failed'] += status == 'failed'
         if status == 'failed':
@@ -364,6 +407,7 @@ def snapshot(repository):
         job_items = job_timings(tx)
         agents = agent_jobs(tx)
         costs = cost_summary(tx)
+        owners = owner_directory(tx, [row['owner'] for group in (recent, job_items, agents['jobs'], costs['owners']) for row in group])
         # Only event envelope fields; messages/tool arguments may contain private scientific input.
         events = [row['data'] for row in records(tx, 'event', ('id', 'job_id', 'occurred_at', 'event_type', 'status', 'stage')).values()]
         tables, imports = [], []
@@ -396,6 +440,7 @@ def snapshot(repository):
             'notifications':notification_health(repository),
             'database': 'sqlite-test' if repository.sqlite_path else 'aurora-mysql',
             'counts': counts, 'recent': recent, 'statuses': statuses, 'job_kinds': job_kinds, 'jobs': job_items,
-            'agent_jobs': agents, 'costs': costs, 'events': events,
+            'agent_jobs': agents, 'costs': costs, 'owners': owners, 'events': events,
             'tables': tables, 'imports': imports,
-            'limits': {'jobs': 100, 'agent_jobs': AGENT_JOB_WINDOW, 'events': 100, 'recent': 100, 'imports_per_table': 10}}
+            'limits': {'jobs': 100, 'agent_jobs': AGENT_JOB_WINDOW, 'events': 100, 'recent': 100, 'imports_per_table': 10,
+                       'owners': OWNER_WINDOW}}

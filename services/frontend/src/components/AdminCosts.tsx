@@ -4,7 +4,8 @@ import Link from "next/link";
 import type { AdminJob } from "@/lib/admin-job";
 import { formatAdminDuration as duration } from "@/lib/admin-time";
 import { jobHref } from "@/lib/admin-url";
-import { Age, Callout, Empty, Metric, MetricGrid, PageHeading, Panel, StateStatus, Table } from "./admin/ui";
+import type { Owners } from "@/lib/admin-telemetry";
+import { Age, Callout, Empty, Metric, MetricGrid, Owner, PageHeading, Panel, StateStatus, Table } from "./admin/ui";
 
 type Bucket = { spend_usd: number; jobs: number; estimated: number; unreported: number; failed: number };
 type Distribution = { succeeded: number; p50_usd: number | null; p90_usd: number | null; max_usd: number | null; mean_usd: number | null };
@@ -15,7 +16,7 @@ export type AdminCosts = {
   daily: { date: string; analysis_usd: number; paragraph_usd: number; agent_usd?: number; jobs: number; failed: number }[];
   research: Distribution;
   agents?: Distribution;
-  owners: (Bucket & { owner: string; label: string | null })[];
+  owners: (Bucket & { owner: string })[];
   failures: { code: string; jobs: number; spend_usd: number; causes: Record<string, number> }[];
   budget: { exceeded: number; near_limit: number };
 };
@@ -31,7 +32,7 @@ export function JobCost({ job }: { job: AdminJob }) {
   return <>{usd(job.cost_usd)}<small>{[job.turns != null && `${job.turns} turns`, job.budget_used != null && `${percent(job.budget_used)} of ${usd(job.budget_usd)}`].filter(Boolean).join(" · ")}</small></>;
 }
 
-export function AdminCostsView({ costs, jobs }: { costs: AdminCosts; jobs: AdminJob[] }) {
+export function AdminCostsView({ costs, jobs, owners }: { costs: AdminCosts; jobs: AdminJob[]; owners?: Owners }) {
   const dayTotal = (d: AdminCosts["daily"][number]) => d.analysis_usd + d.paragraph_usd + (d.agent_usd ?? 0);
   const peak = Math.max(0.01, ...costs.daily.map(dayTotal));
   const expensive = jobs.filter(j => j.cost_usd != null).sort((a, b) => (b.cost_usd || 0) - (a.cost_usd || 0)).slice(0, 10);
@@ -59,9 +60,9 @@ export function AdminCostsView({ costs, jobs }: { costs: AdminCosts; jobs: Admin
         {costs.failures.map(f => <tr key={f.code}><td className="admin-mono">{f.code}</td><td>{count(f.jobs)}</td><td>{usd(f.spend_usd)}</td><td>{Object.entries(f.causes).sort((a, b) => b[1] - a[1]).map(([cause, n]) => <small key={cause}>{cause} × {n}</small>)}{!Object.keys(f.causes).length && "—"}</td></tr>)}
       </Table> : <Empty>No failed jobs in this window.</Empty>}
     </Panel>
-    <Panel title="Spend by workspace owner" description="Owners are opaque principal ids. Client principals, such as a partner frontend's shared demo identity, are named because every visitor of that client shares them.">
+    <Panel title="Spend by workspace owner" description="Each owner is named from its sign-in: a person by name and email, an API-key workspace by the label its key was issued with, a partner frontend by its shared identity. An anonymous workspace has no name on record.">
       {costs.owners.length ? <Table label="Spend by workspace owner" headings={["Owner", "Jobs", "Spend", "Failed", "Estimated / not reported"]}>
-        {costs.owners.map(o => <tr key={o.owner}><td>{o.label ? <strong>{o.label}</strong> : null}<small className="admin-mono">{o.owner}</small></td><td>{count(o.jobs)}</td><td>{usd(o.spend_usd)}</td><td>{count(o.failed)}</td><td>{count(o.estimated)} / {count(o.unreported)}</td></tr>)}
+        {costs.owners.map(o => <tr key={o.owner}><td><Owner id={o.owner} owners={owners} length={12} /></td><td>{count(o.jobs)}</td><td>{usd(o.spend_usd)}</td><td>{count(o.failed)}</td><td>{count(o.estimated)} / {count(o.unreported)}</td></tr>)}
       </Table> : <Empty>No owner has a recorded cost in this window.</Empty>}
     </Panel>
     <Panel title="Most expensive recent jobs" description="The ten costliest of the latest 100 jobs. A job opens its detail.">

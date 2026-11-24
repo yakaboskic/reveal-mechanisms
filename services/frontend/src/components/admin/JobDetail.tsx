@@ -10,7 +10,7 @@ import { jobHref } from "@/lib/admin-url";
 import { NO_RUN, PromptSettingsSection, ResponseSection, RunButton, type RunState } from "./JobContent";
 import { NO_TRANSCRIPT, TranscriptSection, type TranscriptState } from "./JobTranscript";
 import { useTelemetry } from "./Telemetry";
-import { Callout, CopyButton, Empty, Json, KeyValues, PageHeading, Panel, StateStatus, statusTone } from "./ui";
+import { Callout, CopyButton, Empty, Json, KeyValues, Owner, PageHeading, Panel, StateStatus, statusTone } from "./ui";
 
 // One job at /admin/jobs/[id], in nine sections. The job record (logs, diagnostics, settings, sizes) is read under the
 // telemetry assertion and refreshes every 15 seconds while the job runs. The prompt and response (/run) and the
@@ -46,7 +46,7 @@ function SummarySection({ data }: { data: JobDetail }) {
     </Callout>
     <KeyValues rows={[
       ["Kind", jobLabel(job)],
-      ["Owner", <span key="owner" className="admin-mono">{job.owner}</span>],
+      ["Owner", <Owner key="owner" id={job.owner} owners={job.owner_label ? { [job.owner]: job.owner_label } : undefined} length={36} />],
       ...([["Created", job.created_at], ["Started", job.started_at], ["Updated", job.updated_at], ["Finished", job.completed_at], ["Current attempt started", job.attempt_started_at]] as const).map(([label, value]) => [label, date(value)] as [string, React.ReactNode]),
       ["Worker", job.worker || "—"],
       ["Box", job.box_id || "No Box runtime recorded"],

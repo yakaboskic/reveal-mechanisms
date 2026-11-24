@@ -3,6 +3,7 @@
 import React, { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { adminDate, formatAdminDate } from "@/lib/admin-time";
+import { ownerName, ownerNote, type Owners } from "@/lib/admin-telemetry";
 
 // The admin console's building blocks, ported from the claims console's components/admin/shared.tsx into plain CSS
 // (app/admin/admin.css, scoped under .admin-root). Colour is used only for status.
@@ -86,6 +87,19 @@ export function ShortId({ value, length = 8, href, copy = true }: { value: strin
   return <span className="admin-short-id">
     {href ? <Link href={href} title={value}>{short}</Link> : <code title={value}>{short}</code>}
     {copy && <CopyButton text={value} />}
+  </span>;
+}
+
+/** An owner: who it is (name, then email and sign-in, or the kind of workspace) above its id. Just the id when the
+ *  directory has no entry for it. */
+export function Owner({ id, owners, length = 8 }: { id: string | null | undefined; owners?: Owners; length?: number }) {
+  if (!id) return <span className="admin-muted">—</span>;
+  const label = owners?.[id], name = ownerName(label), note = ownerNote(label);
+  if (!name) return <ShortId value={id} length={length} />;
+  return <span className="admin-owner">
+    <span className={label?.kind === "anonymous" ? "admin-owner-name admin-muted" : "admin-owner-name"}>{name}</span>
+    {note && <small>{note}</small>}
+    <ShortId value={id} length={length} />
   </span>;
 }
 

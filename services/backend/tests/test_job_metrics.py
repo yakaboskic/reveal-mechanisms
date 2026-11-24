@@ -145,7 +145,14 @@ class CostTelemetryTests(unittest.TestCase):
         self.assertEqual(failures['AUTHORING_BUDGET_EXCEEDED']['causes'], {'error_max_budget_usd': 1})
         self.assertEqual(failures['AUTHORING_BUDGET_EXCEEDED']['spend_usd'], 3.14)
         owners = {o['owner']: o for o in costs['owners']}
-        self.assertEqual(owners['client-user']['label'], 'dk/developer'); self.assertIsNone(owners['person']['label'])
+        # The spend rows carry ids only; the snapshot's owner directory says who each one is.
+        self.assertNotIn('label', owners['client-user'])
+        with self.repo.transaction() as tx:
+            for owner in ('client-user', 'person'):
+                tx.put('principal', owner, owner, {'me': {'user_id': owner, 'principal_kind': 'registered', 'display_name': None, 'email': None}, 'retired': False})
+        names = snapshot(self.repo)['owners']
+        self.assertEqual((names['client-user']['kind'], names['client-user']['name']), ('client', 'dk/developer'))
+        self.assertEqual((names['person']['kind'], names['person']['name'], names['person']['sign_in']), ('registered', None, 'Google'))
         self.assertEqual(owners['client-user']['spend_usd'], 4.79); self.assertEqual(owners['person']['unreported'], 1)
         self.assertEqual(sum(d['jobs'] for d in costs['daily']), 6)
 

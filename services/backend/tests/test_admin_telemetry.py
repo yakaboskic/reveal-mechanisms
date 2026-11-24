@@ -41,6 +41,48 @@ class AdminTelemetryTests(unittest.TestCase):
         self.assertEqual(result.headers['cache-control'], 'private, no-store')
         self.assertEqual(result.json()['database'], 'sqlite-test')
 
+    def test_owners_are_named_from_their_sign_in_and_anonymous_ones_are_said_to_be(self):
+        def person(kind, **profile): return {'me': {**api.fresh_principal(kind, profile), 'private_note': 'keep out'}, 'retired': False}
+        ids = {name: uid() for name in ('google', 'key', 'client', 'guest', 'bare')}
+        with self.repo.transaction() as tx:
+            tx.put('principal', ids['google'], ids['google'], person('registered', display_name='Ada Lovelace', email='ada@example.org'))
+            tx.put('principal', ids['key'], ids['key'], person('registered', display_name='Lab colleague (API key)'))
+            tx.put('principal', ids['client'], ids['client'], person('registered'))
+            tx.put('principal', ids['guest'], ids['guest'], person('anonymous'))
+            tx.put('principal', ids['bare'], ids['bare'], person('registered', display_name='  '))
+            for owner, issuer, subject in ((ids['google'], 'https://accounts.google.com', '1074960000'),
+                                           (ids['key'], 'urn:reveal:operator-api-key', 'api-key-workspace/' + ids['key']),
+                                           (ids['client'], 'urn:reveal:client:dk', 'developer')):
+                tx.put('identity', uid(), owner, {'user_id': owner, 'issuer': issuer, 'subject': subject})
+            for owner in (*ids.values(), 'system-owner'): tx.put('draft', uid(), owner, {'secret': 'private research'})
+            job = jobs.enqueue(tx, ids['key'], 'analysis')
+        owners = snapshot(self.repo)['owners']
+        def entry(kind, name=None, email=None, sign_in=None, api_key=False):
+            return {'kind': kind, 'name': name, 'email': email, 'sign_in': sign_in, 'api_key': api_key}
+        self.assertEqual(owners, {
+            ids['google']: entry('registered', 'Ada Lovelace', 'ada@example.org', 'Google'),
+            ids['key']: entry('api_key', 'Lab colleague (API key)'),
+            ids['client']: entry('client', 'dk/developer'),
+            ids['guest']: entry('anonymous'),
+            ids['bare']: entry('registered')})
+        # A key configured for a workspace is reported whatever its kind; a workspace that only holds a key and was
+        # never registered under a name is a key workspace, not an anonymous guest.
+        configured = {'REVEAL_API_KEY_SHA256': 'a' * 64, 'REVEAL_API_KEY_USER_ID': ids['guest'],
+                      'REVEAL_API_KEYS': 'b' * 64 + ':' + ids['google']}
+        with patch.dict(os.environ, configured):
+            keyed = snapshot(self.repo)['owners']
+        self.assertEqual(keyed[ids['guest']], entry('api_key', api_key=True))
+        self.assertEqual(keyed[ids['google']], entry('registered', 'Ada Lovelace', 'ada@example.org', 'Google', api_key=True))
+        self.assertFalse(keyed[ids['key']]['api_key'])
+        with patch.dict(os.environ, {'REVEAL_API_KEYS': 'not-a-key-list'}):
+            self.assertEqual(snapshot(self.repo)['owners'], owners)
+        encoded = json.dumps(owners)
+        for hidden in ('1074960000', 'keep out', 'workspace_expires_at', 'system-owner', 'a' * 64): self.assertNotIn(hidden, encoded)
+        from reveal_backend.admin_jobs import job_detail
+        self.assertEqual(job_detail(self.repo, job['id'])['job']['owner_label'], owners[ids['key']])
+        with self.repo.transaction() as tx: other = jobs.enqueue(tx, 'system-owner', 'analysis')
+        self.assertIsNone(job_detail(self.repo, other['id'])['job']['owner_label'])
+
     def test_projection_excludes_payloads_and_includes_cross_workspace_counts(self):
         with self.repo.transaction() as tx:
             for i in range(105): tx.put('draft', str(i), 'one' if i % 2 else 'two', {'secret':'private research'})
