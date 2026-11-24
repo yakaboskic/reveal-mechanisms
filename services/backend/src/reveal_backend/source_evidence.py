@@ -530,11 +530,13 @@ def verified_files(binding):
     return [{'sha256': digest, 'size_bytes': size} for digest, size in sorted(unique)]
 
 
-def ledger_view(binding):
-    """The ledger the pinned linter reads for an account job: no tool responses (an account cites only files the agent
-    saved), and the saved files this module accepted (source_validation.ledger_sources). REVEAL writes it; the agent
-    cannot."""
-    return {'format': 'reveal.tool-ledger/1', 'calls': [], 'source_files': verified_files(binding)}
+def ledger_view(binding, repository_claims=()):
+    """The ledger the pinned linter reads for an account job: no tool responses (an account quotes only files the agent
+    saved), the saved files this module accepted (source_validation.ledger_sources), and the claims-repository Claims
+    the account names in source_claims that REVEAL resolved there (box_claims.verify_references). REVEAL writes it;
+    the agent cannot."""
+    return {'format': 'reveal.tool-ledger/1', 'calls': [], 'source_files': verified_files(binding),
+            'repository_claims': sorted(set(repository_claims))}
 
 
 def publication(url):

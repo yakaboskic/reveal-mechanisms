@@ -15,8 +15,13 @@ Policy, in one place: REVEAL does not invent questions for curated (DisMech) res
 requester's own, and GAP_DESCRIPTION says so on the node, so nobody reading the account can take it for a curated
 knowledge gap.
 
+An account may also build on Claims the claims repository already holds (a PIGEAN association, say). It names each
+by id in an EvidenceItem's source_claims and does not contain it; REVEAL resolves every such id in the repository
+(box_claims.verify_references), and an id the repository does not hold as a Claim is refused.
+
 After the run, `accept` is the gate: the account's record of its sources is checked against the captured files and
-the tool ledger, then the account is assembled and linted exactly as a research account is
+the tool ledger, the repository Claims it names are resolved, then the account is assembled and linted exactly as a
+research account is
 (acceptance.assemble_account), then put in its deposit form (account_deposit), and last screened for prompt
 injection (deposit_screen): the verdict travels with the record, so the commit step deposits only a passed account.
 `store` keeps the result with the job, and `public` is what the job result says about it.
@@ -93,6 +98,21 @@ def requested_claims(requested, document):
     return result
 
 
+class RepositoryUnavailable(OSError):
+    """The claims repository could not be asked about a Claim an account names. Nothing is decided: the workflow
+    retries the step (it retries an OSError), and the account is neither accepted nor refused."""
+
+
+def repository_resolver():
+    """ClaimsClient.resolve for this deployment's claims repository (REVEAL_CLAIMS_API_URL), or None when none is
+    configured. The lookup is a public read; no key is sent."""
+    from .box_claims import ClaimsClient
+    from .claims_deposit import address
+    from .runtime_config import setting
+    url = address(setting('REVEAL_CLAIMS_API_URL', ''))
+    return ClaimsClient(url, checked=True).resolve if url else None
+
+
 def refused(problems):
     """The AccountValidationError for source-evidence problems: one finding per (where, what to change)."""
     from .scientific_account_lint import AccountValidationError
@@ -101,12 +121,17 @@ def refused(problems):
         for where, message in problems]})
 
 
-def accept(root, job, attempt, account, attribution, result, output_dir):
+def accept(root, job, attempt, account, attribution, result, output_dir, resolve=None):
     """Check the one account an agent job wrote and put it in its deposit form. Returns the record to checkpoint.
 
     Runs once, in the workflow's validate step. Assembly stamps the time and the deposit form is minted from it, so a
     second run would give different ids: everything is written under `root` here, and the commit step only reads it
     back (`stored`).
+
+    `resolve` looks ids up in the claims repository (default: this deployment's, repository_resolver). A repository
+    Claim the account names that does not resolve there refuses the account, as does naming one where no repository
+    is configured: nothing is deposited on an unverified reference. A repository that cannot be reached raises
+    RepositoryUnavailable instead, which the workflow retries.
 
     `account` is the frozen input's account block, `attribution` the requester as recorded at submission (it is never
     in the frozen input, which is copied into the sandbox). The gate attributes the account to the requester as
@@ -140,11 +165,15 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
             problems, binding = source_evidence.check(draft, outputs, calls, ledger_path.parent)
         except source_evidence.SourceError as exc:
             problems = [('ledger', str(exc))]
+        from .box_claims import verify_references
+        unresolved, repository_claims = verify_references(draft, resolve or repository_resolver(), RepositoryUnavailable)
+        problems = [*problems, *unresolved]
         if problems:
             raise refused(problems)
         bound_path = diagnostics / 'account-bound.json'
         bound_path.write_bytes(canonical_json(source_evidence.bind(draft, binding)))
-        view_path = diagnostics / 'account-sources.json'; view_path.write_bytes(canonical_json(source_evidence.ledger_view(binding)))
+        view_path = diagnostics / 'account-sources.json'
+        view_path.write_bytes(canonical_json(source_evidence.ledger_view(binding, repository_claims)))
         document, report = assemble_account(bound_path, package_path, directory / 'account-assembled.json', attribution, job, attempt,
                                             'box', view_path, source_record=True)
     except AccountValidationError as exc:
@@ -153,7 +182,8 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
     (diagnostics / 'validation-1.json').write_bytes(canonical_json(redact(report)))
     try:
         deposit, summary = account_deposit.deposit_document(document, outputs, calls, ledger_path.parent,
-                                                            attribute_requester=account.get('attribute_requester') is True)
+                                                            attribute_requester=account.get('attribute_requester') is True,
+                                                            repository_claims=repository_claims)
         kept = account_deposit.source_bytes(outputs, summary['papers'])
     except account_deposit.DepositError as exc:
         # The gate applies the same source rule, so this is a defect or a tampered capture, not a repairable
@@ -174,6 +204,8 @@ def accept(root, job, attempt, account, attribution, result, output_dir):
             'account_id': summary['account_id'], 'dapper_version': summary['dapper_version'],
             'objects': summary['objects'], 'edges': summary['edges'], 'claims': summary['claims'],
             'value_locators': summary['value_locators'], 'papers': papers,
+            # Claims of the claims repository the account builds on by id (EvidenceItem.source_claims), as resolved here.
+            'repository_claims': summary['repository_claims'],
             'requested_claims': requested_claims(account['claims'], deposit),
             'lint_warnings': sum(1 for finding in findings if isinstance(finding, dict) and finding.get('severity') == 'warning'),
             'screen': verdict}

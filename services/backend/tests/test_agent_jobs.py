@@ -471,7 +471,7 @@ def test_runner_setup_uses_the_callers_prompt_without_a_dapper_release(tmp_path)
     assert wired['agent']['claims_url'] == 'https://claims.example.org'
     ledger = box_remote.Ledger(tmp_path / 'ledger', 'agent-job', 1)
     offered = [tool['name'] for tool in box_remote.agent_tools([], ledger, wired['agent']).definitions()]
-    assert offered == ['query_claims'] and box_remote.agent_tools([], ledger, runtime['agent']).definitions() == []
+    assert offered == ['query_claims', 'run_collection_query'] and box_remote.agent_tools([], ledger, runtime['agent']).definitions() == []
     system = box_remote.agent_system_prompt(value)
     assert system.endswith('\n\nAnswer in French.') and 'output/' in system and 'restricted' in system
     assert 'WebSearch still works' not in system and 'literature' not in system

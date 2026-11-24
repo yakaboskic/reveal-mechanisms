@@ -23,6 +23,9 @@ from reveal_backend.source_validation import source_findings, ledger_sources, ex
 
 ACCEPTANCE_POLICY = 'reveal.scientific-account/2'
 MINTED = re.compile(r'dapper:[A-Za-z][A-Za-z0-9]*\.[A-Za-z0-9_-]{32}')
+# What the pinned release says about a Claim an EvidenceItem names in source_claims without the document containing it.
+UNRESOLVED_REFERENCE = re.compile(r'reference to (dapper:Claim\.[A-Za-z0-9_-]+) does not resolve to any node in this document')
+UNRESOLVED_SOURCE_CLAIM = re.compile(r'(dapper:Claim\.[A-Za-z0-9_-]+) must resolve to Claim; found no local record')
 # Frozen reference-evidence capture formats (reveal.reference-evidence.mysql-capture/<version>): version -> (the capture's
 # identity key, the tables a SQL capture may read). /1 read a reference generation's tables; /2 reads the environment's
 # reference release (reference_evidence, and the release tables later readers capture). scientific_reuse shares it.
@@ -105,6 +108,33 @@ def draft_id_collisions(identities):
         longer = [] if MINTED.fullmatch(short) else [other for other in ordered[index + 1:] if short in other]
         if longer: found[short] = longer
     return found
+
+
+def repository_claims(document, ledger_path):
+    """Claims of the claims repository this document may name without containing them: those REVEAL resolved there
+    and listed in its own lint view of the ledger (source_evidence.ledger_view), and that the document names only in
+    an EvidenceItem's source_claims. A research run's ledger lists none."""
+    if not ledger_path:
+        return frozenset()
+    listed = decode(Path(ledger_path).read_bytes()).get('repository_claims')
+    resolved = {value for value in listed if isinstance(value, str)} if isinstance(listed, list) else set()
+    if not resolved:
+        return frozenset()
+    from reveal_backend.box_claims import repository_references
+    cited, misplaced = repository_references(document)
+    return frozenset(resolved & set(cited) - set(misplaced))
+
+
+def repository_reference_finding(finding, resolved):
+    """True for a pinned-release finding that only says a resolved repository Claim is not in the document."""
+    check, message = finding.get('check'), finding.get('message') or ''
+    if check == 'refs':
+        match = UNRESOLVED_REFERENCE.match(message)
+    elif check == 'scientific-content' and str(finding.get('where', '')).endswith('.source_claims'):
+        match = UNRESOLVED_SOURCE_CLAIM.fullmatch(message)
+    else:
+        return False
+    return bool(match) and match.group(1) in resolved
 
 
 def eligible_source_files(package, package_path, ledger_path=None):
@@ -229,7 +259,10 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
     with tempfile.TemporaryDirectory(prefix='reveal-account-lint-') as directory:
         frozen = Path(directory) / 'account.json'; frozen.write_bytes(canonical_json(document))
         upstream = lint(frozen, vocabulary, sv, validator, profile_name='scientific-account')
-    findings = [asdict(f) for f in upstream.findings] + unbound
+    # A repository Claim an EvidenceItem builds on is named by id, not copied in: the pinned release reports it as an
+    # unresolved reference, and REVEAL has resolved it in the repository instead.
+    resolved = repository_claims(document, ledger_path) if mode != 'profile-only' else frozenset()
+    findings = [finding for finding in map(asdict, upstream.findings) if not repository_reference_finding(finding, resolved)] + unbound
     advisories, structure = [], None
     def error(check, where, message):
         findings.append({'severity': 'error', 'check': check, 'where': where, 'message': message, 'why': ''})
@@ -276,7 +309,9 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
         for edge in document.get('was_derived_from_edges', []):
             if isinstance(edge, dict) and isinstance(edge.get('object'), str):
                 derivations.setdefault(edge.get('subject'), []).append(edge['object'])
-        def evidence_lineage(identity, seen, allowed):
+        def evidence_lineage(identity, seen, allowed, repository=frozenset()):
+            if identity in repository:
+                return True   # a Claim the claims repository holds: evidence by reference, checked by REVEAL
             if identity in allowed:
                 if identity not in trusted:
                     return identity in nodes and identity in eligible and identity not in cfde_files
@@ -289,7 +324,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
                 value = node.get(field, [])
                 if isinstance(value, list): refs.extend(r for r in value if isinstance(r, str))
             refs.extend(derivations.get(identity, []))
-            return any(evidence_lineage(r, seen, allowed) for r in refs)
+            return any(evidence_lineage(r, seen, allowed, repository) for r in refs)
         for account in document.get('scientific_accounts', []) if isinstance(document.get('scientific_accounts'), list) else []:
             if not isinstance(account, dict): continue
             grounded = False
@@ -298,7 +333,7 @@ def _lint(document_path, dapper_root, lock_path, package_path, mode, strict, led
                 claim = nodes[claim_id][1]
                 if not isinstance(claim.get('has_evidence'), list) or not claim['has_evidence']:
                     error('claim-evidence', claim_id, 'Account Claims require explicit EvidenceItems assessing their proposition')
-                if not evidence_lineage(claim_id, set(), eligible):
+                if not evidence_lineage(claim_id, set(), eligible, resolved):
                     error('source-ancestry', claim_id, 'Account Claim lacks explicit evidence lineage to an unchanged eligible scientific source')
                 grounded = grounded or evidence_lineage(claim_id, set(), cfde_files)
                 for evidence_id in claim.get('has_evidence', []) if isinstance(claim.get('has_evidence'), list) else []:

@@ -1,9 +1,11 @@
 # Construct a literature Scientific Account
 
 You are building one DAPPER ScientificAccount that addresses the question in `account-request.json`, from papers you
-fetch and save in this run. Work like a scientist keeping a lab notebook: save each paper with a command, write down
-the command, and quote the saved file. REVEAL checks the record against the files and the commands it saw run, then
-deposits the account. Nobody can answer questions while you work; decide and finish.
+fetch and save in this run and, when you have the claims repository tools, from claims the repository already holds.
+Work like a scientist keeping a lab notebook: save each paper with a command, write down the command, and quote the
+saved file; cite a repository claim by its id. REVEAL checks the record against the files and the commands it saw
+run, and each claim id against the repository, then deposits the account. Nobody can answer questions while you work;
+decide and finish.
 
 ## What you have
 
@@ -21,8 +23,11 @@ deposits the account. Nobody can answer questions while you work; decide and fin
   and the edges `WasGeneratedBy`, `WasDerivedFrom` and `Used`.
 - `mcp__reveal__query_claims`, when it is among your tools: what the claims repository already holds on your
   question. Look once before drafting. If a Proposition you would write already exists, copy its statement exactly:
-  your Claim is then about the same Proposition. A repository record is an earlier claim, not evidence. Do not cite
-  it, and do not treat its absence as a finding.
+  your Claim is then about the same Proposition. Do not treat absence there as a finding.
+- `mcp__reveal__run_collection_query`, when it is among your tools: the repository's result collections, such as
+  PIGEAN gene and gene-set associations. Call it with no arguments to see the queries, then run one. Each row comes
+  with its numbers and the id of the Claim that states them. A Claim the repository holds can be evidence for one of
+  yours ("Evidence from the claims repository", below).
 
 Good sources of full text: Europe PMC
 (`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`, open-access papers), the NCBI E-utilities,
@@ -45,7 +50,8 @@ bioRxiv and medRxiv, and publishers' open-access PDFs.
       `$(…)` or pipe into a shell: REVEAL does not store an account whose recorded commands do.
    4. **Record and cite it in the draft**: an Activity per command, a File per saved file, the edges between them,
       and an EvidenceItem per quote (below). Then save the draft and run `lint_account`.
-3. Repair what the linter reports, then go on to the next paper. A run stopped at its time or turn limit returns
+3. Repair what the linter reports, then go on to the next paper. Evidence from the claims repository goes in the
+   same way: run the query, add an EvidenceItem that names the Claim id, save and lint. A run stopped at its time or turn limit returns
    nothing, so keep a linted draft saved at all times.
 4. Finish with a short final message: what the account concludes, which requester claims you assessed and which you
    could not, and what you did not read.
@@ -147,6 +153,34 @@ Rules REVEAL enforces on this record:
   may not exceed 4,000 characters, or 40% of a short text such as an abstract.
 - **One file per EvidenceItem.** Use several EvidenceItems for several passages or papers.
 
+## Evidence from the claims repository
+
+A Claim the repository holds, such as a PIGEAN association between a gene and a trait, is somebody else's assessment
+that you may build on. You do not copy it into your account. Write an EvidenceItem that names it in `source_claims`:
+
+```json
+{
+  "evidence_items": [ { "id": "urn:draft:evidence-repository-1", "target_proposition": "urn:draft:prop-1",
+                        "direction": "SUPPORTS",
+                        "source_claims": [ "dapper:Claim.gM7GXq3cP0aWm2r5T8uYb1dE4fH6jK9L" ],
+                        "context": "PIGEAN, collection pigean, query top-genes-with-sets, trait IBD, library mouse_msigdb",
+                        "explanation": "PIGEAN ranks NOD2 among the genes with the strongest combined support for inflammatory bowel disease (combined 9.5), with direct GWAS support (log_bf 5.2)." } ]
+}
+```
+
+- **The id is one a tool returned.** Copy it exactly from `run_collection_query` (a row's `claims`) or `query_claims`.
+  REVEAL asks the repository for every id you name: one it does not hold as a Claim is refused, here and when the
+  account is checked at the end. Never write an id from memory or change one.
+- **Only in `source_claims`.** Do not list a repository Claim in `component_claims` or `has_evidence`, and do not
+  write a Claim or Proposition object for it: it is not part of your account.
+- **Say what it shows.** `explanation` states, in your words, what the claim's numbers say about your proposition,
+  and `context` names the collection, query and variables you ran. `target_proposition`, `direction`, `context` and
+  `explanation` are all required. No `snippet` and no `was_derived_from`: nothing is quoted.
+- **It is an assessment, not a fact.** A repository claim says what a method found. Weigh it with what the papers
+  say, and report a claim that points the other way as `DISPUTES`.
+- A Claim may rest on quotes, on repository claims, or on both, each in its own EvidenceItem.
+- Ask only for the claim keys and rows you will use: every row the repository serves is recorded there.
+
 ## The account
 
 The rest of the document is as in any account. Call `write_account_draft` with `filename: "account-1.json"` and a
@@ -170,7 +204,8 @@ The rest of the document is as in any account. Call `write_account_draft` with `
 
 - **Do not write** `was_generated_by` or `was_attributed_to` on Claims or the account, people, or an Activity for
   the run itself: REVEAL supplies them. The only Activities you write are the commands that saved your files.
-- **Every Claim needs evidence**, and each EvidenceItem's `target_proposition` must be its Claim's `proposition`.
+- **Every Claim needs evidence** (a quote from a saved file, or a repository claim named in `source_claims`), and
+  each EvidenceItem's `target_proposition` must be its Claim's `proposition`.
   `direction` is `SUPPORTS`, `DISPUTES`, `MIXED` or `NEUTRAL`. Report contradicting evidence as `DISPUTES`; an empty
   search is a coverage limit, not evidence of absence.
 - **Reference.** When you know the paper's PubMed id, put it in `reference` as `PMID:…`.
@@ -202,5 +237,5 @@ The rest of the document is as in any account. Call `write_account_draft` with `
 
 Run `lint_account` after each paper's evidence is drafted. When it reports findings, edit the saved
 `output/account-1.json` in place for the fields it names and lint again. A `source-evidence` finding tells you
-exactly what to change: a command to copy from your Bash call, a file to save, or where in the file the quote
-actually is.
+exactly what to change: a command to copy from your Bash call, a file to save, where in the file the quote
+actually is, or a claim id the repository does not hold.

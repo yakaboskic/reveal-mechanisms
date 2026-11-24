@@ -311,7 +311,7 @@ def terminate(process):
             process.wait(timeout=5)
 
 
-def lint_tool(filename, ledger):
+def lint_tool(filename, ledger, claims=None):
     deadline = time.monotonic() + 55
     from .box_research import AuthoringTiming
     with AuthoringTiming(STATE / 'ledger/authoring-timing.json', 'lint_account', deadline, clock=time.monotonic) as timing:
@@ -358,9 +358,16 @@ def lint_tool(filename, ledger):
                 problems, binding = source_evidence.check(document, OUTPUT, calls, ledger.root)
             except source_evidence.SourceError as exc:
                 problems, binding = [('ledger', str(exc))], {'files': {}, 'activities': {}, 'quotes': []}
+            # Claims of the claims repository the draft builds on (EvidenceItem.source_claims): named by id, never
+            # copied in, and each resolved in the repository now. The gate resolves them again (agent_account.accept).
+            from .box_claims import ClaimsClient, verify_references
+            if claims is None and (runtime.get('agent') or {}).get('claims_url'):
+                claims = ClaimsClient(runtime['agent']['claims_url'])
+            unresolved, repository_claims = verify_references(document, claims.resolve if claims else None)
+            problems = [*problems, *unresolved]
             document = source_evidence.bind(document, binding)
             frozen.write_bytes(canonical(document))
-            write_json(ledger_path, source_evidence.ledger_view(binding))
+            write_json(ledger_path, source_evidence.ledger_view(binding, repository_claims))
         else:
             write_json(ledger_path, {'calls': calls})
         timing.phase('full_lint')
@@ -457,10 +464,11 @@ def triple_findings(document, package):
 # Lint feedback drops a finding's message unless the finding names a `rule` (authoring_structure._normalized_finding):
 # ordinary lint messages may quote private text. A source-evidence message is the repair instruction and never repeats
 # a file's text (source_evidence.SourceError), so it carries a rule and reaches the agent as written.
-SOURCE_REPAIR = ('Each Claim needs at least one EvidenceItem that quotes a file you saved under output/sources/ with a recorded '
-                 'command: snippet is the verbatim passage, was_derived_from the File, and target_proposition the Claim\'s '
-                 'proposition. Repair the source-evidence findings listed for its evidence and files. Remove a Claim you have '
-                 'no evidence for and say so in your final message.')
+SOURCE_REPAIR = ('Each Claim needs at least one EvidenceItem that either quotes a file you saved under output/sources/ with a '
+                 'recorded command (snippet is the verbatim passage, was_derived_from the File) or names, in source_claims, a '
+                 'Claim id the claims repository returned. Either way target_proposition is the Claim\'s proposition. Repair '
+                 'the source-evidence findings listed for its evidence and files. Remove a Claim you have no evidence for and '
+                 'say so in your final message.')
 
 
 def source_feedback(report, document, problems):
@@ -476,6 +484,9 @@ def source_feedback(report, document, problems):
     broken = {finding['where'] for finding in located}
     files = {node.get('id') for node in document.get('files', []) if isinstance(node, dict)}
     items = {node.get('id'): node for node in document.get('evidence_items', []) if isinstance(node, dict)}
+    # Where the pinned linter reports an EvidenceItem's unresolved source_claims: `refs` names the list entry,
+    # `scientific-content` the node.
+    unresolved = {place for item in broken if item in items for place in (f'evidence_items[{item}].source_claims', f'{item}.source_claims')}
     waiting = set()
     for claim in document.get('claims', []):
         if not isinstance(claim, dict) or not isinstance(claim.get('has_evidence'), list):
@@ -489,6 +500,8 @@ def source_feedback(report, document, problems):
         check = finding.get('check')
         if check == 'activity-inputs' and finding.get('severity') == 'warning':
             continue
+        if check in ('refs', 'scientific-content') and finding.get('where') in unresolved:
+            continue   # a repository Claim that did not resolve: the source-evidence finding says what to change
         if check == 'source-file' and finding.get('where') in files:
             continue   # every File is checked by source_evidence: one it refused is reported there
         if check == 'source-ancestry' and finding.get('where') in waiting:
@@ -900,7 +913,7 @@ def main():
         if agent:
             accounting = runtime.get('deliverable') == 'scientific_account'
             tools = agent_tools(request['selected_graphs'], ledger, runtime['agent'],
-                                lint=(lambda filename: lint_tool(filename, ledger)) if accounting else None,
+                                lint=(lambda filename: lint_tool(filename, ledger)) if accounting else None,   # resolves repository claims itself
                                 write_draft=write_draft_tool if accounting else None)
         else:
             tools = ScopedTools(request['selected_graphs'], ledger, lint=(lambda filename: lint_tool(filename, ledger)) if request['kind'] == 'research' else None,

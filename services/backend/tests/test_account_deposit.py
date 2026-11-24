@@ -177,6 +177,31 @@ class AccountDepositTests(unittest.TestCase):
             deposit.mint({'claims': [claim]})
         self.assertIn('references objects it does not contain', str(dangling.exception))
 
+    def test_a_repository_claim_named_in_source_claims_is_the_one_reference_that_may_leave_the_document(self):
+        held, other = 'dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km', 'dapper:Claim.' + 'Z' * 32
+        document = self.account()
+        proposition = document['claims'][0]['proposition']
+        document['evidence_items'].append({'id': 'urn:draft:evidence-repo', 'target_proposition': proposition, 'direction': 'SUPPORTS',
+                                           'source_claims': [held], 'context': 'PIGEAN, collection pigean, trait IBD',
+                                           'explanation': 'PIGEAN supports the association.'})
+        document['claims'][0]['has_evidence'].append('urn:draft:evidence-repo')
+        # Without the gate's word for it, the reference is refused, as any other unresolved reference is.
+        with self.assertRaisesRegex(deposit.DepositError, 'references objects it does not contain: ' + held):
+            self.deposit(document)
+        with self.assertRaisesRegex(deposit.DepositError, 'references objects it does not contain: ' + held):
+            self.deposit(document, repository_claims=[other])
+        minted, summary = self.deposit(document, repository_claims=[held, other])
+        self.assertEqual(summary['repository_claims'], [held])
+        built_on = [item for item in minted['evidence_items'] if item.get('source_claims')]
+        self.assertEqual([item['source_claims'] for item in built_on], [[held]])
+        self.assertNotIn('value_locators', built_on[0]); self.assertNotIn('snippet', built_on[0])
+        self.assertNotIn(held, {node['id'] for node in minted['claims']})
+        self.assertIn(built_on[0]['id'], minted['claims'][0]['has_evidence'])
+        # Resolved for source_claims does not excuse the same id anywhere else.
+        member = deepcopy(document); member['scientific_accounts'][0]['component_claims'].append(held)
+        with self.assertRaisesRegex(deposit.DepositError, 'references objects it does not contain: ' + held):
+            self.deposit(member, repository_claims=[held])
+
     def test_the_vendored_dapper_is_the_recorded_commit_and_reproduces_its_own_vectors(self):
         vendor = json.loads((deposit.VENDOR / 'VENDOR.json').read_text())
         self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.2.1-a1', 'ac1a4d7'))

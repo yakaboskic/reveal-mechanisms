@@ -18,7 +18,7 @@ from reveal_backend.box_mcp import Ledger
 from reveal_backend.box_remote import ACCOUNT_SKILL
 from reveal_backend.runtime_config import ROOT
 
-PINS = {ACCOUNT_SKILL: 'df7d53f03a5159a4f34da8ad3af0904286f9cd84606170010bc917d895632118',
+PINS = {ACCOUNT_SKILL: 'c74546cf9e3f309f17fe20cbfd0f05c0574ff3dc35ce46f8c2d3d11a91735c94',
         ACCOUNT_EXCERPT: '9ae37c6a974b12cd97bf5ee2bcad0552b5dca0e1e5d87436630336d5be34cd38'}
 LOCK = ROOT / 'services/backend/agent-runtime/dapper-release.json'
 
@@ -76,3 +76,8 @@ def test_the_worked_example_in_the_skill_passes_the_source_checks(tmp_path):
     assert problems == []
     assert {quote['selector'] for quote in binding['quotes']} == {'line=212-213', 'line=2'}
     assert binding['activities']['urn:draft:activity-1']['observed_command'] == commands[0]
+    # The example of evidence from the claims repository names one Claim there, and nothing else outside the account.
+    from reveal_backend import box_claims
+    cited, misplaced = box_claims.repository_references(document)
+    assert list(cited.values()) == [['urn:draft:evidence-repository-1']] and misplaced == {}
+    assert box_claims.verify_references(document, lambda ids: {identity: 'Claim' for identity in ids}) == ([], sorted(cited))

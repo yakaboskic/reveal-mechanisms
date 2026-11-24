@@ -442,6 +442,17 @@ def test_tool_results_are_scored_except_revealss_own_tools_and_kit(deposited, tm
     flagged = ledger_with(tmp_path / 'b', ('WebFetch', {'url': 'https://a.example/'}, attack))
     result = verdict(deposited, calls=flagged.entries, ledger_root=flagged.root, classifier=fake_classifier())
     assert (result['check'], result['location']) == ('prompt_injection', 'ledger call 1 (WebFetch) line=1-2')
+    # What the claims repository returns is text the run read from outside, so it is scored like any other tool result:
+    # a clean collection answer passes, and a planted instruction in one (a trait label, say) withholds the account.
+    answer = lambda label: {'content': [{'type': 'text', 'text': json.dumps({'rows': [{'subject': {'label': 'NOD2'}, 'object': {'label': label},
+                            'claims': {'measurement': {'id': 'dapper:Claim.' + 'a' * 32, 'statement': 'The gene NOD2 is associated with ' + label}}}]})}]}
+    for tool in ('mcp__reveal__run_collection_query', 'mcp__reveal__query_claims'):
+        clean = ledger_with(tmp_path / (tool + '-clean'), (tool, {'collection': 'pigean'}, answer('Inflammatory bowel disease')))
+        assert verdict(deposited, calls=clean.entries, ledger_root=clean.root, classifier=fake_classifier())['outcome'] == 'passed'
+        planted = ledger_with(tmp_path / (tool + '-planted'), (tool, {'collection': 'pigean'}, answer(PLANTED)))
+        result = verdict(deposited, calls=planted.entries, ledger_root=planted.root, classifier=fake_classifier())
+        assert (result['outcome'], result['check']) == ('withheld', 'prompt_injection')
+        assert result['location'].startswith('ledger call 1 (' + tool.rsplit('__', 1)[-1] + ')')
     # A response whose bytes changed after capture is not read as if it were the run's.
     path = flagged.root / flagged.entries[0]['response']['path']
     path.write_bytes(path.read_bytes().replace(b'Page', b'Edit'))

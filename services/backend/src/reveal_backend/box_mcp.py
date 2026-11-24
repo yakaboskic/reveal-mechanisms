@@ -15,7 +15,8 @@ import urllib.request
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from .box_claims import DESCRIPTION as CLAIMS_DESCRIPTION, SCHEMA as CLAIMS_SCHEMA, TOOL as CLAIMS_TOOL, ClaimsInputError
+from .box_claims import (DESCRIPTION as CLAIMS_DESCRIPTION, QUERY_DESCRIPTION as COLLECTION_DESCRIPTION, QUERY_SCHEMA as COLLECTION_SCHEMA,
+                         QUERY_TOOL as COLLECTION_TOOL, SCHEMA as CLAIMS_SCHEMA, TOOL as CLAIMS_TOOL, ClaimsInputError)
 from .box_literature import LiteratureInputError, request_spec
 from .box_research import ALLOWED_TOOLS, HostedResearchClient, ResearchAccessError
 
@@ -442,6 +443,7 @@ class ScopedTools:
                  'inputSchema': {'type': 'object', 'properties': {'source': {'type': 'string', 'enum': ['MED', 'PMC']}, 'id': {'type': 'string'}, 'section': {'type': 'string', 'enum': ['abstract', 'full_text']}, 'offset': {'type': 'integer', 'minimum': 0}, 'limit': {'type': 'integer', 'minimum': 1, 'maximum': 12000}}, 'required': ['source', 'id'], 'additionalProperties': False}}])
         if self.claims:
             tools.append({'name': CLAIMS_TOOL, 'description': CLAIMS_DESCRIPTION, 'inputSchema': CLAIMS_SCHEMA})
+            tools.append({'name': COLLECTION_TOOL, 'description': COLLECTION_DESCRIPTION, 'inputSchema': COLLECTION_SCHEMA})
         if self.research:
             tools.extend(self.research.definitions())
         if self.read_evidence:
@@ -533,9 +535,10 @@ class ScopedTools:
                 result, source_version = self.upstream_call(tool, arguments, client=self.literature)
                 result = dict(result)
                 raw_response = result.pop('_raw_response', None); raw_format = result.pop('_raw_format', 'json')
-            elif tool == CLAIMS_TOOL and self.claims:
-                # A lookup of earlier claims. It is captured like every call, and it is not an eligible source: the
-                # response gets no capture File, so an account cannot cite it.
+            elif tool in (CLAIMS_TOOL, COLLECTION_TOOL) and self.claims:
+                # A read of the claims repository. It is captured like every call, and the response gets no capture
+                # File: an account cites a repository Claim by its id (EvidenceItem.source_claims), which REVEAL checks
+                # against the repository itself (box_claims.verify_references), never by quoting this answer.
                 result, source_version = self.upstream_call(tool, arguments, client=self.claims)
             elif tool in ('get_schema', 'describe_kg'):
                 if set(arguments) != {'graph'} or arguments['graph'] not in self.selected_graphs:

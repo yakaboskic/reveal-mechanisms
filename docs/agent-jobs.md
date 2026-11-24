@@ -42,7 +42,7 @@ EOF
 | `graphs` | `[]` | OKN knowledge graphs for the scoped graph tools (`get_schema`, `describe_kg`, `query_graph`). |
 | `network` | `restricted` (`open` for a Scientific Account job) | `restricted`: only the Anthropic API plus the services of the chosen graph tools and `query_claims`, and `allowed_domains`. `open`: the internet (package installs, downloads, `WebFetch`). |
 | `allowed_domains` | `[]` | Up to 20 exact hostnames the restricted network may also reach, for example `eutils.ncbi.nlm.nih.gov` (PubMed E-utilities) or `api.platform.opentargets.org` (Open Targets GraphQL). No wildcards or IP addresses; not used with `open`. The agent calls them with Bash (`curl`, `python3`). |
-| `claims_repository` | `false` (`true` for a Scientific Account job) | Offer the read-only `query_claims` tool. Needs a claims repository configured on the deployment; see [Return a Scientific Account](#return-a-scientific-account). |
+| `claims_repository` | `false` (`true` for a Scientific Account job) | Offer the claims repository tools, `query_claims` and `run_collection_query`. Needs a claims repository configured on the deployment; see [Return a Scientific Account](#return-a-scientific-account). |
 | `deliverable`, `question`, `claims` | `answer` | See [Return a Scientific Account](#return-a-scientific-account). |
 | `effort` | `medium` | `low`, `medium` or `high`. |
 | `model` | `REVEAL_AGENT_JOB_MODEL` | A Claude model id. |
@@ -83,7 +83,7 @@ and the message names the ceiling. An unknown key in `limits` is refused too.
 | `timeout_seconds` | 900 | 3,600 | 60 to 3,600 | Wall-clock time. The run is stopped at it. |
 | `max_turns` | 50 | 100 | 1 to 1,000 | Claude Code turns. |
 | `max_budget_usd` | 2 | 5 | above 0, to 1,000 | Provider cost. |
-| `tool_calls` | 30 | 300 | 1 to 5,000 | Graph tool and `query_claims` calls, counted together. |
+| `tool_calls` | 30 | 300 | 1 to 5,000 | Graph tool and claims repository (`query_claims`, `run_collection_query`) calls, counted together. |
 | `max_output_tokens` | 128,000 | 128,000 | 4,096 to 128,000 | Tokens Claude Code may generate in one model response, thinking included. Set as `CLAUDE_CODE_MAX_OUTPUT_TOKENS` for the Claude process. |
 
 The run stops at the first of `timeout_seconds`, `max_turns` and `max_budget_usd`, and the job fails with the
@@ -388,13 +388,45 @@ deposited accounts back:
 The key stays in the worker's environment. It is not written to jobs, records or logs, and it is not among the
 credentials passed to the sandbox.
 
-### Looking up earlier claims
+### Reading the claims repository, and building on its claims
 
 With `claims_repository` on (the default for a Scientific Account job, opt-in otherwise) and
-`REVEAL_CLAIMS_API_URL` set, the agent gets `query_claims`: read-only search of the repository by text, by what
-refers to a DAPPER id, or by id. The sandbox may reach that one host and holds no key. Lookups count against
-`tool_calls`. What they return is an earlier claim, not evidence, and cannot be cited in an account. If the
-deployment has no repository, the tool is not offered.
+`REVEAL_CLAIMS_API_URL` set, the agent gets two tools. The sandbox may reach that one host and holds no key. Both
+count against `tool_calls`. If the deployment has no repository, neither is offered.
+
+- `query_claims`: read-only search of stored objects by text, by what refers to a DAPPER id, or by id.
+- `run_collection_query`: the repository's result collections, such as PIGEAN gene and gene-set associations. With no
+  arguments it lists each collection's query templates with their params and claim keys; with `collection` and
+  `dimension` it lists a dimension's values (the id to give for a trait); with `collection`, `query`, `variables`
+  and `claims` it runs one and returns each row's numbers with the id of the Claim that states them.
+  - One call names 1 to 3 claim keys and integer variables of at most 50. Its answer shows at most 40 rows and 5
+    joined rows each, fewer when they are long; the rest are counted, never an error.
+  - The repository mints a collection's claim the first time it serves it, so a run is also how such a claim comes
+    to exist. Every served row is recorded there (it raises the claim's deposit count), in the database the
+    repository's environments share.
+
+**A Claim the repository holds can be evidence.** The account does not copy it. An EvidenceItem names it by id in
+`source_claims`, with `target_proposition`, `direction`, `context` and `explanation`, and no quote:
+
+```json
+{"id": "urn:draft:evidence-repository-1", "target_proposition": "urn:draft:prop-1", "direction": "SUPPORTS",
+ "source_claims": ["dapper:Claim.gM7GXq3cP0aWm2r5T8uYb1dE4fH6jK9L"],
+ "context": "PIGEAN, collection pigean, query top-genes-with-sets, trait IBD",
+ "explanation": "PIGEAN ranks NOD2 among the genes with the strongest combined support for inflammatory bowel disease."}
+```
+
+- This is the one object an account may name without containing it, and only there. A repository Claim id anywhere
+  else (`component_claims`, `has_evidence`) is refused.
+- REVEAL asks the repository for every such id (`POST /v1/objects:batchGet`, a read that mints nothing), while the
+  agent drafts and again at the gate. An id the repository does not hold as a Claim is refused. At the gate, an id
+  that cannot be checked because the repository is unreachable refuses the account too: nothing is deposited on an
+  unverified reference.
+- Any id the repository resolves may be named, whether or not a tool returned it in this run.
+- A Claim may rest on quotes from saved files, on repository claims, or on both.
+- The deposit form carries the id only. The repository already holds the claim, so the deposit's receipt reports no
+  unresolved reference, and the account read back from the repository is the account that was sent.
+- The account is still authored with the pinned DAPPER 0.2.0, which already has `source_claims`. The repository's
+  claim is never validated against 0.2.0, because it is never copied into the account.
 
 ## Return structured output
 

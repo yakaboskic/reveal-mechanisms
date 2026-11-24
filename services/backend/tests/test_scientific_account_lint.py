@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -10,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 import test_evidence_package as fixtures
+from reveal_backend import box_claims
 from reveal_backend.dapper_release import clone_release, prepare_agent_workspace, verify_release
 from reveal_backend.evidence_package import EvidenceBuildError, canonical_json, decode, sha256
 from reveal_backend.scientific_account_lint import AccountValidationError, cfde_source_files, draft_id_collisions, lint_scientific_account, validate_scientific_account
@@ -566,6 +568,118 @@ p.write_text(json.dumps(doc))
                     self.assertRaises(AccountValidationError) as changed:
                 agent_account.accept(base / 'changed', {'id': 'account-job'}, 1, account, requester, captured, output)
             self.assertEqual([item['where'] for item in changed.exception.report['findings']], ['urn:draft:evidence-2'])
+
+    def test_account_job_builds_on_a_repository_claim_by_id_without_containing_it(self):
+        """A Claim the claims repository holds is evidence by reference: an EvidenceItem names it in source_claims,
+        REVEAL resolves it in the repository while the agent drafts and again at the gate, and the deposit form
+        carries the id, not the claim."""
+        import os
+        from types import SimpleNamespace
+        from reveal_backend import acceptance, agent_account, box_agent, box_remote
+        from reveal_backend.box_mcp import Ledger
+        import test_source_evidence as run
+        held = 'dapper:Claim.TsqJgibQNjkHLCocO-AIKxiPUgi3o5km'
+        invented = 'dapper:Claim.' + 'Z' * 32
+        account = agent_account.build('Is NOD2 implicated in inflammatory bowel disease?',
+                                      [box_agent.claim_entry('NOD2 is associated with inflammatory bowel disease.')])
+        gap_id, proposition_id = account['package']['selection']['knowledge_gap_id'], account['claims'][0]['proposition_id']
+        asked = []
+        def resolve(ids):
+            asked.append(list(ids))
+            return {identity: 'Claim' for identity in ids if identity == held}
+        repository = SimpleNamespace(resolve=resolve)
+
+        def draft(*, quoted=True, reference=held):
+            document = run.draft(proposition_id, gap_id)
+            built_on = {'id': 'urn:draft:evidence-repo', 'target_proposition': proposition_id, 'direction': 'SUPPORTS',
+                        'source_claims': [reference], 'context': 'PIGEAN, collection pigean, query top-genes-with-sets, trait IBD',
+                        'explanation': 'PIGEAN gives NOD2 a high combined score for inflammatory bowel disease.'}
+            if quoted:
+                document['evidence_items'].append(built_on); document['claims'][0]['has_evidence'].append(built_on['id'])
+                return document
+            return {'evidence_items': [built_on], 'claims': [{**document['claims'][0], 'has_evidence': [built_on['id']]}],
+                    'scientific_accounts': document['scientific_accounts']}
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory); state = base / 'state'; output = base / 'output'
+            state.mkdir(); output.mkdir()
+            lock = base / 'bundle/services/backend/agent-runtime/dapper-release.json'
+            lock.parent.mkdir(parents=True); lock.write_bytes(self.lock.read_bytes())
+            package_path = base / 'evidence-package.json'; package_path.write_bytes(canonical_json(account['package']))
+            attribution = {'organizations': [{'id': 'urn:reveal:runtime:executor', 'name': 'REVEAL Mechanisms runtime executor'}],
+                           'activities': [{'id': 'urn:reveal:runtime:execution:job:1', 'name': 'Claude Code research execution',
+                                           'command': 'reveal Box scientific-account authoring', 'software_name': 'Claude Code'}]}
+            (state / 'runtime.json').write_bytes(canonical_json({'dapper_root': str(self.release), 'evidence_package': str(package_path),
+                                                                  'deliverable': 'scientific_account', 'draft_attribution': attribution}))
+            ledger = Ledger(state / 'ledger', 'account-job', 1)
+            run.save_sources(output, ledger)
+            with patch.object(box_remote, 'BASE', base), patch.object(box_remote, 'STATE', state), patch.object(box_remote, 'OUTPUT', output), \
+                    patch.object(box_remote.pwd, 'getpwnam', return_value=SimpleNamespace(pw_uid=os.getuid(), pw_gid=os.getgid())):
+                def tools_with(claims):
+                    return box_remote.agent_tools([], ledger, {'limits': {'tool_calls': 30}}, write_draft=box_remote.write_draft_tool,
+                                                  lint=lambda filename: box_remote.lint_tool(filename, ledger, claims=claims))
+                def lint(document, claims=repository):
+                    tools = tools_with(claims)
+                    saved = tools.call('write_account_draft', {'filename': 'account-1.json', 'document': document})
+                    self.assertFalse(saved.get('isError'), saved)
+                    return json.loads(tools.call('lint_account', {'filename': 'account-1.json'})['content'][0]['text'])
+                errors = lambda report: [(item['check'], item['where']) for item in report['findings'] if item['severity'] == 'error']
+                # Beside quotes, and as a Claim's only evidence: both are valid, and REVEAL asked the repository each time.
+                for quoted in (True, False):
+                    clean = lint(draft(quoted=quoted))
+                    self.assertTrue(clean['valid'], clean['findings']); self.assertEqual(errors(clean), [])
+                self.assertEqual(asked, [[held], [held]])
+                self.assertEqual(json.loads((state / 'ledger/lint-sources.json').read_bytes())['repository_claims'], [held])
+                # An id the repository does not hold is one finding, where it is, saying what to change: the pinned
+                # release's own two findings about the same reference are not shown beside it.
+                refused = lint(draft(reference=invented))
+                self.assertEqual(errors(refused), [('source-evidence', 'urn:draft:evidence-repo')], refused['findings'])
+                self.assertIn('The claims repository holds no claim ' + invented, refused['findings'][-1]['message'])
+                # With it as the Claim's only evidence, the Claim is waiting on that repair and is not reported twice.
+                self.assertEqual(errors(lint(draft(quoted=False, reference=invented))), [('source-evidence', 'urn:draft:evidence-repo')])
+                # A run with no claims repository cannot check an id, so it cannot use one.
+                unchecked = lint(draft(), claims=None)
+                self.assertEqual(errors(unchecked), [('source-evidence', 'urn:draft:evidence-repo')])
+                self.assertIn('no claims repository to check it against', unchecked['findings'][-1]['message'])
+                # Resolved for source_claims only: the same id as a member of the account is refused.
+                member = draft(); member['scientific_accounts'][0]['component_claims'].append(held)
+                as_member = lint(member)
+                self.assertFalse(as_member['valid'])
+                self.assertIn(('source-evidence', 'urn:draft:account-1.component_claims'), errors(as_member))
+                self.assertTrue(lint(draft(quoted=False))['valid'])
+            ledger.freeze()
+            manifest = state / 'ledger/manifest.json'
+            requester = {'user_id': '11111111-1111-4111-8111-111111111111', 'principal_kind': 'registered', 'display_name': 'Test Requester',
+                         'orcid': None, 'orcid_authenticated': False}
+            captured = SimpleNamespace(account_paths=(output / 'account-1.json',), ledger_manifest_path=manifest)
+            with patch.object(acceptance, 'release_root', return_value=self.release), patch.object(acceptance, 'LOCK', self.lock):
+                work = base / 'work'; work.mkdir()
+                record = agent_account.accept(work, {'id': 'account-job'}, 1, account, requester, captured, output, resolve=resolve)
+                # The gate asks the repository itself. An id it no longer resolves refuses the account.
+                (base / 'gone').mkdir()
+                with self.assertRaises(AccountValidationError) as failed:
+                    agent_account.accept(base / 'gone', {'id': 'account-job'}, 1, account, requester, captured, output, resolve=lambda ids: {})
+                self.assertEqual([(item['check'], item['where']) for item in failed.exception.report['findings']], [('source-evidence', 'urn:draft:evidence-repo')])
+                self.assertIn('holds no claim ' + held, failed.exception.report['findings'][0]['message'])
+                # A repository that cannot be reached decides nothing: the step fails as an OSError, which the
+                # workflow retries, and the account is neither accepted nor refused.
+                def down(ids): raise box_claims.ClaimsUnavailable('The claims repository could not be reached')
+                (base / 'down').mkdir()
+                with self.assertRaisesRegex(agent_account.RepositoryUnavailable, 'could not be reached') as unavailable:
+                    agent_account.accept(base / 'down', {'id': 'account-job'}, 1, account, requester, captured, output, resolve=down)
+                self.assertIsInstance(unavailable.exception, OSError)
+                for name in ('gone', 'down'):
+                    self.assertFalse((base / name / 'validated/account.dapper.json').exists())
+            self.assertEqual((record['repository_claims'], record['claims'], record['value_locators']), ([held], 1, 0))
+            self.assertEqual(record['screen']['outcome'], 'passed')
+            document = json.loads(agent_account.stored(work, record)[0])
+            # The deposit form names the repository's Claim and holds none of it: every other reference is its own.
+            self.assertEqual([item['source_claims'] for item in document['evidence_items']], [[held]])
+            self.assertEqual(json.dumps(document).count(held), 1)
+            own = {node['id'] for key, rows in document.items() if not key.endswith('_edges') for node in rows}
+            self.assertNotIn(held, own)
+            self.assertEqual(set(re.findall(r'dapper:[A-Za-z]+\.[A-Za-z0-9_-]{32}', json.dumps(document))) - own, {held})
+            self.assertEqual(agent_account.requested_claims(account['claims'], document), [
+                {'statement': 'NOD2 is associated with inflammatory bowel disease.', 'assessed': True, 'claim_ids': [document['claims'][0]['id']]}])
 
     def test_agent_tool_and_worker_assembly_use_same_source_gate(self):
         from reveal_backend import acceptance, box_remote

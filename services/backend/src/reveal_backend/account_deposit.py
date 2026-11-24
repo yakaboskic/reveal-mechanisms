@@ -121,9 +121,10 @@ def _collapse(document):
     return changed
 
 
-def mint(document):
+def mint(document, repository_claims=()):
     """(document minted with the vendored DAPPER 0.2.1-a1, {old id: new id}). Every id is verified after minting,
-    each object appears once, and every dapper reference must resolve inside the document."""
+    each object appears once, and every dapper reference must resolve inside the document, except the
+    `repository_claims`: Claims the claims repository holds, which the account names without containing."""
     mapping = None
     for _ in range(6):  # each pass can only merge; a document of a few levels settles in two or three
         result = _mint_once(document)
@@ -133,8 +134,9 @@ def mint(document):
             break
     else:
         raise DepositError('The account did not settle on one id per object')
-    if result['unresolved']:
-        raise DepositError('The account references objects it does not contain: ' + ', '.join(result['unresolved'][:5]))
+    unresolved = sorted(set(result['unresolved']) - set(repository_claims))
+    if unresolved:
+        raise DepositError('The account references objects it does not contain: ' + ', '.join(unresolved[:5]))
     return document, mapping
 
 
@@ -161,13 +163,17 @@ def _reattribute(document, identities, agent):
     document['organizations'] = [*document.get('organizations', []), agent]
 
 
-def deposit_document(account_document, sources_root, calls, ledger_root, *, attribute_requester=False):
+def deposit_document(account_document, sources_root, calls, ledger_root, *, attribute_requester=False, repository_claims=()):
     """(the account in its deposit form, a summary) from an accepted account document, the folder its sources were
     saved in (the run's output/) and the run's tool ledger (`calls`, request paths relative to `ledger_root`).
 
     The accepted document is attributed to its requester (assemble_account always does that). The deposit form names
     them only when `attribute_requester` is true; otherwise the requester's Person is left out and the account and
     its Claims are attributed to the service (SERVICE_AGENT): what made it, not who asked.
+
+    `repository_claims` are the Claims of the claims repository the account builds on, as the gate resolved them
+    (box_claims.verify_references): the account names each by id in an EvidenceItem's source_claims and does not
+    contain it. Any other reference to an object outside the document is refused.
 
     `account_document` is what acceptance.assemble_account returned: valid against the pinned release, attributed,
     its Files measured. Its record of sources is checked again here, by the rule the gate applied
@@ -243,7 +249,10 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
             if edge not in used:
                 used.append(edge)
 
-    minted, mapping = mint(document)
+    # Only where the gate allowed them: an id resolved for source_claims does not excuse it anywhere else.
+    from .box_claims import repository_references
+    cited, misplaced = repository_references(document)
+    minted, mapping = mint(document, set(repository_claims) & set(cited) - set(misplaced))
     minted = layout(minted)
     account = minted['scientific_accounts'][0]
     files = binding['files']
@@ -251,6 +260,7 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
                'objects': sum(len(rows) for key, rows in minted.items() if not key.endswith('_edges')),
                'edges': sum(len(rows) for key, rows in minted.items() if key.endswith('_edges')),
                'claims': len(minted.get('claims', [])), 'value_locators': len(minted.get('value_locators', [])),
+               'repository_claims': sorted(set(repository_claims) & set(cited) - set(misplaced)),
                'papers': [{'path': entry['path'], 'url': entry['url'], 'sha256': entry['sha256'], 'size_bytes': entry['size_in_bytes'],
                            'media_type': entry['mime_type'], 'command': entry['command'], 'observed_command': entry['observed_command'],
                            'derived_from': files[entry['derived_from']]['path'] if entry['derived_from'] else None,
