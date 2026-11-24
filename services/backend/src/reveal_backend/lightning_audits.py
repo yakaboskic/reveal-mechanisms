@@ -531,8 +531,11 @@ def reconcile(repo):
         # every completed audit's evidence package/model payload.
         compact = "JSON_OBJECT('status',JSON_EXTRACT(payload,'$.public.status'),'deadline_at',JSON_EXTRACT(payload,'$.deadline_at')," \
             "'continuation_expires_at',JSON_EXTRACT(payload,'$.public.continuation_expires_at'))"
+        # Compare the extracted value itself with true. On MySQL, COALESCE(JSON_EXTRACT(...),false)=false holds for
+        # every row (the JSON true becomes the text 'true', which equals 0), which selected released audits and
+        # rewrote their whole payload on every pass.
         records = tx.execute('SELECT id,owner_id,' + compact + ' FROM reveal_records WHERE kind=%s AND '
-            "COALESCE(JSON_EXTRACT(payload,'$.pin_released'),false)=false", (KIND,)).fetchall()
+            "NOT COALESCE(JSON_EXTRACT(payload,'$.pin_released')=true,false)", (KIND,)).fetchall()
         rows = [{'id': row[0], 'owner': row[1], 'data': json.loads(row[2]) if isinstance(row[2], str) else row[2]} for row in records]
         tx.get_records([('principal', row['owner']) for row in rows])
         candidates = [row['id'] for row in rows if
@@ -543,7 +546,8 @@ def reconcile(repo):
     for identity in candidates:
         with repo.transaction(nowait=True) as tx:
             row = tx.get(KIND, identity)
-            if not row: continue
+            # A released audit has nothing left to reconcile: never rewrite its retained evidence package.
+            if not row or row['data'].get('pin_released'): continue
             data = row['data']; public = data['public']; owner = row['owner']
             tx.get_records([('principal', owner), ('research_pin', public['research_request_id'])])
             alive = _alive(tx, owner)

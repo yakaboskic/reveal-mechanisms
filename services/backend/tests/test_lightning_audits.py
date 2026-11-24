@@ -314,6 +314,30 @@ def test_expired_pending_receipt_has_no_model_retry_and_pin_releases(case):
     assert audits.reconcile(case.repo) == 0
 
 
+def test_released_audit_is_never_rewritten_by_later_passes(case, monkeypatch):
+    """QA rewrote 23 released audits (about 25 MB of JSON) every 30 seconds: MySQL evaluated the old
+    pin_released filter as true for every row, and the release branch wrote unconditionally."""
+    from reveal_backend import repository
+    first = start(case); case.queue.run()
+    edit(case, first['id'], lambda data: data['public'].update(continuation_expires_at='2000-01-01T00:00:00Z'))
+    audits.reconcile(case.repo)
+    def version():
+        with case.repo.read_transaction() as tx: return tx.get(audits.KIND, first['id'])['version']
+    assert stored(case, first['id'])['pin_released'] is True
+    released = version()
+    assert audits.reconcile(case.repo) == 0 and version() == released
+    # Even when the candidate query selects a released audit, as MySQL's did, nothing is written.
+    selected = []
+    execute = repository.Transaction.execute
+    def select_everything(self, sql, params=()):
+        predicate = "NOT COALESCE(JSON_EXTRACT(payload,'$.pin_released')=true,false)"
+        if predicate in sql: selected.append(sql); sql = sql.replace(predicate, '1=1')
+        return execute(self, sql, params)
+    monkeypatch.setattr(repository.Transaction, 'execute', select_everything)
+    assert audits.reconcile(case.repo) == 0
+    assert selected and version() == released
+
+
 @pytest.mark.parametrize('change', ['owner', 'attempt', 'status', 'deadline'])
 def test_inflight_completion_cannot_cross_control_fence(case, change):
     first = start(case)
