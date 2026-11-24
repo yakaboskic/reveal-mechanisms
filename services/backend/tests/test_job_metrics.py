@@ -53,6 +53,17 @@ class AgentMetricsTests(unittest.TestCase):
                                               'authoring_timing': {'calls': 'none'}}})
         self.assertIsNone(agent['cost_usd']); self.assertIsNone(agent['turns']); self.assertIsNone(agent['lint_checks'])
         self.assertEqual(agent_metrics(None)['cost_source'], 'unreported')
+        # Classifier stops: null for runs recorded before the runner counted them, never zero.
+        unknown = {'responses': None, 'refusals': None, 'refusal_categories': None, 'ended_on_refusal': None, 'models': None}
+        self.assertEqual({key: agent_metrics(None)[key] for key in unknown}, unknown)
+        self.assertEqual({key: agent_metrics(BUDGET_STOP)[key] for key in unknown}, unknown)
+        refused = agent_metrics({'completion': {'timing': {'responses': {'ended': 41, 'refused': 2, 'last_stop_reason': 'end_turn',
+            'refusal_categories': {'bio': 1, 'not_reported': 1, 'bad': 'x'}, 'models': ['claude-opus-5-5', 'claude-opus-5', 7]}}}})
+        self.assertEqual({key: refused[key] for key in unknown}, {'responses': 41, 'refusals': 2, 'ended_on_refusal': False,
+            'refusal_categories': {'bio': 1, 'not_reported': 1}, 'models': ['claude-opus-5-5', 'claude-opus-5']})
+        clean = agent_metrics({'completion': {'timing': {'responses': {'ended': 3, 'refused': 0, 'refusal_categories': {},
+            'last_stop_reason': 'end_turn', 'models': ['claude-opus-5-5']}}}})
+        self.assertEqual((clean['refusals'], clean['refusal_categories'], clean['models']), (0, {}, ['claude-opus-5-5']))
 
     def test_failure_metrics_bound_and_redact_the_message(self):
         with patch.dict(os.environ, {'PROVIDER_API_KEY': 'sk-very-secret-value'}):

@@ -2,7 +2,7 @@
 // React is imported by name because the unit tests render this file with the classic JSX runtime.
 import React from "react";
 import Link from "next/link";
-import { jobKindLabel, jobLabel } from "@/lib/admin-job";
+import { jobKindLabel, jobLabel, refusalNote } from "@/lib/admin-job";
 import { distinct, filterJobs, isActive, ownerLine, TERMINAL, type Snapshot } from "@/lib/admin-telemetry";
 import { formatAdminDate as date, formatAdminDuration as duration } from "@/lib/admin-time";
 import { jobHref, pageNumber, pageOf, urlWith, type UrlParams } from "@/lib/admin-url";
@@ -38,7 +38,7 @@ export function JobsView({ data, params, update }: { data: Snapshot; params: Url
       footer={shown.total > JOBS_PAGE_SIZE ? <Pagination page={shown.page} pages={shown.pages} total={shown.total} noun="job" href={page => urlWith("/admin/jobs", params, { page })} /> : undefined}>
       {shown.items.length ? <Table label="Jobs" headings={JOB_HEADINGS}>{shown.items.map(j => <tr key={j.id}>
         <td><Link className="admin-job-link" href={jobHref(j.id)} aria-label={`View logs for ${jobLabel(j)} job ${j.id}`} title={j.id}>{j.id.slice(0, 8)} · {jobLabel(j)}</Link> <CopyButton text={j.id} /><small title={j.owner}>{ownerLine(j.owner, owners)}</small></td>
-        <td><StateStatus value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}</td>
+        <td><StateStatus value={j.status} /><small>{j.stage}</small>{j.failure_code && <small>{j.failure_code}</small>}{j.error_type && <small title="Recorded exception type and phase">{j.error_type}{j.error_phase ? ` · ${j.error_phase}` : ""}</small>}{refusalNote(j) && <small className="admin-warning">{refusalNote(j)}</small>}</td>
         <td className="admin-date"><Age value={j.started_at} /></td>
         <td className="admin-date"><Age value={j.completed_at} /></td>
         <td>{j.attempt}<small>{j.box_phase || "No Box runtime"}</small></td>

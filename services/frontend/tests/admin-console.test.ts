@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { filterJobs, ownerLine, ownerName, ownerNote, totals, type Owners, type Snapshot } from "../src/lib/admin-telemetry";
-import { depositFilter, type AdminJob, type AgentJob, type AgentRun } from "../src/lib/admin-job";
+import { depositFilter, refusalNote, type AdminJob, type AgentJob, type AgentRun } from "../src/lib/admin-job";
 import { ADMIN_NAV, activeSection, AdminSidebar } from "../src/components/admin/AdminNav";
 import { ConsoleNotices } from "../src/components/admin/Telemetry";
 import { OverviewView } from "../src/components/admin/OverviewView";
@@ -108,6 +108,19 @@ test("an owner is shown by name wherever an owner id is, and an anonymous worksp
   const spend = render(AdminCostsView, { costs, jobs: [], owners });
   assert.ok(spend.includes('<span class="admin-owner-name">Lab colleague (API key)</span><small>API key</small>') && spend.includes('<code title="gateway">gateway</code>'));
   assert.ok(!spend.includes("opaque"));
+});
+
+test("a run whose responses the provider's safety classifier stopped says so, although it succeeded", () => {
+  assert.equal(refusalNote({}), null);
+  assert.equal(refusalNote({ refusals: 0, refusal_categories: {}, ended_on_refusal: false, models: ["claude-opus-5-5"] }), null);
+  assert.equal(refusalNote({ refusals: 1, refusal_categories: { bio: 1 }, ended_on_refusal: false, models: ["claude-opus-5-5"] }),
+    "1 response stopped by the model provider's safety classifier (bio)");
+  const stopped = { refusals: 2, refusal_categories: { bio: 1, not_reported: 1 }, ended_on_refusal: false, models: ["claude-opus-5-5", "claude-opus-5"] };
+  assert.equal(refusalNote(stopped), "2 responses stopped by the model provider's safety classifier (bio) · continued on claude-opus-5");
+  assert.ok(refusalNote({ ...stopped, ended_on_refusal: true })?.endsWith("the last response was stopped"));
+  const list = render(JobsView, { data: snapshot([job("r1", "succeeded", stopped), job("c1", "succeeded", { refusals: 0 }), job("o1", "succeeded")]), params: params(), update: noUpdate });
+  assert.equal(list.split("stopped by the model provider").length - 1, 1);
+  assert.ok(list.includes('<small class="admin-warning">2 responses stopped by the model provider&#x27;s safety classifier (bio) · continued on claude-opus-5</small>'));
 });
 
 test("the jobs list filters by kind, state, owner and text, pages through the latest 100, and links each job to its own page", () => {

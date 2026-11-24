@@ -40,7 +40,10 @@ METRIC_FIELDS = {'agent.cost_usd': 'cost_usd', 'agent.estimated_cost_usd': 'esti
                  'agent.model': 'model', 'agent.status': 'agent_status', 'agent.subtype': 'agent_subtype',
                  'agent.lint_checks': 'lint_checks', 'agent.draft_writes': 'draft_writes', 'agent.tool_calls': 'tool_calls',
                  'agent.tool_failures': 'tool_failures', 'agent.turn_limit': 'turn_limit',
-                 'agent.time_limit_seconds': 'time_limit_seconds', 'error.phase': 'error_phase',
+                 'agent.time_limit_seconds': 'time_limit_seconds',
+                 # Responses the provider's safety classifiers stopped, by category, and the models that answered.
+                 'agent.refusals': 'refusals', 'agent.refusal_categories': 'refusal_categories',
+                 'agent.ended_on_refusal': 'ended_on_refusal', 'agent.models': 'models', 'error.phase': 'error_phase',
                  'error.error_type': 'error_type', 'parent_job_id': 'parent_job_id'}
 
 

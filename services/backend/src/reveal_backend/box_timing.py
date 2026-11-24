@@ -1,4 +1,5 @@
-"""Bounded numeric observations of a hosted stream; never retain its content.
+"""Bounded numeric observations of a hosted stream; never retain its content. The only names kept are
+identifiers the provider reports about a response: how it stopped, a refusal's category, and the model.
 
 These are local receipt times, not measurements of model reasoning, network
 latency or provider compute. Concurrent tool intervals are unioned separately
@@ -7,6 +8,7 @@ the terminal event actually reports finite, nonnegative numbers.
 """
 import hashlib
 import math
+import re
 import time
 
 from .public_tool_activity import tool_failed
@@ -15,6 +17,9 @@ from .public_tool_activity import tool_failed
 MAX_ACTIVE_TOOLS = 256
 MAX_TRACKED_MESSAGES = 4096
 MAX_COUNTER = 2 ** 53 - 1
+MAX_REFUSAL_CATEGORIES = 16
+MAX_MODELS = 8
+NAME = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:-]{0,79}')
 # Claude API list prices in USD per million tokens (5-minute cache writes) for the models REVEAL pins.
 # A run's provider-reported total stays authoritative; these only estimate spend it has not reported yet.
 MODEL_PRICES_PER_MTOK = {'claude-sonnet-4-6': {'input_tokens': 3.0, 'output_tokens': 15.0,
@@ -84,6 +89,12 @@ class RuntimeTiming:
         self.usage_totals = dict.fromkeys(TOKEN_FIELDS, 0)
         self.messages_seen = 0
         self.current_message = None
+        # Responses the provider's safety classifiers stopped (stop_reason "refusal"), by its stop_details category,
+        # and the models that answered, in order: Claude Code moves a refused run to a fallback model by itself.
+        self.responses = self.refusals = 0
+        self.refusal_categories = {}
+        self.last_stop_reason = None
+        self.models = []
 
     def account(self, identity, usage):
         """Fold one observation of a provider message's usage. Within a message the counts only grow."""
@@ -104,6 +115,23 @@ class RuntimeTiming:
     @staticmethod
     def increment(value, amount=1):
         return min(MAX_COUNTER, value + amount)
+
+    def stopped(self, delta):
+        """Count how one provider response ended. Only the stop reason and a refusal's category name are read."""
+        reason = delta.get('stop_reason') if isinstance(delta, dict) else None
+        if not isinstance(reason, str) or not NAME.fullmatch(reason):
+            return
+        self.responses = self.increment(self.responses)
+        self.last_stop_reason = reason
+        if reason != 'refusal':
+            return
+        self.refusals = self.increment(self.refusals)
+        details = delta.get('stop_details')
+        category = details.get('category') if isinstance(details, dict) else None
+        # A stop can report no category: on QA a run's second stop did, just before Claude Code moved it to a fallback model.
+        category = category if isinstance(category, str) and NAME.fullmatch(category) else 'not_reported'
+        if category in self.refusal_categories or len(self.refusal_categories) < MAX_REFUSAL_CATEGORIES:
+            self.refusal_categories[category] = self.increment(self.refusal_categories.get(category, 0))
 
     def bytes_received(self, channel, count):
         if channel not in self.io or number(count, integer=True) is None or not count:
@@ -143,8 +171,12 @@ class RuntimeTiming:
                     identity = started.get('id')
                     self.current_message = identity if isinstance(identity, str) and identity else f"stream:{self.lifecycle['message_start']}"
                     self.account(self.current_message, started.get('usage'))
+                    model = started.get('model')
+                    if isinstance(model, str) and NAME.fullmatch(model) and model not in self.models and len(self.models) < MAX_MODELS:
+                        self.models.append(model)
                 elif subtype == 'message_delta':
                     self.account(self.current_message, nested.get('usage'))
+                    self.stopped(nested.get('delta'))
             # The delta's text, thinking, signature and input fragments are never read.
         if kind not in ('assistant', 'user'):
             return
@@ -207,6 +239,8 @@ class RuntimeTiming:
             'measurement': 'Local receipt intervals; gaps do not identify provider, network or reasoning time.',
             'elapsed_seconds': seconds(observed - self.started), 'streams': streams,
             'usage': {'messages': self.messages_seen, **self.usage_totals},
+            'responses': {'ended': self.responses, 'refused': self.refusals, 'refusal_categories': dict(self.refusal_categories),
+                          'last_stop_reason': self.last_stop_reason, 'models': list(self.models)},
             'stream_events': {'count': self.event_count, 'lifecycle': dict(self.lifecycle),
                 'lifecycle_receipts': {name: {
                     'first_elapsed_seconds': seconds(self.lifecycle_first[name] - self.started) if self.lifecycle_first[name] is not None else None,

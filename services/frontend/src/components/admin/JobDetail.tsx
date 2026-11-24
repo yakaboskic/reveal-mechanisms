@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { coalesceMessageDeltas } from "@/lib/activity";
-import { jobKindLabel, jobLabel, type AdminJob, type JobDetail, type JobRunMetrics, type TranscriptPage } from "@/lib/admin-job";
+import { jobKindLabel, jobLabel, refusalNote, type AdminJob, type JobDetail, type JobRunMetrics, type TranscriptPage } from "@/lib/admin-job";
 import { appendPage } from "@/lib/admin-transcript";
 import { formatAdminDate as date, formatAdminDuration as duration, formatAdminJson } from "@/lib/admin-time";
 import { jobHref } from "@/lib/admin-url";
@@ -48,6 +48,7 @@ function SummarySection({ data }: { data: JobDetail }) {
       ["Kind", jobLabel(job)],
       ["Owner", <Owner key="owner" id={job.owner} owners={job.owner_label ? { [job.owner]: job.owner_label } : undefined} length={36} />],
       ...([["Created", job.created_at], ["Started", job.started_at], ["Updated", job.updated_at], ["Finished", job.completed_at], ["Current attempt started", job.attempt_started_at]] as const).map(([label, value]) => [label, date(value)] as [string, React.ReactNode]),
+      ["Safety classifier", job.refusals == null ? "Not recorded for this run" : refusalNote(job) ? <span key="refusals" className="admin-warning">{refusalNote(job)}. A stopped response is withheld from the run, so the answer may be incomplete.</span> : "No response was stopped"],
       ["Worker", job.worker || "—"],
       ["Box", job.box_id || "No Box runtime recorded"],
       ["Attempt / recoveries", `${job.attempt} / ${job.recoveries}${job.delivery_recoveries ? ` · ${job.delivery_recoveries} delivery recoveries` : ""}${job.handoffs ? ` · ${job.handoffs} handoffs` : ""}`],

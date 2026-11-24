@@ -14,7 +14,7 @@ Agent jobs are off until an operator names who may start them:
 |---|---|---|
 | `REVEAL_AGENT_JOB_USERS` | unset (off) | Comma-separated workspace user ids allowed to start agent jobs, of any principal kind (for example an `rvl_` API-key workspace). `*` admits every registered user, never an anonymous guest. |
 | `REVEAL_AGENT_JOB_MAX_BUDGET_USD` | `5` | Budget ceiling per run, unless the admin console sets one. See [Limits](#limits). |
-| `REVEAL_AGENT_JOB_MODEL` | `claude-opus-5-5` | Model when the request names none. |
+| `REVEAL_AGENT_JOB_MODEL` | `claude-opus-5-5` | Model when the request names none. QA sets `claude-sonnet-5-5` (`deploy/dig/service.yaml`). |
 
 They run only on the durable workflow runtime (`REVEAL_JOB_TRANSPORT=workflow`, as on QA). Elsewhere the API
 answers `409 AGENT_JOBS_UNAVAILABLE`; a workspace that is not admitted gets `403 AGENT_JOBS_NOT_ENABLED`.
@@ -490,6 +490,30 @@ An account job's detail also lists each source file it saved: the path, URL, rec
 saw run, size, short SHA-256, media type and how many quotes cite it, with the deposit screen's verdict (check,
 score against threshold, where, and how many windows and texts it scored). These are metadata the agent wrote and
 REVEAL measured, never a file's text; credentials in a URL or command are redacted. The job list carries none of it.
+
+## When a safety classifier stops a response
+
+The model provider runs safety classifiers on some models. Claude Opus 5.5 and Claude Sonnet 5.5 run a biology
+classifier, and genetics or mechanism work can trip it although nothing in it is unsafe. By the provider's documentation,
+Claude Opus 5 and Claude Sonnet 5 do not run it. This is not REVEAL's deposit
+screen, and nothing in REVEAL can loosen it.
+
+What happens in a run:
+
+- The provider ends that response with `stop_reason: "refusal"` and a category such as `bio`. The stopped response is
+  withheld, including any tool call it was making, whose result becomes "Interrupted: the response that made this tool
+  call was stopped by a safety classifier…".
+- The run goes on with the same model, and the agent is told not to regenerate what was withheld. On QA, with
+  Claude Opus 5.5, a run's second stop reported no category, and from then on Claude Code ran it on Claude Opus 5 (its
+  own refusal fallback for a `bio` stop). No response was stopped after that move.
+- The job still ends `succeeded` when the agent finishes. If the stopped response was the final report, the answer is
+  the agent's note that the report is incomplete.
+
+The admin console counts these per job ([Admin telemetry](admin-telemetry.md#classifier-stops)). A count says a
+response was stopped, not that the answer is incomplete: most runs with a stop still finished their work. To try
+avoiding them for a piece of work, name a model in the request that does not run that classifier, for example
+`"model": "claude-opus-5"`, which is where a twice-stopped run continues anyway. An operator can make that the default
+with `REVEAL_AGENT_JOB_MODEL`.
 
 ## How it runs
 

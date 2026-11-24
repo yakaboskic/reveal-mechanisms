@@ -28,6 +28,21 @@ def text(value, limit=300):
     return value[:limit] if isinstance(value, str) and value else None
 
 
+def refusal_metrics(responses):
+    """How often the provider's safety classifiers stopped a response in this run, and which models answered.
+    Runs recorded before the runner counted this have every field null, never zero."""
+    if not isinstance(responses, dict):
+        return {'responses': None, 'refusals': None, 'refusal_categories': None, 'ended_on_refusal': None, 'models': None}
+    categories = responses.get('refusal_categories') if isinstance(responses.get('refusal_categories'), dict) else {}
+    models = responses.get('models') if isinstance(responses.get('models'), list) else []
+    return {'responses': number(responses.get('ended'), integer=True),
+            'refusals': number(responses.get('refused'), integer=True),
+            'refusal_categories': {name: count for key, value in list(categories.items())[:16]
+                                   if (name := text(key, 80)) and (count := number(value, integer=True))},
+            'ended_on_refusal': responses.get('last_stop_reason') == 'refusal',
+            'models': [name for model in models[:8] if (name := text(model, 80))]}
+
+
 def agent_metrics(runtime):
     """Allowlisted projection of a captured `runtime.json`; unknown values stay null, never zero."""
     runtime = runtime if isinstance(runtime, dict) else {}
@@ -69,6 +84,7 @@ def agent_metrics(runtime):
         'tokens': tokens if any(v is not None for v in tokens.values()) else None,
         'tool_calls': number(tools.get('completed'), integer=True),
         'tool_failures': number(tools.get('failed'), integer=True),
+        **refusal_metrics(timing.get('responses')),
         'lint_checks': sum(c.get('tool') == 'lint_account' for c in calls) if calls else None,
         'draft_writes': sum(c.get('tool') == 'write_account_draft' for c in calls) if calls else None,
     }

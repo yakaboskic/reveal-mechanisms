@@ -79,6 +79,21 @@ entry for each owner id in the snapshot that is a principal (system owners have 
 record never leave the database. This is the one place the snapshot carries personal data. It is read under the same
 admin gate and assertion as the rest of the snapshot and, unlike a prompt read, is not recorded per read.
 
+## Classifier stops
+
+A job can finish `succeeded` although the model provider's safety classifier stopped one of its responses and the
+answer is incomplete ([what happens in a run](agent-jobs.md#when-a-safety-classifier-stops-a-response)). The console
+says so under the job's state in **Jobs** and **Agent jobs**, and in the job's Summary as **Safety classifier**, for
+example "2 responses stopped by the model provider's safety classifier (bio) · continued on claude-opus-5".
+
+The runner counts this from Claude Code's stream as it arrives and records it with the run's other metrics
+(`job_metrics.agent`): `responses` (model responses that ended), `refusals` (those that ended with
+`stop_reason: "refusal"`), `refusal_categories` (count by the provider's category; a stop that reports none, as a
+run's second stop did on QA, is counted as `not_reported`), `ended_on_refusal` (the last response was one), and `models`
+(each model that answered, in order: more than one means the run moved to a fallback model). The count says a
+response was stopped, not that the job's answer is incomplete. Only those identifiers
+are kept, never the response. Runs recorded before this have every field null and show "Not recorded for this run".
+
 ## Agent job limits
 
 The **Limits** tab sets the per-run limits of [general agent jobs](agent-jobs.md#limits): run time, turns,

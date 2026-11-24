@@ -25,6 +25,33 @@ def tool(identity, *, result=False, failed=False):
     return {'type': 'user' if result else 'assistant', 'message': {'content': [block]}}
 
 
+def test_refused_responses_are_counted_by_category_with_the_models_that_answered():
+    """The shape Claude Code 2.1.282 streamed on QA: a classifier stop with its category, later a second stop with
+    no category, then the run continuing on the fallback model."""
+    timing = RuntimeTiming(clock=lambda: 0)
+    parser = ClaudeStream(timing=timing)
+    def response(model, stop, details=None):
+        delta = {'stop_reason': stop, 'stop_sequence': None}
+        if details is not None: delta['stop_details'] = details
+        for event in ({'type': 'message_start', 'message': {'id': 'msg', 'model': model, 'content': 'PRIVATE_PROMPT'}},
+                      {'type': 'message_delta', 'delta': delta, 'usage': {'output_tokens': 3}}, {'type': 'message_stop'}):
+            parser.feed(line({'type': 'stream_event', 'event': event}))
+    assert timing.snapshot()['responses'] == {'ended': 0, 'refused': 0, 'refusal_categories': {}, 'last_stop_reason': None, 'models': []}
+    response('claude-opus-5-5', 'tool_use')
+    response('claude-opus-5-5', 'refusal', {'type': 'refusal', 'category': 'bio', 'explanation': 'PRIVATE_EXPLANATION'})
+    response('claude-opus-5-5', 'refusal')
+    assert timing.snapshot()['responses']['last_stop_reason'] == 'refusal'
+    response('claude-opus-5', 'tool_use')
+    response('claude-opus-5', 'end_turn')
+    # Malformed values are never kept as text: an odd category is counted as not reported, an odd reason or model ignored.
+    response('PRIVATE MODEL NAME', 'refusal', {'category': 'PRIVATE CATEGORY TEXT'})
+    response('claude-opus-5', {'not': 'a string'})
+    snapshot = timing.snapshot()
+    assert snapshot['responses'] == {'ended': 6, 'refused': 3, 'refusal_categories': {'bio': 1, 'not_reported': 2},
+                                     'last_stop_reason': 'refusal', 'models': ['claude-opus-5-5', 'claude-opus-5']}
+    assert 'PRIVATE' not in json.dumps(snapshot)
+
+
 def test_stream_lifecycle_and_notifications_count_without_retaining_content():
     tick = [0.0]
     timing = RuntimeTiming(clock=lambda: tick[0])

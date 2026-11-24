@@ -6,7 +6,19 @@ import type { OwnerLabel } from "./admin-telemetry";
 export type AdminJob = { id: string; owner: string; kind: string; deliverable?: string | null; status: string; stage: string; created_at: string; started_at: string | null; attempt_started_at: string | null; completed_at: string | null; updated_at: string; wall_seconds: number | null; queue_seconds: number | null; attempt_seconds: number | null; attempt: number; worker: string | null; lease_until: string | null; recoveries: number; delivery_recoveries?: number; handoffs?: number; lease_expired: boolean; box_id: string | null; box_phase: string | null; box_seconds: number | null; setup_seconds: number | null; agent_seconds: number | null; capture_seconds: number | null; cleanup_seconds: number | null; failure_code: string | null } & AdminJobMetrics;
 
 /** Recorded agent cost and failure telemetry; every field is null until the job records metrics. */
-export type AdminJobMetrics = { cost_usd?: number | null; estimated_cost_usd?: number | null; cost_source?: "provider" | "estimated" | "unreported" | null; budget_usd?: number | null; budget_used?: number | null; turns?: number | null; tokens?: { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null } | null; model?: string | null; agent_status?: string | null; agent_subtype?: string | null; lint_checks?: number | null; draft_writes?: number | null; tool_calls?: number | null; tool_failures?: number | null; turn_limit?: number | null; time_limit_seconds?: number | null; error_phase?: string | null; error_type?: string | null; parent_job_id?: string | null };
+export type AdminJobMetrics = { refusals?: number | null; refusal_categories?: Record<string, number> | null; ended_on_refusal?: boolean | null; models?: string[] | null; cost_usd?: number | null; estimated_cost_usd?: number | null; cost_source?: "provider" | "estimated" | "unreported" | null; budget_usd?: number | null; budget_used?: number | null; turns?: number | null; tokens?: { input: number | null; output: number | null; cache_write: number | null; cache_read: number | null } | null; model?: string | null; agent_status?: string | null; agent_subtype?: string | null; lint_checks?: number | null; draft_writes?: number | null; tool_calls?: number | null; tool_failures?: number | null; turn_limit?: number | null; time_limit_seconds?: number | null; error_phase?: string | null; error_type?: string | null; parent_job_id?: string | null };
+
+/** What the provider's safety classifiers did to a run, in words, or null when none of its responses was stopped
+ *  (or the run predates the count). A stopped response is withheld: the agent continues without it, so a job can
+ *  finish "succeeded" with an incomplete answer. Claude Code moves a refused run to a fallback model by itself. */
+export function refusalNote(job: Pick<AdminJobMetrics, "refusals" | "refusal_categories" | "ended_on_refusal" | "models">): string | null {
+  if (!job.refusals) return null;
+  const named = Object.keys(job.refusal_categories ?? {}).filter(name => name !== "not_reported");
+  const models = job.models ?? [];
+  return [`${job.refusals} ${job.refusals === 1 ? "response" : "responses"} stopped by the model provider's safety classifier${named.length ? ` (${named.join(", ")})` : ""}`,
+    models.length > 1 && `continued on ${models[models.length - 1]}`,
+    job.ended_on_refusal && "the last response was stopped"].filter(Boolean).join(" · ");
+}
 
 /** How an agent job was asked to run and what it returned: settings, limits, sizes and outcomes. The prompt,
  * question, claims and response are not part of it: only the admin content read (AgentRunContent) returns them.
