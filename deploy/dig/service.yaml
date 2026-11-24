@@ -121,6 +121,10 @@ qa:
     # agent-jobs-colleague API-key workspace (REVEAL_API_KEYS). Unset, nobody can start one.
     REVEAL_AGENT_JOB_USERS: '13b86465-2324-43c7-9f13-de73e1d27256,7c363256-ce39-464a-a323-c0d11a279b58'
     REVEAL_AGENT_JOB_MAX_BUDGET_USD: '5'
+    # Agent jobs run on Sonnet unless the request names a model (for example "model": "claude-opus-5"). Sonnet 5.5 costs
+    # half of Opus 5.5 per token. It also runs the provider's biology classifier (docs/agent-jobs.md, "When a safety
+    # classifier stops a response"); claude-sonnet-5 is the same price without it.
+    REVEAL_AGENT_JOB_MODEL: claude-sonnet-5-5
     # Claims repository (docs/agent-jobs.md): the agent's query_claims lookups read it, and an accepted
     # Scientific Account is deposited there with REVEAL_CLAIMS_API_KEY below.
     REVEAL_CLAIMS_API_URL: https://api-qa.hugeampkpnbi.org/api/claims
