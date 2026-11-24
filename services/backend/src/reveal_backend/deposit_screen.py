@@ -28,7 +28,9 @@ account cannot carry it out unless it gets past them.
                  its program, no argument naming a local file outside output/ (absolute, ~, .., @file) and no URL
                  that is not http(s); the observed Bash call it came from runs no shell or interpreter (SHELLS) and
                  writes nowhere outside output/ (or /dev/null). scripts/audit_account_sources.py reruns only commands
-                 this accepts (command_refusal).
+                 this accepts (command_refusal). A command that is not such a plain fetch does not withhold the
+                 account: account_deposit records it quoted instead (`quoted_command`), in a form that prints
+                 itself when pasted into a shell and runs nothing, and the verdict counts those (`quoted_commands`).
   size           Every field has a cap (FIELD_CAPS; DEFAULT_TEXT_CAP and IDENTIFIER_CAP otherwise), and the agent's
                  free text together stays under MAX_FREE_TEXT characters.
 
@@ -418,6 +420,57 @@ def _plain(command):
     return True
 
 
+# A command REVEAL cannot vouch for as a plain fetch is deposited quoted: the argument of a printf that prints it. Pasted
+# into bash, zsh or sh it prints the command and runs nothing (a `#` comment would not do: interactive zsh runs it).
+QUOTED_PREFIX = "printf '%s\\n' "
+TRUNCATED = ' [… {} more characters not recorded]'
+
+
+def quoted_command(command, cap):
+    """`command` as text that is safe to paste: QUOTED_PREFIX and the command as one single-quoted shell word, with
+    hidden and control characters (but not line breaks) written as \\uXXXX escapes. Longer than `cap`, its end is left out and counted."""
+    text = HIDDEN.sub(lambda match: '\\u%04x' % ord(match.group()), command if isinstance(command, str) else '')
+    kept = text
+    while True:
+        value = QUOTED_PREFIX + shlex.quote(kept + (TRUNCATED.format(len(text) - len(kept)) if len(kept) < len(text) else ''))
+        if len(value) <= cap or not kept:
+            return value
+        kept = kept[:max(0, len(kept) - max(16, len(value) - cap))]
+
+
+def is_quoted(value):
+    """True for text quoted_command wrote: the prefix and exactly one shell word, spelled as shlex spells it."""
+    if not isinstance(value, str) or not value.startswith(QUOTED_PREFIX) or HIDDEN.search(value):
+        return False
+    try:
+        words = shlex.split(value)
+    except ValueError:
+        return False
+    return len(words) == 3 and value == QUOTED_PREFIX + shlex.quote(words[2])
+
+
+def quote_unsafe_commands(document):
+    """Rewrite, in place, each command of an Activity the agent wrote that is not a plain fetch or conversion (its
+    recorded `command`, check_command; the Bash call REVEAL saw, `observed_command`, check_observed) as
+    quoted_command. Returns how many were rewritten. Called before the deposit form is minted, so ids are those of
+    what is deposited."""
+    revealed, count = reveal_activities(document), 0
+    for node in document.get('activities', []):
+        if not isinstance(node, dict) or node.get('id') in revealed:
+            continue
+        for key, accepted in (('command', check_command), ('observed_command', check_observed)):
+            if key in node and not is_quoted(node[key]) and not accepted(node[key]):
+                node[key] = quoted_command(node[key], FIELD_CAPS[('activities', key)])
+                count += 1
+    return count
+
+
+def quoted_commands(document):
+    """How many commands of the deposit-form `document` are recorded quoted."""
+    return sum(1 for node in document.get('activities', []) if isinstance(node, dict)
+               for key in ('command', 'observed_command') if is_quoted(node.get(key)))
+
+
 def check_observed(observed):
     """True when the Bash call a source was saved by runs no shell or interpreter and writes only under output/."""
     if not isinstance(observed, str) or HIDDEN.search(observed) or '`' in observed or re.search(r'\$\(|<\(|>\(', observed):
@@ -557,9 +610,10 @@ def fixed_checks(document, account, source_texts):
     for index, node in enumerate(document.get('activities', [])):
         if not isinstance(node, dict) or node.get('id') in revealed:
             continue
-        if not check_command(node.get('command')):
+        # A command account_deposit recorded quoted is inert text; any other must be a plain fetch or conversion.
+        if not is_quoted(node.get('command')) and not check_command(node.get('command')):
             raise Finding('unsafe_command', 'account ' + _place('activities', index, 'command'))
-        if 'observed_command' in node and not check_observed(node['observed_command']):
+        if 'observed_command' in node and not is_quoted(node['observed_command']) and not check_observed(node['observed_command']):
             raise Finding('unsafe_command', 'account ' + _place('activities', index, 'observed_command'))
     # Claims: what the job asked about, or (when it asked about none) the agent's own.
     listed = [node for node in document.get('propositions', []) if isinstance(node, dict)]
@@ -790,7 +844,8 @@ def score_texts(classifier, texts, limit):
 
 def screen(document, account, papers, kept, calls, ledger_root, *, classifier=None):
     """The verdict on one deposit-form account: {'outcome', 'check', 'location', 'score', 'threshold', 'classifier',
-    'windows', 'texts', 'seconds'}. Never contains the text it judged.
+    'windows', 'texts', 'quoted_commands', 'seconds'}. Never contains the text it judged. `quoted_commands` is how
+    many recorded commands were not a plain fetch and are deposited quoted (quoted_command).
 
     `account` is the job's frozen account block, `papers` the gate's summary of the saved sources with `kept` their
     bytes by sha256, `calls` the run's ledger entries with request and response paths relative to `ledger_root`.
@@ -803,7 +858,7 @@ def screen(document, account, papers, kept, calls, ledger_root, *, classifier=No
         raise ScreenError('The prompt-injection classifier is not loaded; a deployed process loads it when it starts')
     limit = threshold()
     verdict = {'outcome': 'passed', 'check': None, 'location': None, 'score': None, 'threshold': limit,
-               'classifier': state, 'windows': 0, 'texts': 0}
+               'classifier': state, 'windows': 0, 'texts': 0, 'quoted_commands': quoted_commands(document)}
     sources = source_texts(papers, kept)
     try:
         fixed_checks(document, account, [text for _, _, text in sources])

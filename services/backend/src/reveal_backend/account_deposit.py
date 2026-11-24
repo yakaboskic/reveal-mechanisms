@@ -11,6 +11,8 @@ its text, the File, and optionally the lines it sits on.
     file (source_evidence finds it), and references a Publication when the file's URL names the paper;
   - each saved file is a File with REVEAL's sha256, size and media type and the URL it came from, and its Activity
     carries the Bash command REVEAL saw run (`observed_command`). The bytes are never deposited: REVEAL keeps them;
+  - a recorded or observed command that is not one plain fetch or conversion is deposited quoted
+    (deposit_screen.quoted_command): text that prints the command and runs nothing if pasted into a shell;
   - everything is minted once, with DAPPER 0.2.1-a1 (the release that has ValueLocator), vendored at
     services/backend/vendor/dapper-0.2.1-a1. DAPPER ids are the same in 0.2.0 and 0.2.1-a1, so nodes this rewrite
     does not touch keep the ids the pinned release gave them;
@@ -205,6 +207,10 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
     for node in document.get('activities', []):
         if node['id'] in binding['activities']:
             node['observed_command'] = binding['activities'][node['id']]['observed_command']
+    # A recorded command that is more than one plain fetch or conversion (a Bash call that also ran a script, say) is
+    # kept, quoted so that it prints itself and runs nothing if pasted: the account is deposited either way.
+    from .deposit_screen import quote_unsafe_commands
+    quoted_commands = quote_unsafe_commands(document)
 
     new = {'value_locators': {}}
     publications = {}   # one per paper, from the identifiers the URL it was fetched from carries
@@ -261,6 +267,7 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
                'edges': sum(len(rows) for key, rows in minted.items() if key.endswith('_edges')),
                'claims': len(minted.get('claims', [])), 'value_locators': len(minted.get('value_locators', [])),
                'repository_claims': sorted(set(repository_claims) & set(cited) - set(misplaced)),
+               'quoted_commands': quoted_commands,
                'papers': [{'path': entry['path'], 'url': entry['url'], 'sha256': entry['sha256'], 'size_bytes': entry['size_in_bytes'],
                            'media_type': entry['mime_type'], 'command': entry['command'], 'observed_command': entry['observed_command'],
                            'derived_from': files[entry['derived_from']]['path'] if entry['derived_from'] else None,

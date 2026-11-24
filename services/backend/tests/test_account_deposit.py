@@ -202,6 +202,45 @@ class AccountDepositTests(unittest.TestCase):
         with self.assertRaisesRegex(deposit.DepositError, 'references objects it does not contain: ' + held):
             self.deposit(member, repository_claims=[held])
 
+    def test_a_bash_call_that_also_ran_a_script_is_deposited_with_that_call_quoted(self):
+        """What withheld two accounts on QA: the agent fetched a paper and looked at it with python in the same Bash
+        call. The recorded fetch is a plain command; the whole call REVEAL observed is not. The account is deposited,
+        with the observed call quoted so that it prints itself and runs nothing."""
+        from reveal_backend import deposit_screen
+        root = self.root / 'scripted'; output = root / 'output'; (output / 'sources').mkdir(parents=True)
+        ledger = Ledger(root / 'ledger', 'deposit-job', 1)
+        observed = "mkdir -p output/sources && " + run.FETCH_XML + "; python3 - <<'E'\nimport json\nprint(json.load(open('/reveal/output/sources/PMID42932963.json'))['resultList'])\nE"
+        for key in ('xml', 'pdf', 'txt'):
+            path, data = run.FILES[key]
+            (output / path).write_bytes(data)
+            run.bash(ledger, observed if key == 'xml' else run.RAN[key])
+        draft = run.draft('urn:t:proposition', 'urn:t:gap')
+        problems, binding = source_evidence.check(draft, output, ledger.entries, ledger.root)
+        self.assertEqual(problems, [])
+        document = source_evidence.bind(draft, binding)
+        document.update({'knowledge_gaps': [{'id': 'urn:t:gap', 'text': 'A question?', 'gap_description': 'Caller-supplied question.'}],
+                         'persons': [{'id': 'urn:t:person', 'name': 'Test Researcher'}], 'organizations': [],
+                         'propositions': [{'id': 'urn:t:proposition', 'statement': 'Loss of hepatocyte LEPR reduces hepatic insulin signalling.'}]})
+        document['activities'].append({'id': 'urn:t:activity', 'name': 'REVEAL Claude Code account construction',
+                                       'command': 'reveal-worker box deposit-job --attempt 1', 'generated_at_time': '2026-11-12T00:00:00Z'})
+        for node in (*document['claims'], *document['scientific_accounts']):
+            node.update(was_generated_by='urn:t:activity', was_attributed_to=['urn:t:person'])
+        minted, summary = deposit.deposit_document(document, output, ledger.entries, ledger.root)
+        self.assertEqual(summary['quoted_commands'], 1)
+        fetch = next(node for node in minted['activities'] if node.get('command') == run.FETCH_XML)
+        self.assertTrue(deposit_screen.is_quoted(fetch['observed_command']))
+        self.assertIn("python3 - <<", fetch['observed_command'])
+        others = [node for node in minted['activities'] if node is not fetch and 'observed_command' in node]
+        self.assertEqual([deposit_screen.is_quoted(node['observed_command']) for node in others], [False, False])
+        # The job result still shows the requester the call as it ran.
+        self.assertEqual(next(paper for paper in summary['papers'] if paper['path'].endswith('.xml'))['observed_command'], observed)
+        # The screen passes what would have been withheld, and says how many commands are quoted.
+        verdict = deposit_screen.screen(minted, {'question': 'A question?', 'claims': [], 'package': {}}, summary['papers'],
+                                        deposit.source_bytes(output, summary['papers']), ledger.entries, ledger.root)
+        self.assertEqual((verdict['outcome'], verdict['check'], verdict['quoted_commands']), ('passed', None, 1))
+        # An ordinary account has none.
+        self.assertEqual(self.deposit(self.account())[1]['quoted_commands'], 0)
+
     def test_the_vendored_dapper_is_the_recorded_commit_and_reproduces_its_own_vectors(self):
         vendor = json.loads((deposit.VENDOR / 'VENDOR.json').read_text())
         self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.2.1-a1', 'ac1a4d7'))

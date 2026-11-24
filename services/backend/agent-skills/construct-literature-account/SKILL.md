@@ -21,13 +21,17 @@ decide and finish.
 - `mcp__reveal__write_account_draft` and `mcp__reveal__lint_account`: save the account and check it.
 - `account/authoring-schema-excerpt.yaml`: the DAPPER classes and fields you may write, including `Activity`, `File`
   and the edges `WasGeneratedBy`, `WasDerivedFrom` and `Used`.
-- `mcp__reveal__query_claims`, when it is among your tools: what the claims repository already holds on your
-  question. Look once before drafting. If a Proposition you would write already exists, copy its statement exactly:
-  your Claim is then about the same Proposition. Do not treat absence there as a finding.
-- `mcp__reveal__run_collection_query`, when it is among your tools: the repository's result collections, such as
-  PIGEAN gene and gene-set associations. Call it with no arguments to see the queries, then run one. Each row comes
-  with its numbers and the id of the Claim that states them. A Claim the repository holds can be evidence for one of
-  yours ("Evidence from the claims repository", below).
+- `mcp__reveal__run_collection_query`, when it is among your tools: the claims repository's result collections,
+  such as PIGEAN gene and gene-set associations. Start here for what the repository holds on a gene or a trait:
+  call it with no arguments to see the queries, then run one. Each row comes with its numbers and the id of the
+  Claim that states them. A Claim the repository holds can be evidence for one of yours ("Evidence from the claims
+  repository", below).
+- `mcp__reveal__query_claims`, when it is among your tools: the repository's stored objects. Search one class at a
+  time with a few specific words: `class_name: "Proposition"` for what has been stated, `class_name: "Claim"` for
+  what has been assessed (every word of `q` must begin a word of the text, in any order; `fields` limits where to
+  look). Give `references` a Proposition's id to list the Claims made on it, or `id` to read one object. If a
+  Proposition you would write already exists, copy its statement exactly: your Claim is then about the same
+  Proposition. Do not treat absence there as a finding.
 
 Good sources of full text: Europe PMC
 (`https://www.ebi.ac.uk/europepmc/webservices/rest/<PMCID>/fullTextXML`, open-access papers), the NCBI E-utilities,
@@ -47,7 +51,9 @@ bioRxiv and medRxiv, and publishers' open-access PDFs.
       Read, `grep`, `head`, `tail`, `sed -n`, `wc` or `cat` without a redirect into the file. Never edit a saved file.
       Keep fetch and convert commands plain: `curl` or `wget` with an http(s) URL and an output file under
       `output/sources/`, `pdftotext` or `xmllint` on a saved file. Do not send data (`-d`, `-T`, `@file`), use
-      `$(…)` or pipe into a shell: REVEAL does not store an account whose recorded commands do.
+      `$(…)` or pipe into a shell, and do not run a script (`python3`, `node`) in the same Bash call as a fetch:
+      REVEAL stores such a command only in a quoted form that cannot be run again, so the source can no longer be
+      fetched again from your record.
    4. **Record and cite it in the draft**: an Activity per command, a File per saved file, the edges between them,
       and an EvidenceItem per quote (below). Then save the draft and run `lint_account`.
 3. Repair what the linter reports, then go on to the next paper. Evidence from the claims repository goes in the

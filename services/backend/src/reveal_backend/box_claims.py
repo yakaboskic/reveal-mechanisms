@@ -51,12 +51,17 @@ MAX_BATCH = 500                 # the repository's objects:batchGet limit
 MAX_REFERENCES = 200            # repository claims one account may cite
 SOURCE_CLAIMS = 'source_claims'
 
-DESCRIPTION = ('Look up what the claims repository already holds: Propositions, Claims, EvidenceItems and ScientificAccounts deposited by '
-               'earlier runs and other groups. Three ways to ask. (1) q: text to find in statements, names and descriptions, optionally '
-               f'limited to one class_name; up to {MAX_RESULTS} results, continue with offset. (2) references: a dapper id, to list the '
-               'objects that point at it (the Claims made on a Proposition, the EvidenceItems that target it). (3) id: fetch one object '
-               'in full. Use it to see whether a proposition you are about to write already exists (copy its statement exactly and your '
-               'claim is about the same Proposition) and what has been claimed on it. A repository record is an earlier claim, not '
+DESCRIPTION = ('Look up objects the claims repository holds: Propositions, Claims, EvidenceItems, ScientificAccounts, GeneSets. Three '
+               'ways to ask. (1) q: a word search, best with a class_name (search Propositions for what has been stated, Claims '
+               'for what has been assessed). Every word of q must begin a word of the text, in any order: "NOD2 bowel" finds '
+               'statements about NOD2 and inflammatory bowel disease. fields limits where to look (statement, name, description; '
+               f'a Proposition is searched in its statement, a GeneSet in its name). Up to {MAX_RESULTS} results, continue with '
+               'offset. (2) references: a dapper id, to list the objects that point at it (the Claims made on a Proposition, the '
+               'EvidenceItems that target it); add class_name to keep one class. (3) id: fetch one object in full. For the '
+               'numbers a result collection such as PIGEAN holds on a gene or trait, use run_collection_query instead: it '
+               'returns the Claims with their scores. Use this tool to see whether a proposition you are about to write already '
+               'exists (copy its statement exactly and your claim is about the same Proposition) and what has been claimed on '
+               'it. A repository record is an earlier claim '
                'by somebody else, never a finding of yours: to use a Claim as evidence, name its id in an EvidenceItem\'s '
                'source_claims and say in explanation how it bears on your proposition. Absence here says nothing about the science.')
 
@@ -83,9 +88,12 @@ QUERY_SCHEMA = {'type': 'object', 'additionalProperties': False, 'properties': {
     'search': {'type': 'string', 'minLength': 2, 'maxLength': 100},
     'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RESULTS}}}
 
+SEARCH_FIELDS = ('statement', 'name', 'description')
 SCHEMA = {'type': 'object', 'additionalProperties': False, 'properties': {
-    'q': {'type': 'string', 'minLength': 2, 'maxLength': 200},
-    'class_name': {'type': 'string', 'enum': list(CLASSES)},
+    'q': {'type': 'string', 'minLength': 2, 'maxLength': 200, 'description': 'Words to find; each must begin a word of the text.'},
+    'class_name': {'type': 'string', 'enum': list(CLASSES), 'description': 'Search or list one class, for example Proposition or Claim.'},
+    'fields': {'type': 'array', 'minItems': 1, 'maxItems': len(SEARCH_FIELDS), 'items': {'type': 'string', 'enum': list(SEARCH_FIELDS)},
+               'description': 'With q: the text fields to search. Default all three.'},
     'references': {'type': 'string', 'description': 'A dapper id; returns the objects that refer to it.'},
     'id': {'type': 'string', 'description': 'A dapper id; returns that object.'},
     'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RESULTS},
@@ -125,7 +133,7 @@ def host(url):
 def request_path(arguments):
     """The repository path and query for one call. Raises ClaimsInputError."""
     if not isinstance(arguments, dict) or set(arguments) - set(SCHEMA['properties']):
-        raise ClaimsInputError('query_claims takes q, class_name, references, id, limit and offset')
+        raise ClaimsInputError('query_claims takes q, class_name, fields, references, id, limit and offset')
     for key in ('id', 'references'):
         if key in arguments and (not isinstance(arguments[key], str) or not DAPPER_ID.fullmatch(arguments[key])):
             raise ClaimsInputError(f'{key} must be a dapper id such as dapper:Proposition.<digest>')
@@ -138,6 +146,12 @@ def request_path(arguments):
         if not isinstance(arguments['q'], str) or not 2 <= len(arguments['q'].strip()) <= 200:
             raise ClaimsInputError('q must be 2 to 200 characters of text')
         query['q'] = arguments['q'].strip()
+    if 'fields' in arguments:
+        fields = arguments['fields']
+        if 'q' not in arguments or not isinstance(fields, list) or not fields or len(set(map(str, fields))) != len(fields) \
+                or not all(field in SEARCH_FIELDS for field in fields):
+            raise ClaimsInputError('fields goes with q and names one or more of ' + ', '.join(SEARCH_FIELDS))
+        query['fields'] = ','.join(field for field in SEARCH_FIELDS if field in fields)
     if 'references' in arguments:
         query['references'] = arguments['references']
     if 'class_name' in arguments:
@@ -411,7 +425,10 @@ class ClaimsClient:
                 raise ClaimsUnavailable(f'The claims repository is unavailable (HTTP {error.code})') from None
             reason = f': {detail[:600]}' if isinstance(detail, str) and detail else ''
             raise ClaimsInputError(f'The claims repository refused the query (HTTP {error.code}){reason}') from None
-        except (urllib.error.URLError, OSError, ValueError):
+        except (urllib.error.URLError, OSError, ValueError) as error:
+            if isinstance(error, TimeoutError) or isinstance(getattr(error, 'reason', None), TimeoutError):
+                raise ClaimsUnavailable(f'The claims repository did not answer within {self.timeout:g} seconds; nothing is known, '
+                                        'which is not the same as nothing found') from None
             raise ClaimsUnavailable('The claims repository could not be reached') from None
         if len(raw) > limit:
             raise ClaimsInputError('The claims repository returned too much; narrow the query or lower its limits')
@@ -465,19 +482,18 @@ class ClaimsClient:
         if tool != TOOL:
             raise ClaimsInputError('Unknown claims repository tool')
         path, query = request_path(arguments)
-        address = self.url + path + ('?' + urllib.parse.urlencode(query) if query else '')
-        request = urllib.request.Request(address, headers={'Accept': 'application/json', 'User-Agent': 'reveal-mechanisms-agent'})
         try:
-            with self.opener.open(request, timeout=self.timeout) as response:
-                raw = response.read(MAX_RESPONSE_BYTES + 1)
-        except urllib.error.HTTPError as error:
-            if error.code == 404 and query is None:
+            body = self._open('GET', path, query)
+        except urllib.error.HTTPError:
+            if query is None:
                 data = {'found': False, 'id': arguments['id'], 'count': 0}
                 return {'content': [{'type': 'text', 'text': json.dumps(data)}], 'structuredContent': {'source': 'claims-repository', 'data': data}}
-            raise ClaimsInputError(f'The claims repository refused the query (HTTP {error.code}); nothing was returned') from None
-        if len(raw) > MAX_RESPONSE_BYTES:
-            raise ClaimsInputError('The claims repository returned too much; narrow the query or lower limit')
-        body = json.loads(raw)
+            raise ClaimsInputError('The claims repository refused the query (HTTP 404); nothing was returned') from None
+        except ClaimsUnavailable as error:
+            if query is not None and 'q' in query:
+                raise ClaimsUnavailable(f'{error}. Narrow the search: name a class_name, add a more specific word, or limit fields. For '
+                                        'what a result collection such as PIGEAN holds on a gene or trait, use run_collection_query') from None
+            raise
         if query is None:
             text = json.dumps(body, ensure_ascii=False)
             data = {'found': True, 'count': 1, 'object': body} if len(text) <= MAX_OBJECT_CHARACTERS else {

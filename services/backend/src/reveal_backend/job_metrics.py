@@ -98,7 +98,7 @@ def failure_metrics(phase, exc):
 
 # The deposit screen's verdict (deposit_screen.screen): which check withheld the account, the classifier's score and
 # threshold, and where the text was. Never the text itself.
-SCREEN_FIELDS = ('outcome', 'check', 'location', 'score', 'threshold', 'classifier', 'windows', 'texts', 'seconds')
+SCREEN_FIELDS = ('outcome', 'check', 'location', 'score', 'threshold', 'classifier', 'windows', 'texts', 'quoted_commands', 'seconds')
 
 
 def screen_metrics(verdict):

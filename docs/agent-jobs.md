@@ -323,11 +323,22 @@ REVEAL's key. An object it already holds is left as stored.
 
 A deposit cannot be recalled. A cancellation that arrives before the deposit is sent stops it.
 
+**Recorded commands that are more than a plain fetch.** A source's Activity carries the command the agent recorded
+(`command`) and the whole Bash call REVEAL saw run (`observed_command`). When either is not one plain `curl`, `wget`,
+`pdftotext` or `xmllint` call writing only under `output/` (only the options `deposit_screen.OPTIONS` lists for its
+program, no local file outside `output/`, no URL that is not http(s); for the observed call, no shell or interpreter),
+the account is still deposited. That command is deposited quoted instead, for example
+`printf '%s\n' 'curl -fsSL -o output/sources/a.xml https://… && python3 - <<…'`: the whole text is one quoted shell
+word, so pasting it into a shell prints the command and runs nothing. Hidden and control characters in it are
+written as `\uXXXX`, and a call longer than the field keeps its start and says how much was left out. This happens
+most when the agent fetches a paper and inspects it with a script in the same Bash call. The job result still shows
+the requester each command as it ran, the screen's verdict counts the quoted ones (`quoted_commands`), and
+`scripts/audit_account_sources.py` refuses to rerun a quoted command, as it refuses any command that is not a plain
+fetch. Until 2026-11-24 such an account was withheld as `unsafe_command`.
+
 Before sending, REVEAL screens the account for prompt injection. The screen looks for attacks, not scientific quality.
 Fixed checks require that the account's prose carries no links, code, markup, hidden characters or text addressed to
-a model; that each recorded command is a plain `curl`, `wget`, `pdftotext` or `xmllint` call writing only under
-`output/`, using only the options listed for its program (`deposit_screen.OPTIONS`: fetching with GET, converting,
-choosing the output) and naming no local file outside `output/` and no URL that is not http(s); that its claims are about the claims you asked about (or, if you named none, its own, as many as it makes); that
+a model; that its claims are about the claims you asked about (or, if you named none, its own, as many as it makes); that
 each triple term comes from your request, an allowed namespace or a cited paper; and that every field is within its
 size limit. A classifier, Llama Prompt Guard 2 22M, will also score the saved papers, the other tool results and the
 account's text, but it is off until an operator pins its model in

@@ -127,6 +127,34 @@ class ClaimsToolTests(unittest.TestCase):
         self.assertIn('under sources/', problems[0][1])
         self.assertEqual((binding['files'], binding['quotes']), ({}, []))
 
+    def test_a_text_search_can_name_its_class_and_fields_and_a_slow_one_says_what_to_do(self):
+        self.data(q='hepatic insulin', class_name='Proposition', fields=['name', 'statement'])
+        sent = urllib.parse.parse_qs(urllib.parse.urlsplit(self.repository.requests[-1].full_url).query)
+        self.assertEqual(sent, {'q': ['hepatic insulin'], 'class_name': ['Proposition'], 'fields': ['statement,name'], 'limit': ['10'], 'offset': ['0']})
+        for arguments, message in (({'fields': ['statement']}, 'fields goes with q'), ({'q': 'insulin', 'fields': []}, 'fields goes with q'),
+                                   ({'q': 'insulin', 'fields': ['payload']}, 'fields goes with q'), ({'q': 'insulin', 'fields': 'statement'}, 'fields goes with q'),
+                                   ({'references': PROPOSITION, 'fields': ['statement']}, 'fields goes with q')):
+            with self.assertRaisesRegex(ClaimsInputError, message): box_claims.request_path(arguments)
+        described = next(tool for tool in self.tools.definitions() if tool['name'] == 'query_claims')
+        self.assertIn('run_collection_query', described['description']); self.assertIn('class_name', described['description'])
+        self.assertEqual(described['inputSchema']['properties']['fields']['items']['enum'], ['statement', 'name', 'description'])
+
+        class Slow:
+            def open(self, request, timeout): raise TimeoutError('timed out')
+        class Refusing:
+            def open(self, request, timeout):
+                raise urllib.error.HTTPError(request.full_url, 400, 'bad', {}, io.BytesIO(json.dumps({'detail': 'This text search matches too many objects to count and order in time. Add a more specific word.'}).encode()))
+        slow = ScopedTools((), Ledger(self.root / 'slow', 'claims-job', 1), soft_budget=True, max_calls=5, claims=ClaimsClient(URL, opener=Slow()))
+        late = slow.call('query_claims', {'q': 'gene'})
+        self.assertTrue(late['isError'])
+        for expected in ('did not answer within 20 seconds', 'not the same as nothing found', 'name a class_name', 'run_collection_query'):
+            self.assertIn(expected, late['content'][0]['text'])
+        self.assertNotIn('evidence service unavailable', late['content'][0]['text'])
+        by_id = slow.call('query_claims', {'id': CLAIM})
+        self.assertIn('did not answer within 20 seconds', by_id['content'][0]['text']); self.assertNotIn('Narrow the search', by_id['content'][0]['text'])
+        broad = ScopedTools((), Ledger(self.root / 'broad', 'claims-job', 1), soft_budget=True, max_calls=5, claims=ClaimsClient(URL, opener=Refusing()))
+        self.assertIn('matches too many objects', broad.call('query_claims', {'q': 'gene'})['content'][0]['text'])
+
     def test_nothing_found_is_empty_not_an_error_and_a_spent_budget_ends_lookups(self):
         none, _ = self.data(q='nothing here')
         self.assertEqual((none['count'], none['total']), (0, 0)); self.assertEqual(self.ledger.entries[-1]['status'], 'empty')
