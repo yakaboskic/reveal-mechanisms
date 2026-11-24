@@ -53,6 +53,11 @@ class AgentMetricsTests(unittest.TestCase):
                                               'authoring_timing': {'calls': 'none'}}})
         self.assertIsNone(agent['cost_usd']); self.assertIsNone(agent['turns']); self.assertIsNone(agent['lint_checks'])
         self.assertEqual(agent_metrics(None)['cost_source'], 'unreported')
+        # The screen's count of commands deposited quoted is kept; a verdict from before it has none.
+        from reveal_backend.job_metrics import screen_metrics
+        self.assertEqual(screen_metrics({'outcome': 'passed', 'quoted_commands': 2})['quoted_commands'], 2)
+        self.assertIsNone(screen_metrics({'outcome': 'passed'})['quoted_commands'])
+        self.assertIsNone(screen_metrics({'outcome': 'passed', 'quoted_commands': 'two'})['quoted_commands'])
         # Classifier stops: null for runs recorded before the runner counted them, never zero.
         unknown = {'responses': None, 'refusals': None, 'refusal_categories': None, 'ended_on_refusal': None, 'models': None}
         self.assertEqual({key: agent_metrics(None)[key] for key in unknown}, unknown)

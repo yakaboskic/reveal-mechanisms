@@ -107,6 +107,8 @@ def screen_metrics(verdict):
             'location': text(verdict.get('location')), 'score': number(verdict.get('score')),
             'threshold': number(verdict.get('threshold')), 'classifier': text(verdict.get('classifier'), 80),
             'windows': number(verdict.get('windows'), integer=True), 'texts': number(verdict.get('texts'), integer=True),
+            # Recorded commands that were not a plain fetch and were deposited quoted (deposit_screen.quoted_command).
+            'quoted_commands': number(verdict.get('quoted_commands'), integer=True),
             'seconds': number(verdict.get('seconds'))}
 
 
