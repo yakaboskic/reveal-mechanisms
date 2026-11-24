@@ -86,7 +86,8 @@ QUERY_SCHEMA = {'type': 'object', 'additionalProperties': False, 'properties': {
                'description': 'Claim keys to return with each row.'},
     'dimension': {'type': 'string', 'description': 'A dimension of the collection, to list its values.'},
     'search': {'type': 'string', 'minLength': 2, 'maxLength': 100},
-    'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RESULTS}}}
+    'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_RESULTS,
+              'description': "How many dimension values to list, or with query how many of the run's rows to show."}}}
 
 SEARCH_FIELDS = ('statement', 'name', 'description')
 SCHEMA = {'type': 'object', 'additionalProperties': False, 'properties': {
@@ -180,8 +181,12 @@ def collection_request(arguments):
     if not isinstance(arguments, dict) or set(arguments) - set(QUERY_SCHEMA['properties']):
         raise ClaimsInputError('run_collection_query takes collection, query, variables, claims, dimension, search and limit')
     if 'query' in arguments:
-        if set(arguments) - {'collection', 'query', 'variables', 'claims'}:
-            raise ClaimsInputError('Run a query with collection, query, variables and claims only')
+        extra = sorted(set(arguments) - {'collection', 'query', 'variables', 'claims', 'limit'})
+        if extra:
+            raise ClaimsInputError(f"Run a query with collection, query, variables, claims and limit only (not {', '.join(extra)})")
+        # limit only bounds the rows shown (_result); how many the query computes is set by its own variables.
+        if 'limit' in arguments and (type(arguments['limit']) is not int or not 1 <= arguments['limit'] <= MAX_RESULTS):
+            raise ClaimsInputError(f'limit must be 1 to {MAX_RESULTS}')
         collection, query = _name(arguments, 'collection'), _name(arguments, 'query')
         keys = arguments.get('claims')
         if not isinstance(keys, list) or not 1 <= len(keys) <= MAX_CLAIM_KEYS or len(set(map(str, keys))) != len(keys) \
@@ -297,10 +302,10 @@ def _row(row):
     return shown
 
 
-def _result(body):
+def _result(body, limit=None):
     rows = [shown for shown in map(_row, body.get('rows', []) if isinstance(body.get('rows'), list) else []) if shown is not None]
     data = {'collection': body.get('collection'), 'query': body.get('query'), 'release': body.get('release'),
-            'variables': body.get('variables'), 'count': len(rows), 'rows': rows[:MAX_ROWS]}
+            'variables': body.get('variables'), 'count': len(rows), 'rows': rows[:min(limit or MAX_ROWS, MAX_ROWS)]}
     # The run has happened: show as many rows, in order, as fit, and say how many are left out.
     while len(data['rows']) > 1 and len(json.dumps(data, ensure_ascii=False)) > MAX_RUN_CHARACTERS:
         data['rows'] = data['rows'][:len(data['rows']) * 3 // 4]
@@ -472,7 +477,7 @@ class ClaimsClient:
                       for item in answer.get('values', []) if isinstance(item, dict)] if isinstance(answer.get('values'), list) else []
             data = {'collection': answer.get('collection'), 'dimension': answer.get('dimension'), 'count': answer.get('count'), 'values': values}
         else:
-            data = _result(answer)
+            data = _result(answer, arguments.get('limit'))
         return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}],
                 'structuredContent': {'source': 'claims-repository', 'data': data}}
 
@@ -504,5 +509,9 @@ class ClaimsClient:
             data = {'count': len(objects), 'total': body.get('total'), 'offset': query['offset'], 'objects': objects}
             if isinstance(data['total'], int) and query['offset'] + len(objects) < data['total']:
                 data['next_offset'] = query['offset'] + len(objects)
+            if body.get('total_capped') is True:   # the repository counts a text search's matches only up to its cap
+                data['total_capped'] = True
+                data['note'] = (f"More than {data['total']:,} objects match; total is the repository's cap, not a count. Add a "
+                                'more specific word, a class_name or fields to narrow it.')
         return {'content': [{'type': 'text', 'text': json.dumps(data, ensure_ascii=False)}],
                 'structuredContent': {'source': 'claims-repository', 'data': data}}

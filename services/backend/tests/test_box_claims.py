@@ -63,8 +63,9 @@ class Repository:
             objects = [{'id': PROPOSITION, 'class_name': 'Proposition', 'label': 'Loss of hepatocyte LEPR reduces hepatic insulin signalling.',
                         'times_seen': 2, 'resolver_url': '/v1/objects/' + PROPOSITION}]
             if query.get('q') == ['nothing here']: objects = []
+            capped = {'total': 10000, 'total_capped': True} if query.get('q') == ['gene'] else {}
             return Reply(json.dumps({'total': 3 if objects else 0, 'limit': int(query['limit'][0]), 'offset': int(query['offset'][0]),
-                                     'objects': objects}).encode())
+                                     'objects': objects, **capped}).encode())
         if parsed.path == '/v1/objects/' + CLAIM:
             return Reply(json.dumps({'id': CLAIM, 'class_name': 'Claim', 'direction': 'SUPPORTS', 'proposition': PROPOSITION}).encode())
         if parsed.path == '/v1/queries':
@@ -99,6 +100,13 @@ class ClaimsToolTests(unittest.TestCase):
         result = self.tools.call('query_claims', arguments)
         self.assertFalse(result.get('isError'), result)
         return result['structuredContent']['data'], result
+
+    def test_a_capped_search_total_is_said_to_be_a_cap(self):
+        capped, _ = self.data(q='gene', class_name='Proposition', limit=1)
+        self.assertEqual((capped['total'], capped['total_capped'], capped['next_offset']), (10000, True, 1))
+        self.assertIn('More than 10,000 objects match', capped['note'])
+        exact, _ = self.data(q='hepatic insulin', class_name='Proposition', limit=1)
+        self.assertNotIn('total_capped', exact); self.assertNotIn('note', exact)
 
     def test_search_references_and_fetch_are_read_only_keyless_and_captured(self):
         found, result = self.data(q='hepatic insulin', class_name='Proposition', limit=1)
@@ -269,6 +277,12 @@ class CollectionQueryTests(unittest.TestCase):
         self.assertTrue(1 < len(shown['rows']) < box_claims.MAX_ROWS)
         self.assertEqual([item['subject']['value'] for item in shown['rows'][:2]], ['GENE000', 'GENE001'])
         self.assertIn(f"Only the first {len(shown['rows'])} rows are shown", shown['note'])
+        # limit, with a query, bounds the rows shown (never more than MAX_ROWS); the count stays the run's.
+        few = box_claims._result({**long, 'rows': long['rows'][:30]}, 3)
+        self.assertEqual((len(few['rows']), few['count'], few['more_rows']), (3, 30, 27))
+        self.assertLessEqual(len(box_claims._result({'rows': [row('G%d' % n, n + 1) for n in range(60)]}, 25)['rows']), 25)
+        self.assertEqual(box_claims.collection_request({'collection': 'pigean', 'query': 'top-genes-with-sets', 'claims': ['measurement'],
+                                                        'variables': {'trait': 'IBD'}, 'limit': 5})[0], 'run')
 
     def test_a_run_is_bounded_and_a_refusal_says_what_to_change(self):
         for arguments, message in (
@@ -280,7 +294,9 @@ class CollectionQueryTests(unittest.TestCase):
                 ({'collection': '../objects', 'query': 'x', 'claims': ['measurement']}, 'collection must be a name'),
                 ({'collection': 'pigean', 'query': 'q/../../deposits', 'claims': ['measurement']}, 'query must be a name'),
                 ({'collection': 'pigean', 'query': 'x', 'claims': ['measurement'], 'release': 'old'}, 'takes collection'),
-                ({'collection': 'pigean', 'dimension': 'trait', 'query': 'x', 'claims': ['m'], 'search': 'bowel'}, 'Run a query with'),
+                ({'collection': 'pigean', 'dimension': 'trait', 'query': 'x', 'claims': ['m'], 'search': 'bowel'}, r'Run a query with.*\(not dimension, search\)'),
+                ({'collection': 'pigean', 'query': 'x', 'claims': ['m'], 'limit': 0}, 'limit must be 1 to 25'),
+                ({'collection': 'pigean', 'query': 'x', 'claims': ['m'], 'limit': 26}, 'limit must be 1 to 25'),
                 ({'dimension': 'trait'}, 'collection must be a name'), ({'search': 'bowel'}, 'Give query')):
             with self.assertRaisesRegex(ClaimsInputError, message): box_claims.collection_request(arguments)
         self.assertEqual(self.repository.requests, [])
