@@ -1,0 +1,4349 @@
+!config /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/config/pigean_collection.cfg
+!key base_dir /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection
+!key unix_out_dir /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/out
+!key log_dir /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/log
+!key raw_dir /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/raw
+!key source_url s3://dig-pigean-paper-regression-2/out/falcon/staging/pigean/portal/
+!key source_library mouse_msigdb
+!key source_dir /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/raw/pigean_portal
+!key cfde_snapshot 2026-11-24
+!key cfde_dir /humgen/diabetes/users/chase/data/dig-s3/gene_sets/cfde/2026-11-24
+!key cfde_libraries AMP_AD,GEO_BULK,GTEx,GlyGen,HuBMAP,IDG,IGVF,IMPC,ImmPort,KPMP_KTA,MetabolomicsWorkbench,MoTrPAC,PsychENCODE,RummaGEO
+!key lap_home /humgen/diabetes/users/chase/lap
+!key web_out_dir http://internal.broadinstitute.org/~cyakabos/pigean-collection-lap
+!key default_umask 002
+
+pigean_portal__cfde_2026_11_24 class project
+pigean_portal__cfde_2026_11_24 traits_in_file /humgen/diabetes2/users/chase/projects/reveal-mechanisms/lap-pigean-collection/config/pigean_collection.traits.tsv
+
+2hrCPEP class trait
+2hrCPEP parent pigean_portal__cfde_2026_11_24
+
+2hrG class trait
+2hrG parent pigean_portal__cfde_2026_11_24
+
+2hrGadjBMI class trait
+2hrGadjBMI parent pigean_portal__cfde_2026_11_24
+
+2hrI class trait
+2hrI parent pigean_portal__cfde_2026_11_24
+
+AAC class trait
+AAC parent pigean_portal__cfde_2026_11_24
+
+AD class trait
+AD parent pigean_portal__cfde_2026_11_24
+
+ADFather class trait
+ADFather parent pigean_portal__cfde_2026_11_24
+
+ADHD class trait
+ADHD parent pigean_portal__cfde_2026_11_24
+
+ADMother class trait
+ADMother parent pigean_portal__cfde_2026_11_24
+
+ADSibling class trait
+ADSibling parent pigean_portal__cfde_2026_11_24
+
+AD_APOE_e4_Positive_Carrier class trait
+AD_APOE_e4_Positive_Carrier parent pigean_portal__cfde_2026_11_24
+
+AD_or_AD_history class trait
+AD_or_AD_history parent pigean_portal__cfde_2026_11_24
+
+AF class trait
+AF parent pigean_portal__cfde_2026_11_24
+
+AFR class trait
+AFR parent pigean_portal__cfde_2026_11_24
+
+AFlutter class trait
+AFlutter parent pigean_portal__cfde_2026_11_24
+
+AFxAGE class trait
+AFxAGE parent pigean_portal__cfde_2026_11_24
+
+AFxAGEo65 class trait
+AFxAGEo65 parent pigean_portal__cfde_2026_11_24
+
+AFxAGEy65 class trait
+AFxAGEy65 parent pigean_portal__cfde_2026_11_24
+
+AFxBMI class trait
+AFxBMI parent pigean_portal__cfde_2026_11_24
+
+AG class trait
+AG parent pigean_portal__cfde_2026_11_24
+
+AHI class trait
+AHI parent pigean_portal__cfde_2026_11_24
+
+AHIinNREM class trait
+AHIinNREM parent pigean_portal__cfde_2026_11_24
+
+AHIinREM class trait
+AHIinREM parent pigean_portal__cfde_2026_11_24
+
+AIR class trait
+AIR parent pigean_portal__cfde_2026_11_24
+
+AIRadjBMInSI class trait
+AIRadjBMInSI parent pigean_portal__cfde_2026_11_24
+
+AIRadjSI class trait
+AIRadjSI parent pigean_portal__cfde_2026_11_24
+
+AIS class trait
+AIS parent pigean_portal__cfde_2026_11_24
+
+AIpredictedAF class trait
+AIpredictedAF parent pigean_portal__cfde_2026_11_24
+
+ALBUMIN class trait
+ALBUMIN parent pigean_portal__cfde_2026_11_24
+
+ALLOA class trait
+ALLOA parent pigean_portal__cfde_2026_11_24
+
+ALLOA_add class trait
+ALLOA_add parent pigean_portal__cfde_2026_11_24
+
+ALLOA_dom class trait
+ALLOA_dom parent pigean_portal__cfde_2026_11_24
+
+ALLOA_het class trait
+ALLOA_het parent pigean_portal__cfde_2026_11_24
+
+ALLOA_rec class trait
+ALLOA_rec parent pigean_portal__cfde_2026_11_24
+
+ALP class trait
+ALP parent pigean_portal__cfde_2026_11_24
+
+ALS class trait
+ALS parent pigean_portal__cfde_2026_11_24
+
+ALT class trait
+ALT parent pigean_portal__cfde_2026_11_24
+
+AMD class trait
+AMD parent pigean_portal__cfde_2026_11_24
+
+AMD_add class trait
+AMD_add parent pigean_portal__cfde_2026_11_24
+
+AMD_dom class trait
+AMD_dom parent pigean_portal__cfde_2026_11_24
+
+AMD_het class trait
+AMD_het parent pigean_portal__cfde_2026_11_24
+
+AMD_rec class trait
+AMD_rec parent pigean_portal__cfde_2026_11_24
+
+AMDprogression class trait
+AMDprogression parent pigean_portal__cfde_2026_11_24
+
+AM_broad_int class trait
+AM_broad_int parent pigean_portal__cfde_2026_11_24
+
+AM_broad_low class trait
+AM_broad_low parent pigean_portal__cfde_2026_11_24
+
+AM_heavy_int class trait
+AM_heavy_int parent pigean_portal__cfde_2026_11_24
+
+AM_heavy_low class trait
+AM_heavy_low parent pigean_portal__cfde_2026_11_24
+
+AM_int_low class trait
+AM_int_low parent pigean_portal__cfde_2026_11_24
+
+AO_Diameter_Avg class trait
+AO_Diameter_Avg parent pigean_portal__cfde_2026_11_24
+
+APTT class trait
+APTT parent pigean_portal__cfde_2026_11_24
+
+ARHI class trait
+ARHI parent pigean_portal__cfde_2026_11_24
+
+ASAT class trait
+ASAT parent pigean_portal__cfde_2026_11_24
+
+ASATadjBMIHeight class trait
+ASATadjBMIHeight parent pigean_portal__cfde_2026_11_24
+
+ASATtoGFAT class trait
+ASATtoGFAT parent pigean_portal__cfde_2026_11_24
+
+ASCVD class trait
+ASCVD parent pigean_portal__cfde_2026_11_24
+
+AST class trait
+AST parent pigean_portal__cfde_2026_11_24
+
+AST_ALT_ratio class trait
+AST_ALT_ratio parent pigean_portal__cfde_2026_11_24
+
+ASWPD class trait
+ASWPD parent pigean_portal__cfde_2026_11_24
+
+ATMFI class trait
+ATMFI parent pigean_portal__cfde_2026_11_24
+
+ATMV class trait
+ATMV parent pigean_portal__cfde_2026_11_24
+
+AUC_insulin_OGTT_metformin class trait
+AUC_insulin_OGTT_metformin parent pigean_portal__cfde_2026_11_24
+
+AVAP_AVRT class trait
+AVAP_AVRT parent pigean_portal__cfde_2026_11_24
+
+AVNRT class trait
+AVNRT parent pigean_portal__cfde_2026_11_24
+
+AWT_seg class trait
+AWT_seg parent pigean_portal__cfde_2026_11_24
+
+AbAA class trait
+AbAA parent pigean_portal__cfde_2026_11_24
+
+AbAge class trait
+AbAge parent pigean_portal__cfde_2026_11_24
+
+AbFR class trait
+AbFR parent pigean_portal__cfde_2026_11_24
+
+AcAce class trait
+AcAce parent pigean_portal__cfde_2026_11_24
+
+AcidRefluxGERD class trait
+AcidRefluxGERD parent pigean_portal__cfde_2026_11_24
+
+Acne class trait
+Acne parent pigean_portal__cfde_2026_11_24
+
+AcqHypoThyroid class trait
+AcqHypoThyroid parent pigean_portal__cfde_2026_11_24
+
+Act_out_dreams class trait
+Act_out_dreams parent pigean_portal__cfde_2026_11_24
+
+AcuteRenalFail class trait
+AcuteRenalFail parent pigean_portal__cfde_2026_11_24
+
+Addison class trait
+Addison parent pigean_portal__cfde_2026_11_24
+
+Adiponectin class trait
+Adiponectin parent pigean_portal__cfde_2026_11_24
+
+AdiponectinadjBMI class trait
+AdiponectinadjBMI parent pigean_portal__cfde_2026_11_24
+
+AdrenalHyper class trait
+AdrenalHyper parent pigean_portal__cfde_2026_11_24
+
+AdrenalHypo class trait
+AdrenalHypo parent pigean_portal__cfde_2026_11_24
+
+AfibFlutter class trait
+AfibFlutter parent pigean_portal__cfde_2026_11_24
+
+AgingGIP1 class trait
+AgingGIP1 parent pigean_portal__cfde_2026_11_24
+
+AgingGIP1AdjSocioEcon class trait
+AgingGIP1AdjSocioEcon parent pigean_portal__cfde_2026_11_24
+
+Ala class trait
+Ala parent pigean_portal__cfde_2026_11_24
+
+Alb class trait
+Alb parent pigean_portal__cfde_2026_11_24
+
+AlbInT2D class trait
+AlbInT2D parent pigean_portal__cfde_2026_11_24
+
+AlcoholConsumption class trait
+AlcoholConsumption parent pigean_portal__cfde_2026_11_24
+
+Alcohol_to_Sleep class trait
+Alcohol_to_Sleep parent pigean_portal__cfde_2026_11_24
+
+AllDKDvControl_DM class trait
+AllDKDvControl_DM parent pigean_portal__cfde_2026_11_24
+
+AllergicRhinitis class trait
+AllergicRhinitis parent pigean_portal__cfde_2026_11_24
+
+AllergicRhinitis_add class trait
+AllergicRhinitis_add parent pigean_portal__cfde_2026_11_24
+
+AllergicRhinitis_dom class trait
+AllergicRhinitis_dom parent pigean_portal__cfde_2026_11_24
+
+AllergicRhinitis_het class trait
+AllergicRhinitis_het parent pigean_portal__cfde_2026_11_24
+
+AllergicRhinitis_rec class trait
+AllergicRhinitis_rec parent pigean_portal__cfde_2026_11_24
+
+Allergy class trait
+Allergy parent pigean_portal__cfde_2026_11_24
+
+Alopecia class trait
+Alopecia parent pigean_portal__cfde_2026_11_24
+
+AmyloidBeta class trait
+AmyloidBeta parent pigean_portal__cfde_2026_11_24
+
+AnkylosingSpondylitis class trait
+AnkylosingSpondylitis parent pigean_portal__cfde_2026_11_24
+
+AnorexiaNervosa class trait
+AnorexiaNervosa parent pigean_portal__cfde_2026_11_24
+
+AntepartumBleed class trait
+AntepartumBleed parent pigean_portal__cfde_2026_11_24
+
+Anxiety_PHQ4 class trait
+Anxiety_PHQ4 parent pigean_portal__cfde_2026_11_24
+
+AnyCVD class trait
+AnyCVD parent pigean_portal__cfde_2026_11_24
+
+AnyCVD_add class trait
+AnyCVD_add parent pigean_portal__cfde_2026_11_24
+
+AnyCVD_dom class trait
+AnyCVD_dom parent pigean_portal__cfde_2026_11_24
+
+AnyCVD_het class trait
+AnyCVD_het parent pigean_portal__cfde_2026_11_24
+
+AnyCVD_rec class trait
+AnyCVD_rec parent pigean_portal__cfde_2026_11_24
+
+AnyCVDinT2D class trait
+AnyCVDinT2D parent pigean_portal__cfde_2026_11_24
+
+AorticStenosis class trait
+AorticStenosis parent pigean_portal__cfde_2026_11_24
+
+Aortic_valve_area class trait
+Aortic_valve_area parent pigean_portal__cfde_2026_11_24
+
+Aortic_valve_mean_gradient class trait
+Aortic_valve_mean_gradient parent pigean_portal__cfde_2026_11_24
+
+Aortic_valve_peak_velocity class trait
+Aortic_valve_peak_velocity parent pigean_portal__cfde_2026_11_24
+
+Ap-LM class trait
+Ap-LM parent pigean_portal__cfde_2026_11_24
+
+ApoA class trait
+ApoA parent pigean_portal__cfde_2026_11_24
+
+ApoA1 class trait
+ApoA1 parent pigean_portal__cfde_2026_11_24
+
+ApoB class trait
+ApoB parent pigean_portal__cfde_2026_11_24
+
+Arthritis class trait
+Arthritis parent pigean_portal__cfde_2026_11_24
+
+Arthropathy class trait
+Arthropathy parent pigean_portal__cfde_2026_11_24
+
+AscAortaDiam class trait
+AscAortaDiam parent pigean_portal__cfde_2026_11_24
+
+AscAortaDiamInd class trait
+AscAortaDiamInd parent pigean_portal__cfde_2026_11_24
+
+AscAortaDisten class trait
+AscAortaDisten parent pigean_portal__cfde_2026_11_24
+
+AscAortaStrain class trait
+AscAortaStrain parent pigean_portal__cfde_2026_11_24
+
+Asthma class trait
+Asthma parent pigean_portal__cfde_2026_11_24
+
+AsthmaExacerbation class trait
+AsthmaExacerbation parent pigean_portal__cfde_2026_11_24
+
+Asthma_AdultOnset class trait
+Asthma_AdultOnset parent pigean_portal__cfde_2026_11_24
+
+Asthma_ChildhoodOnset class trait
+Asthma_ChildhoodOnset parent pigean_portal__cfde_2026_11_24
+
+Asthma_add class trait
+Asthma_add parent pigean_portal__cfde_2026_11_24
+
+Asthma_dom class trait
+Asthma_dom parent pigean_portal__cfde_2026_11_24
+
+Asthma_het class trait
+Asthma_het parent pigean_portal__cfde_2026_11_24
+
+Asthma_or_chronic_rhinosinusitis class trait
+Asthma_or_chronic_rhinosinusitis parent pigean_portal__cfde_2026_11_24
+
+Asthma_rec class trait
+Asthma_rec parent pigean_portal__cfde_2026_11_24
+
+Atherosclerosis class trait
+Atherosclerosis parent pigean_portal__cfde_2026_11_24
+
+Autism class trait
+Autism parent pigean_portal__cfde_2026_11_24
+
+AutoimmuneThyroid class trait
+AutoimmuneThyroid parent pigean_portal__cfde_2026_11_24
+
+AvgDesaturation class trait
+AvgDesaturation parent pigean_portal__cfde_2026_11_24
+
+BFP class trait
+BFP parent pigean_portal__cfde_2026_11_24
+
+BG_PVS class trait
+BG_PVS parent pigean_portal__cfde_2026_11_24
+
+BIGTT-AIR class trait
+BIGTT-AIR parent pigean_portal__cfde_2026_11_24
+
+BILIRUBIN class trait
+BILIRUBIN parent pigean_portal__cfde_2026_11_24
+
+BIP class trait
+BIP parent pigean_portal__cfde_2026_11_24
+
+BIP1 class trait
+BIP1 parent pigean_portal__cfde_2026_11_24
+
+BIP2 class trait
+BIP2 parent pigean_portal__cfde_2026_11_24
+
+BIPFather class trait
+BIPFather parent pigean_portal__cfde_2026_11_24
+
+BIPMother class trait
+BIPMother parent pigean_portal__cfde_2026_11_24
+
+BIPSibling class trait
+BIPSibling parent pigean_portal__cfde_2026_11_24
+
+BIP_Psychosis class trait
+BIP_Psychosis parent pigean_portal__cfde_2026_11_24
+
+BIP_Schizoaffective class trait
+BIP_Schizoaffective parent pigean_portal__cfde_2026_11_24
+
+BMB_any_noexclusions class trait
+BMB_any_noexclusions parent pigean_portal__cfde_2026_11_24
+
+BMB_any_withexclusions class trait
+BMB_any_withexclusions parent pigean_portal__cfde_2026_11_24
+
+BMB_mixed_or_strictlydeep_withexclusions class trait
+BMB_mixed_or_strictlydeep_withexclusions parent pigean_portal__cfde_2026_11_24
+
+BMB_strictlylobar_noexclusions class trait
+BMB_strictlylobar_noexclusions parent pigean_portal__cfde_2026_11_24
+
+BMB_strictlylobar_withexclusions class trait
+BMB_strictlylobar_withexclusions parent pigean_portal__cfde_2026_11_24
+
+BMI class trait
+BMI parent pigean_portal__cfde_2026_11_24
+
+BMI1_5yrs class trait
+BMI1_5yrs parent pigean_portal__cfde_2026_11_24
+
+BMI1yr class trait
+BMI1yr parent pigean_portal__cfde_2026_11_24
+
+BMI3mons class trait
+BMI3mons parent pigean_portal__cfde_2026_11_24
+
+BMI3yrs class trait
+BMI3yrs parent pigean_portal__cfde_2026_11_24
+
+BMI5yrs class trait
+BMI5yrs parent pigean_portal__cfde_2026_11_24
+
+BMI6mons class trait
+BMI6mons parent pigean_portal__cfde_2026_11_24
+
+BMI6wks class trait
+BMI6wks parent pigean_portal__cfde_2026_11_24
+
+BMI7yrs class trait
+BMI7yrs parent pigean_portal__cfde_2026_11_24
+
+BMI8mons class trait
+BMI8mons parent pigean_portal__cfde_2026_11_24
+
+BMI8yrs class trait
+BMI8yrs parent pigean_portal__cfde_2026_11_24
+
+BMIadjSMK class trait
+BMIadjSMK parent pigean_portal__cfde_2026_11_24
+
+BMIbirth class trait
+BMIbirth parent pigean_portal__cfde_2026_11_24
+
+BNP class trait
+BNP parent pigean_portal__cfde_2026_11_24
+
+BS class trait
+BS parent pigean_portal__cfde_2026_11_24
+
+BSadjFastingTime class trait
+BSadjFastingTime parent pigean_portal__cfde_2026_11_24
+
+BSandFG class trait
+BSandFG parent pigean_portal__cfde_2026_11_24
+
+BUN class trait
+BUN parent pigean_portal__cfde_2026_11_24
+
+BV10 class trait
+BV10 parent pigean_portal__cfde_2026_11_24
+
+BV10_15 class trait
+BV10_15 parent pigean_portal__cfde_2026_11_24
+
+BV15_20 class trait
+BV15_20 parent pigean_portal__cfde_2026_11_24
+
+BV20_25 class trait
+BV20_25 parent pigean_portal__cfde_2026_11_24
+
+BV25_30 class trait
+BV25_30 parent pigean_portal__cfde_2026_11_24
+
+BV30_35 class trait
+BV30_35 parent pigean_portal__cfde_2026_11_24
+
+BV35_40 class trait
+BV35_40 parent pigean_portal__cfde_2026_11_24
+
+BV40_45 class trait
+BV40_45 parent pigean_portal__cfde_2026_11_24
+
+BV45_50 class trait
+BV45_50 parent pigean_portal__cfde_2026_11_24
+
+BV5 class trait
+BV5 parent pigean_portal__cfde_2026_11_24
+
+BV50_55 class trait
+BV50_55 parent pigean_portal__cfde_2026_11_24
+
+BV55_60 class trait
+BV55_60 parent pigean_portal__cfde_2026_11_24
+
+BV5_10 class trait
+BV5_10 parent pigean_portal__cfde_2026_11_24
+
+BV60_65 class trait
+BV60_65 parent pigean_portal__cfde_2026_11_24
+
+BV65_70 class trait
+BV65_70 parent pigean_portal__cfde_2026_11_24
+
+BV70_75 class trait
+BV70_75 parent pigean_portal__cfde_2026_11_24
+
+BV75_80 class trait
+BV75_80 parent pigean_portal__cfde_2026_11_24
+
+BabyEarlyGWG class trait
+BabyEarlyGWG parent pigean_portal__cfde_2026_11_24
+
+BabyLateGWG class trait
+BabyLateGWG parent pigean_portal__cfde_2026_11_24
+
+BabyTotalGWG class trait
+BabyTotalGWG parent pigean_portal__cfde_2026_11_24
+
+BackPain class trait
+BackPain parent pigean_portal__cfde_2026_11_24
+
+BarretsEsophagus class trait
+BarretsEsophagus parent pigean_portal__cfde_2026_11_24
+
+BasoCount class trait
+BasoCount parent pigean_portal__cfde_2026_11_24
+
+BasoPerc class trait
+BasoPerc parent pigean_portal__cfde_2026_11_24
+
+Bedtime class trait
+Bedtime parent pigean_portal__cfde_2026_11_24
+
+Bicarbonate class trait
+Bicarbonate parent pigean_portal__cfde_2026_11_24
+
+BirthHeadCir class trait
+BirthHeadCir parent pigean_portal__cfde_2026_11_24
+
+BladderCancer class trait
+BladderCancer parent pigean_portal__cfde_2026_11_24
+
+BrainVol_TownsendHeightCorr class trait
+BrainVol_TownsendHeightCorr parent pigean_portal__cfde_2026_11_24
+
+BreakfastSkipping class trait
+BreakfastSkipping parent pigean_portal__cfde_2026_11_24
+
+BreastCancer class trait
+BreastCancer parent pigean_portal__cfde_2026_11_24
+
+BreastCancer_ERN class trait
+BreastCancer_ERN parent pigean_portal__cfde_2026_11_24
+
+Bruxism class trait
+Bruxism parent pigean_portal__cfde_2026_11_24
+
+C12_0 class trait
+C12_0 parent pigean_portal__cfde_2026_11_24
+
+C16_0 class trait
+C16_0 parent pigean_portal__cfde_2026_11_24
+
+C16_1n_7 class trait
+C16_1n_7 parent pigean_portal__cfde_2026_11_24
+
+C18_0 class trait
+C18_0 parent pigean_portal__cfde_2026_11_24
+
+C18_1n_7 class trait
+C18_1n_7 parent pigean_portal__cfde_2026_11_24
+
+C18_1trans class trait
+C18_1trans parent pigean_portal__cfde_2026_11_24
+
+C19vAll class trait
+C19vAll parent pigean_portal__cfde_2026_11_24
+
+C19vNeg class trait
+C19vNeg parent pigean_portal__cfde_2026_11_24
+
+C20_0 class trait
+C20_0 parent pigean_portal__cfde_2026_11_24
+
+C20_4n_6 class trait
+C20_4n_6 parent pigean_portal__cfde_2026_11_24
+
+C20_5n_3 class trait
+C20_5n_3 parent pigean_portal__cfde_2026_11_24
+
+C22_5n_3 class trait
+C22_5n_3 parent pigean_portal__cfde_2026_11_24
+
+CAC class trait
+CAC parent pigean_portal__cfde_2026_11_24
+
+CAD class trait
+CAD parent pigean_portal__cfde_2026_11_24
+
+CADinNonT2D class trait
+CADinNonT2D parent pigean_portal__cfde_2026_11_24
+
+CADinT1D class trait
+CADinT1D parent pigean_portal__cfde_2026_11_24
+
+CADinT2D class trait
+CADinT2D parent pigean_portal__cfde_2026_11_24
+
+CAPlaqueBurden class trait
+CAPlaqueBurden parent pigean_portal__cfde_2026_11_24
+
+CCScCEmajor class trait
+CCScCEmajor parent pigean_portal__cfde_2026_11_24
+
+CCScCRYPTCE class trait
+CCScCRYPTCE parent pigean_portal__cfde_2026_11_24
+
+CCScINCUNC class trait
+CCScINCUNC parent pigean_portal__cfde_2026_11_24
+
+CCScLAA class trait
+CCScLAA parent pigean_portal__cfde_2026_11_24
+
+CCScSAO class trait
+CCScSAO parent pigean_portal__cfde_2026_11_24
+
+CCScUNDETER class trait
+CCScUNDETER parent pigean_portal__cfde_2026_11_24
+
+CCSpCEmajincl class trait
+CCSpCEmajincl parent pigean_portal__cfde_2026_11_24
+
+CCSpCryptoincl class trait
+CCSpCryptoincl parent pigean_portal__cfde_2026_11_24
+
+CCSpLAAmajincl class trait
+CCSpLAAmajincl parent pigean_portal__cfde_2026_11_24
+
+CCSpSAOmajincl class trait
+CCSpSAOmajincl parent pigean_portal__cfde_2026_11_24
+
+CCthickness class trait
+CCthickness parent pigean_portal__cfde_2026_11_24
+
+CD class trait
+CD parent pigean_portal__cfde_2026_11_24
+
+CFH1_levels class trait
+CFH1_levels parent pigean_portal__cfde_2026_11_24
+
+CFH2_levels class trait
+CFH2_levels parent pigean_portal__cfde_2026_11_24
+
+CFH3_levels class trait
+CFH3_levels parent pigean_portal__cfde_2026_11_24
+
+CFH4_levels class trait
+CFH4_levels parent pigean_portal__cfde_2026_11_24
+
+CFH5_levels class trait
+CFH5_levels parent pigean_portal__cfde_2026_11_24
+
+CFH_levels class trait
+CFH_levels parent pigean_portal__cfde_2026_11_24
+
+CHIP class trait
+CHIP parent pigean_portal__cfde_2026_11_24
+
+CHIP_ASXL1 class trait
+CHIP_ASXL1 parent pigean_portal__cfde_2026_11_24
+
+CHIP_DNMT3A class trait
+CHIP_DNMT3A parent pigean_portal__cfde_2026_11_24
+
+CHIP_JAK2 class trait
+CHIP_JAK2 parent pigean_portal__cfde_2026_11_24
+
+CHIP_PPM1D class trait
+CHIP_PPM1D parent pigean_portal__cfde_2026_11_24
+
+CHIP_SF3B1 class trait
+CHIP_SF3B1 parent pigean_portal__cfde_2026_11_24
+
+CHIP_SRSF2 class trait
+CHIP_SRSF2 parent pigean_portal__cfde_2026_11_24
+
+CHIP_TET2 class trait
+CHIP_TET2 parent pigean_portal__cfde_2026_11_24
+
+CHIP_TP53 class trait
+CHIP_TP53 parent pigean_portal__cfde_2026_11_24
+
+CHIPwithoutmCA class trait
+CHIPwithoutmCA parent pigean_portal__cfde_2026_11_24
+
+CHOL class trait
+CHOL parent pigean_portal__cfde_2026_11_24
+
+CIR class trait
+CIR parent pigean_portal__cfde_2026_11_24
+
+CIRadjISI class trait
+CIRadjISI parent pigean_portal__cfde_2026_11_24
+
+CK class trait
+CK parent pigean_portal__cfde_2026_11_24
+
+CKD class trait
+CKD parent pigean_portal__cfde_2026_11_24
+
+CKD_DM class trait
+CKD_DM parent pigean_portal__cfde_2026_11_24
+
+CKD_DNinT2D class trait
+CKD_DNinT2D parent pigean_portal__cfde_2026_11_24
+
+CKD_EXT_vGFRinT2D class trait
+CKD_EXT_vGFRinT2D parent pigean_portal__cfde_2026_11_24
+
+CKD_T1D class trait
+CKD_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDadjHbA1cBMI_T1D class trait
+CKDadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDextremes_DM class trait
+CKDextremes_DM parent pigean_portal__cfde_2026_11_24
+
+CKDextremes_T1D class trait
+CKDextremes_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDextremesadjHbA1cBMI_T1D class trait
+CKDextremesadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDinT2D class trait
+CKDinT2D parent pigean_portal__cfde_2026_11_24
+
+CKDpDKD class trait
+CKDpDKD parent pigean_portal__cfde_2026_11_24
+
+CKDpDKD_DM class trait
+CKDpDKD_DM parent pigean_portal__cfde_2026_11_24
+
+CKDpDKD_T1D class trait
+CKDpDKD_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDpDKDadjHbA1cBMI_T1D class trait
+CKDpDKDadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+CKDpDKDinT2D class trait
+CKDpDKDinT2D parent pigean_portal__cfde_2026_11_24
+
+CKFrac class trait
+CKFrac parent pigean_portal__cfde_2026_11_24
+
+CKMB class trait
+CKMB parent pigean_portal__cfde_2026_11_24
+
+COPD class trait
+COPD parent pigean_portal__cfde_2026_11_24
+
+COPD_ICD class trait
+COPD_ICD parent pigean_portal__cfde_2026_11_24
+
+CRF class trait
+CRF parent pigean_portal__cfde_2026_11_24
+
+CRP class trait
+CRP parent pigean_portal__cfde_2026_11_24
+
+CSC class trait
+CSC parent pigean_portal__cfde_2026_11_24
+
+CSI class trait
+CSI parent pigean_portal__cfde_2026_11_24
+
+CSSNS class trait
+CSSNS parent pigean_portal__cfde_2026_11_24
+
+CTS class trait
+CTS parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Emph_Paraseptal class trait
+CT_Visual_Emph_Paraseptal parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Emph_Paraseptal_P1_binary class trait
+CT_Visual_Emph_Paraseptal_P1_binary parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Emph_Severity class trait
+CT_Visual_Emph_Severity parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Emph_Severity_P1_binary class trait
+CT_Visual_Emph_Severity_P1_binary parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Wall_Thickening class trait
+CT_Visual_Wall_Thickening parent pigean_portal__cfde_2026_11_24
+
+CT_Visual_Wall_Thickening_P1_binary class trait
+CT_Visual_Wall_Thickening_P1_binary parent pigean_portal__cfde_2026_11_24
+
+CWP class trait
+CWP parent pigean_portal__cfde_2026_11_24
+
+Ca class trait
+Ca parent pigean_portal__cfde_2026_11_24
+
+Caffeine_Consumption class trait
+Caffeine_Consumption parent pigean_portal__cfde_2026_11_24
+
+Caffeine_Timing class trait
+Caffeine_Timing parent pigean_portal__cfde_2026_11_24
+
+Cancer class trait
+Cancer parent pigean_portal__cfde_2026_11_24
+
+Cancer_dom class trait
+Cancer_dom parent pigean_portal__cfde_2026_11_24
+
+Cancer_het class trait
+Cancer_het parent pigean_portal__cfde_2026_11_24
+
+Cancer_rec class trait
+Cancer_rec parent pigean_portal__cfde_2026_11_24
+
+CarbIntake class trait
+CarbIntake parent pigean_portal__cfde_2026_11_24
+
+CarbIntakeBMIadj class trait
+CarbIntakeBMIadj parent pigean_portal__cfde_2026_11_24
+
+CardiacArrest class trait
+CardiacArrest parent pigean_portal__cfde_2026_11_24
+
+CardiacArrhythmia class trait
+CardiacArrhythmia parent pigean_portal__cfde_2026_11_24
+
+CardiacTropoOneMeasure class trait
+CardiacTropoOneMeasure parent pigean_portal__cfde_2026_11_24
+
+Cardiomegaly class trait
+Cardiomegaly parent pigean_portal__cfde_2026_11_24
+
+Cardiomyopathy class trait
+Cardiomyopathy parent pigean_portal__cfde_2026_11_24
+
+CarotidArteryPlaqueBurden class trait
+CarotidArteryPlaqueBurden parent pigean_portal__cfde_2026_11_24
+
+CataractSenile class trait
+CataractSenile parent pigean_portal__cfde_2026_11_24
+
+Celiac class trait
+Celiac parent pigean_portal__cfde_2026_11_24
+
+Cellulitis class trait
+Cellulitis parent pigean_portal__cfde_2026_11_24
+
+Cellulitis_SPA class trait
+Cellulitis_SPA parent pigean_portal__cfde_2026_11_24
+
+CentralSleepApnea class trait
+CentralSleepApnea parent pigean_portal__cfde_2026_11_24
+
+CerebellarVol class trait
+CerebellarVol parent pigean_portal__cfde_2026_11_24
+
+CerebralAtherosclerosis class trait
+CerebralAtherosclerosis parent pigean_portal__cfde_2026_11_24
+
+CerebralVol class trait
+CerebralVol parent pigean_portal__cfde_2026_11_24
+
+CervicalCancer class trait
+CervicalCancer parent pigean_portal__cfde_2026_11_24
+
+Change_in_HOMA_B_after_metformin class trait
+Change_in_HOMA_B_after_metformin parent pigean_portal__cfde_2026_11_24
+
+Change_in_HOMA_IR_after_metformin class trait
+Change_in_HOMA_IR_after_metformin parent pigean_portal__cfde_2026_11_24
+
+Change_in_fasting_glucose_after_metformin_adjusted_baseline_glucose class trait
+Change_in_fasting_glucose_after_metformin_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+ChestPain class trait
+ChestPain parent pigean_portal__cfde_2026_11_24
+
+ChestPainDuringPhysicalActivity class trait
+ChestPainDuringPhysicalActivity parent pigean_portal__cfde_2026_11_24
+
+ChildObesity class trait
+ChildObesity parent pigean_portal__cfde_2026_11_24
+
+ChildSleepDuration class trait
+ChildSleepDuration parent pigean_portal__cfde_2026_11_24
+
+ChildSleepDurationAdjBMI class trait
+ChildSleepDurationAdjBMI parent pigean_portal__cfde_2026_11_24
+
+Cholelithiasis class trait
+Cholelithiasis parent pigean_portal__cfde_2026_11_24
+
+ChronicBackPain class trait
+ChronicBackPain parent pigean_portal__cfde_2026_11_24
+
+ChronicHeadache class trait
+ChronicHeadache parent pigean_portal__cfde_2026_11_24
+
+ChronicHipPain class trait
+ChronicHipPain parent pigean_portal__cfde_2026_11_24
+
+ChronicKneePain class trait
+ChronicKneePain parent pigean_portal__cfde_2026_11_24
+
+ChronicNeckShoulderPain class trait
+ChronicNeckShoulderPain parent pigean_portal__cfde_2026_11_24
+
+ChronicPulmoHeartDisease class trait
+ChronicPulmoHeartDisease parent pigean_portal__cfde_2026_11_24
+
+ChronicStomachPain class trait
+ChronicStomachPain parent pigean_portal__cfde_2026_11_24
+
+ChronicWidespreadPain class trait
+ChronicWidespreadPain parent pigean_portal__cfde_2026_11_24
+
+Chronic_Insomnia_Disorder class trait
+Chronic_Insomnia_Disorder parent pigean_portal__cfde_2026_11_24
+
+Chronic_rhinosinusitis_with_nasal_polyposis class trait
+Chronic_rhinosinusitis_with_nasal_polyposis parent pigean_portal__cfde_2026_11_24
+
+Chronic_rhinosinusitis_without_nasal_polyposis class trait
+Chronic_rhinosinusitis_without_nasal_polyposis parent pigean_portal__cfde_2026_11_24
+
+Chronic_spontaneous_urticaria class trait
+Chronic_spontaneous_urticaria parent pigean_portal__cfde_2026_11_24
+
+ChronotypeSingle class trait
+ChronotypeSingle parent pigean_portal__cfde_2026_11_24
+
+Chronotype_Extremes class trait
+Chronotype_Extremes parent pigean_portal__cfde_2026_11_24
+
+Chronotype_rMEQ_Total class trait
+Chronotype_rMEQ_Total parent pigean_portal__cfde_2026_11_24
+
+Cirrhosis class trait
+Cirrhosis parent pigean_portal__cfde_2026_11_24
+
+Cit class trait
+Cit parent pigean_portal__cfde_2026_11_24
+
+Cl class trait
+Cl parent pigean_portal__cfde_2026_11_24
+
+CogPerformance class trait
+CogPerformance parent pigean_portal__cfde_2026_11_24
+
+Cognitive_Impairment_BC-CCI class trait
+Cognitive_Impairment_BC-CCI parent pigean_portal__cfde_2026_11_24
+
+ColonCancer class trait
+ColonCancer parent pigean_portal__cfde_2026_11_24
+
+CongestiveHeartFail class trait
+CongestiveHeartFail parent pigean_portal__cfde_2026_11_24
+
+Contact_dermatitis class trait
+Contact_dermatitis parent pigean_portal__cfde_2026_11_24
+
+Craniofacial_microsomia class trait
+Craniofacial_microsomia parent pigean_portal__cfde_2026_11_24
+
+Creatinine class trait
+Creatinine parent pigean_portal__cfde_2026_11_24
+
+CreatinineUrinary class trait
+CreatinineUrinary parent pigean_portal__cfde_2026_11_24
+
+CutaneousLE class trait
+CutaneousLE parent pigean_portal__cfde_2026_11_24
+
+CystatinC class trait
+CystatinC parent pigean_portal__cfde_2026_11_24
+
+CysticKD class trait
+CysticKD parent pigean_portal__cfde_2026_11_24
+
+Cystitis class trait
+Cystitis parent pigean_portal__cfde_2026_11_24
+
+DBP class trait
+DBP parent pigean_portal__cfde_2026_11_24
+
+DCD_INC class trait
+DCD_INC parent pigean_portal__cfde_2026_11_24
+
+DCD_REST class trait
+DCD_REST parent pigean_portal__cfde_2026_11_24
+
+DCM class trait
+DCM parent pigean_portal__cfde_2026_11_24
+
+DCM_broad class trait
+DCM_broad parent pigean_portal__cfde_2026_11_24
+
+DDFather class trait
+DDFather parent pigean_portal__cfde_2026_11_24
+
+DDMother class trait
+DDMother parent pigean_portal__cfde_2026_11_24
+
+DDSibling class trait
+DDSibling parent pigean_portal__cfde_2026_11_24
+
+DHA class trait
+DHA parent pigean_portal__cfde_2026_11_24
+
+DHEAS class trait
+DHEAS parent pigean_portal__cfde_2026_11_24
+
+DI class trait
+DI parent pigean_portal__cfde_2026_11_24
+
+DIBIG class trait
+DIBIG parent pigean_portal__cfde_2026_11_24
+
+DI_Kadowaki_Matsuda class trait
+DI_Kadowaki_Matsuda parent pigean_portal__cfde_2026_11_24
+
+DIadjBMI class trait
+DIadjBMI parent pigean_portal__cfde_2026_11_24
+
+DLCOInIPF class trait
+DLCOInIPF parent pigean_portal__cfde_2026_11_24
+
+DME class trait
+DME parent pigean_portal__cfde_2026_11_24
+
+DNAme_PAI1 class trait
+DNAme_PAI1 parent pigean_portal__cfde_2026_11_24
+
+DPAcm class trait
+DPAcm parent pigean_portal__cfde_2026_11_24
+
+DPAcmInd class trait
+DPAcmInd parent pigean_portal__cfde_2026_11_24
+
+DRvNoDR class trait
+DRvNoDR parent pigean_portal__cfde_2026_11_24
+
+DRvNoDRwDoD class trait
+DRvNoDRwDoD parent pigean_portal__cfde_2026_11_24
+
+DayDozing class trait
+DayDozing parent pigean_portal__cfde_2026_11_24
+
+DaySleepInPD class trait
+DaySleepInPD parent pigean_portal__cfde_2026_11_24
+
+Daytime_Dysfunction_PSQI class trait
+Daytime_Dysfunction_PSQI parent pigean_portal__cfde_2026_11_24
+
+DeepVeinThrombosis class trait
+DeepVeinThrombosis parent pigean_portal__cfde_2026_11_24
+
+DementiaInPD class trait
+DementiaInPD parent pigean_portal__cfde_2026_11_24
+
+Depression class trait
+Depression parent pigean_portal__cfde_2026_11_24
+
+Depression_PHQ4 class trait
+Depression_PHQ4 parent pigean_portal__cfde_2026_11_24
+
+Dermatophytosis class trait
+Dermatophytosis parent pigean_portal__cfde_2026_11_24
+
+Dermatophytosis_add class trait
+Dermatophytosis_add parent pigean_portal__cfde_2026_11_24
+
+Dermatophytosis_dom class trait
+Dermatophytosis_dom parent pigean_portal__cfde_2026_11_24
+
+Dermatophytosis_het class trait
+Dermatophytosis_het parent pigean_portal__cfde_2026_11_24
+
+DescAortaDiam class trait
+DescAortaDiam parent pigean_portal__cfde_2026_11_24
+
+DescAortaDisten class trait
+DescAortaDisten parent pigean_portal__cfde_2026_11_24
+
+DescAortaStrain class trait
+DescAortaStrain parent pigean_portal__cfde_2026_11_24
+
+Device_at_Bedtime class trait
+Device_at_Bedtime parent pigean_portal__cfde_2026_11_24
+
+DiabeticNephro class trait
+DiabeticNephro parent pigean_portal__cfde_2026_11_24
+
+DiabeticNeuropathy class trait
+DiabeticNeuropathy parent pigean_portal__cfde_2026_11_24
+
+DiabeticRetino class trait
+DiabeticRetino parent pigean_portal__cfde_2026_11_24
+
+DiastolicHeartFail class trait
+DiastolicHeartFail parent pigean_portal__cfde_2026_11_24
+
+DirectBilirubin class trait
+DirectBilirubin parent pigean_portal__cfde_2026_11_24
+
+DiverticularDisease class trait
+DiverticularDisease parent pigean_portal__cfde_2026_11_24
+
+DiverticularDiseaseAgeO class trait
+DiverticularDiseaseAgeO parent pigean_portal__cfde_2026_11_24
+
+Diverticulitis class trait
+Diverticulitis parent pigean_portal__cfde_2026_11_24
+
+Diverticulosis class trait
+Diverticulosis parent pigean_portal__cfde_2026_11_24
+
+Dorsalgia class trait
+Dorsalgia parent pigean_portal__cfde_2026_11_24
+
+Dyschromia_and_Vitiligo class trait
+Dyschromia_and_Vitiligo parent pigean_portal__cfde_2026_11_24
+
+Dyslipid class trait
+Dyslipid parent pigean_portal__cfde_2026_11_24
+
+Dyslipid_add class trait
+Dyslipid_add parent pigean_portal__cfde_2026_11_24
+
+Dyslipid_dom class trait
+Dyslipid_dom parent pigean_portal__cfde_2026_11_24
+
+Dyslipid_het class trait
+Dyslipid_het parent pigean_portal__cfde_2026_11_24
+
+Dyslipid_rec class trait
+Dyslipid_rec parent pigean_portal__cfde_2026_11_24
+
+EAA_Grim class trait
+EAA_Grim parent pigean_portal__cfde_2026_11_24
+
+EAA_Hannum class trait
+EAA_Hannum parent pigean_portal__cfde_2026_11_24
+
+EAA_Intrinsic class trait
+EAA_Intrinsic parent pigean_portal__cfde_2026_11_24
+
+EAA_Pheno class trait
+EAA_Pheno parent pigean_portal__cfde_2026_11_24
+
+EF class trait
+EF parent pigean_portal__cfde_2026_11_24
+
+EGFR class trait
+EGFR parent pigean_portal__cfde_2026_11_24
+
+EO_Stroke_ischemic class trait
+EO_Stroke_ischemic parent pigean_portal__cfde_2026_11_24
+
+EPATarea class trait
+EPATarea parent pigean_portal__cfde_2026_11_24
+
+ESR class trait
+ESR parent pigean_portal__cfde_2026_11_24
+
+ESRD class trait
+ESRD parent pigean_portal__cfde_2026_11_24
+
+ESRD_DM class trait
+ESRD_DM parent pigean_portal__cfde_2026_11_24
+
+ESRDinT2D class trait
+ESRDinT2D parent pigean_portal__cfde_2026_11_24
+
+ESRDvControl_DM class trait
+ESRDvControl_DM parent pigean_portal__cfde_2026_11_24
+
+ESRDvControl_T1D class trait
+ESRDvControl_T1D parent pigean_portal__cfde_2026_11_24
+
+ESRDvControladjHbA1cBMI_T1D class trait
+ESRDvControladjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+ESRDvControlinT2D class trait
+ESRDvControlinT2D parent pigean_portal__cfde_2026_11_24
+
+ESRDvMacro_DM class trait
+ESRDvMacro_DM parent pigean_portal__cfde_2026_11_24
+
+ESRDvMacro_T1D class trait
+ESRDvMacro_T1D parent pigean_portal__cfde_2026_11_24
+
+ESRDvNonESRD_DM class trait
+ESRDvNonESRD_DM parent pigean_portal__cfde_2026_11_24
+
+ESRDvNonESRD_T1D class trait
+ESRDvNonESRD_T1D parent pigean_portal__cfde_2026_11_24
+
+ESRDvNonESRDadjHbA1cBMI_T1D class trait
+ESRDvNonESRDadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+ESRDvNonESRDinT2D class trait
+ESRDvNonESRDinT2D parent pigean_portal__cfde_2026_11_24
+
+EarlyAMD class trait
+EarlyAMD parent pigean_portal__cfde_2026_11_24
+
+EarlyBleed class trait
+EarlyBleed parent pigean_portal__cfde_2026_11_24
+
+EarlyBleedLiveBirth class trait
+EarlyBleedLiveBirth parent pigean_portal__cfde_2026_11_24
+
+EarlyPretermBirthFetal class trait
+EarlyPretermBirthFetal parent pigean_portal__cfde_2026_11_24
+
+Early_ALLOA class trait
+Early_ALLOA parent pigean_portal__cfde_2026_11_24
+
+Early_Morning_Awakening_Insomnia class trait
+Early_Morning_Awakening_Insomnia parent pigean_portal__cfde_2026_11_24
+
+EaseOfWakingUp class trait
+EaseOfWakingUp parent pigean_portal__cfde_2026_11_24
+
+Eczema class trait
+Eczema parent pigean_portal__cfde_2026_11_24
+
+Emphysema class trait
+Emphysema parent pigean_portal__cfde_2026_11_24
+
+EndometrialCancer class trait
+EndometrialCancer parent pigean_portal__cfde_2026_11_24
+
+EndometrialCancer_EH class trait
+EndometrialCancer_EH parent pigean_portal__cfde_2026_11_24
+
+Endometriosis class trait
+Endometriosis parent pigean_portal__cfde_2026_11_24
+
+EnthesopathiesExcludingLowerLimb class trait
+EnthesopathiesExcludingLowerLimb parent pigean_portal__cfde_2026_11_24
+
+EnthesopathiesLowerLimb class trait
+EnthesopathiesLowerLimb parent pigean_portal__cfde_2026_11_24
+
+EosinCount class trait
+EosinCount parent pigean_portal__cfde_2026_11_24
+
+EosinPerc class trait
+EosinPerc parent pigean_portal__cfde_2026_11_24
+
+Epilepsy class trait
+Epilepsy parent pigean_portal__cfde_2026_11_24
+
+Epilepsy_FocalHS class trait
+Epilepsy_FocalHS parent pigean_portal__cfde_2026_11_24
+
+Epilepsy_FocalLN class trait
+Epilepsy_FocalLN parent pigean_portal__cfde_2026_11_24
+
+Epilepsy_GeneralizedTCS class trait
+Epilepsy_GeneralizedTCS parent pigean_portal__cfde_2026_11_24
+
+EsoStomachCancer class trait
+EsoStomachCancer parent pigean_portal__cfde_2026_11_24
+
+Esophagitis class trait
+Esophagitis parent pigean_portal__cfde_2026_11_24
+
+EssentialHYPERTENSION class trait
+EssentialHYPERTENSION parent pigean_portal__cfde_2026_11_24
+
+EssentialTremor class trait
+EssentialTremor parent pigean_portal__cfde_2026_11_24
+
+Estradiol class trait
+Estradiol parent pigean_portal__cfde_2026_11_24
+
+EtOH class trait
+EtOH parent pigean_portal__cfde_2026_11_24
+
+Eveningness_rMEQ class trait
+Eveningness_rMEQ parent pigean_portal__cfde_2026_11_24
+
+Excessive_scarring class trait
+Excessive_scarring parent pigean_portal__cfde_2026_11_24
+
+Exercise_Frequency class trait
+Exercise_Frequency parent pigean_portal__cfde_2026_11_24
+
+ExpInspMeanAtten_ratio class trait
+ExpInspMeanAtten_ratio parent pigean_portal__cfde_2026_11_24
+
+Exp_LAA856_LLL class trait
+Exp_LAA856_LLL parent pigean_portal__cfde_2026_11_24
+
+Exp_LAA856_LUL class trait
+Exp_LAA856_LUL parent pigean_portal__cfde_2026_11_24
+
+Exp_LAA856_RLL class trait
+Exp_LAA856_RLL parent pigean_portal__cfde_2026_11_24
+
+Exp_LAA856_RML class trait
+Exp_LAA856_RML parent pigean_portal__cfde_2026_11_24
+
+Exp_LAA856_RUL class trait
+Exp_LAA856_RUL parent pigean_portal__cfde_2026_11_24
+
+ExtremeLongevity_90thPerc class trait
+ExtremeLongevity_90thPerc parent pigean_portal__cfde_2026_11_24
+
+ExtremeLongevity_99thPerc class trait
+ExtremeLongevity_99thPerc parent pigean_portal__cfde_2026_11_24
+
+Extreme_Sleep_Duration class trait
+Extreme_Sleep_Duration parent pigean_portal__cfde_2026_11_24
+
+FAinCSVD class trait
+FAinCSVD parent pigean_portal__cfde_2026_11_24
+
+FAw3 class trait
+FAw3 parent pigean_portal__cfde_2026_11_24
+
+FAw6 class trait
+FAw6 parent pigean_portal__cfde_2026_11_24
+
+FBW class trait
+FBW parent pigean_portal__cfde_2026_11_24
+
+FBWadjMGen class trait
+FBWadjMGen parent pigean_portal__cfde_2026_11_24
+
+FEV1 class trait
+FEV1 parent pigean_portal__cfde_2026_11_24
+
+FEV1toFVC class trait
+FEV1toFVC parent pigean_portal__cfde_2026_11_24
+
+FG class trait
+FG parent pigean_portal__cfde_2026_11_24
+
+FG_plus_diab class trait
+FG_plus_diab parent pigean_portal__cfde_2026_11_24
+
+FGadjBMI class trait
+FGadjBMI parent pigean_portal__cfde_2026_11_24
+
+FI class trait
+FI parent pigean_portal__cfde_2026_11_24
+
+FIadjBMI class trait
+FIadjBMI parent pigean_portal__cfde_2026_11_24
+
+FMD class trait
+FMD parent pigean_portal__cfde_2026_11_24
+
+FNBMD class trait
+FNBMD parent pigean_portal__cfde_2026_11_24
+
+FNarea class trait
+FNarea parent pigean_portal__cfde_2026_11_24
+
+FRC class trait
+FRC parent pigean_portal__cfde_2026_11_24
+
+FRC_TLC_ratio class trait
+FRC_TLC_ratio parent pigean_portal__cfde_2026_11_24
+
+FS class trait
+FS parent pigean_portal__cfde_2026_11_24
+
+FT3 class trait
+FT3 parent pigean_portal__cfde_2026_11_24
+
+FT3overFT4 class trait
+FT3overFT4 parent pigean_portal__cfde_2026_11_24
+
+FT4 class trait
+FT4 parent pigean_portal__cfde_2026_11_24
+
+FVC class trait
+FVC parent pigean_portal__cfde_2026_11_24
+
+FVCinIPF class trait
+FVCinIPF parent pigean_portal__cfde_2026_11_24
+
+Family_AD_history class trait
+Family_AD_history parent pigean_portal__cfde_2026_11_24
+
+Family_Insomnia class trait
+Family_Insomnia parent pigean_portal__cfde_2026_11_24
+
+Family_Narcolepsy class trait
+Family_Narcolepsy parent pigean_portal__cfde_2026_11_24
+
+Family_Night_Terrors class trait
+Family_Night_Terrors parent pigean_portal__cfde_2026_11_24
+
+Family_RLS class trait
+Family_RLS parent pigean_portal__cfde_2026_11_24
+
+Family_Sleep_Apnea class trait
+Family_Sleep_Apnea parent pigean_portal__cfde_2026_11_24
+
+Family_Sleepwalking class trait
+Family_Sleepwalking parent pigean_portal__cfde_2026_11_24
+
+Fasting_glucose_metformin_adjusted_baseline_glucose class trait
+Fasting_glucose_metformin_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Fasting_insulin_metformin class trait
+Fasting_insulin_metformin parent pigean_portal__cfde_2026_11_24
+
+FatIntake class trait
+FatIntake parent pigean_portal__cfde_2026_11_24
+
+FatIntakeBMIadj class trait
+FatIntakeBMIadj parent pigean_portal__cfde_2026_11_24
+
+Fatigue_Score class trait
+Fatigue_Score parent pigean_portal__cfde_2026_11_24
+
+Fbg class trait
+Fbg parent pigean_portal__cfde_2026_11_24
+
+Feels_best_rMEQ class trait
+Feels_best_rMEQ parent pigean_portal__cfde_2026_11_24
+
+Female_infertility__all_causes_ class trait
+Female_infertility__all_causes_ parent pigean_portal__cfde_2026_11_24
+
+Female_infertility__anatomical_ class trait
+Female_infertility__anatomical_ parent pigean_portal__cfde_2026_11_24
+
+Female_infertility__anovulatory_ class trait
+Female_infertility__anovulatory_ parent pigean_portal__cfde_2026_11_24
+
+Female_infertility__idiopathic_defined_by_coding_in_electronic_health_record_ class trait
+Female_infertility__idiopathic_defined_by_coding_in_electronic_health_record_ parent pigean_portal__cfde_2026_11_24
+
+Female_infertility__idiopathic_defined_by_excluding_other_causes_ class trait
+Female_infertility__idiopathic_defined_by_excluding_other_causes_ parent pigean_portal__cfde_2026_11_24
+
+FemurToHeight class trait
+FemurToHeight parent pigean_portal__cfde_2026_11_24
+
+Ferritin class trait
+Ferritin parent pigean_portal__cfde_2026_11_24
+
+Fibromyalgia class trait
+Fibromyalgia parent pigean_portal__cfde_2026_11_24
+
+FingerOA class trait
+FingerOA parent pigean_portal__cfde_2026_11_24
+
+FirstCMCJOA class trait
+FirstCMCJOA parent pigean_portal__cfde_2026_11_24
+
+Follicle_stimulating_hormone_levels class trait
+Follicle_stimulating_hormone_levels parent pigean_portal__cfde_2026_11_24
+
+ForearmBMD class trait
+ForearmBMD parent pigean_portal__cfde_2026_11_24
+
+ForearmFracture class trait
+ForearmFracture parent pigean_portal__cfde_2026_11_24
+
+ForearmToHeight class trait
+ForearmToHeight parent pigean_portal__cfde_2026_11_24
+
+Fracture class trait
+Fracture parent pigean_portal__cfde_2026_11_24
+
+FrailtyIndex class trait
+FrailtyIndex parent pigean_portal__cfde_2026_11_24
+
+FriedFrailtyScore class trait
+FriedFrailtyScore parent pigean_portal__cfde_2026_11_24
+
+Frontal_fibrosing_alopecia class trait
+Frontal_fibrosing_alopecia parent pigean_portal__cfde_2026_11_24
+
+GA class trait
+GA parent pigean_portal__cfde_2026_11_24
+
+GCC class trait
+GCC parent pigean_portal__cfde_2026_11_24
+
+GCIPL class trait
+GCIPL parent pigean_portal__cfde_2026_11_24
+
+GCL class trait
+GCL parent pigean_portal__cfde_2026_11_24
+
+GDM class trait
+GDM parent pigean_portal__cfde_2026_11_24
+
+GDM_abnormal_gluc class trait
+GDM_abnormal_gluc parent pigean_portal__cfde_2026_11_24
+
+GERD class trait
+GERD parent pigean_portal__cfde_2026_11_24
+
+GFAT class trait
+GFAT parent pigean_portal__cfde_2026_11_24
+
+GFATadjBMIHeight class trait
+GFATadjBMIHeight parent pigean_portal__cfde_2026_11_24
+
+GGT class trait
+GGT parent pigean_portal__cfde_2026_11_24
+
+GSD class trait
+GSD parent pigean_portal__cfde_2026_11_24
+
+Gastritis class trait
+Gastritis parent pigean_portal__cfde_2026_11_24
+
+GenConvulsiveEpilepsy class trait
+GenConvulsiveEpilepsy parent pigean_portal__cfde_2026_11_24
+
+GestationalDur class trait
+GestationalDur parent pigean_portal__cfde_2026_11_24
+
+GestationalDurationFetal class trait
+GestationalDurationFetal parent pigean_portal__cfde_2026_11_24
+
+GestationalHypertension class trait
+GestationalHypertension parent pigean_portal__cfde_2026_11_24
+
+Get_up_time_rMEQ class trait
+Get_up_time_rMEQ parent pigean_portal__cfde_2026_11_24
+
+Glaucoma class trait
+Glaucoma parent pigean_portal__cfde_2026_11_24
+
+Gln class trait
+Gln parent pigean_portal__cfde_2026_11_24
+
+GluCorticoidDef class trait
+GluCorticoidDef parent pigean_portal__cfde_2026_11_24
+
+Glucose_120_min_OGTT_metformin_adjusted_baseline_glucose class trait
+Glucose_120_min_OGTT_metformin_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_120_min_glipizide_adjusted_baseline_glucose class trait
+Glucose_120_min_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_180_min_glipizide_adjusted_baseline_glucose class trait
+Glucose_180_min_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_30_min_OGTT_metformin_adjusted_baseline_glucose class trait
+Glucose_30_min_OGTT_metformin_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_30_min_glipizide_adjusted_baseline_glucose class trait
+Glucose_30_min_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_60_min_OGTT_metformin_adjusted_baseline_glucose class trait
+Glucose_60_min_OGTT_metformin_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_60_min_glipizide_adjusted_baseline_glucose class trait
+Glucose_60_min_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Glucose_90_min_glipizide_adjusted_baseline_glucose class trait
+Glucose_90_min_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Gly class trait
+Gly parent pigean_portal__cfde_2026_11_24
+
+Gout class trait
+Gout parent pigean_portal__cfde_2026_11_24
+
+Gp class trait
+Gp parent pigean_portal__cfde_2026_11_24
+
+Graves class trait
+Graves parent pigean_portal__cfde_2026_11_24
+
+GripL class trait
+GripL parent pigean_portal__cfde_2026_11_24
+
+GripR class trait
+GripR parent pigean_portal__cfde_2026_11_24
+
+HBA1C class trait
+HBA1C parent pigean_portal__cfde_2026_11_24
+
+HBA1CadjBMI class trait
+HBA1CadjBMI parent pigean_portal__cfde_2026_11_24
+
+HCC class trait
+HCC parent pigean_portal__cfde_2026_11_24
+
+HCVRnaViralLoad class trait
+HCVRnaViralLoad parent pigean_portal__cfde_2026_11_24
+
+HDL class trait
+HDL parent pigean_portal__cfde_2026_11_24
+
+HDL2chol class trait
+HDL2chol parent pigean_portal__cfde_2026_11_24
+
+HDL3chol class trait
+HDL3chol parent pigean_portal__cfde_2026_11_24
+
+HEIGHT class trait
+HEIGHT parent pigean_portal__cfde_2026_11_24
+
+HF class trait
+HF parent pigean_portal__cfde_2026_11_24
+
+HF_with_preserved_ejection_fraction class trait
+HF_with_preserved_ejection_fraction parent pigean_portal__cfde_2026_11_24
+
+HF_with_reduced_ejection_fraction class trait
+HF_with_reduced_ejection_fraction parent pigean_portal__cfde_2026_11_24
+
+HIPC class trait
+HIPC parent pigean_portal__cfde_2026_11_24
+
+HIPCadjBMI class trait
+HIPCadjBMI parent pigean_portal__cfde_2026_11_24
+
+HIPKNEEOA class trait
+HIPKNEEOA parent pigean_portal__cfde_2026_11_24
+
+HIPKNEEOAreplacement class trait
+HIPKNEEOAreplacement parent pigean_portal__cfde_2026_11_24
+
+HIPOA class trait
+HIPOA parent pigean_portal__cfde_2026_11_24
+
+HIP_PVS class trait
+HIP_PVS parent pigean_portal__cfde_2026_11_24
+
+HMB class trait
+HMB parent pigean_portal__cfde_2026_11_24
+
+HOMAB class trait
+HOMAB parent pigean_portal__cfde_2026_11_24
+
+HOMAIR class trait
+HOMAIR parent pigean_portal__cfde_2026_11_24
+
+HP-0000717 class trait
+HP-0000717 parent pigean_portal__cfde_2026_11_24
+
+HR class trait
+HR parent pigean_portal__cfde_2026_11_24
+
+HSM1 class trait
+HSM1 parent pigean_portal__cfde_2026_11_24
+
+HSM10 class trait
+HSM10 parent pigean_portal__cfde_2026_11_24
+
+HSM2 class trait
+HSM2 parent pigean_portal__cfde_2026_11_24
+
+HSM3 class trait
+HSM3 parent pigean_portal__cfde_2026_11_24
+
+HSM4 class trait
+HSM4 parent pigean_portal__cfde_2026_11_24
+
+HSM5 class trait
+HSM5 parent pigean_portal__cfde_2026_11_24
+
+HSM6 class trait
+HSM6 parent pigean_portal__cfde_2026_11_24
+
+HSM7 class trait
+HSM7 parent pigean_portal__cfde_2026_11_24
+
+HSM8 class trait
+HSM8 parent pigean_portal__cfde_2026_11_24
+
+HSM9 class trait
+HSM9 parent pigean_portal__cfde_2026_11_24
+
+HYPERTENSION class trait
+HYPERTENSION parent pigean_portal__cfde_2026_11_24
+
+HYPERTENSION_add class trait
+HYPERTENSION_add parent pigean_portal__cfde_2026_11_24
+
+HYPERTENSION_dom class trait
+HYPERTENSION_dom parent pigean_portal__cfde_2026_11_24
+
+HYPERTENSION_het class trait
+HYPERTENSION_het parent pigean_portal__cfde_2026_11_24
+
+HYPERTENSION_rec class trait
+HYPERTENSION_rec parent pigean_portal__cfde_2026_11_24
+
+HandOA class trait
+HandOA parent pigean_portal__cfde_2026_11_24
+
+Hand_eczema class trait
+Hand_eczema parent pigean_portal__cfde_2026_11_24
+
+Handedness class trait
+Handedness parent pigean_portal__cfde_2026_11_24
+
+Hb class trait
+Hb parent pigean_portal__cfde_2026_11_24
+
+HbConc class trait
+HbConc parent pigean_portal__cfde_2026_11_24
+
+Healthspan class trait
+Healthspan parent pigean_portal__cfde_2026_11_24
+
+Hearing_loss class trait
+Hearing_loss parent pigean_portal__cfde_2026_11_24
+
+HeartAttack class trait
+HeartAttack parent pigean_portal__cfde_2026_11_24
+
+Hematocrit class trait
+Hematocrit parent pigean_portal__cfde_2026_11_24
+
+Hemorrhoids class trait
+Hemorrhoids parent pigean_portal__cfde_2026_11_24
+
+Hemorrhoids_add class trait
+Hemorrhoids_add parent pigean_portal__cfde_2026_11_24
+
+Hemorrhoids_dom class trait
+Hemorrhoids_dom parent pigean_portal__cfde_2026_11_24
+
+Hemorrhoids_het class trait
+Hemorrhoids_het parent pigean_portal__cfde_2026_11_24
+
+HerniaAbdomin class trait
+HerniaAbdomin parent pigean_portal__cfde_2026_11_24
+
+HerniaAbdomin_add class trait
+HerniaAbdomin_add parent pigean_portal__cfde_2026_11_24
+
+HerniaAbdomin_dom class trait
+HerniaAbdomin_dom parent pigean_portal__cfde_2026_11_24
+
+HerniaAbdomin_het class trait
+HerniaAbdomin_het parent pigean_portal__cfde_2026_11_24
+
+HerniaAbdomin_rec class trait
+HerniaAbdomin_rec parent pigean_portal__cfde_2026_11_24
+
+Hidradenitis class trait
+Hidradenitis parent pigean_portal__cfde_2026_11_24
+
+Hidradenitis_suppurativa class trait
+Hidradenitis_suppurativa parent pigean_portal__cfde_2026_11_24
+
+HighScatReticuloCount class trait
+HighScatReticuloCount parent pigean_portal__cfde_2026_11_24
+
+HighScatReticuloPerc class trait
+HighScatReticuloPerc parent pigean_portal__cfde_2026_11_24
+
+HipFracture class trait
+HipFracture parent pigean_portal__cfde_2026_11_24
+
+HipOAnoreplacement class trait
+HipOAnoreplacement parent pigean_portal__cfde_2026_11_24
+
+HipOAreplacement class trait
+HipOAreplacement parent pigean_portal__cfde_2026_11_24
+
+HiptoHeight class trait
+HiptoHeight parent pigean_portal__cfde_2026_11_24
+
+His class trait
+His parent pigean_portal__cfde_2026_11_24
+
+HmPerc class trait
+HmPerc parent pigean_portal__cfde_2026_11_24
+
+HospC19vAll class trait
+HospC19vAll parent pigean_portal__cfde_2026_11_24
+
+HospvNonHospC19 class trait
+HospvNonHospC19 parent pigean_portal__cfde_2026_11_24
+
+HumerusToHeight class trait
+HumerusToHeight parent pigean_portal__cfde_2026_11_24
+
+HyinPD class trait
+HyinPD parent pigean_portal__cfde_2026_11_24
+
+HyperChol class trait
+HyperChol parent pigean_portal__cfde_2026_11_24
+
+HyperParaThyroid class trait
+HyperParaThyroid parent pigean_portal__cfde_2026_11_24
+
+HyperThyroid class trait
+HyperThyroid parent pigean_portal__cfde_2026_11_24
+
+Hyperaldosteronism class trait
+Hyperaldosteronism parent pigean_portal__cfde_2026_11_24
+
+Hyperglyceridemia class trait
+Hyperglyceridemia parent pigean_portal__cfde_2026_11_24
+
+Hyperlipidemia class trait
+Hyperlipidemia parent pigean_portal__cfde_2026_11_24
+
+HypertensiveCKD class trait
+HypertensiveCKD parent pigean_portal__cfde_2026_11_24
+
+HypertrophicCardiomyopathy_MTAG_ class trait
+HypertrophicCardiomyopathy_MTAG_ parent pigean_portal__cfde_2026_11_24
+
+HypertrophicCardiomyopathy_sarcomere_neg_ class trait
+HypertrophicCardiomyopathy_sarcomere_neg_ parent pigean_portal__cfde_2026_11_24
+
+HypertrophicCardiomyopathy_sarcomere_pos_ class trait
+HypertrophicCardiomyopathy_sarcomere_pos_ parent pigean_portal__cfde_2026_11_24
+
+HypoThyroidNOS class trait
+HypoThyroidNOS parent pigean_portal__cfde_2026_11_24
+
+Hypotension class trait
+Hypotension parent pigean_portal__cfde_2026_11_24
+
+IA class trait
+IA parent pigean_portal__cfde_2026_11_24
+
+IAU class trait
+IAU parent pigean_portal__cfde_2026_11_24
+
+IBD class trait
+IBD parent pigean_portal__cfde_2026_11_24
+
+IBS class trait
+IBS parent pigean_portal__cfde_2026_11_24
+
+IBS_add class trait
+IBS_add parent pigean_portal__cfde_2026_11_24
+
+IBS_het class trait
+IBS_het parent pigean_portal__cfde_2026_11_24
+
+ICP class trait
+ICP parent pigean_portal__cfde_2026_11_24
+
+IDD class trait
+IDD parent pigean_portal__cfde_2026_11_24
+
+IDLchol class trait
+IDLchol parent pigean_portal__cfde_2026_11_24
+
+IDLpart class trait
+IDLpart parent pigean_portal__cfde_2026_11_24
+
+IGF1 class trait
+IGF1 parent pigean_portal__cfde_2026_11_24
+
+IGI class trait
+IGI parent pigean_portal__cfde_2026_11_24
+
+INL class trait
+INL parent pigean_portal__cfde_2026_11_24
+
+IPF class trait
+IPF parent pigean_portal__cfde_2026_11_24
+
+IPFSurvival class trait
+IPFSurvival parent pigean_portal__cfde_2026_11_24
+
+IPL class trait
+IPL parent pigean_portal__cfde_2026_11_24
+
+ISI class trait
+ISI parent pigean_portal__cfde_2026_11_24
+
+ISIadjAgeSex class trait
+ISIadjAgeSex parent pigean_portal__cfde_2026_11_24
+
+ISIadjAgeSexBMI class trait
+ISIadjAgeSexBMI parent pigean_portal__cfde_2026_11_24
+
+ISIadjBMIinterGenoBMI class trait
+ISIadjBMIinterGenoBMI parent pigean_portal__cfde_2026_11_24
+
+ISR class trait
+ISR parent pigean_portal__cfde_2026_11_24
+
+ISRadjBMI class trait
+ISRadjBMI parent pigean_portal__cfde_2026_11_24
+
+ISen class trait
+ISen parent pigean_portal__cfde_2026_11_24
+
+ISenBMI class trait
+ISenBMI parent pigean_portal__cfde_2026_11_24
+
+ISthickness class trait
+ISthickness parent pigean_portal__cfde_2026_11_24
+
+IVS class trait
+IVS parent pigean_portal__cfde_2026_11_24
+
+IgAN class trait
+IgAN parent pigean_portal__cfde_2026_11_24
+
+Ile class trait
+Ile parent pigean_portal__cfde_2026_11_24
+
+ImReticuloFrac class trait
+ImReticuloFrac parent pigean_portal__cfde_2026_11_24
+
+Incr30 class trait
+Incr30 parent pigean_portal__cfde_2026_11_24
+
+InfantHeadCir class trait
+InfantHeadCir parent pigean_portal__cfde_2026_11_24
+
+Ins30adjBMI class trait
+Ins30adjBMI parent pigean_portal__cfde_2026_11_24
+
+Insomnia class trait
+Insomnia parent pigean_portal__cfde_2026_11_24
+
+Insomnia_cont class trait
+Insomnia_cont parent pigean_portal__cfde_2026_11_24
+
+Insp_Histo_Mode class trait
+Insp_Histo_Mode parent pigean_portal__cfde_2026_11_24
+
+Insp_LAA950_LLL class trait
+Insp_LAA950_LLL parent pigean_portal__cfde_2026_11_24
+
+Insp_LAA950_LUL class trait
+Insp_LAA950_LUL parent pigean_portal__cfde_2026_11_24
+
+Insp_LAA950_RLL class trait
+Insp_LAA950_RLL parent pigean_portal__cfde_2026_11_24
+
+Insp_LAA950_RML class trait
+Insp_LAA950_RML parent pigean_portal__cfde_2026_11_24
+
+Insp_LAA950_RUL class trait
+Insp_LAA950_RUL parent pigean_portal__cfde_2026_11_24
+
+Insp_Lung_Mass class trait
+Insp_Lung_Mass parent pigean_portal__cfde_2026_11_24
+
+Insp_Skewness class trait
+Insp_Skewness parent pigean_portal__cfde_2026_11_24
+
+Insulin_120_min_OGTT_metformin class trait
+Insulin_120_min_OGTT_metformin parent pigean_portal__cfde_2026_11_24
+
+Insulin_120_min_glipizide class trait
+Insulin_120_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Insulin_180_min_glipizide class trait
+Insulin_180_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Insulin_240_min_glipizide class trait
+Insulin_240_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Insulin_30_min_OGTT_metformin class trait
+Insulin_30_min_OGTT_metformin parent pigean_portal__cfde_2026_11_24
+
+Insulin_30_min_glipizide class trait
+Insulin_30_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Insulin_60_min_OGTT_metformin class trait
+Insulin_60_min_OGTT_metformin parent pigean_portal__cfde_2026_11_24
+
+Insulin_60_min_glipizide class trait
+Insulin_60_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Insulin_90_min_glipizide class trait
+Insulin_90_min_glipizide parent pigean_portal__cfde_2026_11_24
+
+Intelligence class trait
+Intelligence parent pigean_portal__cfde_2026_11_24
+
+IntensityStdDev_Ex class trait
+IntensityStdDev_Ex parent pigean_portal__cfde_2026_11_24
+
+IntensityStdDev_In class trait
+IntensityStdDev_In parent pigean_portal__cfde_2026_11_24
+
+IntertrochArea class trait
+IntertrochArea parent pigean_portal__cfde_2026_11_24
+
+IntestinalMalabsorption class trait
+IntestinalMalabsorption parent pigean_portal__cfde_2026_11_24
+
+IntracerebralHemorrhage class trait
+IntracerebralHemorrhage parent pigean_portal__cfde_2026_11_24
+
+Intraocular_pressure class trait
+Intraocular_pressure parent pigean_portal__cfde_2026_11_24
+
+Iron class trait
+Iron parent pigean_portal__cfde_2026_11_24
+
+IronDef class trait
+IronDef parent pigean_portal__cfde_2026_11_24
+
+IronDefAnemias class trait
+IronDefAnemias parent pigean_portal__cfde_2026_11_24
+
+IronDef_add class trait
+IronDef_add parent pigean_portal__cfde_2026_11_24
+
+IronDef_dom class trait
+IronDef_dom parent pigean_portal__cfde_2026_11_24
+
+IronDef_het class trait
+IronDef_het parent pigean_portal__cfde_2026_11_24
+
+IronDef_rec class trait
+IronDef_rec parent pigean_portal__cfde_2026_11_24
+
+JointPain class trait
+JointPain parent pigean_portal__cfde_2026_11_24
+
+K class trait
+K parent pigean_portal__cfde_2026_11_24
+
+KExcretion class trait
+KExcretion parent pigean_portal__cfde_2026_11_24
+
+KNEEOA class trait
+KNEEOA parent pigean_portal__cfde_2026_11_24
+
+KSD class trait
+KSD parent pigean_portal__cfde_2026_11_24
+
+Keloid class trait
+Keloid parent pigean_portal__cfde_2026_11_24
+
+Keratoconus class trait
+Keratoconus parent pigean_portal__cfde_2026_11_24
+
+KidneyCancer class trait
+KidneyCancer parent pigean_portal__cfde_2026_11_24
+
+Kidney_volume class trait
+Kidney_volume parent pigean_portal__cfde_2026_11_24
+
+KleineLevinSynd class trait
+KleineLevinSynd parent pigean_portal__cfde_2026_11_24
+
+KneeOAnoreplacement class trait
+KneeOAnoreplacement parent pigean_portal__cfde_2026_11_24
+
+KneeOAreplacement class trait
+KneeOAreplacement parent pigean_portal__cfde_2026_11_24
+
+KneePain class trait
+KneePain parent pigean_portal__cfde_2026_11_24
+
+LAAEF class trait
+LAAEF parent pigean_portal__cfde_2026_11_24
+
+LADA class trait
+LADA parent pigean_portal__cfde_2026_11_24
+
+LAPEF class trait
+LAPEF parent pigean_portal__cfde_2026_11_24
+
+LATEF class trait
+LATEF parent pigean_portal__cfde_2026_11_24
+
+LAmax class trait
+LAmax parent pigean_portal__cfde_2026_11_24
+
+LAmin class trait
+LAmin parent pigean_portal__cfde_2026_11_24
+
+LBD class trait
+LBD parent pigean_portal__cfde_2026_11_24
+
+LDH class trait
+LDH parent pigean_portal__cfde_2026_11_24
+
+LDH_M51_1 class trait
+LDH_M51_1 parent pigean_portal__cfde_2026_11_24
+
+LDH_Surgical class trait
+LDH_Surgical parent pigean_portal__cfde_2026_11_24
+
+LDL class trait
+LDL parent pigean_portal__cfde_2026_11_24
+
+LDL_CALCULATED class trait
+LDL_CALCULATED parent pigean_portal__cfde_2026_11_24
+
+LEP class trait
+LEP parent pigean_portal__cfde_2026_11_24
+
+LEPadjBMI class trait
+LEPadjBMI parent pigean_portal__cfde_2026_11_24
+
+LFR class trait
+LFR parent pigean_portal__cfde_2026_11_24
+
+LPDFF class trait
+LPDFF parent pigean_portal__cfde_2026_11_24
+
+LSBMD class trait
+LSBMD parent pigean_portal__cfde_2026_11_24
+
+LSarea class trait
+LSarea parent pigean_portal__cfde_2026_11_24
+
+LTL class trait
+LTL parent pigean_portal__cfde_2026_11_24
+
+LVC class trait
+LVC parent pigean_portal__cfde_2026_11_24
+
+LVDD class trait
+LVDD parent pigean_portal__cfde_2026_11_24
+
+LVEDA class trait
+LVEDA parent pigean_portal__cfde_2026_11_24
+
+LVEDAL class trait
+LVEDAL parent pigean_portal__cfde_2026_11_24
+
+LVEDAS class trait
+LVEDAS parent pigean_portal__cfde_2026_11_24
+
+LVEDI class trait
+LVEDI parent pigean_portal__cfde_2026_11_24
+
+LVEDIL class trait
+LVEDIL parent pigean_portal__cfde_2026_11_24
+
+LVEDIS class trait
+LVEDIS parent pigean_portal__cfde_2026_11_24
+
+LVEDV class trait
+LVEDV parent pigean_portal__cfde_2026_11_24
+
+LVEDVI class trait
+LVEDVI parent pigean_portal__cfde_2026_11_24
+
+LVEF class trait
+LVEF parent pigean_portal__cfde_2026_11_24
+
+LVESA class trait
+LVESA parent pigean_portal__cfde_2026_11_24
+
+LVESAL class trait
+LVESAL parent pigean_portal__cfde_2026_11_24
+
+LVESAS class trait
+LVESAS parent pigean_portal__cfde_2026_11_24
+
+LVESI class trait
+LVESI parent pigean_portal__cfde_2026_11_24
+
+LVESIL class trait
+LVESIL parent pigean_portal__cfde_2026_11_24
+
+LVESIS class trait
+LVESIS parent pigean_portal__cfde_2026_11_24
+
+LVESV class trait
+LVESV parent pigean_portal__cfde_2026_11_24
+
+LVESVI class trait
+LVESVI parent pigean_portal__cfde_2026_11_24
+
+LVGCS class trait
+LVGCS parent pigean_portal__cfde_2026_11_24
+
+LVGLS class trait
+LVGLS parent pigean_portal__cfde_2026_11_24
+
+LVGRS class trait
+LVGRS parent pigean_portal__cfde_2026_11_24
+
+LVSD class trait
+LVSD parent pigean_portal__cfde_2026_11_24
+
+LVWTMax class trait
+LVWTMax parent pigean_portal__cfde_2026_11_24
+
+LVWTMean class trait
+LVWTMean parent pigean_portal__cfde_2026_11_24
+
+LVmass class trait
+LVmass parent pigean_portal__cfde_2026_11_24
+
+LVmass-EDVratio class trait
+LVmass-EDVratio parent pigean_portal__cfde_2026_11_24
+
+LVmassBSAindexed class trait
+LVmassBSAindexed parent pigean_portal__cfde_2026_11_24
+
+LVmassIndex class trait
+LVmassIndex parent pigean_portal__cfde_2026_11_24
+
+LacunarStroke class trait
+LacunarStroke parent pigean_portal__cfde_2026_11_24
+
+LateAD class trait
+LateAD parent pigean_portal__cfde_2026_11_24
+
+LegPain class trait
+LegPain parent pigean_portal__cfde_2026_11_24
+
+Leg_length class trait
+Leg_length parent pigean_portal__cfde_2026_11_24
+
+Leu class trait
+Leu parent pigean_portal__cfde_2026_11_24
+
+Lifespan class trait
+Lifespan parent pigean_portal__cfde_2026_11_24
+
+Light_Exposure_Summer class trait
+Light_Exposure_Summer parent pigean_portal__cfde_2026_11_24
+
+Light_Exposure_Winter class trait
+Light_Exposure_Winter parent pigean_portal__cfde_2026_11_24
+
+LipoproteinA class trait
+LipoproteinA parent pigean_portal__cfde_2026_11_24
+
+LiverAge class trait
+LiverAge parent pigean_portal__cfde_2026_11_24
+
+LiverFat class trait
+LiverFat parent pigean_portal__cfde_2026_11_24
+
+LiverIron class trait
+LiverIron parent pigean_portal__cfde_2026_11_24
+
+Liver_volume class trait
+Liver_volume parent pigean_portal__cfde_2026_11_24
+
+LocalHistogramMildCentilobular class trait
+LocalHistogramMildCentilobular parent pigean_portal__cfde_2026_11_24
+
+LocalHistogramModerateCentilobular class trait
+LocalHistogramModerateCentilobular parent pigean_portal__cfde_2026_11_24
+
+LocalHistogramNormal class trait
+LocalHistogramNormal parent pigean_portal__cfde_2026_11_24
+
+LocalHistogramSevereCentilobular class trait
+LocalHistogramSevereCentilobular parent pigean_portal__cfde_2026_11_24
+
+LocalOA class trait
+LocalOA parent pigean_portal__cfde_2026_11_24
+
+LocalSystemicLupus class trait
+LocalSystemicLupus parent pigean_portal__cfde_2026_11_24
+
+LongCovid_BroadCase_BroadControl class trait
+LongCovid_BroadCase_BroadControl parent pigean_portal__cfde_2026_11_24
+
+LongCovid_StrictCase_BroadControl class trait
+LongCovid_StrictCase_BroadControl parent pigean_portal__cfde_2026_11_24
+
+LongQT class trait
+LongQT parent pigean_portal__cfde_2026_11_24
+
+LowGripEWGSOP class trait
+LowGripEWGSOP parent pigean_portal__cfde_2026_11_24
+
+LowGripFNIH class trait
+LowGripFNIH parent pigean_portal__cfde_2026_11_24
+
+LumbarDiscHerniation class trait
+LumbarDiscHerniation parent pigean_portal__cfde_2026_11_24
+
+LungCancer class trait
+LungCancer parent pigean_portal__cfde_2026_11_24
+
+Lung_disease_inCF class trait
+Lung_disease_inCF parent pigean_portal__cfde_2026_11_24
+
+Lung_volume class trait
+Lung_volume parent pigean_portal__cfde_2026_11_24
+
+Luteinizing_hormone_levels class trait
+Luteinizing_hormone_levels parent pigean_portal__cfde_2026_11_24
+
+LymphLeukemia class trait
+LymphLeukemia parent pigean_portal__cfde_2026_11_24
+
+LymphoCount class trait
+LymphoCount parent pigean_portal__cfde_2026_11_24
+
+LymphoPerc class trait
+LymphoPerc parent pigean_portal__cfde_2026_11_24
+
+MA class trait
+MA parent pigean_portal__cfde_2026_11_24
+
+MAP class trait
+MAP parent pigean_portal__cfde_2026_11_24
+
+MA_DM class trait
+MA_DM parent pigean_portal__cfde_2026_11_24
+
+MA_T1D class trait
+MA_T1D parent pigean_portal__cfde_2026_11_24
+
+MA_T2D class trait
+MA_T2D parent pigean_portal__cfde_2026_11_24
+
+MAadjHbA1cBMI_T1D class trait
+MAadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+MBW class trait
+MBW parent pigean_portal__cfde_2026_11_24
+
+MBWadjFGen class trait
+MBWadjFGen parent pigean_portal__cfde_2026_11_24
+
+MDD class trait
+MDD parent pigean_portal__cfde_2026_11_24
+
+MDD1_depressed class trait
+MDD1_depressed parent pigean_portal__cfde_2026_11_24
+
+MDD2_anhedonia class trait
+MDD2_anhedonia parent pigean_portal__cfde_2026_11_24
+
+MDD3a_weightLoss class trait
+MDD3a_weightLoss parent pigean_portal__cfde_2026_11_24
+
+MDD3b_weightGain class trait
+MDD3b_weightGain parent pigean_portal__cfde_2026_11_24
+
+MDD4a_sleepProb class trait
+MDD4a_sleepProb parent pigean_portal__cfde_2026_11_24
+
+MDD4b_sleepMore class trait
+MDD4b_sleepMore parent pigean_portal__cfde_2026_11_24
+
+MDD5a_psychomotorFast class trait
+MDD5a_psychomotorFast parent pigean_portal__cfde_2026_11_24
+
+MDD5b_psychomotorSlow class trait
+MDD5b_psychomotorSlow parent pigean_portal__cfde_2026_11_24
+
+MDD6_fatigue class trait
+MDD6_fatigue parent pigean_portal__cfde_2026_11_24
+
+MDD7_worthless class trait
+MDD7_worthless parent pigean_portal__cfde_2026_11_24
+
+MDD8_concentration class trait
+MDD8_concentration parent pigean_portal__cfde_2026_11_24
+
+MDD_NoTrauma class trait
+MDD_NoTrauma parent pigean_portal__cfde_2026_11_24
+
+MDD_add class trait
+MDD_add parent pigean_portal__cfde_2026_11_24
+
+MDD_broad class trait
+MDD_broad parent pigean_portal__cfde_2026_11_24
+
+MDD_dom class trait
+MDD_dom parent pigean_portal__cfde_2026_11_24
+
+MDD_het class trait
+MDD_het parent pigean_portal__cfde_2026_11_24
+
+MDD_probable class trait
+MDD_probable parent pigean_portal__cfde_2026_11_24
+
+MDD_rec class trait
+MDD_rec parent pigean_portal__cfde_2026_11_24
+
+MDD_symptoms class trait
+MDD_symptoms parent pigean_portal__cfde_2026_11_24
+
+MDinCSVD class trait
+MDinCSVD parent pigean_portal__cfde_2026_11_24
+
+MI class trait
+MI parent pigean_portal__cfde_2026_11_24
+
+MMSEinPD class trait
+MMSEinPD parent pigean_portal__cfde_2026_11_24
+
+MN class trait
+MN parent pigean_portal__cfde_2026_11_24
+
+MOCAinPD class trait
+MOCAinPD parent pigean_portal__cfde_2026_11_24
+
+MP class trait
+MP parent pigean_portal__cfde_2026_11_24
+
+MUFA class trait
+MUFA parent pigean_portal__cfde_2026_11_24
+
+MVP class trait
+MVP parent pigean_portal__cfde_2026_11_24
+
+MacroInT2D class trait
+MacroInT2D parent pigean_portal__cfde_2026_11_24
+
+Macroalbuminuria_DM class trait
+Macroalbuminuria_DM parent pigean_portal__cfde_2026_11_24
+
+MacrovControl class trait
+MacrovControl parent pigean_portal__cfde_2026_11_24
+
+MacrovControl_T1D class trait
+MacrovControl_T1D parent pigean_portal__cfde_2026_11_24
+
+MacrovControladjHbA1cBMI_T1D class trait
+MacrovControladjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+MajorAnxietyDisorders class trait
+MajorAnxietyDisorders parent pigean_portal__cfde_2026_11_24
+
+Male_infertility class trait
+Male_infertility parent pigean_portal__cfde_2026_11_24
+
+Male_pattern_baldness class trait
+Male_pattern_baldness parent pigean_portal__cfde_2026_11_24
+
+MaternalLongevity_AtDeath class trait
+MaternalLongevity_AtDeath parent pigean_portal__cfde_2026_11_24
+
+MaternalLongevity_Attained class trait
+MaternalLongevity_Attained parent pigean_portal__cfde_2026_11_24
+
+Maternal_AD_history class trait
+Maternal_AD_history parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp class trait
+MeanAtten_Exp parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp_LLL class trait
+MeanAtten_Exp_LLL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp_LUL class trait
+MeanAtten_Exp_LUL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp_RLL class trait
+MeanAtten_Exp_RLL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp_RML class trait
+MeanAtten_Exp_RML parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Exp_RUL class trait
+MeanAtten_Exp_RUL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp class trait
+MeanAtten_Insp parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp_LLL class trait
+MeanAtten_Insp_LLL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp_LUL class trait
+MeanAtten_Insp_LUL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp_RLL class trait
+MeanAtten_Insp_RLL parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp_RML class trait
+MeanAtten_Insp_RML parent pigean_portal__cfde_2026_11_24
+
+MeanAtten_Insp_RUL class trait
+MeanAtten_Insp_RUL parent pigean_portal__cfde_2026_11_24
+
+MeanCorpHb class trait
+MeanCorpHb parent pigean_portal__cfde_2026_11_24
+
+MeanCorpHbConc class trait
+MeanCorpHbConc parent pigean_portal__cfde_2026_11_24
+
+MeanCorpVol class trait
+MeanCorpVol parent pigean_portal__cfde_2026_11_24
+
+MeanReticuloVol class trait
+MeanReticuloVol parent pigean_portal__cfde_2026_11_24
+
+MeanSleepDiurnalInactRN class trait
+MeanSleepDiurnalInactRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepDurationRN class trait
+MeanSleepDurationRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepEfficiencyRN class trait
+MeanSleepEfficiencyRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepL5timeRN class trait
+MeanSleepL5timeRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepM10timeRN class trait
+MeanSleepM10timeRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepMidPointRN class trait
+MeanSleepMidPointRN parent pigean_portal__cfde_2026_11_24
+
+MeanSleepNumEpisodesRN class trait
+MeanSleepNumEpisodesRN parent pigean_portal__cfde_2026_11_24
+
+MeanSpheredVol class trait
+MeanSpheredVol parent pigean_portal__cfde_2026_11_24
+
+Meconium_ileus_inCF class trait
+Meconium_ileus_inCF parent pigean_portal__cfde_2026_11_24
+
+Melanoma class trait
+Melanoma parent pigean_portal__cfde_2026_11_24
+
+MemPerformance class trait
+MemPerformance parent pigean_portal__cfde_2026_11_24
+
+Men class trait
+Men parent pigean_portal__cfde_2026_11_24
+
+MetS class trait
+MetS parent pigean_portal__cfde_2026_11_24
+
+MetS_cont class trait
+MetS_cont parent pigean_portal__cfde_2026_11_24
+
+MgMeasure class trait
+MgMeasure parent pigean_portal__cfde_2026_11_24
+
+MicroInT2D class trait
+MicroInT2D parent pigean_portal__cfde_2026_11_24
+
+Migraine class trait
+Migraine parent pigean_portal__cfde_2026_11_24
+
+MonoCount class trait
+MonoCount parent pigean_portal__cfde_2026_11_24
+
+MonoPerc class trait
+MonoPerc parent pigean_portal__cfde_2026_11_24
+
+MultipleSclerosis class trait
+MultipleSclerosis parent pigean_portal__cfde_2026_11_24
+
+Myasthenia_gravis class trait
+Myasthenia_gravis parent pigean_portal__cfde_2026_11_24
+
+Myasthenia_gravis_early class trait
+Myasthenia_gravis_early parent pigean_portal__cfde_2026_11_24
+
+Myasthenia_gravis_late class trait
+Myasthenia_gravis_late parent pigean_portal__cfde_2026_11_24
+
+MyocardialT1 class trait
+MyocardialT1 parent pigean_portal__cfde_2026_11_24
+
+NAFLD class trait
+NAFLD parent pigean_portal__cfde_2026_11_24
+
+NAFLDfibrosis class trait
+NAFLDfibrosis parent pigean_portal__cfde_2026_11_24
+
+NAFLDinT2D class trait
+NAFLDinT2D parent pigean_portal__cfde_2026_11_24
+
+NAFLDscore class trait
+NAFLDscore parent pigean_portal__cfde_2026_11_24
+
+NAP class trait
+NAP parent pigean_portal__cfde_2026_11_24
+
+ND class trait
+ND parent pigean_portal__cfde_2026_11_24
+
+NICM class trait
+NICM parent pigean_portal__cfde_2026_11_24
+
+NPDRvNoDR class trait
+NPDRvNoDR parent pigean_portal__cfde_2026_11_24
+
+NPDRvNoDRwDoD class trait
+NPDRvNoDRwDoD parent pigean_portal__cfde_2026_11_24
+
+NT1 class trait
+NT1 parent pigean_portal__cfde_2026_11_24
+
+NaExcretion class trait
+NaExcretion parent pigean_portal__cfde_2026_11_24
+
+Nap_Duration class trait
+Nap_Duration parent pigean_portal__cfde_2026_11_24
+
+Nap_Frequency class trait
+Nap_Frequency parent pigean_portal__cfde_2026_11_24
+
+Naps class trait
+Naps parent pigean_portal__cfde_2026_11_24
+
+NeckCir class trait
+NeckCir parent pigean_portal__cfde_2026_11_24
+
+NeckCiradjBMI class trait
+NeckCiradjBMI parent pigean_portal__cfde_2026_11_24
+
+Neuromyelitis_optica class trait
+Neuromyelitis_optica parent pigean_portal__cfde_2026_11_24
+
+Neuromyelitis_optica_IgG_minus class trait
+Neuromyelitis_optica_IgG_minus parent pigean_portal__cfde_2026_11_24
+
+Neuromyelitis_optica_IgG_plus class trait
+Neuromyelitis_optica_IgG_plus parent pigean_portal__cfde_2026_11_24
+
+Neuropathy class trait
+Neuropathy parent pigean_portal__cfde_2026_11_24
+
+NeuropathyinT2D class trait
+NeuropathyinT2D parent pigean_portal__cfde_2026_11_24
+
+Neuroticism class trait
+Neuroticism parent pigean_portal__cfde_2026_11_24
+
+Neuroticism_DepressedAffect class trait
+Neuroticism_DepressedAffect parent pigean_portal__cfde_2026_11_24
+
+Neuroticism_Worry class trait
+Neuroticism_Worry parent pigean_portal__cfde_2026_11_24
+
+NeutCount class trait
+NeutCount parent pigean_portal__cfde_2026_11_24
+
+NeutroPerc class trait
+NeutroPerc parent pigean_portal__cfde_2026_11_24
+
+Nightmare_Disorder class trait
+Nightmare_Disorder parent pigean_portal__cfde_2026_11_24
+
+Nightmares class trait
+Nightmares parent pigean_portal__cfde_2026_11_24
+
+NonHodgkinsLymphoma class trait
+NonHodgkinsLymphoma parent pigean_portal__cfde_2026_11_24
+
+NonInfectiveGastroenteritisColitis class trait
+NonInfectiveGastroenteritisColitis parent pigean_portal__cfde_2026_11_24
+
+NucleatedRedCount class trait
+NucleatedRedCount parent pigean_portal__cfde_2026_11_24
+
+NucleatedRedPerc class trait
+NucleatedRedPerc parent pigean_portal__cfde_2026_11_24
+
+OCD class trait
+OCD parent pigean_portal__cfde_2026_11_24
+
+OCPCancer class trait
+OCPCancer parent pigean_portal__cfde_2026_11_24
+
+OCS class trait
+OCS parent pigean_portal__cfde_2026_11_24
+
+ONLthickness class trait
+ONLthickness parent pigean_portal__cfde_2026_11_24
+
+OPL class trait
+OPL parent pigean_portal__cfde_2026_11_24
+
+OPLL class trait
+OPLL parent pigean_portal__cfde_2026_11_24
+
+OSA class trait
+OSA parent pigean_portal__cfde_2026_11_24
+
+OSthickness class trait
+OSthickness parent pigean_portal__cfde_2026_11_24
+
+Obesity class trait
+Obesity parent pigean_portal__cfde_2026_11_24
+
+ObstructiveApnea class trait
+ObstructiveApnea parent pigean_portal__cfde_2026_11_24
+
+OcculusionCerebralArteries class trait
+OcculusionCerebralArteries parent pigean_portal__cfde_2026_11_24
+
+OcularVD class trait
+OcularVD parent pigean_portal__cfde_2026_11_24
+
+OpenAngleGlaucoma class trait
+OpenAngleGlaucoma parent pigean_portal__cfde_2026_11_24
+
+Optic_cup_area class trait
+Optic_cup_area parent pigean_portal__cfde_2026_11_24
+
+Optic_disc_area class trait
+Optic_disc_area parent pigean_portal__cfde_2026_11_24
+
+Osteoporosis class trait
+Osteoporosis parent pigean_portal__cfde_2026_11_24
+
+Osteoporosis_add class trait
+Osteoporosis_add parent pigean_portal__cfde_2026_11_24
+
+Osteoporosis_dom class trait
+Osteoporosis_dom parent pigean_portal__cfde_2026_11_24
+
+Osteoporosis_het class trait
+Osteoporosis_het parent pigean_portal__cfde_2026_11_24
+
+Osteoporosis_rec class trait
+Osteoporosis_rec parent pigean_portal__cfde_2026_11_24
+
+Other_intervertebral_disk_disorders class trait
+Other_intervertebral_disk_disorders parent pigean_portal__cfde_2026_11_24
+
+OvarianCancer class trait
+OvarianCancer parent pigean_portal__cfde_2026_11_24
+
+P class trait
+P parent pigean_portal__cfde_2026_11_24
+
+PACG class trait
+PACG parent pigean_portal__cfde_2026_11_24
+
+PAD class trait
+PAD parent pigean_portal__cfde_2026_11_24
+
+PAD_eversmk class trait
+PAD_eversmk parent pigean_portal__cfde_2026_11_24
+
+PAD_neversmk class trait
+PAD_neversmk parent pigean_portal__cfde_2026_11_24
+
+PADinT2D class trait
+PADinT2D parent pigean_portal__cfde_2026_11_24
+
+PADnonT2D class trait
+PADnonT2D parent pigean_portal__cfde_2026_11_24
+
+PAH class trait
+PAH parent pigean_portal__cfde_2026_11_24
+
+PAStraincm class trait
+PAStraincm parent pigean_portal__cfde_2026_11_24
+
+PA_A_Ratio class trait
+PA_A_Ratio parent pigean_portal__cfde_2026_11_24
+
+PA_AvgAcc class trait
+PA_AvgAcc parent pigean_portal__cfde_2026_11_24
+
+PA_Diameter class trait
+PA_Diameter parent pigean_portal__cfde_2026_11_24
+
+PA_FracTimeAcc425MG class trait
+PA_FracTimeAcc425MG parent pigean_portal__cfde_2026_11_24
+
+PA_ModerateDur class trait
+PA_ModerateDur parent pigean_portal__cfde_2026_11_24
+
+PA_ModerateToVigorous class trait
+PA_ModerateToVigorous parent pigean_portal__cfde_2026_11_24
+
+PA_OverallDur class trait
+PA_OverallDur parent pigean_portal__cfde_2026_11_24
+
+PA_SedentaryDur class trait
+PA_SedentaryDur parent pigean_portal__cfde_2026_11_24
+
+PA_UsualWalkPace class trait
+PA_UsualWalkPace parent pigean_portal__cfde_2026_11_24
+
+PA_Vigorous class trait
+PA_Vigorous parent pigean_portal__cfde_2026_11_24
+
+PAcm class trait
+PAcm parent pigean_portal__cfde_2026_11_24
+
+PAcmInd class trait
+PAcmInd parent pigean_portal__cfde_2026_11_24
+
+PAtoARdia class trait
+PAtoARdia parent pigean_portal__cfde_2026_11_24
+
+PAtoARsys class trait
+PAtoARsys parent pigean_portal__cfde_2026_11_24
+
+PBC class trait
+PBC parent pigean_portal__cfde_2026_11_24
+
+PC class trait
+PC parent pigean_portal__cfde_2026_11_24
+
+PC1diet class trait
+PC1diet parent pigean_portal__cfde_2026_11_24
+
+PC3diet class trait
+PC3diet parent pigean_portal__cfde_2026_11_24
+
+PCOS class trait
+PCOS parent pigean_portal__cfde_2026_11_24
+
+PCOSadjAge class trait
+PCOSadjAge parent pigean_portal__cfde_2026_11_24
+
+PDAgeO class trait
+PDAgeO parent pigean_portal__cfde_2026_11_24
+
+PDAndFirstDegree class trait
+PDAndFirstDegree parent pigean_portal__cfde_2026_11_24
+
+PDRvNoDRwDoD class trait
+PDRvNoDRwDoD parent pigean_portal__cfde_2026_11_24
+
+PDRvNoPDR class trait
+PDRvNoPDR parent pigean_portal__cfde_2026_11_24
+
+PDRvNoPDRwDoD class trait
+PDRvNoPDRwDoD parent pigean_portal__cfde_2026_11_24
+
+PEAK class trait
+PEAK parent pigean_portal__cfde_2026_11_24
+
+PEAKadjBMInSI class trait
+PEAKadjBMInSI parent pigean_portal__cfde_2026_11_24
+
+PEAKadjSI class trait
+PEAKadjSI parent pigean_portal__cfde_2026_11_24
+
+PEF class trait
+PEF parent pigean_portal__cfde_2026_11_24
+
+PI class trait
+PI parent pigean_portal__cfde_2026_11_24
+
+PIadjBMI class trait
+PIadjBMI parent pigean_portal__cfde_2026_11_24
+
+POAG class trait
+POAG parent pigean_portal__cfde_2026_11_24
+
+PPD class trait
+PPD parent pigean_portal__cfde_2026_11_24
+
+PPH class trait
+PPH parent pigean_portal__cfde_2026_11_24
+
+PPHAtony class trait
+PPHAtony parent pigean_portal__cfde_2026_11_24
+
+PPHRetainedPlacenta class trait
+PPHRetainedPlacenta parent pigean_portal__cfde_2026_11_24
+
+PRI class trait
+PRI parent pigean_portal__cfde_2026_11_24
+
+PRM_pct_airtrapping class trait
+PRM_pct_airtrapping parent pigean_portal__cfde_2026_11_24
+
+PRM_pct_emphysema class trait
+PRM_pct_emphysema parent pigean_portal__cfde_2026_11_24
+
+PRM_pct_normal class trait
+PRM_pct_normal parent pigean_portal__cfde_2026_11_24
+
+PRM_pct_other class trait
+PRM_pct_other parent pigean_portal__cfde_2026_11_24
+
+PS class trait
+PS parent pigean_portal__cfde_2026_11_24
+
+PSC class trait
+PSC parent pigean_portal__cfde_2026_11_24
+
+PSMR class trait
+PSMR parent pigean_portal__cfde_2026_11_24
+
+PSQI_Score class trait
+PSQI_Score parent pigean_portal__cfde_2026_11_24
+
+PTINR class trait
+PTINR parent pigean_portal__cfde_2026_11_24
+
+PTMFI class trait
+PTMFI parent pigean_portal__cfde_2026_11_24
+
+PTMV class trait
+PTMV parent pigean_portal__cfde_2026_11_24
+
+PTSD class trait
+PTSD parent pigean_portal__cfde_2026_11_24
+
+PTTime class trait
+PTTime parent pigean_portal__cfde_2026_11_24
+
+PUFA class trait
+PUFA parent pigean_portal__cfde_2026_11_24
+
+PUV class trait
+PUV parent pigean_portal__cfde_2026_11_24
+
+PVD class trait
+PVD parent pigean_portal__cfde_2026_11_24
+
+PVD_add class trait
+PVD_add parent pigean_portal__cfde_2026_11_24
+
+PVD_dom class trait
+PVD_dom parent pigean_portal__cfde_2026_11_24
+
+PVD_het class trait
+PVD_het parent pigean_portal__cfde_2026_11_24
+
+PVD_rec class trait
+PVD_rec parent pigean_portal__cfde_2026_11_24
+
+PVDinT2D class trait
+PVDinT2D parent pigean_portal__cfde_2026_11_24
+
+PWT class trait
+PWT parent pigean_portal__cfde_2026_11_24
+
+PaceMaker class trait
+PaceMaker parent pigean_portal__cfde_2026_11_24
+
+Palpitations class trait
+Palpitations parent pigean_portal__cfde_2026_11_24
+
+PanAge class trait
+PanAge parent pigean_portal__cfde_2026_11_24
+
+PancreasFat class trait
+PancreasFat parent pigean_portal__cfde_2026_11_24
+
+PancreasIron class trait
+PancreasIron parent pigean_portal__cfde_2026_11_24
+
+Pancreas_volume class trait
+Pancreas_volume parent pigean_portal__cfde_2026_11_24
+
+PancreaticCancer class trait
+PancreaticCancer parent pigean_portal__cfde_2026_11_24
+
+Panlobular class trait
+Panlobular parent pigean_portal__cfde_2026_11_24
+
+Parasomnia class trait
+Parasomnia parent pigean_portal__cfde_2026_11_24
+
+ParentalExtremeLongevity_10pct class trait
+ParentalExtremeLongevity_10pct parent pigean_portal__cfde_2026_11_24
+
+ParentalExtremeLongevity_95yrs class trait
+ParentalExtremeLongevity_95yrs parent pigean_portal__cfde_2026_11_24
+
+ParentalLifespan class trait
+ParentalLifespan parent pigean_portal__cfde_2026_11_24
+
+ParentalLongevity_AtDeath class trait
+ParentalLongevity_AtDeath parent pigean_portal__cfde_2026_11_24
+
+ParentalLongevity_Attained class trait
+ParentalLongevity_Attained parent pigean_portal__cfde_2026_11_24
+
+Parkinsons class trait
+Parkinsons parent pigean_portal__cfde_2026_11_24
+
+ParoxysmalTachycardia class trait
+ParoxysmalTachycardia parent pigean_portal__cfde_2026_11_24
+
+PaternalLongevity_AtDeath class trait
+PaternalLongevity_AtDeath parent pigean_portal__cfde_2026_11_24
+
+PaternalLongevity_Attained class trait
+PaternalLongevity_Attained parent pigean_portal__cfde_2026_11_24
+
+Paternal_AD_history class trait
+Paternal_AD_history parent pigean_portal__cfde_2026_11_24
+
+Pemphigus_and_emphigoid class trait
+Pemphigus_and_emphigoid parent pigean_portal__cfde_2026_11_24
+
+PepticUlcers class trait
+PepticUlcers parent pigean_portal__cfde_2026_11_24
+
+PepticUlcers_het class trait
+PepticUlcers_het parent pigean_portal__cfde_2026_11_24
+
+Perc15HUinCOPD class trait
+Perc15HUinCOPD parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp class trait
+Perc15_Exp parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp_LLL class trait
+Perc15_Exp_LLL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp_LUL class trait
+Perc15_Exp_LUL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp_RLL class trait
+Perc15_Exp_RLL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp_RML class trait
+Perc15_Exp_RML parent pigean_portal__cfde_2026_11_24
+
+Perc15_Exp_RUL class trait
+Perc15_Exp_RUL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp class trait
+Perc15_Insp parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp_LLL class trait
+Perc15_Insp_LLL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp_LUL class trait
+Perc15_Insp_LUL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp_RLL class trait
+Perc15_Insp_RLL parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp_RML class trait
+Perc15_Insp_RML parent pigean_portal__cfde_2026_11_24
+
+Perc15_Insp_RUL class trait
+Perc15_Insp_RUL parent pigean_portal__cfde_2026_11_24
+
+PercLAA950inCOPD class trait
+PercLAA950inCOPD parent pigean_portal__cfde_2026_11_24
+
+PerceivedAge class trait
+PerceivedAge parent pigean_portal__cfde_2026_11_24
+
+Phe class trait
+Phe parent pigean_portal__cfde_2026_11_24
+
+Phosphate class trait
+Phosphate parent pigean_portal__cfde_2026_11_24
+
+Pi10_SRWA_Thirona class trait
+Pi10_SRWA_Thirona parent pigean_portal__cfde_2026_11_24
+
+Pi10_SRWA_Vida class trait
+Pi10_SRWA_Vida parent pigean_portal__cfde_2026_11_24
+
+Pi10mminCOPD class trait
+Pi10mminCOPD parent pigean_portal__cfde_2026_11_24
+
+Pi15_SRWA_Vida class trait
+Pi15_SRWA_Vida parent pigean_portal__cfde_2026_11_24
+
+PituitaryHyper class trait
+PituitaryHyper parent pigean_portal__cfde_2026_11_24
+
+PituitaryHypo class trait
+PituitaryHypo parent pigean_portal__cfde_2026_11_24
+
+PlatCount class trait
+PlatCount parent pigean_portal__cfde_2026_11_24
+
+PlatCrit class trait
+PlatCrit parent pigean_portal__cfde_2026_11_24
+
+PlatDistWidth class trait
+PlatDistWidth parent pigean_portal__cfde_2026_11_24
+
+PlatVol class trait
+PlatVol parent pigean_portal__cfde_2026_11_24
+
+Pneumonia class trait
+Pneumonia parent pigean_portal__cfde_2026_11_24
+
+Pollinosis class trait
+Pollinosis parent pigean_portal__cfde_2026_11_24
+
+Polyarthrosis class trait
+Polyarthrosis parent pigean_portal__cfde_2026_11_24
+
+PolymyalgiaRheumatica class trait
+PolymyalgiaRheumatica parent pigean_portal__cfde_2026_11_24
+
+PolyneuropathyDM class trait
+PolyneuropathyDM parent pigean_portal__cfde_2026_11_24
+
+PosttermBirthFetal class trait
+PosttermBirthFetal parent pigean_portal__cfde_2026_11_24
+
+PreEclampsia class trait
+PreEclampsia parent pigean_portal__cfde_2026_11_24
+
+PredC19vPredNoC19 class trait
+PredC19vPredNoC19 parent pigean_portal__cfde_2026_11_24
+
+PretermBirthMaternal class trait
+PretermBirthMaternal parent pigean_portal__cfde_2026_11_24
+
+ProBNP class trait
+ProBNP parent pigean_portal__cfde_2026_11_24
+
+ProstateAntigen class trait
+ProstateAntigen parent pigean_portal__cfde_2026_11_24
+
+ProstateCancer class trait
+ProstateCancer parent pigean_portal__cfde_2026_11_24
+
+Prostatitis class trait
+Prostatitis parent pigean_portal__cfde_2026_11_24
+
+ProteinIntake class trait
+ProteinIntake parent pigean_portal__cfde_2026_11_24
+
+ProteinIntakeBMIadj class trait
+ProteinIntakeBMIadj parent pigean_portal__cfde_2026_11_24
+
+Psoriasis class trait
+Psoriasis parent pigean_portal__cfde_2026_11_24
+
+PsoriasisVulgaris class trait
+PsoriasisVulgaris parent pigean_portal__cfde_2026_11_24
+
+Psoriasis_SPA class trait
+Psoriasis_SPA parent pigean_portal__cfde_2026_11_24
+
+PsoriaticArthritis class trait
+PsoriaticArthritis parent pigean_portal__cfde_2026_11_24
+
+PsoriaticArthropathy class trait
+PsoriaticArthropathy parent pigean_portal__cfde_2026_11_24
+
+Psychiatric class trait
+Psychiatric parent pigean_portal__cfde_2026_11_24
+
+Psychiatric_add class trait
+Psychiatric_add parent pigean_portal__cfde_2026_11_24
+
+Psychiatric_dom class trait
+Psychiatric_dom parent pigean_portal__cfde_2026_11_24
+
+Psychiatric_het class trait
+Psychiatric_het parent pigean_portal__cfde_2026_11_24
+
+PulmonaryHT class trait
+PulmonaryHT parent pigean_portal__cfde_2026_11_24
+
+PulsePress class trait
+PulsePress parent pigean_portal__cfde_2026_11_24
+
+PulseRate class trait
+PulseRate parent pigean_portal__cfde_2026_11_24
+
+Pwave_duration class trait
+Pwave_duration parent pigean_portal__cfde_2026_11_24
+
+Pyr class trait
+Pyr parent pigean_portal__cfde_2026_11_24
+
+QRS class trait
+QRS parent pigean_portal__cfde_2026_11_24
+
+QTc class trait
+QTc parent pigean_portal__cfde_2026_11_24
+
+RA class trait
+RA parent pigean_portal__cfde_2026_11_24
+
+RAFAC class trait
+RAFAC parent pigean_portal__cfde_2026_11_24
+
+RAMaxArea class trait
+RAMaxArea parent pigean_portal__cfde_2026_11_24
+
+RAMaxAreaInd class trait
+RAMaxAreaInd parent pigean_portal__cfde_2026_11_24
+
+RAMinArea class trait
+RAMinArea parent pigean_portal__cfde_2026_11_24
+
+RAMinAreaInd class trait
+RAMinAreaInd parent pigean_portal__cfde_2026_11_24
+
+RAQT class trait
+RAQT parent pigean_portal__cfde_2026_11_24
+
+RBCDistWidth class trait
+RBCDistWidth parent pigean_portal__cfde_2026_11_24
+
+RBD class trait
+RBD parent pigean_portal__cfde_2026_11_24
+
+RLS class trait
+RLS parent pigean_portal__cfde_2026_11_24
+
+RNFL class trait
+RNFL parent pigean_portal__cfde_2026_11_24
+
+RPE class trait
+RPE parent pigean_portal__cfde_2026_11_24
+
+RRinterval class trait
+RRinterval parent pigean_portal__cfde_2026_11_24
+
+RVEDV class trait
+RVEDV parent pigean_portal__cfde_2026_11_24
+
+RVEDVI class trait
+RVEDVI parent pigean_portal__cfde_2026_11_24
+
+RVEDVtoLVEDV class trait
+RVEDVtoLVEDV parent pigean_portal__cfde_2026_11_24
+
+RVEF class trait
+RVEF parent pigean_portal__cfde_2026_11_24
+
+RVEFtoLVEF class trait
+RVEFtoLVEF parent pigean_portal__cfde_2026_11_24
+
+RVESV class trait
+RVESV parent pigean_portal__cfde_2026_11_24
+
+RVESVI class trait
+RVESVI parent pigean_portal__cfde_2026_11_24
+
+RVESVtoLVESV class trait
+RVESVtoLVESV parent pigean_portal__cfde_2026_11_24
+
+RVSV class trait
+RVSV parent pigean_portal__cfde_2026_11_24
+
+RVSVI class trait
+RVSVI parent pigean_portal__cfde_2026_11_24
+
+RVSVtoLVSV class trait
+RVSVtoLVSV parent pigean_portal__cfde_2026_11_24
+
+RWT class trait
+RWT parent pigean_portal__cfde_2026_11_24
+
+ReactionTime class trait
+ReactionTime parent pigean_portal__cfde_2026_11_24
+
+RectalCancer class trait
+RectalCancer parent pigean_portal__cfde_2026_11_24
+
+RecurrentStroke class trait
+RecurrentStroke parent pigean_portal__cfde_2026_11_24
+
+RedCount class trait
+RedCount parent pigean_portal__cfde_2026_11_24
+
+Remembering_Dreams class trait
+Remembering_Dreams parent pigean_portal__cfde_2026_11_24
+
+RemnantC class trait
+RemnantC parent pigean_portal__cfde_2026_11_24
+
+RestlessLegs class trait
+RestlessLegs parent pigean_portal__cfde_2026_11_24
+
+ReticuloCount class trait
+ReticuloCount parent pigean_portal__cfde_2026_11_24
+
+ReticuloPerc class trait
+ReticuloPerc parent pigean_portal__cfde_2026_11_24
+
+RhA class trait
+RhA parent pigean_portal__cfde_2026_11_24
+
+RheumatoidFactor class trait
+RheumatoidFactor parent pigean_portal__cfde_2026_11_24
+
+Rootcm class trait
+Rootcm parent pigean_portal__cfde_2026_11_24
+
+RootcmInd class trait
+RootcmInd parent pigean_portal__cfde_2026_11_24
+
+Rosacea class trait
+Rosacea parent pigean_portal__cfde_2026_11_24
+
+SAH class trait
+SAH parent pigean_portal__cfde_2026_11_24
+
+SAT class trait
+SAT parent pigean_portal__cfde_2026_11_24
+
+SBP class trait
+SBP parent pigean_portal__cfde_2026_11_24
+
+SCAD class trait
+SCAD parent pigean_portal__cfde_2026_11_24
+
+SCOOPvSTILTS class trait
+SCOOPvSTILTS parent pigean_portal__cfde_2026_11_24
+
+SCOOPvUKHLS class trait
+SCOOPvUKHLS parent pigean_portal__cfde_2026_11_24
+
+SCS class trait
+SCS parent pigean_portal__cfde_2026_11_24
+
+SCZ class trait
+SCZ parent pigean_portal__cfde_2026_11_24
+
+SCZMother class trait
+SCZMother parent pigean_portal__cfde_2026_11_24
+
+SCZSibling class trait
+SCZSibling parent pigean_portal__cfde_2026_11_24
+
+SEADLinPD class trait
+SEADLinPD parent pigean_portal__cfde_2026_11_24
+
+SEG class trait
+SEG parent pigean_portal__cfde_2026_11_24
+
+SFA class trait
+SFA parent pigean_portal__cfde_2026_11_24
+
+SHBG class trait
+SHBG parent pigean_portal__cfde_2026_11_24
+
+SHBGadjBMI class trait
+SHBGadjBMI parent pigean_portal__cfde_2026_11_24
+
+SHS class trait
+SHS parent pigean_portal__cfde_2026_11_24
+
+SHS_PC1 class trait
+SHS_PC1 parent pigean_portal__cfde_2026_11_24
+
+SHS_PC2 class trait
+SHS_PC2 parent pigean_portal__cfde_2026_11_24
+
+SHS_PC3 class trait
+SHS_PC3 parent pigean_portal__cfde_2026_11_24
+
+SHS_PC4 class trait
+SHS_PC4 parent pigean_portal__cfde_2026_11_24
+
+SHS_PC5 class trait
+SHS_PC5 parent pigean_portal__cfde_2026_11_24
+
+SKBMD class trait
+SKBMD parent pigean_portal__cfde_2026_11_24
+
+SLE class trait
+SLE parent pigean_portal__cfde_2026_11_24
+
+SM class trait
+SM parent pigean_portal__cfde_2026_11_24
+
+SND_INC class trait
+SND_INC parent pigean_portal__cfde_2026_11_24
+
+SND_REST class trait
+SND_REST parent pigean_portal__cfde_2026_11_24
+
+SRH class trait
+SRH parent pigean_portal__cfde_2026_11_24
+
+STILTSvUKHLS class trait
+STILTSvUKHLS parent pigean_portal__cfde_2026_11_24
+
+SVI class trait
+SVI parent pigean_portal__cfde_2026_11_24
+
+SVL class trait
+SVL parent pigean_portal__cfde_2026_11_24
+
+Scoliosis class trait
+Scoliosis parent pigean_portal__cfde_2026_11_24
+
+Seborrheic_dermatitis class trait
+Seborrheic_dermatitis parent pigean_portal__cfde_2026_11_24
+
+SecHypoThyroid class trait
+SecHypoThyroid parent pigean_portal__cfde_2026_11_24
+
+SeropositiveRhA class trait
+SeropositiveRhA parent pigean_portal__cfde_2026_11_24
+
+SerumUrea class trait
+SerumUrea parent pigean_portal__cfde_2026_11_24
+
+SevereC19vAll class trait
+SevereC19vAll parent pigean_portal__cfde_2026_11_24
+
+SevereDKD class trait
+SevereDKD parent pigean_portal__cfde_2026_11_24
+
+SeverevNonHospC19 class trait
+SeverevNonHospC19 parent pigean_portal__cfde_2026_11_24
+
+Shiftwork_Disorder class trait
+Shiftwork_Disorder parent pigean_portal__cfde_2026_11_24
+
+Shiftworker class trait
+Shiftworker parent pigean_portal__cfde_2026_11_24
+
+ShoulderToHeight class trait
+ShoulderToHeight parent pigean_portal__cfde_2026_11_24
+
+Sitting_height class trait
+Sitting_height parent pigean_portal__cfde_2026_11_24
+
+Sitting_height_ratio_adjusted_for_height_and_BMI class trait
+Sitting_height_ratio_adjusted_for_height_and_BMI parent pigean_portal__cfde_2026_11_24
+
+SleepApnea class trait
+SleepApnea parent pigean_portal__cfde_2026_11_24
+
+SleepApneaAdjBMI class trait
+SleepApneaAdjBMI parent pigean_portal__cfde_2026_11_24
+
+SleepChronotype class trait
+SleepChronotype parent pigean_portal__cfde_2026_11_24
+
+SleepDuration class trait
+SleepDuration parent pigean_portal__cfde_2026_11_24
+
+SleepEDS class trait
+SleepEDS parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia class trait
+SleepInsomnia parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia_ICD class trait
+SleepInsomnia_ICD parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia_add class trait
+SleepInsomnia_add parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia_dom class trait
+SleepInsomnia_dom parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia_het class trait
+SleepInsomnia_het parent pigean_portal__cfde_2026_11_24
+
+SleepInsomnia_rec class trait
+SleepInsomnia_rec parent pigean_portal__cfde_2026_11_24
+
+SleepLong class trait
+SleepLong parent pigean_portal__cfde_2026_11_24
+
+SleepNaps class trait
+SleepNaps parent pigean_portal__cfde_2026_11_24
+
+SleepShort class trait
+SleepShort parent pigean_portal__cfde_2026_11_24
+
+Sleep_Device_Usage class trait
+Sleep_Device_Usage parent pigean_portal__cfde_2026_11_24
+
+Sleep_Disturbance_PSQI class trait
+Sleep_Disturbance_PSQI parent pigean_portal__cfde_2026_11_24
+
+Sleep_Duration_PSQI class trait
+Sleep_Duration_PSQI parent pigean_portal__cfde_2026_11_24
+
+Sleep_Efficiency class trait
+Sleep_Efficiency parent pigean_portal__cfde_2026_11_24
+
+Sleep_Efficiency_PSQI class trait
+Sleep_Efficiency_PSQI parent pigean_portal__cfde_2026_11_24
+
+Sleep_Latency class trait
+Sleep_Latency parent pigean_portal__cfde_2026_11_24
+
+Sleep_Latency_PSQI class trait
+Sleep_Latency_PSQI parent pigean_portal__cfde_2026_11_24
+
+Sleep_Maintenance_Insomnia class trait
+Sleep_Maintenance_Insomnia parent pigean_portal__cfde_2026_11_24
+
+Sleep_Medication_PSQI class trait
+Sleep_Medication_PSQI parent pigean_portal__cfde_2026_11_24
+
+Sleep_Midpoint_Sleeptime class trait
+Sleep_Midpoint_Sleeptime parent pigean_portal__cfde_2026_11_24
+
+Sleep_Seizures class trait
+Sleep_Seizures parent pigean_portal__cfde_2026_11_24
+
+Sleepiness_Score class trait
+Sleepiness_Score parent pigean_portal__cfde_2026_11_24
+
+Sleepiness_rMEQ class trait
+Sleepiness_rMEQ parent pigean_portal__cfde_2026_11_24
+
+Sleeptime class trait
+Sleeptime parent pigean_portal__cfde_2026_11_24
+
+Sleeptime_rMEQ class trait
+Sleeptime_rMEQ parent pigean_portal__cfde_2026_11_24
+
+Sleepwalking class trait
+Sleepwalking parent pigean_portal__cfde_2026_11_24
+
+Sleepy_Accident class trait
+Sleepy_Accident parent pigean_portal__cfde_2026_11_24
+
+Slope_to_glucose_recovery_glipizide_adjusted_baseline_glucose class trait
+Slope_to_glucose_recovery_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Slope_to_glucose_trough_glipizide_adjusted_baseline_glucose class trait
+Slope_to_glucose_trough_glipizide_adjusted_baseline_glucose parent pigean_portal__cfde_2026_11_24
+
+Smoke_AgeFirst class trait
+Smoke_AgeFirst parent pigean_portal__cfde_2026_11_24
+
+Smoke_Cessation class trait
+Smoke_Cessation parent pigean_portal__cfde_2026_11_24
+
+Smoke_CigPerDay class trait
+Smoke_CigPerDay parent pigean_portal__cfde_2026_11_24
+
+Smoke_Ever class trait
+Smoke_Ever parent pigean_portal__cfde_2026_11_24
+
+SmokingFGjoint class trait
+SmokingFGjoint parent pigean_portal__cfde_2026_11_24
+
+SmokingFGmain class trait
+SmokingFGmain parent pigean_portal__cfde_2026_11_24
+
+SmokingT2Djoint class trait
+SmokingT2Djoint parent pigean_portal__cfde_2026_11_24
+
+SmokingT2Dmain class trait
+SmokingT2Dmain parent pigean_portal__cfde_2026_11_24
+
+Snoring class trait
+Snoring parent pigean_portal__cfde_2026_11_24
+
+SnoringAdjBMI class trait
+SnoringAdjBMI parent pigean_portal__cfde_2026_11_24
+
+Sodium class trait
+Sodium parent pigean_portal__cfde_2026_11_24
+
+SpO2avg class trait
+SpO2avg parent pigean_portal__cfde_2026_11_24
+
+SpO2min class trait
+SpO2min parent pigean_portal__cfde_2026_11_24
+
+SpO2per90 class trait
+SpO2per90 parent pigean_portal__cfde_2026_11_24
+
+SpineOA class trait
+SpineOA parent pigean_portal__cfde_2026_11_24
+
+Spleen_volume class trait
+Spleen_volume parent pigean_portal__cfde_2026_11_24
+
+SporadicMiscarriage class trait
+SporadicMiscarriage parent pigean_portal__cfde_2026_11_24
+
+StDevSleepDurationRN class trait
+StDevSleepDurationRN parent pigean_portal__cfde_2026_11_24
+
+StoolFreq class trait
+StoolFreq parent pigean_portal__cfde_2026_11_24
+
+Stress class trait
+Stress parent pigean_portal__cfde_2026_11_24
+
+Stress_add class trait
+Stress_add parent pigean_portal__cfde_2026_11_24
+
+Stress_dom class trait
+Stress_dom parent pigean_portal__cfde_2026_11_24
+
+Stress_het class trait
+Stress_het parent pigean_portal__cfde_2026_11_24
+
+Stroke class trait
+Stroke parent pigean_portal__cfde_2026_11_24
+
+Stroke_cardioembolic class trait
+Stroke_cardioembolic parent pigean_portal__cfde_2026_11_24
+
+Stroke_deep class trait
+Stroke_deep parent pigean_portal__cfde_2026_11_24
+
+Stroke_hemorrhagic class trait
+Stroke_hemorrhagic parent pigean_portal__cfde_2026_11_24
+
+Stroke_ischemic class trait
+Stroke_ischemic parent pigean_portal__cfde_2026_11_24
+
+Stroke_largeartery class trait
+Stroke_largeartery parent pigean_portal__cfde_2026_11_24
+
+Stroke_lobar class trait
+Stroke_lobar parent pigean_portal__cfde_2026_11_24
+
+Stroke_smallvessel class trait
+Stroke_smallvessel parent pigean_portal__cfde_2026_11_24
+
+StrokeinT2D class trait
+StrokeinT2D parent pigean_portal__cfde_2026_11_24
+
+Stumvoll class trait
+Stumvoll parent pigean_portal__cfde_2026_11_24
+
+SubarachnoidHemorrhage class trait
+SubarachnoidHemorrhage parent pigean_portal__cfde_2026_11_24
+
+SubcorticalVol class trait
+SubcorticalVol parent pigean_portal__cfde_2026_11_24
+
+SubduralHemorrhage class trait
+SubduralHemorrhage parent pigean_portal__cfde_2026_11_24
+
+SubjectiveWellbeing class trait
+SubjectiveWellbeing parent pigean_portal__cfde_2026_11_24
+
+Subjective_Sleep_Quality_PSQI class trait
+Subjective_Sleep_Quality_PSQI parent pigean_portal__cfde_2026_11_24
+
+Superficial_cellulitis_and_abscess class trait
+Superficial_cellulitis_and_abscess parent pigean_portal__cfde_2026_11_24
+
+SupraventricularPremaBeats class trait
+SupraventricularPremaBeats parent pigean_portal__cfde_2026_11_24
+
+SymptomaticAutosomalDominantAD class trait
+SymptomaticAutosomalDominantAD parent pigean_portal__cfde_2026_11_24
+
+SystolicHeartFail class trait
+SystolicHeartFail parent pigean_portal__cfde_2026_11_24
+
+T1D class trait
+T1D parent pigean_portal__cfde_2026_11_24
+
+T1DAgeO class trait
+T1DAgeO parent pigean_portal__cfde_2026_11_24
+
+T1DwKA class trait
+T1DwKA parent pigean_portal__cfde_2026_11_24
+
+T1DwNM class trait
+T1DwNM parent pigean_portal__cfde_2026_11_24
+
+T1DwOM class trait
+T1DwOM parent pigean_portal__cfde_2026_11_24
+
+T1DwRM class trait
+T1DwRM parent pigean_portal__cfde_2026_11_24
+
+T2D class trait
+T2D parent pigean_portal__cfde_2026_11_24
+
+T2D_add class trait
+T2D_add parent pigean_portal__cfde_2026_11_24
+
+T2D_age-related class trait
+T2D_age-related parent pigean_portal__cfde_2026_11_24
+
+T2D_autoimmune class trait
+T2D_autoimmune parent pigean_portal__cfde_2026_11_24
+
+T2D_dom class trait
+T2D_dom parent pigean_portal__cfde_2026_11_24
+
+T2D_het class trait
+T2D_het parent pigean_portal__cfde_2026_11_24
+
+T2D_insulin-deficient class trait
+T2D_insulin-deficient parent pigean_portal__cfde_2026_11_24
+
+T2D_insulin-resistant class trait
+T2D_insulin-resistant parent pigean_portal__cfde_2026_11_24
+
+T2D_nopreg class trait
+T2D_nopreg parent pigean_portal__cfde_2026_11_24
+
+T2D_obesity-related class trait
+T2D_obesity-related parent pigean_portal__cfde_2026_11_24
+
+T2D_preg class trait
+T2D_preg parent pigean_portal__cfde_2026_11_24
+
+T2D_rec class trait
+T2D_rec parent pigean_portal__cfde_2026_11_24
+
+T2DadjBMI class trait
+T2DadjBMI parent pigean_portal__cfde_2026_11_24
+
+T2DwKA class trait
+T2DwKA parent pigean_portal__cfde_2026_11_24
+
+T2DwNM class trait
+T2DwNM parent pigean_portal__cfde_2026_11_24
+
+T2DwOM class trait
+T2DwOM parent pigean_portal__cfde_2026_11_24
+
+T2DwPC class trait
+T2DwPC parent pigean_portal__cfde_2026_11_24
+
+T2DwRM class trait
+T2DwRM parent pigean_portal__cfde_2026_11_24
+
+T2LVchangeMS class trait
+T2LVchangeMS parent pigean_portal__cfde_2026_11_24
+
+TB-BMD class trait
+TB-BMD parent pigean_portal__cfde_2026_11_24
+
+TB-LM class trait
+TB-LM parent pigean_portal__cfde_2026_11_24
+
+TBLH-BMD class trait
+TBLH-BMD parent pigean_portal__cfde_2026_11_24
+
+TBV_Slicer class trait
+TBV_Slicer parent pigean_portal__cfde_2026_11_24
+
+TFR class trait
+TFR parent pigean_portal__cfde_2026_11_24
+
+TG class trait
+TG parent pigean_portal__cfde_2026_11_24
+
+TGinT2D class trait
+TGinT2D parent pigean_portal__cfde_2026_11_24
+
+TGnonT2D class trait
+TGnonT2D parent pigean_portal__cfde_2026_11_24
+
+TGtoHDL class trait
+TGtoHDL parent pigean_portal__cfde_2026_11_24
+
+THR class trait
+THR parent pigean_portal__cfde_2026_11_24
+
+TJR class trait
+TJR parent pigean_portal__cfde_2026_11_24
+
+TKR class trait
+TKR parent pigean_portal__cfde_2026_11_24
+
+TL class trait
+TL parent pigean_portal__cfde_2026_11_24
+
+TLC_Slicer class trait
+TLC_Slicer parent pigean_portal__cfde_2026_11_24
+
+TLC_Thirona class trait
+TLC_Thirona parent pigean_portal__cfde_2026_11_24
+
+TSH class trait
+TSH parent pigean_portal__cfde_2026_11_24
+
+TT3 class trait
+TT3 parent pigean_portal__cfde_2026_11_24
+
+TT3overFT4 class trait
+TT3overFT4 parent pigean_portal__cfde_2026_11_24
+
+TTMVz class trait
+TTMVz parent pigean_portal__cfde_2026_11_24
+
+TestiHypo class trait
+TestiHypo parent pigean_portal__cfde_2026_11_24
+
+Testosterone class trait
+Testosterone parent pigean_portal__cfde_2026_11_24
+
+Testosterone_bioavailable class trait
+Testosterone_bioavailable parent pigean_portal__cfde_2026_11_24
+
+Testosterone_total class trait
+Testosterone_total parent pigean_portal__cfde_2026_11_24
+
+ThoracicAA class trait
+ThoracicAA parent pigean_portal__cfde_2026_11_24
+
+ThumbOA class trait
+ThumbOA parent pigean_portal__cfde_2026_11_24
+
+Thyroid class trait
+Thyroid parent pigean_portal__cfde_2026_11_24
+
+ThyroidCancer class trait
+ThyroidCancer parent pigean_portal__cfde_2026_11_24
+
+TibiaToHeight class trait
+TibiaToHeight parent pigean_portal__cfde_2026_11_24
+
+TibiofemoralAngle class trait
+TibiofemoralAngle parent pigean_portal__cfde_2026_11_24
+
+Time_to_glucose_trough_glipizide class trait
+Time_to_glucose_trough_glipizide parent pigean_portal__cfde_2026_11_24
+
+Time_to_peak_insulin_glipizide class trait
+Time_to_peak_insulin_glipizide parent pigean_portal__cfde_2026_11_24
+
+Timezone_Travel class trait
+Timezone_Travel parent pigean_portal__cfde_2026_11_24
+
+TorsoToHeight class trait
+TorsoToHeight parent pigean_portal__cfde_2026_11_24
+
+TotCho class trait
+TotCho parent pigean_portal__cfde_2026_11_24
+
+TotHipArea class trait
+TotHipArea parent pigean_portal__cfde_2026_11_24
+
+TotPG class trait
+TotPG parent pigean_portal__cfde_2026_11_24
+
+TotalIron class trait
+TotalIron parent pigean_portal__cfde_2026_11_24
+
+TotalProtein class trait
+TotalProtein parent pigean_portal__cfde_2026_11_24
+
+TransferrinSaturation class trait
+TransferrinSaturation parent pigean_portal__cfde_2026_11_24
+
+TrochanterArea class trait
+TrochanterArea parent pigean_portal__cfde_2026_11_24
+
+Tyr class trait
+Tyr parent pigean_portal__cfde_2026_11_24
+
+UA class trait
+UA parent pigean_portal__cfde_2026_11_24
+
+UACR class trait
+UACR parent pigean_portal__cfde_2026_11_24
+
+UACR_DM class trait
+UACR_DM parent pigean_portal__cfde_2026_11_24
+
+UC class trait
+UC parent pigean_portal__cfde_2026_11_24
+
+UMOD_antibody class trait
+UMOD_antibody parent pigean_portal__cfde_2026_11_24
+
+UMOD_aptamer class trait
+UMOD_aptamer parent pigean_portal__cfde_2026_11_24
+
+UPCR class trait
+UPCR parent pigean_portal__cfde_2026_11_24
+
+UPDRS class trait
+UPDRS parent pigean_portal__cfde_2026_11_24
+
+UPDRS1 class trait
+UPDRS1 parent pigean_portal__cfde_2026_11_24
+
+UPDRS2 class trait
+UPDRS2 parent pigean_portal__cfde_2026_11_24
+
+UPDRS3 class trait
+UPDRS3 parent pigean_portal__cfde_2026_11_24
+
+UPDRS4 class trait
+UPDRS4 parent pigean_portal__cfde_2026_11_24
+
+USCR class trait
+USCR parent pigean_portal__cfde_2026_11_24
+
+USPR class trait
+USPR parent pigean_portal__cfde_2026_11_24
+
+Unintentional_Sleep class trait
+Unintentional_Sleep parent pigean_portal__cfde_2026_11_24
+
+UpperThird_LowerThird class trait
+UpperThird_LowerThird parent pigean_portal__cfde_2026_11_24
+
+Urate class trait
+Urate parent pigean_portal__cfde_2026_11_24
+
+UrinaryColic class trait
+UrinaryColic parent pigean_portal__cfde_2026_11_24
+
+Urticaria class trait
+Urticaria parent pigean_portal__cfde_2026_11_24
+
+UterineFibroids class trait
+UterineFibroids parent pigean_portal__cfde_2026_11_24
+
+UterineFibroids_HMB class trait
+UterineFibroids_HMB parent pigean_portal__cfde_2026_11_24
+
+VAT class trait
+VAT parent pigean_portal__cfde_2026_11_24
+
+VATadjBMIHeight class trait
+VATadjBMIHeight parent pigean_portal__cfde_2026_11_24
+
+VATtoASAT class trait
+VATtoASAT parent pigean_portal__cfde_2026_11_24
+
+VATtoGFAT class trait
+VATtoGFAT parent pigean_portal__cfde_2026_11_24
+
+VCDR class trait
+VCDR parent pigean_portal__cfde_2026_11_24
+
+VFD class trait
+VFD parent pigean_portal__cfde_2026_11_24
+
+VFibFlutter class trait
+VFibFlutter parent pigean_portal__cfde_2026_11_24
+
+VLDLchol class trait
+VLDLchol parent pigean_portal__cfde_2026_11_24
+
+VaricoseVeins class trait
+VaricoseVeins parent pigean_portal__cfde_2026_11_24
+
+VaricoseVeins_add class trait
+VaricoseVeins_add parent pigean_portal__cfde_2026_11_24
+
+VaricoseVeins_dom class trait
+VaricoseVeins_dom parent pigean_portal__cfde_2026_11_24
+
+VaricoseVeins_rec class trait
+VaricoseVeins_rec parent pigean_portal__cfde_2026_11_24
+
+VenousThromboembolism class trait
+VenousThromboembolism parent pigean_portal__cfde_2026_11_24
+
+Venous_thromboembolism_recurrence_in_VTE class trait
+Venous_thromboembolism_recurrence_in_VTE parent pigean_portal__cfde_2026_11_24
+
+VerbNumReasoning class trait
+VerbNumReasoning parent pigean_portal__cfde_2026_11_24
+
+Violent_Sleep class trait
+Violent_Sleep parent pigean_portal__cfde_2026_11_24
+
+VitD class trait
+VitD parent pigean_portal__cfde_2026_11_24
+
+Vitiligo class trait
+Vitiligo parent pigean_portal__cfde_2026_11_24
+
+VitiligoEarly class trait
+VitiligoEarly parent pigean_portal__cfde_2026_11_24
+
+VitiligoLate class trait
+VitiligoLate parent pigean_portal__cfde_2026_11_24
+
+WAIST class trait
+WAIST parent pigean_portal__cfde_2026_11_24
+
+WAISTadjBMI class trait
+WAISTadjBMI parent pigean_portal__cfde_2026_11_24
+
+WBC class trait
+WBC parent pigean_portal__cfde_2026_11_24
+
+WCadjBMISMK class trait
+WCadjBMISMK parent pigean_portal__cfde_2026_11_24
+
+WEIGHT class trait
+WEIGHT parent pigean_portal__cfde_2026_11_24
+
+WHR class trait
+WHR parent pigean_portal__cfde_2026_11_24
+
+WHRadjBMI class trait
+WHRadjBMI parent pigean_portal__cfde_2026_11_24
+
+WHRadjBMISMK class trait
+WHRadjBMISMK parent pigean_portal__cfde_2026_11_24
+
+WMH class trait
+WMH parent pigean_portal__cfde_2026_11_24
+
+WMHinCSVD class trait
+WMHinCSVD parent pigean_portal__cfde_2026_11_24
+
+WMR class trait
+WMR parent pigean_portal__cfde_2026_11_24
+
+WM_PVS class trait
+WM_PVS parent pigean_portal__cfde_2026_11_24
+
+Waketime class trait
+Waketime parent pigean_portal__cfde_2026_11_24
+
+WallAreaPct_seg_Thirona class trait
+WallAreaPct_seg_Thirona parent pigean_portal__cfde_2026_11_24
+
+WallAreaPct_seg_Vida class trait
+WallAreaPct_seg_Vida parent pigean_portal__cfde_2026_11_24
+
+Weight_Bearing_Bone_Fracture class trait
+Weight_Bearing_Bone_Fracture parent pigean_portal__cfde_2026_11_24
+
+XXLVLDLpart class trait
+XXLVLDLpart parent pigean_portal__cfde_2026_11_24
+
+YnEOPD class trait
+YnEOPD parent pigean_portal__cfde_2026_11_24
+
+YouthT2D class trait
+YouthT2D parent pigean_portal__cfde_2026_11_24
+
+ZST class trait
+ZST parent pigean_portal__cfde_2026_11_24
+
+adj_density_mesa class trait
+adj_density_mesa parent pigean_portal__cfde_2026_11_24
+
+adj_density_plethy class trait
+adj_density_plethy parent pigean_portal__cfde_2026_11_24
+
+allDKD class trait
+allDKD parent pigean_portal__cfde_2026_11_24
+
+allDKD_T1D class trait
+allDKD_T1D parent pigean_portal__cfde_2026_11_24
+
+allDKD_T2D class trait
+allDKD_T2D parent pigean_portal__cfde_2026_11_24
+
+allDKDadjHbA1cBMI_T1D class trait
+allDKDadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+allSVS class trait
+allSVS parent pigean_portal__cfde_2026_11_24
+
+ao_regurgitation_fraction class trait
+ao_regurgitation_fraction parent pigean_portal__cfde_2026_11_24
+
+ao_regurgitation_volume class trait
+ao_regurgitation_volume parent pigean_portal__cfde_2026_11_24
+
+aortic_velocity_vmax class trait
+aortic_velocity_vmax parent pigean_portal__cfde_2026_11_24
+
+aortic_velocity_vmax_ao_adjusted class trait
+aortic_velocity_vmax_ao_adjusted parent pigean_portal__cfde_2026_11_24
+
+bOHBut class trait
+bOHBut parent pigean_portal__cfde_2026_11_24
+
+broadASB class trait
+broadASB parent pigean_portal__cfde_2026_11_24
+
+bv10_TBV class trait
+bv10_TBV parent pigean_portal__cfde_2026_11_24
+
+bv5_TBV class trait
+bv5_TBV parent pigean_portal__cfde_2026_11_24
+
+cIMT class trait
+cIMT parent pigean_portal__cfde_2026_11_24
+
+cIMTmax class trait
+cIMTmax parent pigean_portal__cfde_2026_11_24
+
+cIMTmean class trait
+cIMTmean parent pigean_portal__cfde_2026_11_24
+
+eBMD class trait
+eBMD parent pigean_portal__cfde_2026_11_24
+
+eGFRcrcys class trait
+eGFRcrcys parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea class trait
+eGFRcrea parent pigean_portal__cfde_2026_11_24
+
+eGFRcreaCKDi25 class trait
+eGFRcreaCKDi25 parent pigean_portal__cfde_2026_11_24
+
+eGFRcreaInDiabetes class trait
+eGFRcreaInDiabetes parent pigean_portal__cfde_2026_11_24
+
+eGFRcreaNoDiabetes class trait
+eGFRcreaNoDiabetes parent pigean_portal__cfde_2026_11_24
+
+eGFRcreaRapid3 class trait
+eGFRcreaRapid3 parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_DM class trait
+eGFRcrea_DM parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_T1D class trait
+eGFRcrea_T1D parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_T2D class trait
+eGFRcrea_T2D parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_med_DeclineAdjBL class trait
+eGFRcrea_med_DeclineAdjBL parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_med_DeclineAdjDM class trait
+eGFRcrea_med_DeclineAdjDM parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_med_DeclineInCKD class trait
+eGFRcrea_med_DeclineInCKD parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_med_DeclineInDM class trait
+eGFRcrea_med_DeclineInDM parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_perc_DeclineInDM class trait
+eGFRcrea_perc_DeclineInDM parent pigean_portal__cfde_2026_11_24
+
+eGFRcrea_perc_DeclineNoDM class trait
+eGFRcrea_perc_DeclineNoDM parent pigean_portal__cfde_2026_11_24
+
+eGFRcys class trait
+eGFRcys parent pigean_portal__cfde_2026_11_24
+
+exp_histo_mode class trait
+exp_histo_mode parent pigean_portal__cfde_2026_11_24
+
+exp_lung_mass class trait
+exp_lung_mass parent pigean_portal__cfde_2026_11_24
+
+exp_skewness class trait
+exp_skewness parent pigean_portal__cfde_2026_11_24
+
+fLVSV class trait
+fLVSV parent pigean_portal__cfde_2026_11_24
+
+fQRSTa class trait
+fQRSTa parent pigean_portal__cfde_2026_11_24
+
+freshfruit class trait
+freshfruit parent pigean_portal__cfde_2026_11_24
+
+iaorta_area class trait
+iaorta_area parent pigean_portal__cfde_2026_11_24
+
+imitral_regurgitation class trait
+imitral_regurgitation parent pigean_portal__cfde_2026_11_24
+
+lateDKD_T1D class trait
+lateDKD_T1D parent pigean_portal__cfde_2026_11_24
+
+lateDKDadjHbA1cBMI_T1D class trait
+lateDKDadjHbA1cBMI_T1D parent pigean_portal__cfde_2026_11_24
+
+liverT1time class trait
+liverT1time parent pigean_portal__cfde_2026_11_24
+
+mCAA class trait
+mCAA parent pigean_portal__cfde_2026_11_24
+
+mCAX class trait
+mCAX parent pigean_portal__cfde_2026_11_24
+
+mCAY class trait
+mCAY parent pigean_portal__cfde_2026_11_24
+
+mRS01v23456 class trait
+mRS01v23456 parent pigean_portal__cfde_2026_11_24
+
+mRS01v23456AdjSever class trait
+mRS01v23456AdjSever parent pigean_portal__cfde_2026_11_24
+
+mRSOrdinal class trait
+mRSOrdinal parent pigean_portal__cfde_2026_11_24
+
+mvAging class trait
+mvAging parent pigean_portal__cfde_2026_11_24
+
+n6FA182 class trait
+n6FA182 parent pigean_portal__cfde_2026_11_24
+
+niHF class trait
+niHF parent pigean_portal__cfde_2026_11_24
+
+niHFpEF class trait
+niHFpEF parent pigean_portal__cfde_2026_11_24
+
+niHFrEF class trait
+niHFrEF parent pigean_portal__cfde_2026_11_24
+
+nonHDL class trait
+nonHDL parent pigean_portal__cfde_2026_11_24
+
+nonlobarSVS class trait
+nonlobarSVS parent pigean_portal__cfde_2026_11_24
+
+oilyfish class trait
+oilyfish parent pigean_portal__cfde_2026_11_24
+
+pRBD class trait
+pRBD parent pigean_portal__cfde_2026_11_24
+
+pSSNS class trait
+pSSNS parent pigean_portal__cfde_2026_11_24
+
+p_Tau class trait
+p_Tau parent pigean_portal__cfde_2026_11_24
+
+pancreasT1time class trait
+pancreasT1time parent pigean_portal__cfde_2026_11_24
+
+pctEmph class trait
+pctEmph parent pigean_portal__cfde_2026_11_24
+
+pctEmph_LowerLobes class trait
+pctEmph_LowerLobes parent pigean_portal__cfde_2026_11_24
+
+pctEmph_LowerThird class trait
+pctEmph_LowerThird parent pigean_portal__cfde_2026_11_24
+
+pctEmph_UL_LL_ratio class trait
+pctEmph_UL_LL_ratio parent pigean_portal__cfde_2026_11_24
+
+pctEmph_UpperLobes class trait
+pctEmph_UpperLobes parent pigean_portal__cfde_2026_11_24
+
+pctEmph_UpperThird class trait
+pctEmph_UpperThird parent pigean_portal__cfde_2026_11_24
+
+pctGasTrap class trait
+pctGasTrap parent pigean_portal__cfde_2026_11_24
+
+renalcortexT1time class trait
+renalcortexT1time parent pigean_portal__cfde_2026_11_24
+
+saltconsumption class trait
+saltconsumption parent pigean_portal__cfde_2026_11_24
+
+smeq_binary class trait
+smeq_binary parent pigean_portal__cfde_2026_11_24
+
+spQRSTa class trait
+spQRSTa parent pigean_portal__cfde_2026_11_24
+
+tLVSV class trait
+tLVSV parent pigean_portal__cfde_2026_11_24
+
+t_Tau class trait
+t_Tau parent pigean_portal__cfde_2026_11_24
+
+toastCE class trait
+toastCE parent pigean_portal__cfde_2026_11_24
+
+toastDETER class trait
+toastDETER parent pigean_portal__cfde_2026_11_24
+
+toastLAA class trait
+toastLAA parent pigean_portal__cfde_2026_11_24
+
+toastSAO class trait
+toastSAO parent pigean_portal__cfde_2026_11_24
+
+toastUNDETER class trait
+toastUNDETER parent pigean_portal__cfde_2026_11_24
+
+vitDBP class trait
+vitDBP parent pigean_portal__cfde_2026_11_24
+
+vitDBP_GChapAdj class trait
+vitDBP_GChapAdj parent pigean_portal__cfde_2026_11_24
+
+xinsG30 class trait
+xinsG30 parent pigean_portal__cfde_2026_11_24
+
+xinsdG30 class trait
+xinsdG30 parent pigean_portal__cfde_2026_11_24

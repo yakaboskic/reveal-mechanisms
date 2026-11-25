@@ -1,0 +1,5 @@
+# LAP-managed outputs and logs, and downloaded or cloned inputs.
+out/
+log/
+raw/
+__pycache__/
