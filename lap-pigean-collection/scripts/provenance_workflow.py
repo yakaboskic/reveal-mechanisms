@@ -225,7 +225,8 @@ def cmd_trait(args):
     # the collection files
     files = cw.read_columns(args.files_file, cw.FILES_COLUMNS)
     check(files and all(f["instance"] == instance for f in files), "%s is not this trait's file table" % args.files_file)
-    kinds = {"gene_stats": "gene statistics", "gene_set_stats": "gene-set statistics", "membership": "gene-set memberships"}
+    kinds = {"gene_stats": "gene statistics", "gene_set_stats": "gene-set statistics", "membership": "gene-set memberships",
+             "cfde_gene_set_stats": "gene-set statistics (gene sets named by their CFDE dapper:GeneSet id)"}
     for library in sorted({f["library"] for f in files}):
         if library == args.source_library:
             what = ("the portal run's genes with finite scores, its analyzed gene sets with a nonzero beta_uncorrected, "
@@ -234,8 +235,8 @@ def cmd_trait(args):
         else:
             check(library in betas, "%s has collection files for %s but no fitted betas run" % (key, library))
             what = ("the gene sets `pigean betas` analyzed with a nonzero beta_uncorrected, named by their "
-                    "dapper:GeneSet id, and their GMT genes that are in the trait's gene stats (gs.out)")
-            inputs = [betas[library], gmt[library], source["gene_stats"]]
+                    "dapper:GeneSet id (their rosters are in the cfde-genesets collection)")
+            inputs = [betas[library]]
         formatting = doc.node(
             "Activity", name="Format %s on %s for the PIGEAN claims collection" % (key, library),
             description="Writes the collection files of trait %s on the %s gene-set library (uncompressed NDJSON; "

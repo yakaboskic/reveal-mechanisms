@@ -28,6 +28,10 @@ NA = "NA"
 SOURCE_FILES = OrderedDict([("gene_stats", "gs.out"), ("gene_set_stats", "gss.out"), ("membership", "ggss.out")])
 KINDS = OrderedDict([("gene_stats", "combined_gene_stats"), ("gene_set_stats", "combined_gene_set_stats"),
                      ("membership", "gene_gene_set_stats")])
+# A CFDE library's gene-set file has its own role and name: its gene sets are named by the dapper:GeneSet id the CFDE
+# gene-set collection (cfde-genesets) deposits, and the claims collection uses that id as it is instead of minting one.
+KINDS["cfde_gene_set_stats"] = "cfde_gene_set_stats"
+
 TRAIT_COLUMNS = ["instance", "trait"] + ["%s_%s" % (role, field) for role in SOURCE_FILES for field in ("size", "etag")]
 SOURCE_MANIFEST_COLUMNS = ["instance", "trait", "role", "file", "size", "sha256"]
 GENE_STATS_COLUMNS = ["phenotype", "gene", "combined", "log_bf", "prior"]
@@ -530,8 +534,9 @@ def cmd_format_trait(args):
     <source library> (the PIGEAN run itself): gene stats from gs.out (every gene with finite metrics), gene-set stats
     from gss.out (the analyzed gene sets with a nonzero beta_uncorrected) and their memberships from ggss.out.
     Each CFDE library: gene-set stats from the `pigean betas` fit (same rule; n is PIGEAN's N, the member genes it
-    used) and the whole roster of those gene sets from the library's GMT. A CFDE library
-    has no gene file: its betas regress the source run's gene stats, which the source library's dataset already holds.
+    used). A CFDE library has no gene file: its betas regress the source run's gene stats, which the source library's
+    dataset already holds. It has no membership file either: the gene sets are named by their dapper:GeneSet id and
+    their rosters are in the CFDE gene-set collection (cfde-genesets), once, instead of once per trait.
     A library with no gene-set rows gets no folder.
 
     Every row carries phenotype (= the trait folder) and gene_set_size (= the library folder).
@@ -555,15 +560,15 @@ def cmd_format_trait(args):
     libraries = [r["library"] for r in read_columns(args.runs_file, BETAS_RUN_COLUMNS)]
     for library in [args.source_library] + libraries:
         for role in KINDS:
-            if os.path.exists(out_path(library, role)):
-                os.unlink(out_path(library, role))
+            for path in (out_path(library, role), out_path(library, role) + ".dapper.yaml"):
+                if os.path.exists(path):
+                    os.unlink(path)
 
     # --- the PIGEAN run's own library
     library = args.source_library
     stats = read_source_gene_stats(source_path(args.source_dir, library, key, "gene_stats"))
-    writer, dropped, spelling = NdjsonWriter(out_path(library, "gene_stats")), 0, {}
+    writer, dropped = NdjsonWriter(out_path(library, "gene_stats")), 0
     for gene, combined, log_bf, prior in stats:
-        spelling.setdefault(gene.upper(), gene)
         if not (finite(combined) and finite(log_bf) and finite(prior)):
             dropped += 1
             continue
@@ -609,7 +614,6 @@ def cmd_format_trait(args):
 
     # --- the CFDE libraries
     index = {r["gene_set_id"]: r for r in read_columns(args.gene_set_index_file, GENE_SET_INDEX_COLUMNS)}
-    gmts = {r["library"]: r["file"] for r in read_columns(args.library_gmts_file, LIBRARY_GMT_COLUMNS)}
     for run in read_columns(args.runs_file, BETAS_RUN_COLUMNS):
         library = run["library"]
         check(run["instance"] == trait["instance"] and run["pigean_commit"] == args.expected_pigean_commit,
@@ -617,16 +621,11 @@ def cmd_format_trait(args):
         kept = [r for r in kept_gene_sets(run["gene_set_stats_file"]) if float(r["beta_uncorrected"]) != 0]
         if not kept:
             continue
-        members = read_gmt_members(gmts[library], {r["Gene_Set"] for r in kept})
-        writer = NdjsonWriter(out_path(library, "gene_set_stats"))
-        member_writer = NdjsonWriter(out_path(library, "membership"))
+        writer = NdjsonWriter(out_path(library, "cfde_gene_set_stats"))
         for r in kept:
             gene_set_id = r["Gene_Set"]
             check(gene_set_id in index and index[gene_set_id]["library"] == library,
                   "%s is not a %s gene set of the index" % (gene_set_id, library))
-            # The gene set's whole roster, as the library's GMT lists it. A gene the trait's gene stats also hold is
-            # written in their spelling (CFDE C10orf71 is PIGEAN's C10ORF71), so it is the same gene id in both.
-            genes = OrderedDict((spelling.get(gene.upper(), gene), True) for gene in members[gene_set_id])
             row = OrderedDict([("gene_set", gene_set_id), ("gene_set_name", index[gene_set_id]["gene_set_name"]),
                                ("source", index[gene_set_id]["cfde_label"]),
                                ("collection_id", index[gene_set_id]["collection_id"]),
@@ -635,12 +634,7 @@ def cmd_format_trait(args):
                                ("n", int(r["N"]))])
             row.update(dims(library))
             writer.write(row)
-            for gene in genes:
-                pair = OrderedDict([("gene", gene), ("gene_set", gene_set_id)])
-                pair.update(slim(library))
-                member_writer.write(pair)
-        record(library, "gene_set_stats", writer, 0)
-        record(library, "membership", member_writer, 0)
+        record(library, "cfde_gene_set_stats", writer, 0)
     write_tsv(args.output_file, FILES_COLUMNS, files)
     print("%s: %s; %d %s gene sets without membership rows" % (
         key, "; ".join("%s %s %d" % (f["library"], f["role"], f["rows"]) for f in files), without_members,
@@ -687,7 +681,7 @@ def cmd_collect(args):
     write_tsv(args.output_runs_file, BETAS_RUN_COLUMNS[:-4], runs)
 
     gmts = {r["library"]: r for r in read_columns(args.library_gmts_file, LIBRARY_GMT_COLUMNS)}
-    datasets = Counter(f["library"] for f in files if f["role"] == "gene_set_stats" and int(f["rows"]))
+    datasets = Counter(f["library"] for f in files if f["role"] in ("gene_set_stats", "cfde_gene_set_stats") and int(f["rows"]))
     datasets[args.source_library] = sum(1 for f in files if f["library"] == args.source_library and f["role"] == "gene_stats")
     record = OrderedDict([
         ("collection_layout", "data/{library}/{trait}/{kind}.json"),

@@ -66,21 +66,24 @@ run/<project>.collection_manifest.tsv, .provenance_manifest.tsv, .betas_manifest
 |---|---|---|
 | `combined_gene_stats.json` | `gene`, `prior`, `combined`, `log_bf`, `trait_group`, `phenotype`, `gene_set_size` | Every gene of `gs.out` |
 | `combined_gene_set_stats.json` | `gene_set`, `source`, `beta`, `beta_uncorrected`, `n`, `trait_group`, `phenotype`, `gene_set_size`; CFDE libraries also `gene_set_name`, `collection_id` | The gene sets PIGEAN analyzed (`filter_reason` kept) with a nonzero `beta_uncorrected` |
-| `gene_gene_set_stats.json` | `gene`, `gene_set`, `phenotype`, `gene_set_size` | The memberships of those gene sets |
+| `gene_gene_set_stats.json` | `gene`, `gene_set`, `phenotype`, `gene_set_size` | The memberships of those gene sets (`mouse_msigdb` only) |
 
 - **`mouse_msigdb`** rows are the PIGEAN run's own. The gene-set rule reproduces the existing collection's file: for
   IBD, `gss.out`'s 1,567 kept gene sets less the 126 with a zero `beta_uncorrected` are the 1,441 rows of the published
   `combined_gene_set_stats.json`. Memberships are `ggss.out`'s pairs.
 - **Dropped from the old files**: `huge_score`, `n` (gene), `sigma`, and the EAGGL `label` and `factor` columns of the
   gene and gene-set files; all eight metric columns of the membership file. The claims collection reads none of them.
-- **CFDE libraries** have gene-set and membership files only. `pigean betas` regresses the run's `log_bf` on a library's
+- **CFDE libraries** have a gene-set file only, named `cfde_gene_set_stats.json` (same columns as
+  `combined_gene_set_stats.json`). The claims collection reads it as its own row kind and uses `gene_set`, the
+  `dapper:GeneSet` id, as the gene set's id as it is, so a claim resolves to the object the `cfde-genesets`
+  collection deposits. `pigean betas` regresses the run's `log_bf` on a library's
   gene sets and produces no gene scores, so a CFDE dataset has no gene file; the trait's gene scores are in its
   `mouse_msigdb` dataset. `gene_set` is the `dapper:GeneSet` id, `gene_set_name` its name in the producer's DAPPER
   document, `source` the collection label (`GTEx__adipose_tissue__HZ1__20-29_30-39`) and `collection_id` the
   `dapper:GeneSetCollection` id.
-- **CFDE memberships** are the gene set's whole roster from the library's GMT. A gene that is also in the trait's
-  `gs.out` is written in `gs.out`'s spelling (CFDE `C10orf71` is PIGEAN's `C10ORF71`). `n` is PIGEAN's `N`, the member
-  genes the fit used, so it can be smaller than the roster.
+- **CFDE memberships are not written.** The rosters are in the CFDE gene-set collection (`cfde-genesets`), once,
+  under the same `dapper:GeneSet` ids; repeating them per trait was 86% of the deposit's bytes. `n` is PIGEAN's `N`,
+  the member genes the fit used, so it can be smaller than the roster.
 - A few `mouse_msigdb` gene sets (1 to 4, for some traits) have no row in `ggss.out`. They keep their gene-set row and
   have no roster.
 - A library with no gene-set rows for a trait gets no folder for it.

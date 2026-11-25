@@ -132,20 +132,18 @@ class FormatTrait(Base):
         self.assertEqual(self.data("msig", "gene_gene_set_stats"), [
             {"gene": g, "gene_set": "set_a", "phenotype": self.TRAIT, "gene_set_size": "msig"} for g in ("TP53", "XIST")])
 
-    def test_cfde_library_has_gene_sets_and_memberships_only(self):
-        self.assertFalse(os.path.exists(self.path("data", "LibA", self.TRAIT, "combined_gene_stats.json")))
-        self.assertEqual(self.data("LibA", "combined_gene_set_stats"), [
+    def test_cfde_library_has_gene_sets_only(self):
+        self.assertEqual(os.listdir(self.path("data", "LibA", self.TRAIT)), ["cfde_gene_set_stats.json"])
+        self.assertEqual(self.data("LibA", "cfde_gene_set_stats"), [
             {"gene_set": G1, "gene_set_name": "name of aaaaaaaa", "source": "LibA__p__M", "collection_id": COLLECTION,
              "beta": 0.2, "beta_uncorrected": 0.4, "n": 3, "trait_group": "portal", "phenotype": self.TRAIT,
              "gene_set_size": "LibA"}])
-        # The whole GMT roster; a gene of the trait's gene stats in their spelling.
-        self.assertEqual([r["gene"] for r in self.data("LibA", "gene_gene_set_stats")], ["TP53", "C10ORF71", "NOT_A_GENE"])
 
     def test_library_without_rows_has_no_folder_and_manifest_matches_disk(self):
         self.assertFalse(os.path.exists(self.path("data", "LibB")))
         files = cw.read_columns(self.path("files.tsv"), cw.FILES_COLUMNS)
         self.assertEqual(sorted((f["library"], f["role"], f["rows"]) for f in files), [
-            ("LibA", "gene_set_stats", "1"), ("LibA", "membership", "3"), ("msig", "gene_set_stats", "1"),
+            ("LibA", "cfde_gene_set_stats", "1"), ("msig", "gene_set_stats", "1"),
             ("msig", "gene_stats", "2"), ("msig", "membership", "2")])
         for f in files:
             path = self.path("data", f["relative_path"])

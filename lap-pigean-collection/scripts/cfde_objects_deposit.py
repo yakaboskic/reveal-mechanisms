@@ -35,7 +35,22 @@ except AttributeError:
 
 
 def parts(document):
-    """A document's node and edge groups as deposits within the limits: {group: [items]} dicts."""
+    """A document's node and edge groups as deposits within the limits: {group: [items]} dicts.
+
+    A deposit must hold at least one object, so a part that would hold edges only (a document with more edges than
+    one deposit takes) repeats the document's first object; a repeated object changes nothing.
+    """
+    anchor = None
+    for part in _split(document):
+        nodes = [(g, v) for g, v in part.items() if not g.endswith("_edges")]
+        if nodes and anchor is None:
+            anchor = (nodes[0][0], nodes[0][1][0])
+        if not nodes and anchor is not None:
+            part = dict([(anchor[0], [anchor[1]])], **part)
+        yield part
+
+
+def _split(document):
     part, objects, edges, size = {}, 0, 0, 0
     for group, items in document.items():
         if group in SKIPPED_GROUPS or not isinstance(items, list):
