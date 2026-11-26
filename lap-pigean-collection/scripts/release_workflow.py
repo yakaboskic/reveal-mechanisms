@@ -13,6 +13,7 @@ Python 3.9, standard library; S3 through the aws CLI.
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -126,17 +127,29 @@ def cmd_deposit(args):
     print("%s: %d files to upload (%.2f GB), %d already there%s" % (
         args.destination_url, len(to_upload), total / 1e9, same, " [dry run]" if args.dry_run else ""))
     if not args.dry_run:
-        for start in range(0, len(to_upload), 400):
-            batch, procs = to_upload[start:start + 400], []
-            for chunk in [batch[i::args.workers] for i in range(args.workers)]:
-                if chunk:
-                    script = "\n".join("aws s3 cp --only-show-errors %s %s" % (
-                        cw.shell_quote(path), cw.shell_quote("s3://%s/%s%s" % (bucket, prefix, name))) for name, path, _ in chunk)
-                    procs.append(subprocess.Popen(["bash", "-e", "-c", script], stdout=subprocess.PIPE,
-                                                  stderr=subprocess.STDOUT, universal_newlines=True))
-            for proc in procs:
-                out = proc.communicate()[0]
-                check(proc.returncode == 0, "Upload failed:\n%s" % out[-3000:])
+        # One `aws s3 cp --recursive` per worker over a folder of links named as the objects: a process per
+        # file spends seconds starting the CLI, a recursive copy sends many files at once from one process.
+        stage = args.output_file + ".stage"
+        shutil.rmtree(stage, ignore_errors=True)
+        procs = []
+        for i in range(args.workers):
+            chunk = to_upload[i::args.workers]
+            if chunk:
+                folder = os.path.join(stage, str(i))
+                for name, path, _ in chunk:
+                    target = os.path.join(folder, name)
+                    os.makedirs(os.path.dirname(target), exist_ok=True)
+                    os.symlink(os.path.abspath(path), target)
+                procs.append(subprocess.Popen(["aws", "s3", "cp", "--recursive", "--only-show-errors", folder + "/",
+                                               "s3://%s/%s" % (bucket, prefix)], stdout=subprocess.PIPE,
+                                              stderr=subprocess.STDOUT, universal_newlines=True))
+        failed = []
+        for proc in procs:
+            out = proc.communicate()[0]
+            if proc.returncode != 0:
+                failed.append(out[-3000:])
+        shutil.rmtree(stage, ignore_errors=True)
+        check(not failed, "Upload failed:\n%s" % "\n".join(failed))
         remote = cw.s3_objects(args.destination_url)
         for name, path in local.items():
             check(prefix + name in remote and remote[prefix + name][0] == os.path.getsize(path),
