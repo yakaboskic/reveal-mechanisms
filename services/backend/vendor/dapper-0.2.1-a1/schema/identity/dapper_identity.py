@@ -79,10 +79,10 @@ SELF_REF = "urn:dapper:self-reference"
 SLOT_NS = "urn:dapper:slot:"
 CLASS_PRED = URIRef("urn:dapper:class")
 
-# Reject pathological inputs rather than canonicalizing forever. RDFC-1.0
-# documents blank-node graphs with super-polynomial behaviour; we emit no blank
-# nodes, but the limit is part of the published profile.
-MAX_TRIPLES = 10_000
+# No size limit. RDFC-1.0 is super-polynomial only on blank-node graphs, and
+# DAPPER emits no blank nodes, so canonicalizing grows with the input (a sort).
+# A record that lists many members (a release of 20,000 Datasets) mints like
+# any other.
 
 # Node-list key -> class, matching how the graph examples group their nodes.
 # Covers EVERY concrete HashableNode class, so any DAPPER document mints
@@ -310,8 +310,6 @@ def canonical_bytes(g: Graph) -> bytes:
     yields a DIFFERENT digest. That was observed, not theorised. Removing the
     sort makes identifiers silently non-reproducible across machines.
     """
-    if len(g) > MAX_TRIPLES:
-        raise ValueError(f"input exceeds DAPPER-ID-1 limit of {MAX_TRIPLES} triples: {len(g)}")
     canonical = to_canonical_graph(g)
     lines = sorted(line for line in canonical.serialize(format="nt").split("\n") if line.strip())
     return "\n".join(lines).encode("utf-8")

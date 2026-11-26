@@ -134,7 +134,7 @@ For later verified GMT/source ingestion, current DAPPER distinguishes:
 - **GeneSet:** one set; pair unhashable `in_gmt_file` with exact unhashable `gmt_entry`, populate verified gene members and `n_genes`, and retain exact aliases. `n_sets` on a GeneSet is deprecated and, if present, must equal 1.
 - Collection `members` is a complete, distinct list when supplied. Individual `in_gene_set_collection` backlinks can be present without enumerating a whole collection; backlinks are unhashable and must agree with any supplied full list.
 
-DAPPER's linter does not fetch GMT bytes or prove a row exists. The source adapter must verify checksum, row identity, membership and counts. The identity implementation caps one object at **10,000 triples**, including list items and other fields. Do not mint a collection listing the entire CFDE catalog, or use a truncated list as if complete. Keep the catalog in application import/alias tables. Real large libraries can omit the full member list and retain verified backlinks/file references within the current model.
+DAPPER's linter does not fetch GMT bytes or prove a row exists. The source adapter must verify checksum, row identity, membership and counts. DAPPER 0.2.0 capped one object at 10,000 triples; DAPPER-ID-1 no longer has a size limit (dapper #35), so a collection can list all of its members. Never use a truncated list as if complete. Real large libraries can still omit the full member list and retain verified backlinks/file references within the current model.
 
 ## 7. Remaining work and optional upstream improvements
 

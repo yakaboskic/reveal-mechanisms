@@ -115,12 +115,12 @@ def main():
     expanded = {**gap, 'about_entities': ['http://purl.obolibrary.org/obo/MONDO_0005148']}
     assert identity.compute_id(compact, 'KnowledgeGap', sv) != identity.compute_id(expanded, 'KnowledgeGap', sv)
     collection = {'name': 'Illustrative large collection', 'members': ['urn:example:gene-set:' + str(i) for i in range(10001)]}
-    try:
+    try:  # DAPPER 0.2.0 refused more than 10,000 triples; later releases have no size limit
         identity.compute_id(collection, 'GeneSetCollection', sv)
     except ValueError as exc:
         collection_limit = str(exc)
     else:
-        raise AssertionError('Expected identity triple limit')
+        collection_limit = None
     report['application_boundaries'] = {
         'file_location_changes_payload_without_changing_id': True,
         'geneset_inverse_collection_link_changes_payload_without_changing_id': True,
