@@ -243,7 +243,7 @@ class AccountDepositTests(unittest.TestCase):
 
     def test_the_vendored_dapper_is_the_recorded_commit_and_reproduces_its_own_vectors(self):
         vendor = json.loads((deposit.VENDOR / 'VENDOR.json').read_text())
-        self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.2.1-a1', 'ac1a4d7'))
+        self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.2.1-a1', '1611a98'))
         for name, digest in vendor['files'].items():
             self.assertEqual(hashlib.sha256((deposit.VENDOR / name).read_bytes()).hexdigest(), digest, name)
         vectors = json.loads((deposit.VENDOR / 'schema/identity/test_vectors.json').read_text())['vectors']
