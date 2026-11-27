@@ -118,6 +118,10 @@ the mint response, and is never stored or logged. A lost key cannot be shown aga
 - **Agent jobs.** Allow agent jobs to let the workspace start general agent jobs while the key is active.
   This works alongside `REVEAL_AGENT_JOB_USERS`; it does not replace it. The grant belongs to the
   workspace, so any credential for that workspace can start agent jobs until its last granting key is revoked.
+- **Which key did it.** Every job a minted key starts records that key's id, label and prefix on its internal
+  queue row, and the admin console's job detail shows it as "Started with API key". A service workspace has no
+  person behind it, so this is how its work is traced to the app that holds the key. Public job responses
+  never include it.
 - **Revocation** takes effect on the next request. An open event stream ends within its four-minute window.
 - **Budget.** Optionally limit what the key's jobs may cost per month or in total ([Budgets](#budgets)).
 

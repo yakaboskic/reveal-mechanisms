@@ -102,6 +102,10 @@ def job_detail(repository, job_id, *, before=None, limit=100):
         job = {**timings[0], **redact(metadata)}
         # Who the owner is (name, email, kind of workspace), as in the telemetry snapshot; null for a system owner.
         job['owner_label'] = owner_directory(tx, [job['owner']]).get(job['owner'])
+        # The console-minted API key that started the job, if one did (api_key_budget.admit): id, label, prefix.
+        started = records(tx, 'queue', ('api_key.key_id', 'api_key.label', 'api_key.prefix'), [job_id]).get(job_id, {}).get('data', {})
+        job['api_key'] = ({'key_id': started.get('api_key.key_id'), 'label': started.get('api_key.label'),
+                           'prefix': started.get('api_key.prefix')} if started.get('api_key.key_id') else None)
         # How an agent job was asked to run: settings, limits and sizes, never the prompt, question or claims.
         agent = agent_runs(tx, [job_id])[job_id] if job['kind'] == 'agent' else None
         # An account job's saved sources: paths, URLs, commands, sizes and checksums, never a file's content. Commands

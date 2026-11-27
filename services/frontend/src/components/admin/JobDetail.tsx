@@ -47,6 +47,7 @@ function SummarySection({ data }: { data: JobDetail }) {
     <KeyValues rows={[
       ["Kind", jobLabel(job)],
       ["Owner", <Owner key="owner" id={job.owner} owners={job.owner_label ? { [job.owner]: job.owner_label } : undefined} length={36} />],
+      ...(job.api_key ? [["Started with API key", <span key="api-key">{job.api_key.label || "Unlabelled key"} <span className="admin-mono">{job.api_key.prefix ? `${job.api_key.prefix}…` : ""}</span></span>] as [string, React.ReactNode]] : []),
       ...([["Created", job.created_at], ["Started", job.started_at], ["Updated", job.updated_at], ["Finished", job.completed_at], ["Current attempt started", job.attempt_started_at]] as const).map(([label, value]) => [label, date(value)] as [string, React.ReactNode]),
       ["Safety classifier", job.refusals == null ? "Not recorded for this run" : refusalNote(job) ? <span key="refusals" className="admin-warning">{refusalNote(job)}. A stopped response is withheld from the run, so the answer may be incomplete.</span> : "No response was stopped"],
       ["Worker", job.worker || "—"],

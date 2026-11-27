@@ -155,6 +155,11 @@ def admit(tx, key, owner, job, rows):
                       + ' Ask an admin to raise the budget' + (', or wait for next month.' if budget['period'] == 'month' else '.'))
             raise Problem(402, 'API_KEY_BUDGET_EXHAUSTED', detail, remaining_usd=remaining, limit_usd=budget['limit_usd'],
                           period=budget['period'], job_reserve_usd=amount)
+    # Which key started the job, beside its input on the queue row (never in the input or a public response), so
+    # the admin console can say which key a service workspace's work came from.
+    queue = next((data for record_kind, _, _, data in rows if record_kind == 'queue'), None)
+    if queue is not None:
+        queue['api_key'] = {'key_id': key['key_id'], 'label': key.get('label'), 'prefix': key.get('prefix')}
     data, version = ledger(tx, key['key_id'])
     if len(data['jobs']) >= MAX_JOBS:
         raise Problem(429, 'API_KEY_JOB_LIMIT', 'This API key has started as many jobs as one key may. Mint another key.')

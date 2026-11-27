@@ -256,3 +256,16 @@ def test_an_analysis_holds_its_cap_and_is_charged_its_statement_jobs(service):
 def test_a_minted_key_shows_its_spend_at_once(service):
     created = mint(service, label='new', budget={'limit_usd': 25, 'period': 'month'}).json()
     assert created['key']['usage']['spent_usd'] == 0 and created['key']['usage']['remaining_usd'] == 25.0
+
+
+def test_the_admin_job_detail_names_the_key_that_started_the_job(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 10)
+    job = spend(service, key, 2).json()['id']
+    detail = service.client.get(f'/internal/v1/admin/jobs/{job}', headers=admin_headers('admin_telemetry', email=None))
+    assert detail.status_code == 200, detail.text
+    assert detail.json()['job']['api_key'] == {'key_id': key_id, 'label': 'budgeted', 'prefix': key[:8]}
+    # Nothing of the key reaches the job's public response.
+    public = service.client.get(f'/v1/jobs/{job}', headers=bearer(key)).json()
+    assert key_id not in json.dumps(public) and 'api_key' not in public
+    with service.repo.read_transaction() as tx:
+        assert 'api_key' not in tx.get('queue', job)['data']['inputs']
