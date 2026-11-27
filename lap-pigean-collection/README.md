@@ -134,6 +134,29 @@ the producer documents to a claims service as deposits into a release of the obj
 `kpn-dapper-toolkit/collections/cfde-genesets` (needs a deposit key granted that collection; C2M2File nodes are left
 out because the claims repository's DAPPER profile cannot verify their ids).
 
+### Source resources (`scripts/cfde_sources.py`)
+
+The producer documents end at root input Files (a URL). `config/cfde_source_datasets.yaml` is the registry
+of the public datasets behind them (GTEx V8, KPMP Kidney Tissue Atlas, IGVF Data Portal, ...) and the
+organizations that publish and produced them. `scripts/cfde_sources.py` matches every root input file of
+the 7,228 documents against it and writes `sources/cfde_sources.dapper.yaml`: Organization and Dataset
+nodes, a `was_derived_from` edge from each root File to its Dataset, and one from each GeneSetCollection to
+the source Datasets of its document. It fails when a root file matches no rule. It is run by hand (it is not
+a LAP stage), on the claims repository's Python:
+
+```bash
+P=out/projects/<project>
+<claims venv>/bin/python -B scripts/cfde_sources.py --claims-repo-dir <claims-repository> \
+  --registry config/cfde_source_datasets.yaml --manifest $P/<project>.cfde_manifest.tsv \
+  --tree-dir $P/cfde_collection --output-file $P/cfde_sources/cfde_sources.dapper.yaml \
+  --report-file $P/cfde_sources/cfde_sources.report.tsv
+```
+
+The document, its report and a copy of the registry are in the bucket under
+`collections/cfde-genesets/2026.11/sources/`. `scripts/cfde_objects_deposit.py --extra-document` deposits it
+after the gene-set documents. Registry entries marked `DRAFT 2026-11-27` were written from file locations
+and await review; changing an entry changes its Dataset id, so rebuild and upload under a new name.
+
 ## Layout
 
 ```

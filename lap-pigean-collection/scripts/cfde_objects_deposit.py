@@ -6,7 +6,8 @@ geneset.provenance.dapper.yaml) and sends their nodes and edges, unchanged, to a
 release of the collection: GeneSets (with members), GeneSetCollections, Files and Activities. Ids are the producer's.
 
     cfde_objects_deposit.py --api http://localhost:8110 --release 2026.11.0 \
-        --manifest <project>.cfde_manifest.tsv --tree-dir <project_dir>/cfde_collection --open --close
+        --manifest <project>.cfde_manifest.tsv --tree-dir <project_dir>/cfde_collection \
+        --extra-document <sources dir>/cfde_sources.dapper.yaml --open --close
 
 The key is read from $CLAIMS_API_KEY (a key granted the collection). A deposit holds at most 1,000 objects, 5,000 edges
 and 16 MB, so a document is sent in parts; resending a part changes nothing, so a stopped run can be repeated.
@@ -81,6 +82,9 @@ def main(argv=None):
     parser.add_argument("--open", action="store_true", help="open the release first")
     parser.add_argument("--close", action="store_true", help="close the release after the last document")
     parser.add_argument("--state-file", default=None, help="documents already sent (one relative path per line)")
+    parser.add_argument("--extra-document", action="append", default=[],
+                        help="another DAPPER document to deposit after the manifest's, before the close (repeatable): "
+                             "sources/cfde_sources.dapper.yaml, whose edges name objects of the gene-set documents")
     args = parser.parse_args(argv)
     key = os.environ.get("CLAIMS_API_KEY")
     if not key:
@@ -143,6 +147,17 @@ def main(argv=None):
         if totals["documents"] % 200 == 0 or n == len(rows):
             print("%d / %d documents (%s), %.0f s: %s" % (n, len(rows), row["library"], time.time() - started, totals),
                   flush=True)
+    for path in args.extra_document:
+        with open(path) as fh:
+            document = yaml.load(fh, Loader=Loader)
+        extra = {"parts": 0, "objects": 0, "edges": 0, "unresolved_references": 0}
+        for part in parts(document):
+            receipt = post("/v1/deposits", {"collection": args.collection, "release": args.release, "document": part})
+            extra["parts"] += 1
+            extra["objects"] += sum(len(v) for g, v in part.items() if not g.endswith("_edges"))
+            extra["edges"] += sum(len(v) for g, v in part.items() if g.endswith("_edges"))
+            extra["unresolved_references"] += len(receipt.get("unresolved_references") or [])
+        print("extra document %s: %s" % (path, json.dumps(extra)), flush=True)
     if args.close:
         print("closed", json.dumps(post("/v1/collections/%s/releases/%s:close" % (args.collection, args.release), {}))[:500])
     print(json.dumps(totals))

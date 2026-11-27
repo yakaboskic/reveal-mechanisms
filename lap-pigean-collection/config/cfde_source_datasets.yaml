@@ -1,0 +1,547 @@
+# Public source datasets (the resources, e.g. GTEx V8) and the organizations behind them, for the CFDE
+# gene-set libraries of the cfde-genesets collection.
+#
+# scripts/cfde_sources.py reads the root input Files of every geneset.provenance.dapper.yaml (the Files an
+# Activity used and no Activity generated), matches them against the `files` rules below, and writes one
+# DAPPER document, sources/cfde_sources.dapper.yaml:
+#   - an Organization node per organization used,
+#   - a Dataset node per dataset used,
+#   - a was_derived_from edge from each matched root File to its Dataset,
+#   - a was_derived_from edge from each GeneSetCollection to the source Datasets of its document
+#     (datasets marked `reference: true`, such as gene-annotation tables, are left out of these).
+# So a gene set's provenance ends at an object for the resource, not at a bare file URL.
+#
+# organizations: become DAPPER `Organization` nodes (name + optional ROR CURIE). Datasets reference them by
+#   key in `publisher` (-> Dataset.publisher, who distributes it) and `attributed_to` (-> was_attributed_to,
+#   the data producer when it differs).
+# datasets: DAPPER `Dataset` nodes (name, description, version, alternate_identifier, location, publisher,
+#   was_attributed_to). A `files` rule matches a root file by `pattern` (regex on the file name) and/or
+#   `location` (regex on the File's location); both must match when both are given. `url` and `note` are
+#   documentation only. `reference: true` marks an auxiliary reference table.
+# libraries: which datasets a library's root files may come from (rules are only tried for these).
+# ignore: root files that are the extractor's own workflow artefacts, not source data.
+#
+# Review status. Entries from the first registry (pigean/raw/cfde_source_datasets.yaml, 2026-09-28) had
+# their ROR ids and public URLs checked then. Entries marked `# DRAFT 2026-11-27` were written from the
+# file locations recorded in the provenance documents and need a curator's review of name, description,
+# version, publisher and attribution. ROR ids on them were checked against api.ror.org on 2026-11-27.
+
+organizations: become DAPPER `Organization` nodes (name + optional ROR CURIE; ROR ids verified against
+#   api.ror.org on 2026-09-28). Datasets reference them by key in `publisher` (-> Dataset.publisher) and
+#   `attributed_to` (-> was_attributed_to, the data producer when it differs from the distributor).
+# datasets: DAPPER `Dataset` nodes (hashable: name, description, version, alternate_identifier, publisher,
+#   was_attributed_to; unhashable: location). `files` map root file names (regex) to a public `url` where one
+#   is known; the url and note go into the raw File's description. Where a note says byte-identical, the public
+#   object's md5 equals the md5 recorded in the provenance graph.
+# libraries: which datasets a library's root files may come from (patterns are only tried for these).
+#
+# Root files that match no pattern are still written as File nodes (with their S3 copy as location) but carry
+# no dataset link; annotate warns about them so this registry can be extended.
+
+organizations:
+  broad:
+    name: Broad Institute
+    ror: ror:05a0ya142
+  ncbi:
+    name: National Center for Biotechnology Information
+    ror: ror:02meqm098
+  mount_sinai:
+    name: Icahn School of Medicine at Mount Sinai
+    ror: ror:04a9tmd77
+  indiana_university:
+    name: Indiana University
+    ror: ror:01kg8sb98
+  gtex_consortium:
+    name: GTEx Consortium
+  motrpac_study_group:
+    name: MoTrPAC Study Group
+  maayan_lab:
+    name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
+  hubmap_consortium:
+    name: HuBMAP Consortium
+  ucsd:
+    name: University of California San Diego
+    ror: ror:0168r3w48
+  gaulton_lab:
+    name: Gaulton Laboratory, University of California San Diego
+  gwu:
+    name: George Washington University
+    ror: ror:00y4zzh67
+  glygen_consortium:
+    name: GlyGen Consortium
+  embl_ebi:
+    name: European Bioinformatics Institute
+    ror: ror:02catss52
+  impc_consortium:
+    name: International Mouse Phenotyping Consortium
+  idg_consortium:
+    name: Illuminating the Druggable Genome Consortium
+  metabolomics_workbench:
+    name: Metabolomics Workbench (NIH Common Fund Metabolomics Program)
+
+  # DRAFT 2026-11-27: organizations of the libraries added to the release after the first registry.
+  sage_bionetworks:
+    name: Sage Bionetworks
+    ror: ror:049ncjx51
+  amp_ad_consortium:
+    name: Accelerating Medicines Partnership Program for Alzheimer's Disease (AMP-AD) Consortium
+  stanford:
+    name: Stanford University
+    ror: ror:00f54p054
+  igvf_consortium:
+    name: Impact of Genomic Variation on Function (IGVF) Consortium
+  niaid:
+    name: National Institute of Allergy and Infectious Diseases
+    ror: ror:043z4tv69
+  kpmp_consortium:
+    name: Kidney Precision Medicine Project (KPMP)
+  psychencode_consortium:
+    name: PsychENCODE Consortium
+
+datasets:
+  gtex_v8:
+    name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)
+    description: >-
+      Genotype-Tissue Expression project release V8 (dbGaP phs000424.v8.p2; RNA-SeQC v1.1.9 gene read counts
+      dated 2017-06-05) with the open-access sample attribute and subject phenotype tables, as distributed by
+      the GTEx Portal. The CFDE GTEx aging signatures were computed from these files.
+    version: v8
+    alternate_identifier:
+      - phs000424.v8.p2
+      - https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    publisher: broad              # hosts the GTEx Portal
+    attributed_to: [gtex_consortium]
+    location: https://gtexportal.org/home/downloads/adult-gtex/bulk_tissue_expression
+    files:
+      - pattern: '^GTEx_Analysis_2017-06-05_v8_RNASeQCv1\.1\.9_gene_reads\.gct\.gz$'
+        url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_reads.gct.gz
+        note: byte-identical to the extractor's copy (md5 HW7Jcxikd9f9grpyFDkl7g==, 917091994 bytes; checked 2026-09-28)
+      - pattern: '^GTEx_Analysis_v8_Annotations_SampleAttributesDS\.txt$'
+        url: https://storage.googleapis.com/adult-gtex/annotations/v8/metadata-files/GTEx_Analysis_v8_Annotations_SampleAttributesDS.txt
+        note: byte-identical to the extractor's copy (md5 OoY7ANsAoKCKXHkA1E6hGQ==, 11512258 bytes; checked 2026-09-28)
+      - pattern: '^GTEx_Analysis_v8_Annotations_SubjectPhenotypesDS\.txt$'
+        url: https://storage.googleapis.com/adult-gtex/annotations/v8/metadata-files/GTEx_Analysis_v8_Annotations_SubjectPhenotypesDS.txt
+        note: byte-identical to the extractor's copy (md5 kCl/wxUSkC9EWcdXGA/ldQ==, 20271 bytes; checked 2026-09-28)
+      # DRAFT 2026-11-27: the TPM matrix of the same release, used by the v2.0 extractor runs.
+      - pattern: '^GTEx_Analysis_2017-06-05_v8_RNASeQCv1\.1\.9_gene_tpm\.gct\.gz$'
+        url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_tpm.gct.gz
+
+  ncbi_gene_info_human:
+    reference: true
+    name: NCBI Gene Homo_sapiens.gene_info
+    description: >-
+      NCBI Gene's per-species gene_info table for human (Entrez gene ids, official symbols, synonyms,
+      Ensembl cross-references), used by the Harmonizome-style notebooks as `human_gene_info` for
+      Ensembl-to-symbol mapping. NCBI rebuilds the file daily; the snapshot date behind the extractor's copy
+      is not recorded, only its checksum and size.
+    version: undated snapshot
+    alternate_identifier:
+      - https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+    publisher: ncbi
+    location: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/
+    files:
+      - pattern: '^human_gene_info$'
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+        note: uncompressed, undated copy of the NCBI file (md5 hvzbVLFaJJSRJutxecW6lQ==, 34989436 bytes)
+      - pattern: '^Homo_sapiens\.gene_info\.gz$'
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+        note: pinned snapshot recorded by the extractor (NCBI rebuilds the file daily)
+
+  ncbi_gene_mouse_and_orthologs:
+    reference: true
+    name: NCBI Gene Mus_musculus.gene_info and gene_orthologs
+    description: >-
+      NCBI Gene's mouse gene_info table and the cross-species gene_orthologs table, used to map mouse
+      signatures to human genes. NCBI rebuilds these files daily; the extractor records the checksum of
+      the snapshot it used.
+    version: undated snapshot
+    alternate_identifier:
+      - https://ftp.ncbi.nlm.nih.gov/gene/DATA/
+    publisher: ncbi
+    location: https://ftp.ncbi.nlm.nih.gov/gene/DATA/
+    files:
+      - pattern: '^Mus_musculus\.gene_info\.gz$'
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Mus_musculus.gene_info.gz
+      - pattern: '^gene_orthologs\.gz$'
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene_orthologs.gz
+
+  harmonizome_mapping_2017:
+    reference: true
+    name: Harmonizome gene symbol mapping file (mappingFile_2017.txt)
+    description: >-
+      The Ma'ayan Laboratory's symbol/alias-to-approved-symbol mapping table distributed with the
+      HarmonizomePythonScripts repository and used by every Harmonizome-style processing notebook to
+      harmonise gene identifiers.
+    version: "2017"
+    alternate_identifier:
+      - https://github.com/MaayanLab/HarmonizomePythonScripts
+    publisher: mount_sinai
+    attributed_to: [maayan_lab]
+    location: https://github.com/MaayanLab/HarmonizomePythonScripts/blob/master/mappingFile_2017.txt
+    files:
+      - pattern: '^mappingFile_2017\.txt$'
+        url: https://raw.githubusercontent.com/MaayanLab/HarmonizomePythonScripts/master/mappingFile_2017.txt
+        note: byte-identical to the extractor's copy (md5 Tt3CWz+9SSTS6P+lMIrg8A==, 2575360 bytes; checked 2026-09-28)
+
+  motrpac_pass1b_dea:
+    name: MoTrPAC PASS1B-06 rat endurance training study, released differential analysis (transcriptomics)
+    description: >-
+      Differential expression results of the MoTrPAC 6-month endurance exercise training study in rats
+      (PASS1B-06): training vs sedentary controls (training_DA) and per-timepoint contrasts (timewise_DA)
+      across 19 tissues, plus the transcript feature annotation. Released with "Temporal dynamics of the
+      multi-omic response to endurance exercise training" (Nature 629, 2024) through the MoTrPAC Data Hub
+      (registration required) and as the MotrpacRatTraining6moData R data package.
+    version: MotrpacRatTraining6moData 2.0.0
+    alternate_identifier:
+      - doi:10.1038/s41586-023-06877-w
+      - doi:10.5281/zenodo.16851449
+      - https://github.com/MoTrPAC/MotrpacRatTraining6moData
+    publisher: motrpac_study_group
+    location: https://motrpac-data.org/data-access
+    files:
+      - pattern: '^TRNSCRPT_training_DA\.tsv$'
+        url: https://motrpac-data.org/data-access
+        note: Data Hub path transcriptomics/analysis/transcript-rna-seq/dea/ (registration required; no anonymous HTTP copy to checksum against; md5 d/+1ztqJypniEAGG4RqC/w==, 106873273 bytes)
+      - pattern: '^TRNSCRPT_timewise_DA\.tsv$'
+        url: https://motrpac-data.org/data-access
+        note: Data Hub path transcriptomics/analysis/transcript-rna-seq/dea/ (registration required; md5 zc1gX9pDNq+5iL5vIOU2ig==, 735104486 bytes)
+      - pattern: '^TRNSCRPT_FEATURE_ANNOT\.txt$'
+        url: https://motrpac-data.org/data-access
+        note: Data Hub path transcriptomics/analysis/transcript-rna-seq/feature-annot/ (registration required; md5 YkL4hWebDKKiuQaqs+aNTQ==, 3104459 bytes)
+
+  motrpac_pass1b_counts:
+    name: MoTrPAC PASS1B-06 rat endurance training study, transcriptomics raw counts and sample metadata
+    description: >-
+      Per-tissue RNA-seq raw count matrices (TRNSCRPT_<TISSUE>_RAW_COUNTS), transcript and phenotype sample
+      metadata, the feature-to-gene map and the rat-to-human ortholog map of the MoTrPAC 6-month endurance
+      exercise training study in rats (PASS1B-06), released with "Temporal dynamics of the multi-omic
+      response to endurance exercise training" (Nature 629, 2024) through the MoTrPAC Data Hub
+      (registration required) and the MotrpacRatTraining6moData R data package. The CFDE MoTrPAC TR1 gene
+      sets (training vs control per tissue) were computed from these files.
+    version: MotrpacRatTraining6moData 2.0.0
+    alternate_identifier:
+      - doi:10.1038/s41586-023-06877-w
+      - doi:10.5281/zenodo.16851449
+      - https://github.com/MoTrPAC/MotrpacRatTraining6moData
+    publisher: motrpac_study_group
+    location: https://motrpac-data.org/data-access
+    files:
+      - pattern: '^TRNSCRPT_[A-Z]+_RAW_COUNTS\.tsv\.gz$'
+        url: https://motrpac-data.org/data-access
+        note: Data Hub transcriptomics raw counts (registration required; no anonymous HTTP copy to checksum against)
+      - pattern: '^(TRNSCRPT_META|PHENO)_sample_metadata\.tsv\.gz$'
+        url: https://motrpac-data.org/data-access
+        note: Data Hub sample / phenotype metadata (registration required)
+      - pattern: '^FEATURE_TO_GENE_transcriptomics_subset\.tsv\.gz$'
+        url: https://motrpac-data.org/data-access
+        note: feature-to-gene map (registration required)
+      - pattern: '^RAT_TO_HUMAN_GENE\.tsv\.gz$'
+        url: https://github.com/MoTrPAC/MotrpacRatTraining6moData
+        note: rat-to-human ortholog map distributed with the R data package (RAT_TO_HUMAN_GENE)
+
+  lincs_l1000_consensus_2020:
+    name: LINCS L1000 consensus perturbation signatures (chemical perturbation and CRISPR knockout), Ma'ayan Laboratory
+    description: >-
+      Consensus (mean characteristic-direction coefficient) signatures per perturbagen computed by the
+      Ma'ayan Laboratory from the LINCS L1000 2020 data release: cp_mean_coeff_mat.tsv.gz (chemical
+      perturbations) and xpr_mean_coeff_mat.tsv.gz (CRISPR knockouts). These are the inputs of the
+      Harmonizome datasets "LINCS L1000 CMAP Chemical Perturbation Consensus Signatures" and "LINCS L1000
+      CMAP CRISPR Knockout Consensus Signatures" and are served through SigCom LINCS and the LINCS DCIC S3
+      bucket (LINCS-sigs-2021/means/).
+    version: LINCS 2020 release
+    alternate_identifier:
+      - https://maayanlab.cloud/Harmonizome/dataset/LINCS+L1000+CMAP+Chemical+Perturbation+Consensus+Signatures
+      - https://maayanlab.cloud/Harmonizome/dataset/LINCS+L1000+CMAP+CRISPR+Knockout+Consensus+Signatures
+    publisher: mount_sinai
+    attributed_to: [maayan_lab]
+    location: https://maayanlab.cloud/sigcom-lincs/
+    files:
+      - pattern: '^cp_mean_coeff_mat\.tsv\.gz$'
+        url: https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/means/cp_mean_coeff_mat.tsv.gz
+        note: public size 1897525732 bytes matches the extractor's copy (multipart ETag, md5 not comparable; checked 2026-10-05)
+      - pattern: '^xpr_mean_coeff_mat\.tsv\.gz$'
+        url: https://lincs-dcic.s3.amazonaws.com/LINCS-sigs-2021/means/xpr_mean_coeff_mat.tsv.gz
+        note: public size 432492125 bytes matches the extractor's copy (checked 2026-10-05)
+
+  hubmap_asctb_v2_2:
+    name: HuBMAP ASCT+B tables, 8th release (v2.2)
+    description: >-
+      The Anatomical Structures, Cell Types, plus Biomarkers (ASCT+B) tables of the Human Reference Atlas,
+      8th release (v2.2; 33 organ tables, each versioned separately, e.g. kidney v1.6), as published by the
+      HuBMAP CCF ASCT+B Reporter with per-table CSVs on cdn.humanatlas.io and persistent
+      purl.humanatlas.io/asct-b/<organ>/<version> identifiers. The CFDE HuBMAP gene sets are the cell-type
+      biomarker lists of these tables (HZ2 additionally augmented with Geneshot co-occurrence genes).
+    version: 8th release (v2.2)
+    alternate_identifier:
+      - https://purl.humanatlas.io/asct-b
+      - https://hubmapconsortium.github.io/ccf-asct-reporter/
+    publisher: hubmap_consortium
+    attributed_to: [indiana_university]   # Human Reference Atlas / ASCT+B Reporter team (CNS, Indiana University)
+    location: https://hubmapconsortium.github.io/ccf-asct-reporter/
+    files:
+      - pattern: '^(ASCT-B_VH_|asct-b-).*\.csv$'
+        url: https://cdn.humanatlas.io/digital-objects/asct-b/
+        note: per-organ table of the 8th release; the exact versioned CSV URL is the File's location
+      - pattern: '^gene_attribute_matrix\.txt\.gz$'
+        url: https://cdn.humanatlas.io/digital-objects/asct-b/
+        note: intermediate matrix built by the HuBMAP HZ1 workflow from the 33 ASCT+B v2.2 tables (the tables themselves sit in s3://dig-gene-set-filtered/HuBMAP/input/); it is the root of the HZ2 lineage graph
+
+  gaulton_liana_ccc:
+    name: Gaulton Lab LIANA cell-cell communication signaling gene sets
+    description: >-
+      Per-tissue gene sets of incoming / outgoing / combined cell-cell communication signaling genes derived
+      with LIANA by the Gaulton Laboratory (UC San Diego) and supplied as GMT files from the
+      liana-ccc-pipeline repository; imported unchanged by the extractor.
+    version: liana-ccc-pipeline (GitHub, 2026)
+    alternate_identifier:
+      - https://github.com/kjgaulton/liana-ccc-pipeline
+    publisher: ucsd
+    attributed_to: [gaulton_lab]
+    location: https://github.com/kjgaulton/liana-ccc-pipeline
+    files:
+      - pattern: '_(combined|incoming|outgoing)_signal_sets\.gmt$'
+        url: https://github.com/kjgaulton/liana-ccc-pipeline
+
+  glygen_v1_12_1:
+    name: GlyGen data release v1.12.1 (human glycosylation annotations and protein master list)
+    description: >-
+      GlyGen's reviewed human proteoform glycosylation citation tables (UniCarbKB, Harvard, GlyConnect
+      sources) and the human protein master list from data release v1.12.1, grouped by GlyTouCan accession
+      into glycosylated-protein gene sets by the extractor.
+    version: v1.12.1
+    alternate_identifier:
+      - https://data.glygen.org/ln2data/releases/data/v1.12.1/
+      - https://glygen.org/
+    publisher: gwu
+    attributed_to: [glygen_consortium]
+    location: https://data.glygen.org/ln2data/releases/data/v1.12.1/reviewed/
+    files:
+      - pattern: '^human_proteoform_citations_glycosylation_.*\.csv$'
+        url: https://data.glygen.org/ln2data/releases/data/v1.12.1/reviewed/
+      - pattern: '^human_protein_masterlist\.csv$'
+        url: https://data.glygen.org/ln2data/releases/data/v1.12.1/reviewed/human_protein_masterlist.csv
+        note: the URL answers with a 3454-byte landing page rather than the 3490929-byte file; fetch via the release directory
+
+  enrichr_idg_drug_targets_2022:
+    name: Enrichr library IDG_Drug_Targets_2022
+    description: >-
+      The Enrichr gene-set library "IDG_Drug_Targets_2022" (Ma'ayan Laboratory): drug-target gene sets
+      compiled from the Illuminating the Druggable Genome program's Pharos / TCRD resources, served by the
+      Enrichr geneSetLibrary API and imported unchanged by the extractor.
+    version: "2022"
+    alternate_identifier:
+      - https://maayanlab.cloud/Enrichr/#libraries
+      - https://pharos.nih.gov/
+    publisher: mount_sinai
+    attributed_to: [maayan_lab, idg_consortium]
+    location: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=IDG_Drug_Targets_2022
+    files:
+      - pattern: '^IDG_Drug_Targets_2022\.gmt$'
+        url: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=IDG_Drug_Targets_2022
+
+  impc_release_18:
+    name: IMPC Data Release 18.0 genotype-phenotype assertions
+    description: >-
+      All genotype-to-phenotype association assertions of the International Mouse Phenotyping Consortium,
+      data release 18.0, as distributed from the EMBL-EBI FTP site; the extractor builds one gene set per
+      mouse phenotype term with Harmonizome-style symbol normalization.
+    version: DR18.0
+    alternate_identifier:
+      - https://www.mousephenotype.org/
+      - https://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/release-18.0/
+    publisher: embl_ebi
+    attributed_to: [impc_consortium]
+    location: https://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/release-18.0/
+    files:
+      - pattern: '^genotype-phenotype-assertions-ALL\.r18\.0\.csv\.gz$'
+        url: https://ftp.ebi.ac.uk/pub/databases/impc/all-data-releases/release-18.0/results/
+        note: the exact file URL the extractor recorded answers 404 now; the release directory still exists
+
+  harmonizome_mw_metabolites:
+    name: Harmonizome "Metabolomics Workbench Metabolites" gene-attribute edges
+    description: >-
+      Harmonizome's processed gene-metabolite association edge list for the Metabolomics Workbench dataset
+      (human genes associated with metabolites), from which the extractor reconstructs one gene set per
+      metabolite. The underlying data are the NIH Common Fund Metabolomics Workbench.
+    version: Harmonizome processed dataset (mwmetabolites)
+    alternate_identifier:
+      - https://maayanlab.cloud/Harmonizome/dataset/Metabolomics+Workbench+Metabolites
+      - https://www.metabolomicsworkbench.org/
+    publisher: mount_sinai
+    attributed_to: [maayan_lab, metabolomics_workbench]
+    location: https://maayanlab.cloud/static/hdfs/harmonizome/data/mwmetabolites/
+    files:
+      - pattern: '^gene_attribute_edges\.txt\.gz$'
+        url: https://maayanlab.cloud/static/hdfs/harmonizome/data/mwmetabolites/gene_attribute_edges.txt.gz
+        note: the live file is 47336 bytes vs the extractor's 47445-byte copy, so Harmonizome has since updated it
+
+  rummageo_2_5:
+    name: RummaGEO 2.5 automatically generated GEO signatures (human and mouse)
+    description: >-
+      RummaGEO release 2.5 (Ma'ayan Laboratory): gene-set signatures automatically computed from GEO
+      RNA-seq studies, human and mouse GMTs, from which the extractor selected the drug-perturbation
+      signatures using recorded Harmonizome selection rows.
+    version: "2.5"
+    alternate_identifier:
+      - https://rummageo.com/
+    publisher: mount_sinai
+    attributed_to: [maayan_lab]
+    location: https://minio.dev.maayanlab.cloud/rummageo/2.5/
+    files:
+      - pattern: '^human-geo-auto\.gmt\.gz$'
+        url: https://minio.dev.maayanlab.cloud/rummageo/2.5/human-geo-auto.gmt.gz
+        note: public size 536171815 bytes matches the extractor's copy (checked 2026-10-05)
+      - pattern: '^mouse-geo-auto\.gmt\.gz$'
+        url: https://minio.dev.maayanlab.cloud/rummageo/2.5/mouse-geo-auto.gmt.gz
+
+  # ---------------------------------------------------------------------------------------------------
+  # DRAFT 2026-11-27: datasets for inputs the first registry did not cover. Review before relying on them.
+
+  enrichr_archs4_idg_coexp:
+    name: Enrichr library ARCHS4_IDG_Coexp
+    description: >-
+      The Enrichr gene-set library "ARCHS4_IDG_Coexp" (Ma'ayan Laboratory): genes co-expressed in ARCHS4
+      with the understudied targets of the Illuminating the Druggable Genome program, served by the Enrichr
+      geneSetLibrary API and imported by the extractor.
+    alternate_identifier:
+      - https://maayanlab.cloud/Enrichr/#libraries
+    publisher: mount_sinai
+    attributed_to: [maayan_lab, idg_consortium]
+    location: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ARCHS4_IDG_Coexp
+    files:
+      - pattern: '^ARCHS4_IDG_Coexp\.gmt$'
+        url: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=ARCHS4_IDG_Coexp
+
+  amp_ad_differential_expression:
+    name: AMP-AD harmonized RNA-seq differential expression summary (Synapse syn14237651)
+    description: >-
+      The differential expression summary table of the AMP-AD cross-study harmonized RNA-seq analysis
+      (differentialExpressionSummary.tsv), distributed through the AD Knowledge Portal on Synapse. The CFDE
+      AMP-AD gene sets were extracted from this table.
+    alternate_identifier:
+      - syn14237651
+    publisher: sage_bionetworks        # operates Synapse and the AD Knowledge Portal
+    attributed_to: [amp_ad_consortium]
+    location: https://www.synapse.org/Synapse:syn14237651
+    files:
+      - pattern: '^differentialExpressionSummary\.tsv$'
+        location: 'synapse\.org/Synapse:syn14237651'
+
+  ncbi_geo_series:
+    name: NCBI Gene Expression Omnibus (GEO) series records and NCBI-generated RNA-seq counts
+    description: >-
+      Gene Expression Omnibus series (GSE) used by the CFDE GEO bulk RNA-seq gene sets: each series' MINiML
+      family record and supplementary files from the GEO FTP site, and the NCBI-generated raw count matrices
+      and gene annotation table from the GEO RNA-seq counts download service. One Dataset stands for the
+      resource; each File's location names its series accession.
+    alternate_identifier:
+      - https://www.ncbi.nlm.nih.gov/geo/
+    publisher: ncbi
+    location: https://www.ncbi.nlm.nih.gov/geo/
+    files:
+      - location: '^https://ftp\.ncbi\.nlm\.nih\.gov/geo/series/'
+      - location: '^https://www\.ncbi\.nlm\.nih\.gov/geo/download/'
+
+  glygen_glycan_api:
+    name: GlyGen glycan detail records (GlyGen API)
+    description: >-
+      Per-glycan detail records returned by the GlyGen API (api.glygen.org/glycan/detail/<GlyTouCan
+      accession>), read by the extractor for the glycans named in the GlyGen release tables. No release
+      version is recorded with these responses.
+    alternate_identifier:
+      - https://api.glygen.org/
+    publisher: gwu
+    attributed_to: [glygen_consortium]
+    location: https://api.glygen.org/glycan/detail/
+    files:
+      - location: '^https://api\.glygen\.org/glycan/detail/'
+
+  igvf_data_portal:
+    name: IGVF Data Portal tabular files
+    description: >-
+      Tabular analysis files of the Impact of Genomic Variation on Function Consortium, downloaded from the
+      IGVF Data Portal (data.igvf.org/tabular-files/<IGVFFI accession>). Each File's name and location carry
+      its IGVFFI accession.
+    alternate_identifier:
+      - https://data.igvf.org/
+    publisher: stanford                # hosts the IGVF Data and Administrative Coordinating Center portal
+    attributed_to: [igvf_consortium]
+    location: https://data.igvf.org/
+    files:
+      - location: '^https://data\.igvf\.org/tabular-files/'
+
+  immport_sdy1299:
+    name: ImmPort study SDY1299 RNA sequencing result files
+    description: >-
+      RNA sequencing result files of ImmPort shared study SDY1299 (DESeq differential expression tables),
+      from the study's ResultFiles on ImmPort.
+    alternate_identifier:
+      - SDY1299
+    publisher: niaid                   # ImmPort is funded and overseen by NIAID DAIT
+    location: https://www.immport.org/shared/study/SDY1299
+    files:
+      - location: '^https://www\.immport\.org/shared/study/SDY1299(#|/|$)'
+
+  immport_sdy2948:
+    name: ImmPort study SDY2948 RNA sequencing result files
+    description: >-
+      RNA sequencing result files of ImmPort shared study SDY2948 (HTSeq count matrix, also GEO series
+      GSE207214), from the study's ResultFiles on ImmPort.
+    alternate_identifier:
+      - SDY2948
+      - GSE207214
+    publisher: niaid
+    location: https://www.immport.org/shared/study/SDY2948
+    files:
+      - location: '^https://www\.immport\.org/shared/study/SDY2948(#|/|$)'
+
+  kpmp_kidney_tissue_atlas:
+    name: KPMP Kidney Tissue Atlas repository files (single-cell transcriptomics)
+    description: >-
+      Per-participant single-cell and single-nucleus transcriptomics expression matrices and their metadata
+      workbooks, downloaded from the Kidney Precision Medicine Project's Kidney Tissue Atlas data repository
+      (atlas.kpmp.org/api/v1/file/download/<package id>/<file>).
+    alternate_identifier:
+      - https://atlas.kpmp.org/repository
+    publisher: kpmp_consortium
+    location: https://atlas.kpmp.org/repository
+    files:
+      - location: '^https://atlas\.kpmp\.org/api/v1/file/download/'
+
+  psychencode_derived_dex_coexp:
+    name: PsychENCODE integrative analysis derived data (differential expression and co-expression modules)
+    description: >-
+      Derived data files of the PsychENCODE Consortium's integrative analysis, from the PsychENCODE resource
+      site: DER-13 (disorder differentially expressed genes) and DER-16 (disorder gene co-expression modules).
+    alternate_identifier:
+      - DER-13
+      - DER-16
+      - http://resource.psychencode.org/
+    publisher: psychencode_consortium
+    location: http://resource.psychencode.org/Datasets/Derived/DEXgenes_CoExp/
+    files:
+      - location: '^http://resource\.psychencode\.org/Datasets/Derived/'
+
+# Which datasets a library's root files may come from.
+libraries:
+  GTEx: [gtex_v8, ncbi_gene_info_human]
+  MoTrPAC: [motrpac_pass1b_dea, motrpac_pass1b_counts, harmonizome_mapping_2017]
+  HuBMAP: [hubmap_asctb_v2_2, ncbi_gene_info_human]
+  LINCS_L1000: [lincs_l1000_consensus_2020, harmonizome_mapping_2017]
+  GaultonLab: [gaulton_liana_ccc]
+  GlyGen: [glygen_v1_12_1, glygen_glycan_api]
+  IDG: [enrichr_idg_drug_targets_2022, enrichr_archs4_idg_coexp]
+  IMPC: [impc_release_18, harmonizome_mapping_2017]
+  MetabolomicsWorkbench: [harmonizome_mw_metabolites]
+  RummaGEO: [rummageo_2_5, ncbi_gene_info_human, ncbi_gene_mouse_and_orthologs]
+  AMP_AD: [amp_ad_differential_expression]
+  GEO_BULK: [ncbi_geo_series]
+  IGVF: [igvf_data_portal]
+  ImmPort: [immport_sdy1299, immport_sdy2948]
+  KPMP_KTA: [kpmp_kidney_tissue_atlas]
+  PsychENCODE: [psychencode_derived_dex_coexp]
+
+# Root files that are the extractor's own workflow artefacts (written by a step whose Activity the document
+# does not record), not source data. They get no Dataset link and are not reported as unmatched.
+ignore:
+  - location: '^s3://dig-gene-set-data/.*/workflow/(selection/)?(selection_manifest\.tsv|source_manifest\.json)$'
