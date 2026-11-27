@@ -113,6 +113,15 @@ def agent_job_users(tx):
     return {data['user_id'] for _, data in minted(tx) if not data.get('revoked_at') and data.get('agent_jobs') is True}
 
 
+def minted_key(tx, authorization):
+    """The active console-minted key this credential is, or None (a signed session or a configured key)."""
+    token = authorization[7:] if isinstance(authorization, str) and authorization.startswith('Bearer ') else None
+    if not well_formed(token): return None
+    digest = hashlib.sha256(token.encode()).hexdigest()
+    if any(hmac.compare_digest(digest, fingerprint) for fingerprint, _ in keys()): return None
+    return active(tx.get(KIND, digest))
+
+
 def summary(data, principal=None):
     me = (principal or {}).get('data', {}).get('me', {}) if isinstance(principal, dict) else {}
     return {'key_id': data.get('key_id'), 'label': data.get('label'), 'prefix': data.get('prefix'),
@@ -120,6 +129,8 @@ def summary(data, principal=None):
             'workspace': {'principal_kind': me.get('principal_kind'), 'display_name': me.get('display_name'),
                           'workspace_expires_at': me.get('workspace_expires_at'),
                           'retired': bool(principal and principal['data'].get('retired'))} if principal else None,
+            'budget': data.get('budget'), 'budget_changed_at': data.get('budget_changed_at'),
+            'budget_changed_by': data.get('budget_changed_by'),
             'created_at': data.get('created_at'), 'created_by': data.get('created_by'),
             'revoked_at': data.get('revoked_at'), 'revoked_by': data.get('revoked_by')}
 
@@ -136,7 +147,10 @@ def view(tx, environ=None):
         problem = None
     except Problem as exc:
         configured, problem = [], exc.detail
-    return {'format': VIEW_FORMAT, 'keys': [summary(data, principals.get(data['user_id'])) for _, data in entries],
+    from .api_key_budget import status
+    return {'format': VIEW_FORMAT,
+            'keys': [{**summary(data, principals.get(data['user_id'])), 'usage': status(tx, data, data['user_id'])}
+                     for _, data in entries],
             'environment': {'keys': configured, 'problem': problem}}
 
 
@@ -150,8 +164,11 @@ def usable_principal(row):
 def mint(tx, body, actor, new_principal):
     """Mint one key for an existing workspace (user_id) or for a new registered service workspace named by the label.
     Returns the key's summary and the raw key, which nothing stores."""
-    if not isinstance(body, dict) or set(body) - {'label', 'user_id', 'agent_jobs'}:
-        raise KeyRequestError('Send a label, and optionally user_id and agent_jobs.')
+    from .api_key_budget import BudgetError, parse
+    if not isinstance(body, dict) or set(body) - {'label', 'user_id', 'agent_jobs', 'budget'}:
+        raise KeyRequestError('Send a label, and optionally user_id, agent_jobs and budget.')
+    try: budget = parse(body.get('budget'))
+    except BudgetError as exc: raise KeyRequestError(str(exc)) from None
     label, user_id, agent_jobs = body.get('label'), body.get('user_id'), body.get('agent_jobs', False)
     if not isinstance(label, str) or not LABEL.fullmatch(label.strip()) or label != label.strip():
         raise KeyRequestError('The label must be 1 to 64 letters, digits, spaces, dots, underscores or hyphens, starting with a letter or digit.')
@@ -177,9 +194,26 @@ def mint(tx, body, actor, new_principal):
     if any(hmac.compare_digest(fingerprint, configured) for configured, _ in keys()) or tx.get(KIND, fingerprint):
         raise Conflict('Mint again.')  # a 256-bit collision; never expected
     data = {'format': FORMAT, 'key_id': uid(), 'label': label, 'prefix': key[:8], 'user_id': user_id,
-            'agent_jobs': agent_jobs, 'created_at': now(), 'created_by': actor, 'revoked_at': None, 'revoked_by': None}
+            'agent_jobs': agent_jobs, 'budget': budget, 'created_at': now(), 'created_by': actor,
+            'revoked_at': None, 'revoked_by': None}
     tx.insert(KIND, fingerprint, OWNER, data)
     return {'key': summary(data, tx.get('principal', user_id)), 'api_key': key}
+
+
+def change_budget(tx, key_id, body, actor):
+    """Set, change or remove (null) a minted key's budget. It applies to the next job the key starts."""
+    from .api_key_budget import BudgetError, parse, status
+    if not isinstance(body, dict) or set(body) != {'budget'}:
+        raise KeyRequestError('Send {"budget": {"limit_usd": <dollars>, "period": "month" or "total"}}, or {"budget": null}.')
+    try: budget = parse(body['budget'])
+    except BudgetError as exc: raise KeyRequestError(str(exc)) from None
+    for row, data in minted(tx):
+        if data.get('key_id') == key_id:
+            if data.get('revoked_at'): raise KeyRequestError('This key is revoked.')
+            data = {**data, 'budget': budget, 'budget_changed_at': now(), 'budget_changed_by': actor}
+            tx.put(KIND, row['id'], OWNER, data, expected=row['version'])
+            return {'key': {**summary(data, tx.get('principal', data['user_id'])), 'usage': status(tx, data, data['user_id'])}}
+    raise Problem(404, 'NOT_FOUND', 'No key has that id.')
 
 
 def revoke(tx, key_id, actor):

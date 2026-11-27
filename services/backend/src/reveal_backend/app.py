@@ -306,6 +306,23 @@ async def admin_mint_api_key(request: Request, actor: str = Depends(admin_keys_a
     except Conflict: raise Problem(409, 'API_KEY_CHANGED', 'Another change was saved at the same time; mint again.') from None
     return JSONResponse(result, status_code=201, headers={'Cache-Control': 'private, no-store'})
 
+@app.put('/internal/v1/admin/api-keys/{key_id}/budget')
+async def admin_api_key_budget(key_id: str, request: Request, actor: str = Depends(admin_keys_authority)):
+    from . import api_keys
+    from .repository import Conflict
+    if len(key_id) > 64: raise Problem(404, 'NOT_FOUND', 'No key has that id.')
+    raw = await request.body()
+    if len(raw) > 4096: raise Problem(413, 'INVALID_API_KEY_REQUEST', 'The request is too large.')
+    try: body = json.loads(raw)
+    except ValueError: raise Problem(422, 'INVALID_API_KEY_REQUEST', 'Send the budget as JSON.') from None
+    def write():
+        with repo.transaction() as tx:
+            return api_keys.change_budget(tx, key_id, body, actor)
+    try: result = await run_in_threadpool(write)
+    except api_keys.KeyRequestError as exc: raise Problem(422, 'INVALID_API_KEY_REQUEST', str(exc)[:400]) from None
+    except Conflict: raise Problem(409, 'API_KEY_CHANGED', 'The key changed; reload and try again.') from None
+    return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
+
 @app.post('/internal/v1/admin/api-keys/{key_id}/revoke')
 async def admin_revoke_api_key(key_id: str, actor: str = Depends(admin_keys_authority)):
     from . import api_keys
@@ -1148,22 +1165,32 @@ def create_job_transaction(body,authorization,idempotency_key):
         reads=[('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
         identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
-            if body['kind']=='agent': admit_agent_job(identity,tx)
-            check_job_quota(tx,identity,body['kind'])
-            if body['kind']=='agent': return agent_job_rows(tx,identity,body)
-            if body['kind']=='paragraph':
-                # Research statements need no reference data: allowed on archived accounts.
-                account=owned(tx,'account',body['account_id'],user)
-                job,rows=jobs.new(user,'paragraph',account_id=body['account_id'],inputs=body)
-                jobs.update_paragraph_state(tx,job)
-                return job,rows
-            # No reload gate: a release publish swaps the reference tables in one RENAME, and an anchor the
-            # served release no longer serves is refused by freeze_research_request (409).
-            # The request is frozen as progressive and written once, with every other new row, in one statement.
-            frozen,binding,rows=freeze_research_request(tx,identity,body,retrieval_mode='progressive',write=False)
-            job,queued=analysis_job_rows(identity,frozen,binding,body)
-            return job,rows+queued
+            job,rows=create_job(tx,identity,body)
+            # A key minted in the admin console pays for the jobs it starts, within its budget (api_key_budget).
+            from . import api_key_budget, api_keys
+            key=api_keys.minted_key(tx,authorization)
+            if key: api_key_budget.admit(tx,key,user,job,rows)
+            return job,rows
         return idempotent(tx,user,'job',idempotency_key,body,create,staged=True)
+
+def create_job(tx,identity,body):
+    """The new job and its rows, for the kind the request names; nothing is written here."""
+    user=identity['user_id']
+    if body['kind']=='agent': admit_agent_job(identity,tx)
+    check_job_quota(tx,identity,body['kind'])
+    if body['kind']=='agent': return agent_job_rows(tx,identity,body)
+    if body['kind']=='paragraph':
+        # Research statements need no reference data: allowed on archived accounts.
+        account=owned(tx,'account',body['account_id'],user)
+        job,rows=jobs.new(user,'paragraph',account_id=body['account_id'],inputs=body)
+        jobs.update_paragraph_state(tx,job)
+        return job,rows
+    # No reload gate: a release publish swaps the reference tables in one RENAME, and an anchor the
+    # served release no longer serves is refused by freeze_research_request (409).
+    # The request is frozen as progressive and written once, with every other new row, in one statement.
+    frozen,binding,rows=freeze_research_request(tx,identity,body,retrieval_mode='progressive',write=False)
+    job,queued=analysis_job_rows(identity,frozen,binding,body)
+    return job,rows+queued
 
 @app.get('/v1/jobs')
 def list_jobs(request:Request,limit:int=20,cursor:str|None=None,kind:str|None=None,status:str|None=None,research_request_id:str|None=None):

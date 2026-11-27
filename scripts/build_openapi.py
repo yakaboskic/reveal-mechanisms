@@ -404,7 +404,10 @@ def application_schemas():
     SCHEMAS['GeneSetResult']['required'].append('coverage')
     add('Problem', obj({'type': string(format='uri'), 'title': string(), 'status': {'type': 'integer', 'minimum': 400, 'maximum': 599},
         'code': string(), 'detail': string(), 'request_id': uuid, 'retryable': {'type': 'boolean'},
-        'current_version': {'type': 'integer', 'minimum': 1}, 'field_errors': array(obj({'pointer': string(), 'message': string()}))},
+        'current_version': {'type': 'integer', 'minimum': 1}, 'field_errors': array(obj({'pointer': string(), 'message': string()})),
+        # API_KEY_BUDGET_EXHAUSTED (402): the key's budget, what is left of it in its period, and what the refused job could cost.
+        'remaining_usd': {'type': 'number', 'minimum': 0}, 'limit_usd': {'type': 'number', 'exclusiveMinimum': 0},
+        'period': {'type': 'string', 'enum': ['month', 'total']}, 'job_reserve_usd': {'type': 'number', 'minimum': 0}},
         ['type', 'title', 'status', 'code', 'detail', 'request_id', 'retryable'], description='RFC 9457-style problem details; details never contain secrets or another user\'s private data.'))
     add('CitationRenderInput', obj({'paragraph_id': did('Paragraph'), 'style': enum('apa', 'mla'), 'locale': string(default='en-US')}, ['paragraph_id', 'style'],
         description='Render the saved paragraph\'s entire pinned citation set together. No mutable text or latest-revision substitution is accepted. Does not launch an agent or change Paragraph identity.'))
@@ -441,6 +444,7 @@ def problem(status, code, detail, **extra):
 ERRORS = {
     '400': problem(400, 'INVALID_REQUEST', 'A parameter or cursor does not match the requested operation.'),
     '401': problem(401, 'AUTHENTICATION_REQUIRED', 'A valid trusted-gateway API assertion is required.'),
+    '402': problem(402, 'API_KEY_BUDGET_EXHAUSTED', 'This API key has $1.00 of its $100.00 budget left this month, and this job may cost up to $2.00. Ask an admin to raise the budget, or wait for next month.', remaining_usd=1.0, limit_usd=100.0, period='month', job_reserve_usd=2.0),
     '403': problem(403, 'SIGN_IN_REQUIRED', 'Sign in to publish a scientific account or exploration.'),
     '404': problem(404, 'NOT_FOUND', 'No accessible record exists for the supplied identifier or exact revision.'),
     '409': problem(409, 'VERSION_CONFLICT', 'The saved draft has changed. Reload and reconcile before retrying.', current_version=3),
@@ -652,12 +656,12 @@ def endpoints(f, e):
             parameter('status', 'query', SCHEMAS['Job']['properties']['status'], 'succeeded'),
             parameter('research_request_id', 'query', uuid, REQUEST_ID)] + page_parameters(), errors=('400', '401', '429'))
     op = operation('/v1/jobs', 'post', 'createJob', 'Jobs', 'Start an analysis or paragraph job',
-        'Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt.',
+        'Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. A job started with an API key minted in the admin console is charged to that key; if the key has a budget its remainder cannot cover the cap of the job, it is refused with 402 API_KEY_BUDGET_EXHAUSTED and nothing is written.',
         'Job', {'analysis_accepted': e['analysis_queued'], 'paragraph_accepted': e['paragraph_queued']},
         request_schema='JobCreate', request_examples={'analysis': {'kind': 'analysis', 'draft_id': DRAFT_ID, 'draft_version': 2, 'budgets': {'max_accounts': 3}},
             'paragraph': {'kind': 'paragraph', 'account_id': f['account']['id'], 'focus_claim_id': f['claim']['id'], 'audience': 'researcher',
                 'language': 'en', 'target_words': 180, 'additional_citations': []}}, status=202, idempotent=True,
-        errors=('401', '404', '409', '422', '429', '503'))
+        errors=('401', '402', '404', '409', '422', '429', '503'))
     op['responses']['422']['content']['application/problem+json']['examples']['missing_eaggl_anchor'] = {'summary': 'Draft has no valid EAGGL anchor',
         'value': problem(422, 'EAGGL_ANCHOR_REQUIRED', 'Select at least one resolvable EAGGL factor before creating an analysis job.',
                          field_errors=[{'pointer': '/draft/eaggl_anchors', 'message': 'At least one EAGGL anchor is required.'}])}

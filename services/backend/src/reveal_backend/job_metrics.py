@@ -143,7 +143,13 @@ def record(repository, job, *, agent=None, error=None, screen=None, deposit=None
                 account = tx.get('account', digest([owner, current['input_account_id']]))
                 parent = account['data'].get('summary', {}).get('job_id') if account and account['owner'] == owner else None
                 data['parent_job_id'] = parent if isinstance(parent, str) else None
-            if agent is not None: data['agent'] = agent
+            if agent is not None:
+                # data['agent'] is the latest run; charged_usd adds up every run (retries included), which API-key
+                # budgets charge (api_key_budget). A run with no reported or estimated cost is charged its whole cap.
+                from .api_key_budget import run_charge
+                data['agent'] = agent
+                data['charged_usd'] = round(float(data.get('charged_usd') or 0) + run_charge(agent), 6)
+                data['agent_runs'] = int(data.get('agent_runs') or 0) + 1
             if error is not None: data['error'] = error
             if screen is not None: data['screen'] = screen_metrics(screen)
             if deposit is not None: data['deposit'] = deposit_metrics(deposit)

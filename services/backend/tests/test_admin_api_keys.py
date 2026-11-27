@@ -107,3 +107,119 @@ def test_malformed_requests_are_refused_and_mint_nothing(service, body):
 def test_an_unknown_or_malformed_key_is_401(service):
     assert service.client.get('/v1/me', headers=bearer('rvl_' + 'Z' * 43)).status_code == 401
     assert service.client.get('/v1/me', headers=bearer('rvl_short')).status_code == 401
+
+
+# Budgets ----------------------------------------------------------------------------------------------------------
+
+from reveal_backend import api_key_budget, job_metrics  # noqa: E402
+
+
+def budgeted(service, monkeypatch, limit, period='total'):
+    monkeypatch.setenv('REVEAL_MAX_ACTIVE_JOBS', '20')
+    created = mint(service, label='budgeted', agent_jobs=True, budget={'limit_usd': limit, 'period': period}).json()
+    return created['api_key'], created['key']['key_id']
+
+
+def spend(service, key, budget_usd):
+    return service.client.post('/v1/jobs', json={'kind': 'agent', 'prompt': 'Say hello.', 'limits': {'max_budget_usd': budget_usd}},
+                               headers={**bearer(key), 'Idempotency-Key': uid()})
+
+
+def finish(service, job_id, *costs):
+    """The job's runs, each recorded as the runner records it, then the job finished."""
+    for cost in costs:
+        job_metrics.record(service.repo, {'id': job_id}, agent={'cost_usd': cost, 'estimated_cost_usd': None, 'budget_usd': 2.0})
+    with service.repo.transaction() as tx:
+        row = tx.get('job', job_id); tx.put('job', job_id, row['owner'], {**row['data'], 'status': 'succeeded'})
+
+
+def listed(service, key_id):
+    keys = service.client.get('/internal/v1/admin/api-keys', headers=admin_headers()).json()['keys']
+    return next(entry for entry in keys if entry['key_id'] == key_id)
+
+
+def test_a_budget_refuses_a_job_its_remainder_cannot_cover_and_writes_nothing(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 5)
+    first, second = spend(service, key, 2), spend(service, key, 2)
+    assert first.status_code == second.status_code == 202
+    with service.repo.read_transaction() as tx: jobs_before = len(tx.list('job'))
+    refused = spend(service, key, 2)
+    assert refused.status_code == 402, refused.text
+    body = refused.json()
+    assert body['code'] == 'API_KEY_BUDGET_EXHAUSTED' and body['remaining_usd'] == 1.0 and body['job_reserve_usd'] == 2.0
+    with service.repo.read_transaction() as tx: assert len(tx.list('job')) == jobs_before
+    # The remainder still covers a smaller run.
+    assert spend(service, key, 1).status_code == 202
+    usage = listed(service, key_id)['usage']
+    assert usage['spent_usd'] == 5.0 and usage['in_progress_usd'] == 5.0 and usage['remaining_usd'] == 0.0 and usage['jobs'] == 3
+
+
+def test_a_finished_job_is_charged_what_its_runs_cost_retries_included(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 3)
+    job = spend(service, key, 2).json()['id']
+    finish(service, job, 0.25, 0.5)   # two runs: a retry
+    usage = listed(service, key_id)['usage']
+    assert usage['spent_usd'] == 0.75 and usage['in_progress_usd'] == 0 and usage['remaining_usd'] == 2.25
+    assert spend(service, key, 2).status_code == 202
+    assert spend(service, key, 0.5).status_code == 402
+
+
+def test_a_run_that_reports_no_cost_is_charged_its_cap(service):
+    job_id = uid()
+    with service.repo.transaction() as tx: tx.put('job', job_id, service.users['registered'], {'id': job_id, 'kind': 'agent', 'status': 'running'})
+    job_metrics.record(service.repo, {'id': job_id}, agent={'cost_usd': None, 'estimated_cost_usd': None, 'budget_usd': 2.0})
+    with service.repo.read_transaction() as tx:
+        assert api_key_budget.charged(tx.get('job_metrics', job_id)) == 2.0
+
+
+def test_a_monthly_budget_counts_only_this_calendar_month(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 3, 'month')
+    job = spend(service, key, 2).json()['id']
+    finish(service, job, 2.0)
+    assert spend(service, key, 2).status_code == 402
+    with service.repo.transaction() as tx:   # the job was last month
+        row = tx.get(api_key_budget.USAGE_KIND, key_id)
+        row['data']['jobs'][job]['created_at'] = '2000-01-15T00:00:00Z'
+        tx.put(api_key_budget.USAGE_KIND, key_id, row['owner'], row['data'])
+    assert listed(service, key_id)['usage']['spent_usd'] == 0
+    assert spend(service, key, 2).status_code == 202
+
+
+def test_an_admin_can_change_or_remove_a_budget(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 1)
+    assert spend(service, key, 2).status_code == 402
+    path = f'/internal/v1/admin/api-keys/{key_id}/budget'
+    raised = service.client.put(path, json={'budget': {'limit_usd': 10, 'period': 'month'}}, headers=admin_headers())
+    assert raised.status_code == 200 and raised.json()['key']['budget'] == {'limit_usd': 10.0, 'period': 'month'}
+    assert raised.json()['key']['budget_changed_by'] == ADMIN and raised.json()['key']['usage']['remaining_usd'] == 10.0
+    assert spend(service, key, 2).status_code == 202
+    removed = service.client.put(path, json={'budget': None}, headers=admin_headers())
+    assert removed.json()['key']['budget'] is None and removed.json()['key']['usage']['remaining_usd'] is None
+    for bad in ({'budget': {'limit_usd': 0, 'period': 'month'}}, {'budget': {'limit_usd': 5, 'period': 'week'}},
+                {'budget': {'limit_usd': True, 'period': 'total'}}, {}):
+        assert service.client.put(path, json=bad, headers=admin_headers()).status_code == 422
+    assert service.client.put(path, json={'budget': None}, headers=admin_headers('admin_settings')).status_code == 401
+
+
+def test_jobs_from_a_key_without_a_budget_are_still_counted(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_MAX_ACTIVE_JOBS', '20')
+    created = mint(service, label='open', agent_jobs=True).json()
+    assert spend(service, created['api_key'], 2).status_code == 202
+    usage = listed(service, created['key']['key_id'])['usage']
+    assert usage['spent_usd'] == 2.0 and usage['limit_usd'] is None and usage['remaining_usd'] is None
+
+
+def test_signed_sessions_are_never_charged_to_a_key(service, monkeypatch):
+    monkeypatch.setenv('REVEAL_AGENT_JOB_USERS', service.users['registered'])
+    mint(service, label='owner', user_id=service.users['registered'], budget={'limit_usd': 1, 'period': 'total'})
+    claims = {'sub': service.users['registered'], 'principal_kind': 'registered', 'iss': 'reveal-nextjs', 'aud': 'reveal-api',
+              'iat': int(time.time()), 'exp': int(time.time()) + 120, 'jti': uid()}
+    headers = {'Authorization': 'Bearer ' + jwt.encode(claims, 's' * 40, algorithm='HS256'), 'Idempotency-Key': uid()}
+    created = service.client.post('/v1/jobs', json={'kind': 'agent', 'prompt': 'x', 'limits': {'max_budget_usd': 2}}, headers=headers)
+    assert created.status_code == 202
+    with service.repo.read_transaction() as tx: assert tx.list(api_key_budget.USAGE_KIND) == []
+
+
+def test_mint_refuses_a_malformed_budget(service):
+    for budget in ({'limit_usd': -1, 'period': 'total'}, {'limit_usd': 5}, 'five dollars', {'limit_usd': 1e9, 'period': 'month'}):
+        assert mint(service, label='x', budget=budget).status_code == 422

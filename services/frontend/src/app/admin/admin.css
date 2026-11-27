@@ -312,3 +312,7 @@ body:has(.admin-root) .site-nav { display: none; }
 .admin-root .admin-key-secret code { padding: 6px 8px; border: 1px solid var(--a-line); border-radius: 4px; background: var(--a-surface, #fff); user-select: all; word-break: break-all; }
 .admin-root .admin-key-confirm { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
 .admin-root .submit.danger { color: var(--a-bad); border-color: var(--a-bad); }
+.admin-root .admin-key-budget { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.admin-root .admin-key-budget select.field { width: auto; min-height: 32px; padding: 5px 8px; }
+.admin-root .admin-key-budget input.field { width: 120px; min-height: 32px; padding: 5px 8px; font-variant-numeric: tabular-nums; }
+.admin-root .admin-key-budget small { flex-basis: 100%; }
