@@ -2664,7 +2664,10 @@ paths:
         atomically. kind=paragraph uses an already saved account. Trusted backend
         supplies attribution, model/harness configuration and dates. Paid execution
         is asynchronous; 202 does not imply a successful scientific result. Idempotent
-        replay returns the original job and never starts another paid attempt. Analysis
+        replay returns the original job and never starts another paid attempt. A job
+        started with an API key minted in the admin console is charged to that key;
+        if the key has a budget its remainder cannot cover the cap of the job, it
+        is refused with 402 API_KEY_BUDGET_EXHAUSTED and nothing is written. Analysis
         submission requires an exact imported DisMech gap and nonempty resolved CFDE
         anchors. Freeze the saved source/mapping-run bindings and native IDs with
         the request; later mapping imports do not retarget historical jobs. Label/gene
@@ -2792,6 +2795,29 @@ paths:
                 authentication_required:
                   summary: Authentication required
                   value: *id001
+        '402':
+          description: Api Key Budget Exhausted
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              examples:
+                api_key_budget_exhausted:
+                  summary: Api key budget exhausted
+                  value:
+                    type: urn:reveal:problem:api-key-budget-exhausted
+                    title: Api Key Budget Exhausted
+                    status: 402
+                    code: API_KEY_BUDGET_EXHAUSTED
+                    detail: This API key has $1.00 of its $100.00 budget left this
+                      month, and this job may cost up to $2.00. Ask an admin to raise
+                      the budget, or wait for next month.
+                    request_id: aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa
+                    retryable: false
+                    remaining_usd: 1.0
+                    limit_usd: 100.0
+                    period: month
+                    job_reserve_usd: 2.0
         '404':
           description: Not Found
           content:
@@ -36935,6 +36961,20 @@ components:
             - pointer
             - message
             additionalProperties: false
+        remaining_usd:
+          type: number
+          minimum: 0
+        limit_usd:
+          type: number
+          exclusiveMinimum: 0
+        period:
+          type: string
+          enum:
+          - month
+          - total
+        job_reserve_usd:
+          type: number
+          minimum: 0
         archived_reference_factor:
           anyOf:
           - $ref: '#/components/schemas/ArchivedReferenceFactor'

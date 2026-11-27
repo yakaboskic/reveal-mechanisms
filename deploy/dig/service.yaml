@@ -118,7 +118,8 @@ qa:
     REVEAL_S3_READ_PREFIXES: ''
     REVEAL_WORKFLOW_URL: https://api-qa.hugeampkpnbi.org/api/reveal/internal/workflows/research-v1
     # General agent jobs (docs/agent-jobs.md), allowed for: the owner's registered workspace and the
-    # agent-jobs-colleague API-key workspace (REVEAL_API_KEYS). Unset, nobody can start one.
+    # agent-jobs-colleague API-key workspace (REVEAL_API_KEYS). A key minted in the admin console with agent jobs
+    # allowed admits its workspace too, with no change here (docs/api-keys.md).
     REVEAL_AGENT_JOB_USERS: '13b86465-2324-43c7-9f13-de73e1d27256,7c363256-ce39-464a-a323-c0d11a279b58'
     REVEAL_AGENT_JOB_MAX_BUDGET_USD: '5'
     # Agent jobs run on Sonnet unless the request names a model (for example "model": "claude-opus-5"). Sonnet 5.5 costs

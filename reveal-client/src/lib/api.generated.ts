@@ -251,7 +251,7 @@ export interface paths {
         put?: never;
         /**
          * Start an analysis, paragraph or general agent job
-         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected. kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.
+         * @description Replaces analysis-runs and account-specific paragraph-run creation. kind=analysis freezes draft/version, creates a research request and enqueues atomically. kind=paragraph uses an already saved account. Trusted backend supplies attribution, model/harness configuration and dates. Paid execution is asynchronous; 202 does not imply a successful scientific result. Idempotent replay returns the original job and never starts another paid attempt. A job started with an API key minted in the admin console is charged to that key; if the key has a budget its remainder cannot cover the cap of the job, it is refused with 402 API_KEY_BUDGET_EXHAUSTED and nothing is written. Analysis submission requires an exact imported DisMech gap and nonempty resolved CFDE anchors. Freeze the saved source/mapping-run bindings and native IDs with the request; later mapping imports do not retarget historical jobs. Label/gene disagreement does not reject a mapped anchor. Persist each accepted account with an outbox record that automatically schedules its default paragraph job, unique by account payload, citation pins and paragraph settings. Analysis completion does not wait for paragraph success. Manual paragraph jobs support retries or alternate focus/settings. Analysis anchors must belong to the active reference generation (409 REFERENCE_GENERATION_SUPERSEDED: start a new analysis on the gap with current factors), and analysis submission waits while a reference reload is in progress (503 REFERENCE_RELOAD_IN_PROGRESS). Paragraph jobs, including on archived accounts, are not affected. kind=agent runs a caller prompt as a general-purpose agent with the chosen tools and limits; it needs a workspace named in REVEAL_AGENT_JOB_USERS (or * for registered users) and the durable workflow runtime.
          */
         post: operations["createJob"];
         delete?: never;
@@ -4625,6 +4625,11 @@ export interface components {
                 pointer: string;
                 message: string;
             }[];
+            remaining_usd?: number;
+            limit_usd?: number;
+            /** @enum {string} */
+            period?: "month" | "total";
+            job_reserve_usd?: number;
             /** @description Only on 410 REFERENCE_GENERATION_SUPERSEDED from a mechanism read: the frozen factor, or null when none was captured. */
             archived_reference_factor?: components["schemas"]["ArchivedReferenceFactor"] | null;
         };
@@ -11035,6 +11040,15 @@ export interface operations {
             };
             /** @description Authentication Required */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Api Key Budget Exhausted */
+            402: {
                 headers: {
                     [name: string]: unknown;
                 };

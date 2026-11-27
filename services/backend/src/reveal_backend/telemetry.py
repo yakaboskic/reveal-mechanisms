@@ -295,7 +295,8 @@ def owner_directory(tx, owners):
     key: named when an operator registered it under a name, otherwise nameless), 'client' or 'application' (a partner
     frontend's shared identity, named <client>/<subject>), or 'anonymous' (a browser workspace nobody signed in to:
     there is no name to show). name and email are the profile the sign-in supplied and may be null. api_key says
-    whether this deployment has a key configured for the workspace, whatever its kind. An id that is no principal,
+    whether this deployment has a key for the workspace, configured or minted in the console and not revoked,
+    whatever its kind. An id that is no principal,
     such as a system owner, is left out. Only these allowlisted profile fields are read, by exact key."""
     owners = sorted({owner for owner in owners if isinstance(owner, str) and owner})[:OWNER_WINDOW]
     if not owners: return {}
@@ -307,7 +308,8 @@ def owner_directory(tx, owners):
                                       + marks + ') ORDER BY id', ('identity', *owners)).fetchall():
         issued.setdefault(owner, []).append(json.loads(identity))
     def text(value): return value.strip() if isinstance(value, str) and value.strip() else None
-    keyed = key_owners()
+    from . import api_keys
+    keyed = key_owners() | {data['user_id'] for _, data in api_keys.minted(tx) if not data.get('revoked_at')}
     directory = {}
     for owner, row in principals.items():
         profile = row['data']

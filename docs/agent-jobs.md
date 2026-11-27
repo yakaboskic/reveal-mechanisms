@@ -12,7 +12,7 @@ Agent jobs are off until an operator names who may start them:
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `REVEAL_AGENT_JOB_USERS` | unset (off) | Comma-separated workspace user ids allowed to start agent jobs, of any principal kind (for example an `rvl_` API-key workspace). `*` admits every registered user, never an anonymous guest. |
+| `REVEAL_AGENT_JOB_USERS` | unset (off) | Comma-separated workspace user ids allowed to start agent jobs, of any principal kind (for example an `rvl_` API-key workspace). `*` admits every registered user, never an anonymous guest. A workspace whose active admin-console key was minted with agent jobs allowed is admitted too ([API keys](api-keys.md#mint-a-key-in-the-admin-console)). |
 | `REVEAL_AGENT_JOB_MAX_BUDGET_USD` | `5` | Budget ceiling per run, unless the admin console sets one. See [Limits](#limits). |
 | `REVEAL_AGENT_JOB_MODEL` | `claude-opus-5-5` | Model when the request names none. QA sets `claude-sonnet-5-5` (`deploy/dig/service.yaml`). |
 

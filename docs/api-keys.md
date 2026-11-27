@@ -105,6 +105,58 @@ reconnecting after a terminal job event. The same bearer works for
 replay; clients do not need to poll Redis or job status. To request cancellation,
 send `POST /v1/jobs/{job_id}/cancel` with the same Authorization header.
 
+## Mint a key in the admin console
+
+Admins can mint and revoke keys under **API keys** in the admin console (`/admin/api-keys`), with no
+deploy. Each minted key is stored as one application record: its SHA-256, a label, the workspace it acts
+as, whether it may start agent jobs, and who minted or revoked it and when. The raw key appears once, in
+the mint response, and is never stored or logged. A lost key cannot be shown again: revoke it and mint another.
+
+- **Workspace.** Mint for an existing workspace by its id, or leave it empty to create a new
+  registered service workspace named by the label. A service workspace has no sign-in identity and
+  no expiry.
+- **Agent jobs.** Allow agent jobs to let the workspace start general agent jobs while the key is active.
+  This works alongside `REVEAL_AGENT_JOB_USERS`; it does not replace it. The grant belongs to the
+  workspace, so any credential for that workspace can start agent jobs until its last granting key is revoked.
+- **Which key did it.** Every job a minted key starts records that key's id, label and prefix on its internal
+  queue row, and the admin console's job detail shows it as "Started with API key". A service workspace has no
+  person behind it, so this is how its work is traced to the app that holds the key. Public job responses
+  never include it.
+- **Revocation** takes effect on the next request. An open event stream ends within its four-minute window.
+- **Budget.** Optionally limit what the key's jobs may cost per month or in total ([Budgets](#budgets)).
+
+### Budgets
+
+A minted key can carry a budget, set when it is minted or changed later in the same tab: a dollar limit per
+calendar month (UTC; it resets on the 1st) or in total. Every job the key starts is charged to it, budget or
+not, so its spend is shown either way and a budget set later counts this month's earlier jobs.
+
+- **Spend** is what the key's jobs cost: each agent run's provider-reported cost, or its token estimate,
+  added up across retries. A run that reports neither is charged its whole cap. For an analysis, the
+  statement jobs written from its accounts count too, once their runs are recorded.
+- **While a job runs**, it also holds the most its next run may cost: an agent job's `limits.max_budget_usd`,
+  `REVEAL_AGENT_MAX_BUDGET_USD` for an analysis, `REVEAL_PARAGRAPH_MAX_BUDGET_USD` for a statement. The hold
+  is released when the job finishes, leaving only what its runs cost.
+- **Enforcement is at the start of a job.** A job whose hold would take the key's spend past its budget is
+  refused with `402 API_KEY_BUDGET_EXHAUSTED`, and nothing is written. The response gives `remaining_usd`,
+  `limit_usd`, `period` and `job_reserve_usd`. An agent job can ask for a lower `limits.max_budget_usd` to fit
+  the remainder. A run in progress is never stopped: its own cap, already held, bounds it.
+- **Overrun is bounded.** A job that retries can cost more than the one run it held for, so spend can pass
+  the budget by at most the extra runs of jobs already running when it ran out. The next job is then refused.
+- **A job that ends without a recorded run** (cancelled mid-run, or its sandbox lost) is charged its whole
+  hold; one cancelled before its sandbox was created costs nothing.
+- **Spend is model cost only**: what the agent runs cost the provider. Sandbox time, embeddings and reranking
+  are not charged to a key.
+- **A budget change** applies to the next job. Removing a budget leaves the key unlimited.
+- One key can start at most 20,000 jobs; after that, mint another key.
+- Only jobs started with the minted key count. Jobs the same workspace starts from a signed-in browser
+  session or a configured key are not charged to it.
+
+The backend checks keys configured in the environment first, then a minted key's record by its hash.
+Configured keys are listed read-only on the same page and still change only with a deploy (below).
+The console calls `/internal/v1/admin/api-keys`, authorized by the gateway service token and an
+`admin_api_keys` assertion that names the admin.
+
 ## Operator issuance and rotation
 
 The operator CLI creates an anonymous workspace through the separately trusted

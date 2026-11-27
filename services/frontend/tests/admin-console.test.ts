@@ -40,7 +40,7 @@ test("empty lists are said in words", () => {
 });
 
 test("the sidebar names each section, marks the current one and says who is signed in", () => {
-  assert.deepEqual(ADMIN_NAV.map(item => item.label), ["Overview", "Jobs", "Agent jobs", "Costs", "Database", "Activity", "Performance", "Limits"]);
+  assert.deepEqual(ADMIN_NAV.map(item => item.label), ["Overview", "Jobs", "Agent jobs", "Costs", "Database", "Activity", "Performance", "Limits", "API keys"]);
   assert.deepEqual(["/admin", "/admin/", "/admin/jobs", "/admin/jobs/abc", "/admin/agent-jobs", "/admin/limits"].map(path => activeSection(path).label),
     ["Overview", "Overview", "Jobs", "Jobs", "Agent jobs", "Limits"]);
   const signedIn = render(AdminSidebar, { pathname: "/admin/costs", email: "admin@example.org", bypass: false });
