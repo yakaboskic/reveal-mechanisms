@@ -13,6 +13,7 @@ export const ADMIN_NAV = [
   { href: "/admin/activity", label: "Activity" },
   { href: "/admin/performance", label: "Performance" },
   { href: "/admin/limits", label: "Limits" },
+  { href: "/admin/api-keys", label: "API keys" },
 ] as const;
 
 /** The section a path belongs to: Overview only on /admin itself, the others on their own path and anything below. */

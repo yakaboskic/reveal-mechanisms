@@ -273,6 +273,51 @@ async def admin_change_agent_limits(request: Request, actor: str = Depends(admin
     except Conflict as exc: raise Problem(409, 'LIMITS_CHANGED', str(exc)[:400]) from None
     return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
 
+def admin_keys_authority(request: Request):
+    """Minting and revoking API keys is its own authority: the admin_api_keys purpose, and the verified admin's email,
+    which each key records as who created or revoked it. An assertion that names no admin is refused."""
+    service_authority(request.headers.get('authorization'))
+    claims = decode_assertion(request.headers.get('x-reveal-admin-assertion', ''), 'admin_api_keys')
+    email = claims.get('admin_email')
+    if not isinstance(email, str) or not 0 < len(email) <= 254:
+        raise Problem(401, 'INVALID_IDENTITY_PROOF', 'The signed session does not name an admin.')
+    return email
+
+@app.get('/internal/v1/admin/api-keys')
+def admin_api_keys(actor: str = Depends(admin_keys_authority)):
+    from . import api_keys
+    with repo.read_transaction() as tx:
+        return JSONResponse(api_keys.view(tx), headers={'Cache-Control': 'private, no-store'})
+
+@app.post('/internal/v1/admin/api-keys', status_code=201)
+async def admin_mint_api_key(request: Request, actor: str = Depends(admin_keys_authority)):
+    """The response carries the raw key, once; only its SHA-256 is stored, and nothing here logs it."""
+    from . import api_keys
+    from .repository import Conflict
+    raw = await request.body()
+    if len(raw) > 4096: raise Problem(413, 'INVALID_API_KEY_REQUEST', 'The request is too large.')
+    try: body = json.loads(raw)
+    except ValueError: raise Problem(422, 'INVALID_API_KEY_REQUEST', 'Send the key request as JSON.') from None
+    def write():
+        with repo.transaction() as tx:
+            return api_keys.mint(tx, body, actor, lambda label: fresh_principal('registered', {'display_name': label}))
+    try: result = await run_in_threadpool(write)
+    except api_keys.KeyRequestError as exc: raise Problem(422, 'INVALID_API_KEY_REQUEST', str(exc)[:400]) from None
+    except Conflict: raise Problem(409, 'API_KEY_CHANGED', 'Another change was saved at the same time; mint again.') from None
+    return JSONResponse(result, status_code=201, headers={'Cache-Control': 'private, no-store'})
+
+@app.post('/internal/v1/admin/api-keys/{key_id}/revoke')
+async def admin_revoke_api_key(key_id: str, actor: str = Depends(admin_keys_authority)):
+    from . import api_keys
+    from .repository import Conflict
+    if len(key_id) > 64: raise Problem(404, 'NOT_FOUND', 'No key has that id.')
+    def write():
+        with repo.transaction() as tx:
+            return api_keys.revoke(tx, key_id, actor)
+    try: result = await run_in_threadpool(write)
+    except Conflict as exc: raise Problem(409, 'API_KEY_CHANGED', 'The key changed; reload and try again.') from None
+    return JSONResponse(result, headers={'Cache-Control': 'private, no-store'})
+
 def admin_content_authority(request: Request):
     """Reading what a job was asked and what it answered is its own authority: the admin_content purpose, and the
     verified admin's email, which every read is recorded under. An assertion that names no admin is refused."""
@@ -459,10 +504,13 @@ async def claim_workspace(request: Request):
     return await run_in_threadpool(run)
 
 # Workspace reads never take the global write fence: one consistent snapshot authorizes and reads, so they
-# neither queue behind writers nor serialize against each other. /v1/me is exactly one principal row.
+# neither queue behind writers nor serialize against each other. /v1/me is exactly one principal row, except that
+# an API key may be one minted in the admin console, whose own record is read first: those take a read transaction.
 @app.get('/v1/me')
 def me(request: Request):
-    with repo.single_read() as tx: return principal(tx,request.headers.get('authorization'))
+    authorization=request.headers.get('authorization')
+    reader=repo.read_transaction if (authorization or '').startswith('Bearer rvl_') else repo.single_read
+    with reader() as tx: return principal(tx,authorization)
 
 def filter_gaps(items,kind,status,disease_id):
     if disease_id and ':' in disease_id and not disease_id.startswith(('http:','https:','urn:')):
@@ -1044,11 +1092,15 @@ def check_job_quota(tx, identity, kind='analysis'):
         if len(today)>=int(os.getenv('REVEAL_ANONYMOUS_ANALYSES_PER_DAY','5')): raise Problem(429,'ANONYMOUS_QUOTA_EXCEEDED','This anonymous workspace has reached its daily analysis allowance.')
 
 
-def admit_agent_job(identity):
+def admit_agent_job(identity, tx=None):
     """A general agent job runs any prompt with shell and web tools, so only operator-chosen workspaces may start one:
     REVEAL_AGENT_JOB_USERS lists their user ids (any principal kind, e.g. an API-key workspace), and * admits every
-    registered user, never an anonymous guest. Unset, nobody can."""
+    registered user, never an anonymous guest. A workspace with an active admin-console key minted with agent jobs
+    allowed is admitted too (api_keys.agent_job_users). Otherwise nobody can."""
     allowed={value.strip() for value in os.getenv('REVEAL_AGENT_JOB_USERS','').split(',') if value.strip()}
+    if not (identity['user_id'] in allowed or '*' in allowed and identity['principal_kind']=='registered'):
+        from . import api_keys
+        allowed=api_keys.agent_job_users(tx) if tx is not None else set()
     if not (identity['user_id'] in allowed or '*' in allowed and identity['principal_kind']=='registered'):
         raise Problem(403,'AGENT_JOBS_NOT_ENABLED','General agent jobs are not enabled for this workspace.')
     if jobs.transport()!='workflow':
@@ -1096,7 +1148,7 @@ def create_job_transaction(body,authorization,idempotency_key):
         reads=[('draft',body.get('draft_id')),('draft_binding',body.get('draft_id'))] if analysis else []
         identity=principal_for(tx,authorization,'job',idempotency_key,reads); user=identity['user_id']
         def create():
-            if body['kind']=='agent': admit_agent_job(identity)
+            if body['kind']=='agent': admit_agent_job(identity,tx)
             check_job_quota(tx,identity,body['kind'])
             if body['kind']=='agent': return agent_job_rows(tx,identity,body)
             if body['kind']=='paragraph':

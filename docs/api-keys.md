@@ -105,6 +105,26 @@ reconnecting after a terminal job event. The same bearer works for
 replay; clients do not need to poll Redis or job status. To request cancellation,
 send `POST /v1/jobs/{job_id}/cancel` with the same Authorization header.
 
+## Mint a key in the admin console
+
+Admins can mint and revoke keys under **API keys** in the admin console (`/admin/api-keys`), with no
+deploy. Each minted key is stored as one application record: its SHA-256, a label, the workspace it acts
+as, whether it may start agent jobs, and who minted or revoked it and when. The raw key appears once, in
+the mint response, and is never stored or logged. A lost key cannot be shown again: revoke it and mint another.
+
+- **Workspace.** Mint for an existing workspace by its id, or leave it empty to create a new
+  registered service workspace named by the label. A service workspace has no sign-in identity and
+  no expiry.
+- **Agent jobs.** Allow agent jobs to let the workspace start general agent jobs while the key is active.
+  This works alongside `REVEAL_AGENT_JOB_USERS`; it does not replace it. The grant belongs to the
+  workspace, so any credential for that workspace can start agent jobs until its last granting key is revoked.
+- **Revocation** takes effect on the next request. An open event stream ends within its four-minute window.
+
+The backend checks keys configured in the environment first, then a minted key's record by its hash.
+Configured keys are listed read-only on the same page and still change only with a deploy (below).
+The console calls `/internal/v1/admin/api-keys`, authorized by the gateway service token and an
+`admin_api_keys` assertion that names the admin.
+
 ## Operator issuance and rotation
 
 The operator CLI creates an anonymous workspace through the separately trusted

@@ -3,9 +3,10 @@ import { adminAccess } from "./admin";
 import { adminActor } from "./admin-policy";
 import { assertion, backendUrl } from "./gateway";
 
-/** purpose "admin_settings" is the backend's separate authority for console settings, and "admin_content" for one job's
- * prompt and response; both assertions also name the admin, whom the backend records. */
-type AdminRequest = { method?: "GET" | "PUT"; body?: unknown; purpose?: "admin_telemetry" | "admin_settings" | "admin_content" };
+/** purpose "admin_settings" is the backend's separate authority for console settings, "admin_content" for one job's
+ * prompt and response, and "admin_api_keys" for minting and revoking API keys; these assertions also name the admin,
+ * whom the backend records. A minted key's response carries the raw key once: it is passed through, never logged. */
+type AdminRequest = { method?: "GET" | "PUT" | "POST"; body?: unknown; purpose?: "admin_telemetry" | "admin_settings" | "admin_content" | "admin_api_keys" };
 
 export async function adminProxy(path: string, search = "", { method = "GET", body, purpose = "admin_telemetry" }: AdminRequest = {}) {
   const headers = { "Cache-Control": "private, no-store", Vary: "Cookie" };
@@ -25,6 +26,6 @@ export async function adminProxy(path: string, search = "", { method = "GET", bo
       const detail = (upstream.status < 500 || result.code === "INSPECTION_TIMEOUT" || result.code === "ACCESS_LOG_UNAVAILABLE") && typeof result.detail === "string" ? result.detail : "The database is unavailable. Retry shortly.";
       return Response.json({ error: detail }, { status: upstream.status, headers });
     }
-    return Response.json(result, { headers });
+    return Response.json(result, { status: upstream.status, headers });
   } catch { return Response.json({ error: "The database is unavailable. Check the API connection, then retry." }, { status: 503, headers }); }
 }

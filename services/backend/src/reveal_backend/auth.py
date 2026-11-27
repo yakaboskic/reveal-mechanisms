@@ -29,14 +29,15 @@ def service_authority(authorization):
     if len(expected) < 32 or not hmac.compare_digest(authorization or '', 'Bearer '+expected):
         raise Problem(403, 'SERVICE_IDENTITY_REQUIRED', 'A trusted gateway service credential is required.')
 
-def _credential(authorization):
-    """The principal id a credential names, and its claims; no database access."""
+def _credential(authorization, tx=None):
+    """The principal id a credential names, and its claims. Only an API key minted in the admin console reads the
+    database (its own record, through tx); signed sessions and configured keys never do."""
     if not authorization or not authorization.startswith('Bearer ') or not authorization[7:]:
         raise Problem(401, 'SESSION_EXPIRED', 'Continue with a registered or anonymous session.')
     token = authorization[7:]
     if token.startswith('rvl_'):
         from .api_keys import authenticate
-        return authenticate(token), None
+        return authenticate(token, tx), None
     claims = decode_assertion(token)
     return claims.get('sub', ''), claims
 
@@ -49,14 +50,14 @@ def _accept(row, claims):
     return me
 
 def principal(tx, authorization):
-    identity, claims = _credential(authorization)
+    identity, claims = _credential(authorization, tx)
     return _accept(tx.get('principal', identity), claims)
 
 def principal_with(tx, authorization, keys):
     """principal() and exact extra keys in one read. The principal is accepted first, so an invalid session
     still fails 401 before any 404; the extra rows are NOT authorized: pass each through require_owned.
     keys may be a function of the credential's principal id, for keys derived from the owner."""
-    identity, claims = _credential(authorization)
+    identity, claims = _credential(authorization, tx)
     rows = tx.get_records((('principal', identity), *(keys(identity) if callable(keys) else keys)))
     return _accept(rows.get(('principal', identity)), claims), rows
 
@@ -67,9 +68,11 @@ def credential_expiry(authorization):
         raise Problem(401, 'SESSION_EXPIRED', 'Continue with a registered or anonymous session.')
     token = authorization[7:]
     if token.startswith('rvl_'):
-        from .api_keys import authenticate
-        authenticate(token)
-        return None  # Opaque keys use the ordinary bounded SSE renewal window.
+        # No transaction here, so a console-minted key cannot be looked up: every caller has already authorized this
+        # credential with principal(), which reads it. Opaque keys use the ordinary bounded SSE renewal window.
+        from .api_keys import well_formed
+        if not well_formed(token): raise Problem(401, 'INVALID_API_KEY', 'The API key is invalid or unavailable.')
+        return None
     return decode_assertion(token)['exp']
 
 def publication_principal(tx, authorization, visibility):

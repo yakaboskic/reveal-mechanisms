@@ -299,3 +299,16 @@ body:has(.admin-root) .site-nav { display: none; }
   .admin-root .admin-row-key > div { grid-template-columns: 1fr; gap: 4px; }
   .admin-root .admin-search { max-width: none; }
 }
+
+/* API keys */
+.admin-root .admin-keys { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+.admin-root .admin-key-form { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 14px 20px; padding: 16px 16px 0; align-items: start; }
+.admin-root .admin-key-form > .admin-limits-actions { grid-column: 1 / -1; margin: 0 -16px; }
+.admin-root .admin-key-form .field { width: min(420px, 100%); min-height: 32px; padding: 5px 8px; }
+.admin-root .admin-key-form .field[aria-invalid] { border-color: var(--a-bad); background: var(--a-bad-bg); }
+.admin-root .admin-key-form fieldset { display: grid; gap: 8px; border: 0; padding: 0; margin: 0; }
+.admin-root .admin-key-form small { display: block; margin-top: 4px; }
+.admin-root .admin-key-secret { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 10px 0 6px; }
+.admin-root .admin-key-secret code { padding: 6px 8px; border: 1px solid var(--a-line); border-radius: 4px; background: var(--a-surface, #fff); user-select: all; word-break: break-all; }
+.admin-root .admin-key-confirm { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
+.admin-root .submit.danger { color: var(--a-bad); border-color: var(--a-bad); }
