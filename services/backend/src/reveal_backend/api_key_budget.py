@@ -4,6 +4,8 @@ A key may carry a budget: a dollar limit per calendar month (UTC) or in total. E
 listed in that key's usage record with the most its next agent run may cost (its reserve). A key's spend is:
 
   - for a finished job, what its runs cost (job_metrics charged_usd, which adds up every run, retries included);
+    a finished job whose sandbox was created but whose run was never recorded (cancelled or lost mid-run) is
+    charged its reserve, and one that never dispatched costs nothing;
   - for a job still in progress, what its runs have cost so far plus its reserve, since another run may follow;
   - for an analysis, also what the statement jobs written from its accounts cost.
 
@@ -44,7 +46,9 @@ def period_start(period, moment=None):
     """The first instant this period counts from, as stored timestamps sort; None for a total budget."""
     if period != 'month': return None
     moment = moment or datetime.now(timezone.utc)
-    return moment.strftime('%Y-%m-01T00:00:00Z')
+    # No 'Z': stored stamps carry fractional seconds, and '.' sorts before 'Z', so a job in the month's first second
+    # would otherwise fall into the month before.
+    return moment.strftime('%Y-%m-01T00:00:00')
 
 
 def ledger(tx, key_id):
@@ -69,6 +73,17 @@ def charged(metrics):
     if isinstance(data.get('charged_usd'), (int, float)): return float(data['charged_usd'])
     agent = data.get('agent') if isinstance(data.get('agent'), dict) else None
     return run_charge(agent) if agent else 0.0
+
+
+def recorded(metrics):
+    data = metrics['data'] if metrics else {}
+    return isinstance(data.get('charged_usd'), (int, float)) or isinstance(data.get('agent'), dict)
+
+
+def dispatched(execution):
+    """Whether this job's sandbox was ever asked for: a box handle, or an intent to create or launch one."""
+    data = execution['data'] if execution else {}
+    return bool(data.get('box') or data.get('creation_intent') or data.get('launch_intent'))
 
 
 def run_charge(agent):
@@ -97,12 +112,15 @@ def usage(tx, key, owner, moment=None):
     entries = {job_id: entry for job_id, entry in data['jobs'].items() if not start or entry.get('created_at', '') >= start}
     ids = sorted(entries)
     jobs, metrics = batched(tx, 'job', ids), batched(tx, 'job_metrics', ids)
+    # A job row that is gone (its workspace was removed) is finished: it keeps only what was recorded.
+    running = {job_id for job_id in ids if job_id in jobs and jobs[job_id]['data'].get('status') not in TERMINAL}
+    unrecorded = [job_id for job_id in ids if job_id in jobs and job_id not in running and not recorded(metrics.get(job_id))]
+    executions = batched(tx, 'execution', unrecorded)
     spent = held = 0.0
     for job_id in ids:
-        cost = charged(metrics.get(job_id))
-        status = (jobs.get(job_id) or {}).get('data', {}).get('status')
-        if status not in TERMINAL:
-            held += entries[job_id].get('reserve_usd', 0.0); cost += entries[job_id].get('reserve_usd', 0.0)
+        cost, hold = charged(metrics.get(job_id)), entries[job_id].get('reserve_usd', 0.0)
+        if job_id in running: held += hold; cost += hold
+        elif job_id in unrecorded and dispatched(executions.get(job_id)): cost = hold
         spent += cost
     if any(entry.get('kind') == 'analysis' for entry in entries.values()):
         # Statement jobs an analysis's accounts schedule are the workspace's, not the key's: count them by their parent.

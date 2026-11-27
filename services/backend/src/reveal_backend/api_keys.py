@@ -197,7 +197,8 @@ def mint(tx, body, actor, new_principal):
             'agent_jobs': agent_jobs, 'budget': budget, 'created_at': now(), 'created_by': actor,
             'revoked_at': None, 'revoked_by': None}
     tx.insert(KIND, fingerprint, OWNER, data)
-    return {'key': summary(data, tx.get('principal', user_id)), 'api_key': key}
+    from .api_key_budget import status
+    return {'key': {**summary(data, tx.get('principal', user_id)), 'usage': status(tx, data, user_id)}, 'api_key': key}
 
 
 def change_budget(tx, key_id, body, actor):

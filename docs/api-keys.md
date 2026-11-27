@@ -139,7 +139,12 @@ not, so its spend is shown either way and a budget set later counts this month's
   the remainder. A run in progress is never stopped: its own cap, already held, bounds it.
 - **Overrun is bounded.** A job that retries can cost more than the one run it held for, so spend can pass
   the budget by at most the extra runs of jobs already running when it ran out. The next job is then refused.
+- **A job that ends without a recorded run** (cancelled mid-run, or its sandbox lost) is charged its whole
+  hold; one cancelled before its sandbox was created costs nothing.
+- **Spend is model cost only**: what the agent runs cost the provider. Sandbox time, embeddings and reranking
+  are not charged to a key.
 - **A budget change** applies to the next job. Removing a budget leaves the key unlimited.
+- One key can start at most 20,000 jobs; after that, mint another key.
 - Only jobs started with the minted key count. Jobs the same workspace starts from a signed-in browser
   session or a configured key are not charged to it.
 

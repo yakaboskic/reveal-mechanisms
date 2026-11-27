@@ -223,3 +223,36 @@ def test_signed_sessions_are_never_charged_to_a_key(service, monkeypatch):
 def test_mint_refuses_a_malformed_budget(service):
     for budget in ({'limit_usd': -1, 'period': 'total'}, {'limit_usd': 5}, 'five dollars', {'limit_usd': 1e9, 'period': 'month'}):
         assert mint(service, label='x', budget=budget).status_code == 422
+
+
+def test_a_job_that_ends_without_a_recorded_run_is_charged_its_hold_only_if_it_dispatched(service, monkeypatch):
+    key, key_id = budgeted(service, monkeypatch, 10)
+    ran, never = (spend(service, key, 2).json()['id'] for _ in range(2))
+    with service.repo.transaction() as tx:
+        for job_id, box in ((ran, {'box_id': 'b1', 'phase': 'running'}), (never, None)):
+            execution = tx.get('execution', job_id)
+            tx.put('execution', job_id, execution['owner'], {**execution['data'], 'box': box})
+            row = tx.get('job', job_id); tx.put('job', job_id, row['owner'], {**row['data'], 'status': 'cancelled'})
+    usage = listed(service, key_id)['usage']
+    assert usage['spent_usd'] == 2.0 and usage['in_progress_usd'] == 0
+
+
+def test_an_analysis_holds_its_cap_and_is_charged_its_statement_jobs(service):
+    owner = service.users['registered']
+    analysis, statement, other = uid(), uid(), uid()
+    key = {'key_id': uid(), 'user_id': owner, 'budget': {'limit_usd': 50, 'period': 'month'}}
+    with service.repo.transaction() as tx:
+        tx.put(api_key_budget.USAGE_KIND, key['key_id'], 'admin-console', {'format': api_key_budget.FORMAT, 'key_id': key['key_id'],
+            'jobs': {analysis: {'kind': 'analysis', 'created_at': job_metrics.now(), 'reserve_usd': 5.0}}})
+        tx.put('job', analysis, owner, {'id': analysis, 'kind': 'analysis', 'status': 'running'})
+        for job_id, parent, cost in ((statement, analysis, 0.4), (other, uid(), 9.0)):   # only its own statement counts
+            tx.put('job_metrics', job_id, owner, {'format': job_metrics.FORMAT, 'job_id': job_id, 'parent_job_id': parent, 'charged_usd': cost})
+    with service.repo.read_transaction() as tx:
+        usage = api_key_budget.usage(tx, key, owner)
+    assert usage == {'spent_usd': 5.4, 'in_progress_usd': 5.0, 'jobs': 1, 'period_start': usage['period_start']}
+    assert usage['period_start'].endswith('-01T00:00:00')
+
+
+def test_a_minted_key_shows_its_spend_at_once(service):
+    created = mint(service, label='new', budget={'limit_usd': 25, 'period': 'month'}).json()
+    assert created['key']['usage']['spent_usd'] == 0 and created['key']['usage']['remaining_usd'] == 25.0
