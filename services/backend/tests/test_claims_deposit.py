@@ -59,7 +59,7 @@ def test_the_whole_document_goes_in_one_keyed_request_and_the_receipt_is_summari
     assert outcome == {'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 2, 'stored_differs': 0, 'unresolved_references': 0}
     (request, timeout), = opener.requests
     assert request.full_url == 'https://claims.test/v1/deposits' and request.get_method() == 'POST' and timeout == claims_deposit.TIMEOUT_SECONDS
-    assert request.get_header('X-api-key') == KEY and json.loads(request.data) == {'document': json.loads(DOCUMENT)}
+    assert request.get_header('X-api-key') == KEY and json.loads(request.data) == {'dapper_version': '0.3.0-a1', 'document': json.loads(DOCUMENT)}
     assert KEY not in json.dumps(outcome)
 
 

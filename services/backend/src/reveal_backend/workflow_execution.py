@@ -869,7 +869,7 @@ class WorkflowExecution:
             if claims_deposit.configuration():
                 await run_sync(self.activity, payload, token, 'stage', {'stage': 'persisting',
                     'message': 'Depositing the account in the claims repository.'})
-            deposit = await run_sync(claims_deposit.send, data)
+            deposit = await run_sync(claims_deposit.send, data, dapper_version=record.get('dapper_version'))
             # Any receipt is recorded, an inconsistent one too: the repository has taken the objects either way.
             if deposit.get('deposit_id'):
                 def remember():

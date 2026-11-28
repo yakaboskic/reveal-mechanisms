@@ -1,0 +1,422 @@
+id: https://broadinstitute.github.io/dapper/model/schema/nanopub.yaml
+name: dapper_nanopub
+title: DAPPER nanopublications
+description: >-
+  The nanopublication model as used by the Nanodash / Knowledge Pixels
+  stack: the Head/assertion/provenance/pubinfo quad and the npx signature and
+  lifecycle (supersedes / retracts / introduces) terms. Lets a DAPPER object
+  be emitted as, or minted from, a signed nanopublication. `AssertedIn`
+  records that a Claim was published in one.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  dcterms: http://purl.org/dc/terms/
+  hycl: http://purl.org/petapico/o/hycl#
+  np: http://www.nanopub.org/nschema#
+  npx: http://purl.org/nanopub/x/
+  ntemplate: https://w3id.org/np/o/ntemplate/
+  prov: http://www.w3.org/ns/prov#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# ENUMS
+# ===========================================================================
+enums:
+  NanopubTypeEnum:
+    description: >-
+      Nanopublication subtypes from Nanopub-X (npx), used as the object of
+      `npx:hasNanopubType`. Each `meaning` was read from the live npx ontology
+      document at http://purl.org/nanopub/x/.
+    annotations:
+      dapper:source_standard: Nanopub-X (http://purl.org/nanopub/x/)
+    permissible_values:
+      example_nanopub:
+        meaning: npx:ExampleNanopub
+        description: Published for testing; content should not be taken seriously.
+      draft_nanopub:
+        meaning: npx:DraftNanopub
+        description: Marked as work-in-progress.
+      meta_nanopub:
+        meaning: npx:MetaNanopub
+        description: A nanopublication about other nanopublications.
+      protected_nanopub:
+        meaning: npx:ProtectedNanopub
+        description: Not intended to be shared publicly.
+      retraction_nanopub:
+        meaning: npx:RetractionNanopub
+        description: Retracts a previously published nanopublication.
+      intro_nanopub:
+        meaning: npx:IntroNanopub
+        description: Introduces an agent and its public key.
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+# ===========================================================================
+# BLOCK — NANOPUBLICATION (Nanodash / Knowledge Pixels)
+#
+# A nanopublication is FOUR NAMED GRAPHS, not one document:
+#
+#   <np>/Head         np:Nanopublication, and the three functional links:
+#                     np:hasAssertion / np:hasProvenance / np:hasPublicationInfo
+#   <np>/assertion    the claim itself                     (np:Assertion)
+#   <np>/provenance   where the ASSERTION came from        (np:Provenance)
+#   <np>/pubinfo      where the NANOPUB came from + sig    (np:PublicationInfo)
+#
+# LinkML has no named-graph construct, so each graph is modelled here as a
+# class and the graph it belongs in is recorded as `dapper:np_graph` on that
+# class. A serializer walks these annotations to emit TriG/JSON-LD quads; a
+# loader reverses it. Class/slot URIs below are quoted from the live ontology
+# documents at http://www.nanopub.org/nschema and http://purl.org/nanopub/x/.
+#
+# WHY THIS FITS DAPPER. The nanopub split is almost exactly the DAPPER
+# split, which is why the two compose instead of competing:
+#   assertion   <- the scientific claim        (Claim, claims.yaml)
+#   provenance  <- prov:wasAttributedTo, Activity, LineageStep
+#   pubinfo     <- creator / license / created / RecommendedCitation
+# So `ProvenancedResource` already carries most of what the provenance and
+# pubinfo graphs need; the nanopub classes below mostly add IDENTITY (trusty
+# URIs), SIGNATURE, and LIFECYCLE.
+#
+# TRUSTY URIs. A published nanopub's `id` is a trusty URI — the base URI with
+# a cryptographic hash of the content (e.g.
+# https://w3id.org/np/RAwUp0SmZZwQNOY1zbSPhR21aQoImiUyQrDlyXj5QYXmQ). It is
+# therefore CONTENT-ADDRESSED AND IMMUTABLE: you never edit a nanopub, you
+# publish a new one that npx:supersedes it. This is a strictly stronger form
+# of the mirroring invariant above, and worth calling out explicitly — a signed
+# trusty URI makes "a mirror MUST NOT rewrite authoritative provenance"
+# cryptographically checkable rather than merely stated.
+# ===========================================================================
+
+  Nanopublication:
+    is_a: HashableNode
+    class_uri: np:Nanopublication
+    description: >-
+      A nanopublication: an assertion plus its provenance plus its publication
+      info, published as one signed, content-addressed unit. All THREE of
+      `has_assertion`, `has_provenance` and `has_publication_info` are required
+      — the well-formedness rules demand exactly one quad for each, so a nanopub
+      with only an assertion is malformed and the network will reject it. `id` is the
+      nanopub's trusty URI once published (a draft may use a temporary URI).
+    annotations:
+      dapper:np_graph: Head
+      dapper:source_standard: Nanopublication schema (http://www.nanopub.org/nschema)
+    attributes:
+      has_assertion:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: np:hasAssertion
+        description: >-
+          The assertion graph. REQUIRED: nanopublication well-formedness demands
+          exactly one `np:hasAssertion` quad in the Head.
+        annotations:
+          dapper:np_graph: Head
+      has_provenance:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: np:hasProvenance
+        description: >-
+          The provenance graph — where the ASSERTION came from (not where the
+          nanopub came from; that is pubinfo). REQUIRED: exactly one, same as
+          the assertion. A nanopub carrying only an assertion is malformed.
+        annotations:
+          dapper:np_graph: Head
+      has_publication_info:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: np:hasPublicationInfo
+        description: >-
+          The publication-info graph — where the NANOPUB itself came from.
+          REQUIRED: exactly one.
+        annotations:
+          dapper:np_graph: Head
+      nanopub_type:
+        is_a: literal
+        mixins: [hashable]
+        range: NanopubTypeEnum
+        multivalued: true
+        slot_uri: npx:hasNanopubType
+        annotations:
+          dapper:np_graph: pubinfo
+        description: Type(s) classifying this nanopublication (e.g. draft_nanopub).
+      has_signature_element:
+        is_a: relationship
+        mixins: [unhashable]  # signature
+        range: uriorcurie
+        slot_uri: npx:hasSignatureElement
+        description: The NanopubSignature covering this nanopub.
+        annotations:
+          dapper:np_graph: pubinfo
+      supersedes:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: npx:supersedes
+        description: >-
+          A previously published nanopub this one replaces. Because trusty URIs
+          are immutable, this — not editing — is how a nanopub is updated.
+        annotations:
+          dapper:np_graph: pubinfo
+      invalidates:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: npx:invalidates
+        annotations:
+          dapper:np_graph: pubinfo
+        description: Nanopublication(s) this one invalidates without formally superseding them.
+      was_created_at:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: npx:wasCreatedAt
+        description: >-
+          The service that minted this nanopub, e.g.
+          https://nanodash.knowledgepixels.com/.
+        annotations:
+          dapper:np_graph: pubinfo
+      created_from_template:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: ntemplate:wasCreatedFromTemplate
+        description: >-
+          The Nanodash template this nanopub was instantiated from. Knowledge
+          Pixels tooling emits this alongside
+          `ntemplate:wasCreatedFromProvenanceTemplate` and
+          `...FromPubinfoTemplate`.
+        annotations:
+          dapper:np_graph: pubinfo
+      created:
+        is_a: literal
+        mixins: [unhashable]  # temporal
+        range: datetime
+        slot_uri: dcterms:created
+        annotations:
+          dapper:np_graph: pubinfo
+        description: When the nanopublication was created.
+      creator:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dcterms:creator
+        description: ORCID(s) of the nanopub's creator.
+        annotations:
+          dapper:np_graph: pubinfo
+      nanopub_license:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dcterms:license
+        annotations:
+          dapper:np_graph: pubinfo
+        description: License CURIE/URI the nanopublication is released under.
+      label:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: rdfs:label
+        annotations:
+          dapper:np_graph: pubinfo
+        description: Human-readable label for the nanopublication.
+      trusty_uri:
+        is_a: literal
+        mixins: [unhashable]   # assigned after the content exists
+        range: uri
+        description: >-
+          The real Trusty URI (an `RA…` artifact code) minted by nanopub-java
+          when this nanopublication is actually published. NOT computed by
+          identity — see docs/guides/trusty-identifiers.md, which is explicit
+          that `RA` must not be reimplemented or approximated.
+
+          Distinct from `id`, which is this repository's own
+          `dapper:Nanopublication.{digest}` content address. Two identifiers,
+          two different guarantees: keep them separate and never conflate them.
+        annotations:
+          dapper:np_graph: Head
+
+  NanopubAssertion:
+    is_a: HashableNode
+    class_uri: np:Assertion
+    description: >-
+      The assertion graph — the claim being made, and the only part a reader is
+      asked to believe. `asserts` points at a Claim or ScientificAccount. The assertion graph is distinct from
+      the scientific object it carries.
+    annotations:
+      dapper:np_graph: assertion
+    attributes:
+      asserts:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: hycl:claims
+        description: >-
+          The scientific object carried by this graph: a Claim or ScientificAccount id.
+      as_sentence:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: npx:asSentence
+        description: >-
+          An English rendering of the assertion. When it is a single
+          self-contained sentence with an unambiguous subject, this is an
+          AIDA sentence (hycl:AIDA-Sentence).
+        close_mappings:
+          - hycl:AIDA-Sentence
+
+  NanopubProvenance:
+    is_a: HashableNode
+    class_uri: np:Provenance
+    description: >-
+      The provenance graph — where the ASSERTION came from (not where the
+      nanopub came from; that is pubinfo). Its subject is the assertion graph.
+      This is the natural home for a DAPPER `Activity` / `LineageStep` chain.
+    annotations:
+      dapper:np_graph: provenance
+    attributes:
+      provenance_of:
+        is_a: relationship
+        mixins: [unhashable]  # back-reference
+        range: uriorcurie
+        description: The assertion graph this provenance describes.
+      was_attributed_to:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: prov:wasAttributedTo
+        description: >-
+          Agent the assertion is attributed to — an ORCID for a person, or an
+          npx:SoftwareAgent / npx:SoftwareTool for a generating pipeline such
+          as REVEAL.
+      generated_by_activity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: prov:wasGeneratedBy
+        description: DAPPER Activity id that produced the assertion.
+      derived_from:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: prov:wasDerivedFrom
+        description: >-
+          Source entities the assertion was derived from — Dataset, GeneSet, or
+          Publication ids.
+
+  NanopubPublicationInfo:
+    is_a: HashableNode
+    class_uri: np:PublicationInfo
+    description: >-
+      The publication-info graph — metadata about the NANOPUB itself: who
+      published it, when, under what licence, with what signature. Overlaps
+      almost exactly with the DAPPER attribution core.
+    annotations:
+      dapper:np_graph: pubinfo
+    attributes:
+      pubinfo_of:
+        is_a: relationship
+        mixins: [unhashable]  # back-reference
+        range: uriorcurie
+        description: The nanopub this publication info describes.
+
+  NanopubSignature:
+    is_a: HashableNode
+    class_uri: npx:NanopubSignatureElement
+    description: >-
+      The cryptographic signature over a nanopublication. Published nanopubs in
+      the Knowledge Pixels network are RSA-signed and keyed to the signer's
+      ORCID; verifying the signature plus recomputing the trusty-URI hash
+      proves the content has not been altered since publication.
+    annotations:
+      dapper:np_graph: pubinfo
+      dapper:mirror_mutable: false
+    attributes:
+      has_algorithm:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: npx:hasAlgorithm
+        description: Signature algorithm, e.g. "RSA".
+      has_public_key:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: npx:hasPublicKey
+        description: Base64 public key of the signer.
+      has_signature:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: npx:hasSignature
+        description: Base64 signature value.
+      signed_by:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: npx:signedBy
+        description: Agent that signed — an ORCID.
+      has_signature_target:
+        is_a: relationship
+        mixins: [unhashable]  # signature + back-reference
+        range: uriorcurie
+        slot_uri: npx:hasSignatureTarget
+        description: The nanopub this signature covers.
+
+  # ---- nanopub edges -------------------------------------------------------
+
+  HasAssertion:
+    is_a: Edge
+    description: Nanopublication → NanopubAssertion.
+    slot_usage:
+      predicate:
+        ifabsent: string(np:hasAssertion)
+
+  HasProvenanceGraph:
+    is_a: Edge
+    description: Nanopublication → NanopubProvenance.
+    slot_usage:
+      predicate:
+        ifabsent: string(np:hasProvenance)
+
+  HasPublicationInfo:
+    is_a: Edge
+    description: Nanopublication → NanopubPublicationInfo.
+    slot_usage:
+      predicate:
+        ifabsent: string(np:hasPublicationInfo)
+
+  Supersedes:
+    is_a: Edge
+    description: >-
+      Nanopublication → Nanopublication. The update mechanism for immutable
+      trusty-URI artifacts.
+    slot_usage:
+      predicate:
+        ifabsent: string(npx:supersedes)
+
+  AssertedIn:
+    is_a: Edge
+    description: >-
+      Claim → Nanopublication. Records that this claim was published in a
+      signed, content-addressed nanopublication.
+    slot_usage:
+      predicate:
+        ifabsent: string(hycl:claims)

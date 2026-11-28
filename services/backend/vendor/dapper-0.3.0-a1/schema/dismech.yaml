@@ -1,0 +1,117 @@
+id: https://broadinstitute.github.io/dapper/model/schema/dismech.yaml
+name: dapper_dismech
+title: DAPPER DISMECH correspondence
+description: >-
+  Optional correspondence to the Monarch Initiative DISMECH
+  disease-pathophysiology schema (https://w3id.org/monarch-initiative/dismech).
+  `CorrespondsToDismech` specializes the core `CorrespondsTo` edge with the
+  fields a DISMECH entry needs, and the banner below records how a DISMECH
+  pathograph projects onto DAPPER's causal graphs. Nothing else in DAPPER
+  depends on this module: class-level parity is recorded as `close_mappings`
+  on the classes themselves, and DAPPER owns its own names and structure.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  skos: http://www.w3.org/2004/02/skos/core#
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# DISMECH CORRESPONDENCE
+#
+# DISMECH is an independent upstream model; DAPPER does not edit or mirror it.
+# Causal meaning is defined once, in claims.yaml (interventionist variables,
+# links and graphs); this module and mechanisms.yaml say how DISMECH lines up
+# with it. Neither creates a dependency.
+#
+#   Class level (parity). `close_mappings: dismech:...` on DAPPER classes
+#   outside the general causal layer, e.g.
+#     dapper:Dataset             ~ dismech:Dataset   (DISMECH describes the
+#                                  science of a dataset, DAPPER its attribution)
+#     dapper:Publication         ~ dismech:PublicationReference
+#     dapper:Activity            ~ dismech:CurationEvent
+#     dapper:MechanisticModel    ~ dismech:MechanisticHypothesis
+#     dapper:MechanisticLink     ~ dismech:CausalEdge  (with its CausalLink)
+#     dapper:Mechanism           ~ dismech:Mechanism
+#     dapper:EvidenceItem        ~ dismech:EvidenceItem
+#     dapper:Framing             ~ dismech:Discussion  (KnowledgeGap ~ kind
+#                                  KNOWLEDGE_GAP; GapKindEnum ~ DiscussionKindEnum)
+#
+#   Pathograph projection (tools/dismech_pathograph.py). DISMECH calls a
+#   disease's causal graph its pathograph: CausalEdges listed under
+#   `downstream` on Pathophysiology nodes and `sequelae` on Phenotype nodes,
+#   with `target` naming another node in the same disease file.
+#     Pathophysiology node   -> CausalVariable (description = node name)
+#     Phenotype node         -> CausalVariable (description = node name,
+#                               aspect = PRESENCE)
+#     CausalEdge             -> CausalLink (cause = owning node, effect =
+#                               target; statement = the edge description, or
+#                               "<cause> is causally upstream of <effect>.")
+#                               placed in a MechanisticModel by a MechanisticLink
+#     causal_link_type       -> MechanisticLink.link_type (CausalLinkTypeEnum
+#                               has DISMECH's values)
+#     intermediate_mechanisms-> MechanisticLink.intermediates
+#     hypothesis_groups      -> one MechanisticModel per group, plus one for
+#                               edges in no group; an edge in several groups is
+#                               one CausalLink placed in several models
+#     a cycle                -> has_feedback on that model
+#   DISMECH does not define its edges as interventionist; reading them that
+#   way is DAPPER's interpretation, so the correspondence is close, not exact.
+#   Edge evidence is not projected yet.
+#
+#   Instance level (optional). A `CorrespondsToDismech` edge from a DAPPER
+#   node to the DISMECH entry. Edges are not part of a node's identity, so
+#   adding, changing or removing a correspondence never changes a DAPPER id.
+#
+# NOTE ON KEYS. DISMECH identifies entries by plain strings inside a disease
+# file (Disease.name, a hypothesis group id, a node name), not by IRIs. The
+# edge's `object` is the disease's DISMECH page, and `entry_key` names the
+# entry on it, so the join is lossless in both directions.
+# ===========================================================================
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  CorrespondsToDismech:
+    is_a: CorrespondsTo
+    description: >-
+      Any DAPPER node → the DISMECH entry it corresponds to: the disease's
+      DISMECH page as the object, plus the DISMECH class and the entry's
+      string key on that page.
+    slot_usage:
+      object:
+        description: >-
+          IRI of the disease's page on the DISMECH site, e.g.
+          https://dismech.monarchinitiative.org/pages/disorders/Alzheimer_Disease.html.
+          Not a disease ontology term: the subject corresponds to a DISMECH
+          entry, not to the disease itself.
+    attributes:
+      dismech_class:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        description: >-
+          CURIE of the DISMECH class of the entry, e.g.
+          `dismech:MechanisticHypothesis`, `dismech:Pathophysiology`,
+          `dismech:Phenotype` or `dismech:Disease`.
+      entry_key:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          The entry's DISMECH string key on that page: `Disease.name` for a
+          disease, a hypothesis group id, or a Pathophysiology or Phenotype
+          node name. DISMECH uses plain strings as identifiers, so this is
+          NOT a CURIE.

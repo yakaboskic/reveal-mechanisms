@@ -12,6 +12,9 @@ Two settings turn this on, and both live in the backend's environment only:
 The key identifies REVEAL as the depositor. It is never written to a job, a record, a log or the sandbox: the sandbox
 receives only the credentials box_adapter names, and this is not one of them.
 
+A deposit names the DAPPER release its document is in (`dapper_version`); the repository accepts only the release it
+vendors, and refuses (400) a deposit that names none or another.
+
 A deposit is an attempt. `send` never raises: the job has already produced and stored its account, and whether the
 repository took a copy is reported beside it, not allowed to undo it.
 """
@@ -91,8 +94,9 @@ def _receipt(body):
     return {'status': 'deposited', **counts}
 
 
-def send(document_bytes, *, opener=None, configured=None):
-    """Deposit one account document (its canonical JSON bytes). Returns the outcome; never raises.
+def send(document_bytes, *, dapper_version=None, opener=None, configured=None):
+    """Deposit one account document (its canonical JSON bytes), in DAPPER `dapper_version` (by default the release
+    account_deposit deposits in; pass the version recorded with the account). Returns the outcome; never raises.
 
     {'status': 'deposited', 'deposit_id', 'objects', 'stored_differs': 0, 'unresolved_references': 0, 'collection'?, 'release'?}
     {'status': 'failed', 'reason': 'inconsistent', the same counts}    the repository took it but holds it otherwise
@@ -104,7 +108,9 @@ def send(document_bytes, *, opener=None, configured=None):
         if not configured:
             return {'status': 'not_configured'}
         url, key = configured
-        body = b'{"document":' + document_bytes + b'}'
+        if dapper_version is None:
+            from .account_deposit import DAPPER_VERSION as dapper_version
+        body = b'{"dapper_version":' + json.dumps(dapper_version).encode() + b',"document":' + document_bytes + b'}'
         if len(body) > MAX_BODY_BYTES:
             return {'status': 'failed', 'reason': 'too_large'}
         opener = opener or urllib.request.build_opener(NoRedirect)

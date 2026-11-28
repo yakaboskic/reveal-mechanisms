@@ -1,0 +1,256 @@
+id: https://broadinstitute.github.io/dapper/model/schema/biology.yaml
+name: dapper_biology
+title: DAPPER biological contexts
+description: >-
+  The biological kinds of the core `Context`: the setting a Dataset
+  represents or an Activity targets. `AncestryContext` records a
+  source-reported ancestry grouping (`AncestryEnum`, mapped to HANCESTRO) and
+  `TraitContext` the trait measured or analysed, as a catalog CURIE.
+  `TissueContext` (UBERON), `CellTypeContext` (CL), `CellLineContext`
+  (Cellosaurus, CLO or EFO) and `OrganismContext` (NCBITaxon) say where a
+  proposition is claimed to hold or where evidence was obtained. Each names
+  one ontology term rather than an enum value, so the ontology's hierarchy
+  stays usable (a colonic epithelial cell is an epithelial cell); look terms
+  up in an ontology service rather than recalling identifiers. A record lists
+  its contexts in `contexts`, e.g. `[{context_type: AncestryContext,
+  ancestry: AA}, {context_type: TraitContext, trait: KPN.TRAIT:0000096}]`.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  HANCESTRO: http://purl.obolibrary.org/obo/HANCESTRO_
+  KPN.TRAIT: https://broadinstitute.github.io/kpn-data-models/kpn.trait/
+  EFO: http://identifiers.org/efo/
+  UBERON: http://purl.obolibrary.org/obo/UBERON_
+  NCBITaxon: http://purl.obolibrary.org/obo/NCBITaxon_
+  CLO: http://purl.obolibrary.org/obo/CLO_
+  cellosaurus: https://www.cellosaurus.org/CVCL_
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# ENUMS
+# ===========================================================================
+enums:
+  AncestryEnum:
+    description: >-
+      Source-reported ancestry grouping of a genetic dataset or analysis.
+      Initial codes follow DIG. Mixed denotes a combined analysis grouping,
+      not individual genetic admixture. Omit ancestry when unknown.
+    see_also:
+      - https://ebispot.github.io/hancestro/
+      - https://github.com/broadinstitute/dig-dug-portal/blob/859ebdf777d498dab583bb5d49b952ccf167e946/src/utils/formatters.js#L27-L48
+    annotations:
+      dapper:ontology_version: HANCESTRO releases/2025-10-14
+    permissible_values:
+      AA:
+        title: African American / Afro-Caribbean
+        meaning: HANCESTRO:0016
+      AF:
+        title: African, unspecified
+        meaning: HANCESTRO:0010
+      EA:
+        title: East Asian
+        meaning: HANCESTRO:0009
+      EU:
+        title: European
+        meaning: HANCESTRO:0005
+      GME:
+        title: Middle Eastern / North African / Persian
+        meaning: HANCESTRO:0015
+      HS:
+        title: Hispanic / Latin American, as reported
+        description: >-
+          Source-reported grouping; participant classification method is
+          unspecified. Do not infer genetic admixture from this label alone.
+        close_mappings:
+          - HANCESTRO:0014
+      Mixed:
+        title: Multiple ancestry groups
+        description: >-
+          Analysis or data collection combining ancestry groups; component
+          groups may be unspecified. Does not assert individual admixture.
+      SA:
+        title: South Asian
+        meaning: HANCESTRO:0006
+      SSAF:
+        title: Sub-Saharan African
+        meaning: HANCESTRO:0011
+
+# ===========================================================================
+# SLOTS
+# ===========================================================================
+slots:
+  ancestry:
+    is_a: literal
+    mixins: [hashable]
+    range: AncestryEnum
+    multivalued: false
+    required: false
+    slot_uri: dapper:ancestry
+    description: >-
+      Source-reported population grouping represented by a Dataset or
+      targeted by an Activity, stated through an AncestryContext. Omit the
+      context when unknown or not applicable. This records analysis scope,
+      not individual ancestry proportions or the participant classification
+      method.
+  trait:
+    is_a: relationship
+    mixins: [hashable]
+    range: uriorcurie
+    multivalued: false
+    required: false
+    slot_uri: dapper:trait
+    broad_mappings:
+      - schema:about
+    id_prefixes:
+      - KPN.TRAIT
+      - MONDO
+      - EFO
+    pattern: '^[A-Za-z][A-Za-z0-9._-]*:\S+$'
+    description: >-
+      Identifier of the trait or disease measured by a Dataset, targeted by an
+      Activity, or in which a proposition is claimed to hold. Prefer a stable
+      catalog CURIE: KPN.TRAIT:0000096 for atrial fibrillation as the KPN
+      catalog names it, or a MONDO disease or EFO trait term, over a source
+      abbreviation such as AF. External trait definitions remain in their
+      catalog; no local trait node is required.
+
+  tissue:
+    is_a: relationship
+    mixins: [hashable]
+    range: uriorcurie
+    slot_uri: dapper:tissue
+    broad_mappings:
+      - schema:about
+    id_prefixes:
+      - UBERON
+    pattern: '^[A-Za-z][A-Za-z0-9._-]*:\S+$'
+    description: >-
+      UBERON term for the tissue or anatomical structure, e.g. UBERON:0001155
+      for colon. Use the most specific term the source supports.
+  cell_type:
+    is_a: relationship
+    mixins: [hashable]
+    range: uriorcurie
+    slot_uri: dapper:cell_type
+    broad_mappings:
+      - schema:about
+    id_prefixes:
+      - CL
+    pattern: '^[A-Za-z][A-Za-z0-9._-]*:\S+$'
+    description: >-
+      Cell Ontology term for a cell type in an organism, e.g. CL:0000066 for
+      epithelial cell. A cultured cell line is a CellLineContext instead.
+  cell_line:
+    is_a: relationship
+    mixins: [hashable]
+    range: uriorcurie
+    slot_uri: dapper:cell_line
+    broad_mappings:
+      - schema:about
+    id_prefixes:
+      - cellosaurus
+      - CLO
+      - EFO
+    pattern: '^[A-Za-z][A-Za-z0-9._-]*:\S+$'
+    description: >-
+      Identifier of a cultured cell line: a Cellosaurus accession written
+      cellosaurus:<number> (CVCL_0025 is cellosaurus:0025), or a CLO or EFO
+      cell-line term.
+  organism:
+    is_a: relationship
+    mixins: [hashable]
+    range: uriorcurie
+    slot_uri: dapper:organism
+    broad_mappings:
+      - schema:about
+    id_prefixes:
+      - NCBITaxon
+    pattern: '^[A-Za-z][A-Za-z0-9._-]*:\S+$'
+    description: >-
+      NCBI Taxonomy term for the organism, e.g. NCBITaxon:9606 (human) or
+      NCBITaxon:10090 (mouse).
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  AncestryContext:
+    is_a: Context
+    description: >-
+      Ancestry scope for genetic data and analyses: the source-reported
+      population grouping a Dataset represents or an Activity targets.
+    slots:
+      - ancestry
+    slot_usage:
+      ancestry:
+        required: true
+
+  TraitContext:
+    is_a: Context
+    description: >-
+      Trait scope for datasets and analyses: the trait a Dataset measures or
+      an Activity targets, as a catalog CURIE.
+    slots:
+      - trait
+    slot_usage:
+      trait:
+        required: true
+
+  TissueContext:
+    is_a: Context
+    description: >-
+      The tissue or anatomical structure a record applies to: where a
+      proposition is claimed to hold, or where evidence was obtained.
+    slots:
+      - tissue
+    slot_usage:
+      tissue:
+        required: true
+
+  CellTypeContext:
+    is_a: Context
+    description: >-
+      The cell type a record applies to, as a Cell Ontology term. Use
+      CellLineContext for a cultured line.
+    slots:
+      - cell_type
+    slot_usage:
+      cell_type:
+        required: true
+
+  CellLineContext:
+    is_a: Context
+    description: >-
+      The cultured cell line a record applies to. Evidence from a cell line
+      supports a proposition about a cell type in an organism only by analogy;
+      the two contexts make that difference explicit.
+    slots:
+      - cell_line
+    slot_usage:
+      cell_line:
+        required: true
+
+  OrganismContext:
+    is_a: Context
+    description: >-
+      The organism a record applies to. Evidence from a mouse model for a
+      proposition about humans differs in this context.
+    slots:
+      - organism
+    slot_usage:
+      organism:
+        required: true

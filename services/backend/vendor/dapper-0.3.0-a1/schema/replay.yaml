@@ -1,0 +1,132 @@
+id: https://broadinstitute.github.io/dapper/model/schema/replay.yaml
+name: dapper_replay
+title: DAPPER agentic replay
+description: >-
+  `AgenticWorkspace`: the workspace and prompt an AI agent can use to re-run
+  an `Activity`. The executable provenance an Activity carries (`command`,
+  `container_image`, `code_version`) is the machine replay path; this is the
+  agentic one, alongside it rather than instead of it. A prompt is NOT a
+  deterministic replay mechanism, so the two are deliberately not
+  interchangeable.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  prov: http://www.w3.org/ns/prov#
+  schema: http://schema.org/
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  # ======================================================================
+  # BLOCK — AGENTIC REPLAY. `AgenticWorkspace` is the workspace and prompt
+  # an AI agent can use to re-run an Activity, alongside the machine replay
+  # path (`command` / `container_image` / `code_version`) rather than
+  # instead of it — a prompt is not a deterministic replay mechanism.
+  # ======================================================================
+
+  AgenticWorkspace:
+    is_a: HashableNode
+    class_uri: prov:Plan
+    description: >-
+      A workspace in which an AI agent can re-run an Activity, plus the prompt
+      that asks it to. This is the agentic counterpart of the executable
+      provenance an Activity already carries: `command` and `container_image`
+      tell a machine how to replay a step, while `regeneration_prompt` and
+      `workspace_url` tell an agent how to.
+
+      It is typed `prov:Plan` because that is what it is in PROV terms — a
+      description of intended execution, not the execution itself. The run
+      remains the Activity; this is the recipe the agent follows. Keeping them
+      separate matters: re-running a plan produces a NEW Activity, and
+      conflating the two would make a regenerated result indistinguishable from
+      the original.
+
+      WARNING ON REPRODUCIBILITY. A prompt is not a deterministic replay
+      mechanism. The same prompt, workspace, and model can yield a different
+      result run to run. Treat `regeneration_prompt` as documentation of intent
+      that a human or agent can act on, NOT as a guarantee of bit-identical
+      output — that is what `command` plus `container_image` plus
+      `code_version` are for. Record the model and version actually used so a
+      divergent re-run can at least be explained.
+    attributes:
+      workspace_url:
+        is_a: literal
+        mixins: [unhashable]  # environmental
+        range: uri
+        slot_uri: schema:url
+        description: >-
+          Resolvable URL for the workspace — where a person or agent goes to
+          open it. In the example of akleao this is a fork URL,
+          `https://www.akleao.com/fork/<slug-id>`: one shareable link that
+          opens the workspace, rather than a path through project and branch
+          ids. Required in spirit: a workspace nobody can reach is not
+          provenance, it is a note.
+      workspace_key:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          The hosting platform's own identifier for the workspace, when it
+          differs from this node's `id` — for an akleao fork, the slug in its
+          URL.
+      platform:
+        is_a: literal
+        mixins: [unhashable]  # environmental
+        description: >-
+          The system hosting the workspace, e.g. "akleao", "Claude Code".
+      regeneration_prompt:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          The prompt that asks an agent to regenerate this analysis. Write it
+          self-contained: an agent opening the workspace cold should be able to
+          act on it without the surrounding conversation.
+      agent_model:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Model that ran, or is expected to run, the prompt (e.g.
+          "claude-fable-5"). Recorded so a divergent re-run can be explained.
+      agent_role:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: >-
+          The software agent acting in this workspace — an npx:SoftwareAgent,
+          which is also how a nanopublication attributes an assertion to a
+          non-human author.
+        close_mappings:
+          - prov:wasAssociatedWith
+      last_run:
+        is_a: literal
+        mixins: [unhashable]  # temporal
+        range: datetime
+        description: When the prompt was last executed in this workspace.
+
+  HasAgenticWorkspace:
+    is_a: Edge
+    description: >-
+      Activity → AgenticWorkspace. Reified form of
+      `Activity.has_agentic_workspace`: the workspace and prompt from which
+      this analysis can be re-run by an agent.
+    slot_usage:
+      subject:
+        description: Activity id.
+      predicate:
+        ifabsent: string(dapper:hasAgenticWorkspace)
+      object:
+        description: AgenticWorkspace id.

@@ -1,0 +1,292 @@
+id: https://broadinstitute.github.io/dapper/model/schema/genesets.yaml
+name: dapper_genesets
+title: DAPPER gene sets
+description: >-
+  Gene sets for the dig.geneset standard. `GeneSet` specializes the core
+  `Set` with genes as members, and `GeneSetCollection` specializes the core
+  `Collection`. A `GeneSetLibrary` groups the GeneSetCollections one resource
+  publishes (the GTEx library, the IDG library) and is attributed to the
+  organization that produced it, so a gene reaches that organization, and
+  through its parent organizations the program it belongs to, by way of its
+  gene set, collection and library. `has_gmt_file` points a collection, a
+  library, or a single exported set, at the GMT File that serializes it.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  obo: http://purl.obolibrary.org/obo/
+  schema: http://schema.org/
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# SLOTS
+# ===========================================================================
+slots:
+  has_gmt_file:
+    is_a: relationship
+    mixins: [hashable]
+    range: File
+    inlined: false
+    slot_uri: dapper:hasGmtFile
+    description: >-
+      Local File or C2M2File record serializing a gene-set collection, or a
+      whole-file export of a single GeneSet. Use its content-derived DAPPER
+      identifier, not a bare checksum or retrieval URL. A row in a shared GMT
+      is selected with GeneSet.in_gmt_file and gmt_entry instead.
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  # ======================================================================
+  # BLOCK — GENE SETS. Set specializations for genes (dig.geneset).
+  # ======================================================================
+
+  GeneSet:
+    is_a: Set
+    aliases:
+      - gene set
+      - signature
+    description: >-
+      A Set whose members are genes (the dig.geneset standard from
+      flannick/dig-gene-set-extractors). No ontology term is asserted as
+      class_uri — none resolves to "gene set" (verified against EBI OLS4) — so
+      GeneSet grounds via `is_a: Set` (prov:Collection). Represents ONE named
+      set of genes. A library of named sets belongs in GeneSetCollection;
+      a GMT file is its separate physical serialization.
+    annotations:
+      dapper:source_standard: dig.geneset 0.1.0 (flannick/dig-gene-set-extractors)
+    slots:
+      - has_gmt_file
+    slot_usage:
+      has_gmt_file:
+        description: >-
+          Reference to a GMT file exporting this single gene set. For a row
+          within a shared GMT use in_gmt_file and gmt_entry instead. Accepts File and
+          any subclass, including C2M2File. Retrieval locations and checksums
+          belong on the referenced file record. In a provenance document, use
+          the local file record's content-derived DAPPER identifier (CURIE or
+          full URI), not a bare checksum or retrieval URL.
+    attributes:
+      in_gene_set_collection:
+        is_a: relationship
+        mixins: [unhashable]  # inverse membership; avoids a collection/member hash cycle
+        range: GeneSetCollection
+        multivalued: true
+        inlined: false
+        slot_uri: dapper:inGeneSetCollection
+        inverse: members
+        description: >-
+          Collections containing this GeneSet, independent of its GMT representation.
+          A set may belong to several collections. Inverse of GeneSetCollection.members;
+          when both directions are supplied in a document they must agree. Optional
+          so existing forward-only membership remains valid. Excluded from identity:
+          adding a collection backlink does not create a new gene set or a hash cycle.
+      in_gmt_file:
+        is_a: relationship
+        mixins: [unhashable]  # representation locator, independent of the set's content
+        range: File
+        inlined: false
+        slot_uri: dapper:inGmtFile
+        description: >-
+          File containing the row for this gene set. Reference a local File or
+          C2M2File by its DAPPER identifier, paired with gmt_entry. This relation
+          locates a representation; it does not assert collection membership or
+          contribute to identity. A GMT may therefore contain this set's own ID
+          without making that ID depend on the file's checksum.
+      gmt_entry:
+        is_a: literal
+        mixins: [unhashable]  # row selector within a representation
+        pattern: '^\S[^\t\r\n]*$'
+        description: >-
+          Exact first-column name identifying this gene set's row in in_gmt_file.
+          This is a row key, not a line number or the human-readable node name.
+          Row names must be unique within that GMT representation. May equal this
+          GeneSet's id when the GMT uses DAPPER identifiers as row names. Excluded
+          from identity so renaming a serialized row does not rename the set.
+      assay:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - obo:OBI_0000070      # assay
+        description: Assay the gene set derives from (e.g. bulk, sc).
+      data_type:
+        is_a: literal
+        mixins: [hashable]
+        description: Molecular data type (e.g. transcriptomics).
+      organism:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:taxonomicRange
+        description: Organism (e.g. human).
+      genome_build:
+        is_a: literal
+        mixins: [hashable]
+        description: Reference genome build (e.g. hg38).
+      n_genes:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        aliases:
+          - n_members
+        minimum_value: 0
+        description: Number of distinct genes in this single set, not across a library.
+      n_sets:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        aliases:
+          - n_sets_emitted
+        minimum_value: 1
+        maximum_value: 1
+        deprecated: Use GeneSetCollection.n_sets for a library; a GeneSet is one set.
+        description: Legacy single-set count, if supplied must be 1. Libraries use GeneSetCollection.
+      term:
+        is_a: literal
+        mixins: [hashable]
+        description: The term/label a named gene set corresponds to.
+      term_prefix:
+        is_a: literal
+        mixins: [hashable]
+        description: Namespace prefix applied to term-derived set names (e.g. HuBMAP).
+    rules:
+      - preconditions:
+          slot_conditions:
+            in_gmt_file:
+              required: true
+        postconditions:
+          slot_conditions:
+            gmt_entry:
+              required: true
+      - preconditions:
+          slot_conditions:
+            gmt_entry:
+              required: true
+        postconditions:
+          slot_conditions:
+            in_gmt_file:
+              required: true
+
+  GeneSetCollection:
+    is_a: Collection
+    description: >-
+      A collection of named GeneSet objects, commonly serialized as rows of a
+      GMT file. Distinct from an individual gene set and from the physical file.
+      The collections one resource publishes are grouped by a GeneSetLibrary.
+      Members may be omitted when only a library-level manifest is available;
+      when supplied, members enumerates the complete collection.
+    slots:
+      - has_gmt_file
+    slot_usage:
+      has_gmt_file:
+        description: >-
+          File serializing this collection as GMT rows. Use the local File or
+          C2M2File record's DAPPER identifier; file location and checksums belong
+          on that record. No C2M2 registration is required by this class.
+      members:
+        range: GeneSet
+        inlined: false
+        inverse: in_gene_set_collection
+        description: >-
+          Complete list of GeneSet identifiers, not gene identifiers. The inverse
+          link is GeneSet.in_gene_set_collection. Membership contributes to the
+          collection's identity; the inverse backlink does not change member IDs.
+      member_type:
+        ifabsent: string(gene_set)
+        equals_string: gene_set
+      n_members:
+        minimum_value: 0
+        description: Number of member GeneSets; when supplied agrees with n_sets.
+      was_revision_of:
+        range: GeneSetCollection
+        description: The previous version of this gene-set library (same collection_key).
+    attributes:
+      n_sets:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 0
+        aliases:
+          - n_sets_emitted
+        description: Number of distinct named GeneSets in the complete collection.
+      n_genes:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 0
+        description: >-
+          Number of distinct gene identifiers in the union of all member sets.
+          A gene in several sets counts once; this is not the sum of row sizes.
+      assay:
+        is_a: literal
+        mixins: [hashable]
+        description: Assay context shared by the member gene sets, if applicable.
+      data_type:
+        is_a: literal
+        mixins: [hashable]
+        description: Molecular data type shared by the member gene sets.
+      organism:
+        is_a: literal
+        mixins: [hashable]
+        description: Organism shared by the member gene sets, if applicable.
+      genome_build:
+        is_a: literal
+        mixins: [hashable]
+        description: Genome build shared by the member gene sets, if applicable.
+      term_prefix:
+        is_a: literal
+        mixins: [hashable]
+        description: Source naming convention for the GMT row names, not a CURIE declaration.
+
+  GeneSetLibrary:
+    is_a: Collection
+    aliases:
+      - gene set library
+    description: >-
+      The GeneSetCollections one resource publishes, e.g. every collection of
+      the CFDE GTEx library. `was_attributed_to` names the organization the
+      library comes from, the CFDE program first for a CFDE library, and
+      `was_derived_from` the source Datasets its gene sets were computed from.
+      Membership points from the library to its collections, so grouping
+      collections into a library never changes a collection's or a gene set's
+      identifier. A collection may belong to more than one library.
+    slots:
+      - has_gmt_file
+    slot_usage:
+      has_gmt_file:
+        description: File serializing every gene set of the library as one GMT, when one exists.
+      members:
+        range: GeneSetCollection
+        inlined: false
+        required: true
+        minimum_cardinality: 1
+        description: The library's GeneSetCollections.
+      member_type:
+        ifabsent: string(gene_set_collection)
+        equals_string: gene_set_collection
+      n_members:
+        minimum_value: 1
+        description: Number of member GeneSetCollections.
+      was_revision_of:
+        range: GeneSetLibrary
+        description: The previous version of this library (same collection_key).
+    attributes:
+      n_sets:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 0
+        description: Number of distinct GeneSets across the library's collections.
