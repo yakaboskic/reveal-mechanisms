@@ -5,7 +5,8 @@ The producer documents of the cfde-genesets collection (geneset.provenance.dappe
 URL, with no object saying which public dataset the file belongs to or who publishes it. This reads the registry
 config/cfde_source_datasets.yaml, matches every root input file against it and writes one DAPPER document:
 
-    organizations           an Organization per organization the matched datasets name
+    organizations           an Organization per organization the matched datasets name; the CFDE programs
+                            (GTEx, HuBMAP, ...) are among them, first in their datasets' was_attributed_to
     datasets                a Dataset per matched source dataset (publisher, was_attributed_to -> Organizations)
     was_derived_from_edges  root File -> Dataset, and GeneSetCollection -> each source Dataset of its document
                             (datasets marked `reference: true` are left out of the collection edges)
@@ -41,7 +42,8 @@ HEADER = ("# Source resources of the CFDE gene sets: an Organization and Dataset
           "# reveal-mechanisms/lap-pigean-collection (scripts/cfde_sources.py) from config/cfde_source_datasets.yaml;\n"
           "# every node id is the content address of its node, so rerun the script instead of editing this file.\n")
 DATASET_SLOTS = ("name", "description", "version", "alternate_identifier", "location")
-REPORT_COLUMNS = ["library", "dataset", "dataset_id", "reference", "root_files", "c2m2_root_files", "gene_set_collections"]
+REPORT_COLUMNS = ["library", "dataset", "dataset_id", "cfde_program", "cfde_program_id", "reference",
+                  "root_files", "c2m2_root_files", "gene_set_collections"]
 
 
 class Registry:
@@ -51,6 +53,10 @@ class Registry:
         self.organizations, self.datasets, self.libraries = raw["organizations"], raw["datasets"], raw["libraries"]
         self.rules = {}
         for key, spec in self.datasets.items():
+            if spec.get("program"):
+                if not (self.organizations.get(spec["program"]) or {}).get("cfde_program"):
+                    sys.exit("dataset %s: program %r is not an organization with cfde_program" % (key, spec["program"]))
+                spec["attributed_to"] = [spec["program"]] + [k for k in spec.get("attributed_to") or [] if k != spec["program"]]
             for org in [spec.get("publisher")] + list(spec.get("attributed_to") or []):
                 if org and org not in self.organizations:
                     sys.exit("dataset %s: unknown organization %r" % (key, org))
@@ -105,7 +111,7 @@ def main(argv=None):
     counts, unmatched, unlinked = {}, OrderedDict(), []
 
     def count(library, key, column, item):
-        counts.setdefault((library, key), {c: set() for c in REPORT_COLUMNS[4:]})[column].add(item)
+        counts.setdefault((library, key), {c: set() for c in REPORT_COLUMNS[6:]})[column].add(item)
 
     for n, row in enumerate(rows, 1):
         library = row["library"]
@@ -152,7 +158,8 @@ def main(argv=None):
 
     def organization(key):
         if key not in organizations:
-            organizations[key] = idn.mint("Organization", dict(registry.organizations[key]))
+            spec = registry.organizations[key]
+            organizations[key] = idn.mint("Organization", {k: spec[k] for k in ("name", "ror") if spec.get(k)})
         return organizations[key]["id"]
 
     def dataset(key):
@@ -187,8 +194,12 @@ def main(argv=None):
         writer = csv.writer(fh, delimiter="\t", lineterminator="\n")
         writer.writerow(REPORT_COLUMNS)
         for (library, key), sets in sorted(counts.items()):
-            writer.writerow([library, key, datasets[key]["id"], "yes" if registry.datasets[key].get("reference") else "no"]
-                            + [len(sets[c]) for c in REPORT_COLUMNS[4:]])
+            program = registry.datasets[key].get("program")
+            writer.writerow([library, key, datasets[key]["id"],
+                             registry.organizations[program]["cfde_program"] if program else "",
+                             organizations[program]["id"] if program else "",
+                             "yes" if registry.datasets[key].get("reference") else "no"]
+                            + [len(sets[c]) for c in REPORT_COLUMNS[6:]])
     print("%s: %d organizations, %d datasets, %d edges" % (args.output_file, len(organizations), len(datasets), len(edges)))
     return 0
 

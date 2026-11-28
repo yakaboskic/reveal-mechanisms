@@ -152,8 +152,14 @@ P=out/projects/<project>
   --report-file $P/cfde_sources/cfde_sources.report.tsv
 ```
 
+A dataset's `program` names its CFDE program, an Organization named as in the CFDE Knowledge Center's
+program list (https://cfdeknowledge.org/r/kc_programs); it is put first in the Dataset's `was_attributed_to`.
+Six of the 14 libraries have one (GTEx, GlyGen, HuBMAP, IDG, MetabolomicsWorkbench, MoTrPAC); the sources of
+the other eight are not CFDE programs on that list.
+
 The document, its report and a copy of the registry are in the bucket under
-`collections/cfde-genesets/2026.11/sources/`. `scripts/cfde_objects_deposit.py --extra-document` deposits it
+`collections/cfde-genesets/2026.11/sources/` as `cfde_sources.2.dapper.yaml`, `cfde_sources.2.report.tsv` and
+`cfde_source_datasets.2.yaml` (the files without `.2.` are a superseded first build). `scripts/cfde_objects_deposit.py --extra-document` deposits it
 after the gene-set documents. Registry entries marked `DRAFT 2026-11-27` were written from file locations
 and await review; changing an entry changes its Dataset id, so rebuild and upload under a new name.
 

@@ -13,11 +13,18 @@
 #
 # organizations: become DAPPER `Organization` nodes (name + optional ROR CURIE). Datasets reference them by
 #   key in `publisher` (-> Dataset.publisher, who distributes it) and `attributed_to` (-> was_attributed_to,
-#   the data producer when it differs).
+#   the data producer when it differs). An organization with `cfde_program` is a Common Fund Data Ecosystem
+#   program: `cfde_program` is its key in, and `name` and `url` are copied from, the CFDE Knowledge Center's
+#   program list (https://cfdeknowledge.org/r/kc_programs, read 2026-11-28). `cfde_program` and `url` are
+#   documentation: the Organization class has no slot for them.
 # datasets: DAPPER `Dataset` nodes (name, description, version, alternate_identifier, location, publisher,
 #   was_attributed_to). A `files` rule matches a root file by `pattern` (regex on the file name) and/or
 #   `location` (regex on the File's location); both must match when both are given. `url` and `note` are
-#   documentation only. `reference: true` marks an auxiliary reference table.
+#   documentation only. `reference: true` marks an auxiliary reference table. `program` names the CFDE
+#   program the dataset belongs to (an organization key with `cfde_program`); it is put first in
+#   was_attributed_to, so every gene set of that program's library reaches the program's Organization.
+#   Libraries whose source is not one of the listed CFDE programs (AMP_AD, GEO_BULK, IGVF, IMPC, ImmPort,
+#   KPMP_KTA, PsychENCODE, RummaGEO) have no `program`.
 # libraries: which datasets a library's root files may come from (rules are only tried for these).
 # ignore: root files that are the extractor's own workflow artefacts, not source data.
 #
@@ -52,13 +59,19 @@ organizations:
     name: Indiana University
     ror: ror:01kg8sb98
   gtex_consortium:
-    name: GTEx Consortium
+    name: The Genotype-Tissue Expression Project (GTEx)
+    cfde_program: GTEx
+    url: https://gtexportal.org/home/
   motrpac_study_group:
-    name: MoTrPAC Study Group
+    name: The Molecular Transducers of Physical Activity Consortium (MoTrPAC)
+    cfde_program: MoTrPAC
+    url: https://motrpac-data.org/
   maayan_lab:
     name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
   hubmap_consortium:
-    name: HuBMAP Consortium
+    name: The Human BioMolecular Atlas Program (HuBMAP)
+    cfde_program: HuBMAP
+    url: https://hubmapconsortium.org/
   ucsd:
     name: University of California San Diego
     ror: ror:0168r3w48
@@ -68,16 +81,22 @@ organizations:
     name: George Washington University
     ror: ror:00y4zzh67
   glygen_consortium:
-    name: GlyGen Consortium
+    name: GlyGen
+    cfde_program: GlyGen
+    url: https://www.glygen.org/
   embl_ebi:
     name: European Bioinformatics Institute
     ror: ror:02catss52
   impc_consortium:
     name: International Mouse Phenotyping Consortium
   idg_consortium:
-    name: Illuminating the Druggable Genome Consortium
+    name: Illuminating the Druggable Genome (IDG)
+    cfde_program: IDG
+    url: https://druggablegenome.net/
   metabolomics_workbench:
-    name: Metabolomics Workbench (NIH Common Fund Metabolomics Program)
+    name: Metabolomics Workbench
+    cfde_program: Metabolomics
+    url: https://www.metabolomicsworkbench.org/
 
   # DRAFT 2026-11-27: organizations of the libraries added to the release after the first registry.
   sage_bionetworks:
@@ -100,6 +119,7 @@ organizations:
 
 datasets:
   gtex_v8:
+    program: gtex_consortium
     name: GTEx Analysis V8 bulk tissue RNA-seq (gene read counts, sample and subject annotations)
     description: >-
       Genotype-Tissue Expression project release V8 (dbGaP phs000424.v8.p2; RNA-SeQC v1.1.9 gene read counts
@@ -184,6 +204,7 @@ datasets:
         note: byte-identical to the extractor's copy (md5 Tt3CWz+9SSTS6P+lMIrg8A==, 2575360 bytes; checked 2026-09-28)
 
   motrpac_pass1b_dea:
+    program: motrpac_study_group
     name: MoTrPAC PASS1B-06 rat endurance training study, released differential analysis (transcriptomics)
     description: >-
       Differential expression results of the MoTrPAC 6-month endurance exercise training study in rats
@@ -210,6 +231,7 @@ datasets:
         note: Data Hub path transcriptomics/analysis/transcript-rna-seq/feature-annot/ (registration required; md5 YkL4hWebDKKiuQaqs+aNTQ==, 3104459 bytes)
 
   motrpac_pass1b_counts:
+    program: motrpac_study_group
     name: MoTrPAC PASS1B-06 rat endurance training study, transcriptomics raw counts and sample metadata
     description: >-
       Per-tissue RNA-seq raw count matrices (TRNSCRPT_<TISSUE>_RAW_COUNTS), transcript and phenotype sample
@@ -264,6 +286,7 @@ datasets:
         note: public size 432492125 bytes matches the extractor's copy (checked 2026-10-05)
 
   hubmap_asctb_v2_2:
+    program: hubmap_consortium
     name: HuBMAP ASCT+B tables, 8th release (v2.2)
     description: >-
       The Anatomical Structures, Cell Types, plus Biomarkers (ASCT+B) tables of the Human Reference Atlas,
@@ -303,6 +326,7 @@ datasets:
         url: https://github.com/kjgaulton/liana-ccc-pipeline
 
   glygen_v1_12_1:
+    program: glygen_consortium
     name: GlyGen data release v1.12.1 (human glycosylation annotations and protein master list)
     description: >-
       GlyGen's reviewed human proteoform glycosylation citation tables (UniCarbKB, Harvard, GlyConnect
@@ -323,6 +347,7 @@ datasets:
         note: the URL answers with a 3454-byte landing page rather than the 3490929-byte file; fetch via the release directory
 
   enrichr_idg_drug_targets_2022:
+    program: idg_consortium
     name: Enrichr library IDG_Drug_Targets_2022
     description: >-
       The Enrichr gene-set library "IDG_Drug_Targets_2022" (Ma'ayan Laboratory): drug-target gene sets
@@ -358,6 +383,7 @@ datasets:
         note: the exact file URL the extractor recorded answers 404 now; the release directory still exists
 
   harmonizome_mw_metabolites:
+    program: metabolomics_workbench
     name: Harmonizome "Metabolomics Workbench Metabolites" gene-attribute edges
     description: >-
       Harmonizome's processed gene-metabolite association edge list for the Metabolomics Workbench dataset
@@ -398,6 +424,7 @@ datasets:
   # DRAFT 2026-11-27: datasets for inputs the first registry did not cover. Review before relying on them.
 
   enrichr_archs4_idg_coexp:
+    program: idg_consortium
     name: Enrichr library ARCHS4_IDG_Coexp
     description: >-
       The Enrichr gene-set library "ARCHS4_IDG_Coexp" (Ma'ayan Laboratory): genes co-expressed in ARCHS4
@@ -443,6 +470,7 @@ datasets:
       - location: '^https://www\.ncbi\.nlm\.nih\.gov/geo/download/'
 
   glygen_glycan_api:
+    program: glygen_consortium
     name: GlyGen glycan detail records (GlyGen API)
     description: >-
       Per-glycan detail records returned by the GlyGen API (api.glygen.org/glycan/detail/<GlyTouCan
