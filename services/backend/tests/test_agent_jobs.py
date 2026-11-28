@@ -972,7 +972,7 @@ def test_account_commit_deposits_the_checked_bytes_once_then_stores_and_reports(
     receipt = {'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 9, 'stored_differs': 0, 'unresolved_references': 0}
     send, finish, puts = commit_account_job(workflow, receipt)
     record = workflow.execution['account']
-    send.assert_called_once_with((workflow.root / record['document']['path']).read_bytes())
+    send.assert_called_once_with((workflow.root / record['document']['path']).read_bytes(), dapper_version='0.3.0-a1')
     # The receipt is recorded before anything else can fail, so a retried commit does not deposit again.
     assert workflow.execution['account_deposit'] == receipt and puts[0].args[:2] == ('execution', 'agent-job')
     kind, identity, owner, stored = puts[1].args
