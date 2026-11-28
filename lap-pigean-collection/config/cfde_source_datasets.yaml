@@ -83,6 +83,7 @@ organizations:
     url: https://motrpac-data.org/
   maayan_lab:
     name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
+    parent: mount_sinai
   hubmap_consortium:
     name: The Human BioMolecular Atlas Program (HuBMAP)
     cfde_program: HuBMAP
@@ -93,6 +94,7 @@ organizations:
     ror: ror:0168r3w48
   gaulton_lab:
     name: Gaulton Laboratory, University of California San Diego
+    parent: ucsd
   gwu:
     name: George Washington University
     ror: ror:00y4zzh67
