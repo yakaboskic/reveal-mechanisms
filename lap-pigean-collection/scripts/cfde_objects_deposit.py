@@ -150,7 +150,17 @@ def main(argv=None):
 
     if args.open:
         body = {"version": args.release, **({"carry_from": args.carry_from} if args.carry_from else {})}
-        print("opened", json.dumps(post("/v1/collections/%s/releases" % args.collection, body))[:500])
+        opened = post("/v1/collections/%s/releases" % args.collection, body)
+        print("opened", json.dumps(opened)[:500])
+        # A carried release's fields are copied a batch at a time; opening it again continues the copy.
+        rounds = 0
+        while (opened.get("carried_from") or {}).get("fields_complete") is False:
+            rounds += 1
+            opened = post("/v1/collections/%s/releases" % args.collection, body)
+            if rounds % 10 == 0:
+                print("  copying carried fields: %d rounds" % rounds, flush=True)
+        if rounds:
+            print("carried fields copied in %d more rounds" % rounds, flush=True)
     totals = {"documents": 0, "parts": 0, "objects": 0, "edges": 0, "skipped_c2m2_files": 0, "unresolved_references": 0}
     started = time.time()
     for n, row in enumerate(rows, 1):
