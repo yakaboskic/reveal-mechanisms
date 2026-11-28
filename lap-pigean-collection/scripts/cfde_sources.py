@@ -5,9 +5,14 @@ The producer documents of the cfde-genesets collection (geneset.provenance.dappe
 URL, with no object saying which public dataset the file belongs to or who publishes it. This reads the registry
 config/cfde_source_datasets.yaml, matches every root input file against it and writes one DAPPER document:
 
-    organizations           an Organization per organization the matched datasets name; the CFDE programs
-                            (GTEx, HuBMAP, ...) are among them, first in their datasets' was_attributed_to
+    organizations           an Organization per organization the matched datasets name, with its parents; the
+                            CFDE programs (GTEx, HuBMAP, ...) are among them, first in their datasets'
+                            was_attributed_to, and each belongs to CFDE (parent_organization), which belongs to NIH
     datasets                a Dataset per matched source dataset (publisher, was_attributed_to -> Organizations)
+    gene_set_libraries      a GeneSetLibrary per library (GTEx, IDG, ...): its GeneSetCollections as members,
+                            attributed to its CFDE program (or the organizations that produced its datasets), and
+                            derived from its source Datasets; so a gene reaches its program and CFDE through
+                            GeneSet -> GeneSetCollection -> GeneSetLibrary -> Organization -> parent_organization
     was_derived_from_edges  root File -> Dataset, and GeneSetCollection -> each source Dataset of its document
                             (datasets marked `reference: true` are left out of the collection edges)
 
@@ -19,7 +24,8 @@ No producer object is changed: the edges only name ids the producer minted. A ro
 (not deposited into the claims repository) gets no File edge, but still decides its collection's datasets. The run
 fails when a root file matches no rule (extend the registry, or list it under `ignore`) unless --allow-unmatched.
 
-Runs on the claims repository's Python (its identity module mints the ids; PyYAML).
+Runs on the claims repository's Python (its identity module mints the ids; PyYAML). Parents and libraries need
+DAPPER 0.3.0-a1 or later vendored there.
 """
 
 import argparse
@@ -42,6 +48,7 @@ HEADER = ("# Source resources of the CFDE gene sets: an Organization and Dataset
           "# reveal-mechanisms/lap-pigean-collection (scripts/cfde_sources.py) from config/cfde_source_datasets.yaml;\n"
           "# every node id is the content address of its node, so rerun the script instead of editing this file.\n")
 DATASET_SLOTS = ("name", "description", "version", "alternate_identifier", "location")
+CFDE, NIH = "cfde", "nih"  # registry keys of the ecosystem and its parent
 REPORT_COLUMNS = ["library", "dataset", "dataset_id", "cfde_program", "cfde_program_id", "cfde_page", "reference",
                   "root_files", "c2m2_root_files", "gene_set_collections"]
 
@@ -61,6 +68,17 @@ class Registry:
                 if org and org not in self.organizations:
                     sys.exit("dataset %s: unknown organization %r" % (key, org))
             self.rules[key] = [self.rule(f, "dataset %s" % key) for f in spec.get("files") or []]
+        for key, spec in self.organizations.items():
+            if spec.get("cfde_program") and not spec.get("parent") and CFDE in self.organizations:
+                spec["parent"] = CFDE
+            parent, seen = spec.get("parent"), {key}
+            while parent:
+                if parent not in self.organizations:
+                    sys.exit("organization %s: unknown parent %r" % (key, parent))
+                if parent in seen:
+                    sys.exit("organization %s: parents form a cycle" % key)
+                seen.add(parent)
+                parent = self.organizations[parent].get("parent")
         for library, keys in self.libraries.items():
             for key in keys:
                 if key not in self.datasets:
@@ -97,6 +115,7 @@ def main(argv=None):
     parser.add_argument("--output-file", required=True)
     parser.add_argument("--report-file", required=True)
     parser.add_argument("--allow-unmatched", action="store_true")
+    parser.add_argument("--library-version", default="2026.11", help="version label of the GeneSetLibrary records")
     args = parser.parse_args(argv)
 
     sys.path.insert(0, args.claims_repo_dir)
@@ -108,6 +127,7 @@ def main(argv=None):
 
     file_dataset = OrderedDict()        # root File id -> dataset key
     collection_datasets = OrderedDict()  # GeneSetCollection id -> [dataset keys]
+    library_collections = OrderedDict()  # library -> {GeneSetCollection id: number of gene sets}
     counts, unmatched, unlinked = {}, OrderedDict(), []
 
     def count(library, key, column, item):
@@ -135,6 +155,7 @@ def main(argv=None):
                     if not registry.datasets[key].get("reference") and key not in sources:
                         sources.append(key)
         for collection in doc.get("gene_set_collections") or []:
+            library_collections.setdefault(library, OrderedDict())[collection["id"]] = len(collection.get("members") or [])
             if sources:
                 known = collection_datasets.setdefault(collection["id"], [])
                 known.extend(k for k in sources if k not in known)
@@ -159,7 +180,10 @@ def main(argv=None):
     def organization(key):
         if key not in organizations:
             spec = registry.organizations[key]
-            organizations[key] = idn.mint("Organization", {k: spec[k] for k in ("name", "ror") if spec.get(k)})
+            node = {k: spec[k] for k in ("name", "ror", "url") if spec.get(k)}
+            if spec.get("parent"):
+                node["parent_organization"] = organization(spec["parent"])  # parents first: the id hashes it
+            organizations[key] = idn.mint("Organization", node)
         return organizations[key]["id"]
 
     def dataset(key):
@@ -180,6 +204,26 @@ def main(argv=None):
     used_keys = [k for k in registry.datasets if any(k == key for _, key in counts)]
     for key in used_keys:
         dataset(key)
+    libraries = []
+    for library, members in library_collections.items():
+        keys = [key for (lib, key) in counts if lib == library and not registry.datasets[key].get("reference")]
+        programs = [registry.datasets[k]["program"] for k in keys if registry.datasets[k].get("program")]
+        producers = programs[:1] or [org for k in keys for org in registry.datasets[k].get("attributed_to")
+                                     or [registry.datasets[k].get("publisher")] if org]
+        node = {"name": "%s gene-set library" % library,
+                "description": "The %s gene-set library of the cfde-genesets collection: %d gene-set collections "
+                               "holding %d gene sets." % (library, len(members), sum(members.values())),
+                "collection_key": "cfde-genesets-%s" % re.sub(r"[^a-z0-9._-]", "-", library.lower()),
+                "version": args.library_version,
+                "members": sorted(members), "n_members": len(members), "n_sets": sum(members.values())}
+        if producers:
+            node["was_attributed_to"] = [organization(k) for k in dict.fromkeys(producers)]
+        if keys:
+            node["was_derived_from"] = [dataset(k) for k in dict.fromkeys(keys)]
+        libraries.append(idn.mint("GeneSetLibrary", node))
+        print("library %-22s %5d collections  %6d gene sets  attributed to %s" % (
+            library, len(members), sum(members.values()),
+            ", ".join(registry.organizations[k]["name"] for k in dict.fromkeys(producers)) or "nobody"))
     edges = [{"subject": subject, "predicate": "prov:wasDerivedFrom", "object": dataset(key)}
              for subject, key in file_dataset.items()]
     edges += [{"subject": subject, "predicate": "prov:wasDerivedFrom", "object": dataset(key)}
@@ -190,6 +234,7 @@ def main(argv=None):
         fh.write(HEADER)
         yaml.safe_dump(OrderedDict_to_dict([("organizations", list(organizations.values())),
                                             ("datasets", list(datasets.values())),
+                                            ("gene_set_libraries", libraries),
                                             ("was_derived_from_edges", edges),
                                             ("prefixes", {"ror": "https://ror.org/"})]),
                        fh, sort_keys=False, width=200, allow_unicode=True)
@@ -205,7 +250,8 @@ def main(argv=None):
                              registry.organizations[program].get("cfde_page", "") if program else "",
                              "yes" if registry.datasets[key].get("reference") else "no"]
                             + [len(sets[c]) for c in REPORT_COLUMNS[7:]])
-    print("%s: %d organizations, %d datasets, %d edges" % (args.output_file, len(organizations), len(datasets), len(edges)))
+    print("%s: %d organizations, %d datasets, %d libraries, %d edges" % (
+        args.output_file, len(organizations), len(datasets), len(libraries), len(edges)))
     return 0
 
 

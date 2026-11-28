@@ -140,8 +140,11 @@ The producer documents end at root input Files (a URL). `config/cfde_source_data
 of the public datasets behind them (GTEx V8, KPMP Kidney Tissue Atlas, IGVF Data Portal, ...) and the
 organizations that publish and produced them. `scripts/cfde_sources.py` matches every root input file of
 the 7,228 documents against it and writes `sources/cfde_sources.dapper.yaml`: Organization and Dataset
-nodes, a `was_derived_from` edge from each root File to its Dataset, and one from each GeneSetCollection to
-the source Datasets of its document. It fails when a root file matches no rule. It is run by hand (it is not
+nodes, a GeneSetLibrary per library (its GeneSetCollections, attributed to the library's CFDE program or
+producer, derived from its source Datasets), a `was_derived_from` edge from each root File to its Dataset, and
+one from each GeneSetCollection to the source Datasets of its document. It fails when a root file matches no
+rule. Libraries and parent organizations need DAPPER 0.3.0-a1 vendored in the claims repository it runs
+against. It is run by hand (it is not
 a LAP stage), on the claims repository's Python:
 
 ```bash
@@ -154,15 +157,19 @@ P=out/projects/<project>
 
 A dataset's `program` names its CFDE program, an Organization named as in the CFDE Knowledge Center's
 program list (https://cfdeknowledge.org/r/kc_programs) or, for KOMP2, the CFDE Workbench
-(https://cfde.cloud/data/matrix). It is put first in the Dataset's `was_attributed_to`, and its CFDE
-Workbench page is written into the Dataset's description (an Organization has no slot for a URL). Seven of
+(https://cfde.cloud/data/matrix). It is put first in the Dataset's `was_attributed_to` and the library's,
+and its CFDE Workbench page is written into the Dataset's description. Every CFDE program Organization has the
+Common Fund Data Ecosystem as its `parent_organization`, and CFDE has the NIH, so a gene reaches its program,
+CFDE and the NIH: GeneSet → GeneSetCollection → GeneSetLibrary → Organization → `parent_organization`. Seven of
 the 14 libraries have one (GTEx, GlyGen, HuBMAP, IDG, MetabolomicsWorkbench, MoTrPAC, and IMPC through
 KOMP2); the sources of the other seven are not CFDE programs on either list.
 
 The document, its report and a copy of the registry are in the bucket under
 `collections/cfde-genesets/2026.11/sources/` as `cfde_sources.dapper.yaml`, `cfde_sources.report.tsv` and
 `cfde_source_datasets.yaml`. `scripts/cfde_objects_deposit.py --extra-document` deposits it
-after the gene-set documents. Registry entries marked `DRAFT 2026-11-27` were written from file locations
+after the gene-set documents. To add it to the already published gene sets without resending them, open a
+new release that carries the old one's objects (`--carry-from 2026.11.0 --dapper-version 0.3.0-a1 --open`)
+and deposit only the sources document; see the script's docstring. Registry entries marked `DRAFT 2026-11-27` were written from file locations
 and await review; changing an entry changes its Dataset id, so rebuild and upload under a new name.
 
 ## Layout

@@ -9,6 +9,13 @@ release of the collection: GeneSets (with members), GeneSetCollections, Files an
         --manifest <project>.cfde_manifest.tsv --tree-dir <project_dir>/cfde_collection \
         --extra-document <sources dir>/cfde_sources.dapper.yaml --open --close
 
+A new release of an unchanged collection need not resend it: with --carry-from the release opens holding every
+object of a closed earlier release (copied by the service), and only --extra-document is deposited. This is how
+2026.11.1 adds the sources document to 2026.11.0 under DAPPER 0.3.0-a1:
+
+    cfde_objects_deposit.py --api <QA> --release 2026.11.1 --carry-from 2026.11.0 --dapper-version 0.3.0-a1 \
+        --extra-document <sources dir>/cfde_sources.dapper.yaml --open --close
+
 The key is read from $CLAIMS_API_KEY (a key granted the collection). A deposit holds at most 1,000 objects, 5,000 edges
 and 16 MB, so a document is sent in parts; resending a part changes nothing, so a stopped run can be repeated.
 C2M2File nodes are left out: the claims repository's DAPPER profile cannot verify their ids.
@@ -75,8 +82,13 @@ def main(argv=None):
     parser.add_argument("--api", required=True, help="claims service base URL, e.g. http://localhost:8110")
     parser.add_argument("--collection", default="cfde-genesets")
     parser.add_argument("--release", required=True)
-    parser.add_argument("--manifest", required=True, help="the cfde_ stage's manifest (relative_path, role, library, ...)")
-    parser.add_argument("--tree-dir", required=True)
+    parser.add_argument("--manifest", help="the cfde_ stage's manifest (relative_path, role, library, ...); "
+                                           "not needed with --carry-from")
+    parser.add_argument("--tree-dir")
+    parser.add_argument("--carry-from", help="open the release holding every object of this closed release; the "
+                                             "gene-set documents are then not sent again")
+    parser.add_argument("--dapper-version", help="the DAPPER version every deposit names (required by services on "
+                                                 "DAPPER 0.3 and later), e.g. 0.3.0-a1")
     parser.add_argument("--libraries", default=None, help="comma-separated: only these libraries")
     parser.add_argument("--limit", type=int, default=None, help="at most this many documents per library (a test)")
     parser.add_argument("--open", action="store_true", help="open the release first")
@@ -89,10 +101,16 @@ def main(argv=None):
     key = os.environ.get("CLAIMS_API_KEY")
     if not key:
         sys.exit("set CLAIMS_API_KEY to a key granted the collection")
+    if args.carry_from and not args.open:
+        sys.exit("--carry-from applies when the release is opened: pass --open")
+    if not args.carry_from and not (args.manifest and args.tree_dir):
+        sys.exit("pass --manifest and --tree-dir, or --carry-from to carry the documents over")
     wanted = set(args.libraries.split(",")) if args.libraries else None
-    with open(args.manifest, newline="") as fh:
-        rows = [r for r in csv.DictReader(fh, delimiter="\t") if r["role"] == "provenance"
-                and (wanted is None or r["library"] in wanted)]
+    rows = []
+    if not args.carry_from:
+        with open(args.manifest, newline="") as fh:
+            rows = [r for r in csv.DictReader(fh, delimiter="\t") if r["role"] == "provenance"
+                    and (wanted is None or r["library"] in wanted)]
     if args.limit:
         seen, kept = {}, []
         for r in rows:
@@ -124,8 +142,15 @@ def main(argv=None):
                 continue
             sys.exit("POST %s -> %d: %s" % (path, response.status_code, response.text[:2000]))
 
+    def deposit(part):
+        body = {"collection": args.collection, "release": args.release, "document": part}
+        if args.dapper_version:
+            body["dapper_version"] = args.dapper_version
+        return body
+
     if args.open:
-        print("opened", json.dumps(post("/v1/collections/%s/releases" % args.collection, {"version": args.release}))[:300])
+        body = {"version": args.release, **({"carry_from": args.carry_from} if args.carry_from else {})}
+        print("opened", json.dumps(post("/v1/collections/%s/releases" % args.collection, body))[:500])
     totals = {"documents": 0, "parts": 0, "objects": 0, "edges": 0, "skipped_c2m2_files": 0, "unresolved_references": 0}
     started = time.time()
     for n, row in enumerate(rows, 1):
@@ -135,7 +160,7 @@ def main(argv=None):
             document = yaml.load(fh, Loader=Loader)
         totals["skipped_c2m2_files"] += len(document.get("c2m2_files") or [])
         for part in parts(document):
-            receipt = post("/v1/deposits", {"collection": args.collection, "release": args.release, "document": part})
+            receipt = post("/v1/deposits", deposit(part))
             totals["parts"] += 1
             totals["objects"] += sum(len(v) for g, v in part.items() if not g.endswith("_edges"))
             totals["edges"] += sum(len(v) for g, v in part.items() if g.endswith("_edges"))
@@ -152,7 +177,7 @@ def main(argv=None):
             document = yaml.load(fh, Loader=Loader)
         extra = {"parts": 0, "objects": 0, "edges": 0, "unresolved_references": 0}
         for part in parts(document):
-            receipt = post("/v1/deposits", {"collection": args.collection, "release": args.release, "document": part})
+            receipt = post("/v1/deposits", deposit(part))
             extra["parts"] += 1
             extra["objects"] += sum(len(v) for g, v in part.items() if not g.endswith("_edges"))
             extra["edges"] += sum(len(v) for g, v in part.items() if g.endswith("_edges"))

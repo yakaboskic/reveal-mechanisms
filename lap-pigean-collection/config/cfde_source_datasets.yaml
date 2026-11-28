@@ -17,9 +17,12 @@
 #   program: `cfde_program` is its key in, and `name` and `url` are copied from, the CFDE Knowledge Center's
 #   program list (https://cfdeknowledge.org/r/kc_programs, read 2026-11-28). `cfde_page` is the program's
 #   page in the CFDE Workbench (https://cfde.cloud/data/matrix, read 2026-11-28), which lists its DCC portal,
-#   its NIH Common Fund page and its CFDE assets. The Organization class has no slot for a URL, so
-#   `cfde_program`, `cfde_page` and `url` are not on the Organization node; `cfde_page` is written into the
-#   description of each of the program's Datasets ("CFDE program: <name> (<cfde_page>).").
+#   its NIH Common Fund page and its CFDE assets. `url` goes on the Organization node (DAPPER 0.3
+#   Organization.url); `cfde_program` and `cfde_page` do not, and `cfde_page` is written into the description
+#   of each of the program's Datasets ("CFDE program: <name> (<cfde_page>)."). `parent` names the organization
+#   key this one belongs to (Organization.parent_organization). An organization with `cfde_program` and no
+#   `parent` belongs to `cfde`, the Common Fund Data Ecosystem, which belongs to `nih`. So every CFDE
+#   program's library reaches CFDE and NIH by following parents.
 # datasets: DAPPER `Dataset` nodes (name, description, version, alternate_identifier, location, publisher,
 #   was_attributed_to). A `files` rule matches a root file by `pattern` (regex on the file name) and/or
 #   `location` (regex on the File's location); both must match when both are given. `url` and `note` are
@@ -49,6 +52,13 @@ organizations: become DAPPER `Organization` nodes (name + optional ROR CURIE; RO
 # no dataset link; annotate warns about them so this registry can be extended.
 
 organizations:
+  nih:
+    name: National Institutes of Health
+    ror: ror:01cwqze88
+  cfde:
+    name: Common Fund Data Ecosystem (CFDE)
+    url: https://commonfund.nih.gov/dataecosystem
+    parent: nih
   broad:
     name: Broad Institute
     ror: ror:05a0ya142
