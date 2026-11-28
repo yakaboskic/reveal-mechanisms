@@ -160,8 +160,8 @@ the 14 libraries have one (GTEx, GlyGen, HuBMAP, IDG, MetabolomicsWorkbench, MoT
 KOMP2); the sources of the other seven are not CFDE programs on either list.
 
 The document, its report and a copy of the registry are in the bucket under
-`collections/cfde-genesets/2026.11/sources/` as `cfde_sources.3.dapper.yaml`, `cfde_sources.3.report.tsv` and
-`cfde_source_datasets.3.yaml` (the third build; the two earlier ones were removed). `scripts/cfde_objects_deposit.py --extra-document` deposits it
+`collections/cfde-genesets/2026.11/sources/` as `cfde_sources.dapper.yaml`, `cfde_sources.report.tsv` and
+`cfde_source_datasets.yaml`. `scripts/cfde_objects_deposit.py --extra-document` deposits it
 after the gene-set documents. Registry entries marked `DRAFT 2026-11-27` were written from file locations
 and await review; changing an entry changes its Dataset id, so rebuild and upload under a new name.
 
