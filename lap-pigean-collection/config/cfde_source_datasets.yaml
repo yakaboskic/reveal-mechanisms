@@ -15,16 +15,19 @@
 #   key in `publisher` (-> Dataset.publisher, who distributes it) and `attributed_to` (-> was_attributed_to,
 #   the data producer when it differs). An organization with `cfde_program` is a Common Fund Data Ecosystem
 #   program: `cfde_program` is its key in, and `name` and `url` are copied from, the CFDE Knowledge Center's
-#   program list (https://cfdeknowledge.org/r/kc_programs, read 2026-11-28). `cfde_program` and `url` are
-#   documentation: the Organization class has no slot for them.
+#   program list (https://cfdeknowledge.org/r/kc_programs, read 2026-11-28). `cfde_page` is the program's
+#   page in the CFDE Workbench (https://cfde.cloud/data/matrix, read 2026-11-28), which lists its DCC portal,
+#   its NIH Common Fund page and its CFDE assets. The Organization class has no slot for a URL, so
+#   `cfde_program`, `cfde_page` and `url` are not on the Organization node; `cfde_page` is written into the
+#   description of each of the program's Datasets ("CFDE program: <name> (<cfde_page>).").
 # datasets: DAPPER `Dataset` nodes (name, description, version, alternate_identifier, location, publisher,
 #   was_attributed_to). A `files` rule matches a root file by `pattern` (regex on the file name) and/or
 #   `location` (regex on the File's location); both must match when both are given. `url` and `note` are
 #   documentation only. `reference: true` marks an auxiliary reference table. `program` names the CFDE
 #   program the dataset belongs to (an organization key with `cfde_program`); it is put first in
 #   was_attributed_to, so every gene set of that program's library reaches the program's Organization.
-#   Libraries whose source is not one of the listed CFDE programs (AMP_AD, GEO_BULK, IGVF, IMPC, ImmPort,
-#   KPMP_KTA, PsychENCODE, RummaGEO) have no `program`.
+#   Libraries whose source is not a CFDE program on either list (AMP_AD, GEO_BULK, IGVF, ImmPort, KPMP_KTA,
+#   PsychENCODE, RummaGEO) have no `program`. IMPC's is KOMP2, which only the CFDE Workbench lists.
 # libraries: which datasets a library's root files may come from (rules are only tried for these).
 # ignore: root files that are the extractor's own workflow artefacts, not source data.
 #
@@ -61,16 +64,19 @@ organizations:
   gtex_consortium:
     name: The Genotype-Tissue Expression Project (GTEx)
     cfde_program: GTEx
+    cfde_page: https://cfde.cloud/info/dcc/GTEx
     url: https://gtexportal.org/home/
   motrpac_study_group:
     name: The Molecular Transducers of Physical Activity Consortium (MoTrPAC)
     cfde_program: MoTrPAC
+    cfde_page: https://cfde.cloud/info/dcc/MoTrPAC
     url: https://motrpac-data.org/
   maayan_lab:
     name: Ma'ayan Laboratory, Icahn School of Medicine at Mount Sinai
   hubmap_consortium:
     name: The Human BioMolecular Atlas Program (HuBMAP)
     cfde_program: HuBMAP
+    cfde_page: https://cfde.cloud/info/dcc/HuBMAP
     url: https://hubmapconsortium.org/
   ucsd:
     name: University of California San Diego
@@ -83,19 +89,28 @@ organizations:
   glygen_consortium:
     name: GlyGen
     cfde_program: GlyGen
+    cfde_page: https://cfde.cloud/info/dcc/GlyGen
     url: https://www.glygen.org/
   embl_ebi:
     name: European Bioinformatics Institute
     ror: ror:02catss52
   impc_consortium:
     name: International Mouse Phenotyping Consortium
+  komp2:
+    # Not on the Knowledge Center list; named as on the CFDE Workbench page. Its DCC portal is the IMPC's.
+    name: Knockout Mouse Phenotyping Program (KOMP2)
+    cfde_program: KOMP2
+    cfde_page: https://cfde.cloud/info/dcc/KOMP2
+    url: https://www.mousephenotype.org/
   idg_consortium:
     name: Illuminating the Druggable Genome (IDG)
     cfde_program: IDG
+    cfde_page: https://cfde.cloud/info/dcc/IDG
     url: https://druggablegenome.net/
   metabolomics_workbench:
     name: Metabolomics Workbench
     cfde_program: Metabolomics
+    cfde_page: https://cfde.cloud/info/dcc/Metabolomics
     url: https://www.metabolomicsworkbench.org/
 
   # DRAFT 2026-11-27: organizations of the libraries added to the release after the first registry.
@@ -365,6 +380,7 @@ datasets:
         url: https://maayanlab.cloud/Enrichr/geneSetLibrary?mode=text&libraryName=IDG_Drug_Targets_2022
 
   impc_release_18:
+    program: komp2
     name: IMPC Data Release 18.0 genotype-phenotype assertions
     description: >-
       All genotype-to-phenotype association assertions of the International Mouse Phenotyping Consortium,

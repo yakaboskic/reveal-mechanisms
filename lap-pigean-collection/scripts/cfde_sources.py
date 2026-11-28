@@ -42,7 +42,7 @@ HEADER = ("# Source resources of the CFDE gene sets: an Organization and Dataset
           "# reveal-mechanisms/lap-pigean-collection (scripts/cfde_sources.py) from config/cfde_source_datasets.yaml;\n"
           "# every node id is the content address of its node, so rerun the script instead of editing this file.\n")
 DATASET_SLOTS = ("name", "description", "version", "alternate_identifier", "location")
-REPORT_COLUMNS = ["library", "dataset", "dataset_id", "cfde_program", "cfde_program_id", "reference",
+REPORT_COLUMNS = ["library", "dataset", "dataset_id", "cfde_program", "cfde_program_id", "cfde_page", "reference",
                   "root_files", "c2m2_root_files", "gene_set_collections"]
 
 
@@ -111,7 +111,7 @@ def main(argv=None):
     counts, unmatched, unlinked = {}, OrderedDict(), []
 
     def count(library, key, column, item):
-        counts.setdefault((library, key), {c: set() for c in REPORT_COLUMNS[6:]})[column].add(item)
+        counts.setdefault((library, key), {c: set() for c in REPORT_COLUMNS[7:]})[column].add(item)
 
     for n, row in enumerate(rows, 1):
         library = row["library"]
@@ -166,6 +166,10 @@ def main(argv=None):
         if key not in datasets:
             spec = registry.datasets[key]
             node = {slot: spec[slot] for slot in DATASET_SLOTS if spec.get(slot) not in (None, "")}
+            program = registry.organizations.get(spec.get("program") or "")
+            if program and program.get("cfde_page"):  # an Organization has no slot for a URL
+                node["description"] = "%s CFDE program: %s (%s)." % (
+                    " ".join(str(node.get("description") or "").split()), program["name"], program["cfde_page"])
             if spec.get("publisher"):
                 node["publisher"] = organization(spec["publisher"])
             if spec.get("attributed_to"):
@@ -198,8 +202,9 @@ def main(argv=None):
             writer.writerow([library, key, datasets[key]["id"],
                              registry.organizations[program]["cfde_program"] if program else "",
                              organizations[program]["id"] if program else "",
+                             registry.organizations[program].get("cfde_page", "") if program else "",
                              "yes" if registry.datasets[key].get("reference") else "no"]
-                            + [len(sets[c]) for c in REPORT_COLUMNS[6:]])
+                            + [len(sets[c]) for c in REPORT_COLUMNS[7:]])
     print("%s: %d organizations, %d datasets, %d edges" % (args.output_file, len(organizations), len(datasets), len(edges)))
     return 0
 
