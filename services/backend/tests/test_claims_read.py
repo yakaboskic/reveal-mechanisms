@@ -115,6 +115,27 @@ def test_a_deposited_account_is_rebuilt_byte_for_byte_and_no_key_is_sent(claims)
     assert all(request.get_header('X-api-key') is None for request in claims.requests)
 
 
+def test_a_causal_graph_account_and_an_earlier_causal_step_account_are_both_rebuilt(claims):
+    """Accounts are deposited in DAPPER 0.3.0-a1 (CausalLinks between CausalVariables); those deposited before the move
+    are 0.2.1-a1 (CausalSteps). Both read back byte for byte."""
+    import test_account_deposit
+    case = test_account_deposit.AccountDepositTests('test_two_quotes_of_one_span_are_one_locator'); case.setUp()
+    try:
+        current, _ = case.deposit(case.model())
+    finally:
+        case.doCleanups()
+    assert {'causal_links', 'causal_variables'} <= set(current) and 'causal_steps' not in current
+    data = canonical_json(current); claims.deposit(data, 'dep_' + '2' * 32)
+    assert claims_read.account_document('dep_' + '2' * 32, current['scientific_accounts'][0]['id'], sha256(data)) == current
+    earlier = synthetic()
+    step, model = 'dapper:CausalStep.' + 'S' * 32, 'dapper:MechanisticModel.' + 'M' * 32
+    earlier.update(causal_steps=[{'id': step, 'step_index': 1, 'step_subject': 'HGNC:6554', 'step_object': 'GO:0008286'}],
+                   mechanistic_models=[{'id': model, 'has_causal_step': [step]}])
+    earlier['scientific_accounts'][0]['mechanistic_model'] = model
+    earlier = account_deposit.layout(earlier); data = canonical_json(earlier); claims.deposit(data, 'dep_' + '3' * 32)
+    assert claims_read.account_document('dep_' + '3' * 32, earlier['scientific_accounts'][0]['id'], sha256(data)) == earlier
+
+
 def test_a_cached_deposit_is_not_fetched_again_but_is_still_checked(claims):
     document = synthetic(); data = canonical_json(document); claims.deposit(data)
     account = document['scientific_accounts'][0]['id']

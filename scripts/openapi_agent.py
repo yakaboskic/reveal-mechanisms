@@ -243,7 +243,7 @@ def extend(b, f, e):
         'summary': 'Agent complete (synthetic)', 'value': complete}
     account_id = 'dapper:ScientificAccount.' + 'A' * 32
     text_sha = '0' * 63 + '2'
-    account_block = {'account_id': account_id, 'dapper_version': '0.2.1-a1', 'document_sha256': '0' * 63 + '3', 'document_bytes': 9120,
+    account_block = {'account_id': account_id, 'dapper_version': '0.3.0-a1', 'document_sha256': '0' * 63 + '3', 'document_bytes': 9120,
         'objects': 11, 'edges': 4, 'claims': 1, 'value_locators': 1, 'lint_warnings': 1,
         'requested_claims': [{'statement': account['claims'][0], 'assessed': True, 'claim_ids': ['dapper:Claim.' + 'C' * 32]}],
         'papers': [{'path': 'sources/PMC0000000.xml', 'url': 'https://www.ebi.ac.uk/europepmc/webservices/rest/PMC0000000/fullTextXML',

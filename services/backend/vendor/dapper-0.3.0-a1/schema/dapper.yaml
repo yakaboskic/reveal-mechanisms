@@ -1,0 +1,87 @@
+id: https://broadinstitute.github.io/dapper/model/schema/dapper.yaml
+name: dapper
+title: DAPPER - NIH Dataset Attribution and Provenance Profile
+description: >-
+  A LinkML data model for DAPPER, the NIH Dataset Attribution and Provenance
+  Profile. Every dataset returned through an NIH MCP server should carry
+  enough structured metadata for an AI system to cite the dataset, identify its
+  creators, link to the primary publication, report the NIH grant/award that
+  supported it, and describe the provenance of the returned result.
+
+  This is the profile's entry point. It defines no classes of its own; it
+  imports the modules below, and tools and validation start here.
+
+    core.yaml. What is tracked: the knowledge-graph skeleton, identity,
+      citation/funding/provenance (JSON-LD + DataCite + PROV-O + schema.org),
+      GA4GH DRS, DUO, RO-Crate, BioCompute/IEEE-2791, embeddings, versioned
+      collections (`Collection`, `ResultCollection`) and `ValueLocator`.
+
+    claims.yaml. Scientific reasoning: `Proposition`, `Claim` and its scores,
+      `EvidenceItem`, the framings (`Question`, `KnowledgeGap`,
+      `Hypothesis`), `ScientificAccount`, `Paragraph`, the abstract
+      `ExplanatoryModel`, and interventionist causal content
+      (`CausalVariable`, `CausalLink`, `CausalGraph`). Conceptually aligned
+      with SEPIO's Proposition and Statement model.
+
+    genesets.yaml. `GeneSet` and `GeneSetCollection` (dig.geneset).
+
+    cell_programs.yaml. `GeneProgram` and `CellState`.
+
+    mechanisms.yaml. `MechanisticModel` (a `CausalGraph`), `MechanisticLink`
+      and `Mechanism`.
+
+    scm.yaml. `StructuralCausalModel` (a `CausalGraph` with variable
+      domains, distributions and structural equations), `CausalEstimand`,
+      and `DiscriminatingExperiment`, a proposed experiment stated with
+      estimands, instruments and contrasting predictions.
+
+    genetics.yaml. `GenotypeVariable` (allele dosage at a dbSNP variant),
+      `GeneticAssociation` (what a GWAS or QTL study reports) and
+      `GeneticEffectEstimate` (its size per effect-allele copy).
+
+    nanopub.yaml. The nanopublication quad, signature and lifecycle.
+
+    dismech.yaml. `CorrespondsToDismech`, the instance-level DISMECH
+      cross-walk, and how a DISMECH pathograph projects onto causal graphs.
+
+    replay.yaml. `AgenticWorkspace`, the agentic replay path for an Activity.
+
+    cfde.yaml. `C2M2File`, a File with CFDE C2M2 identifiers.
+
+    biology.yaml. The biological kinds of the core `Context`: ancestry,
+      trait, tissue, cell type, cell line and organism.
+
+  The schema is shaped as a Dock knowledge graph: NIH resources, agents,
+  awards, publications, scientific accounts, and nanopublications are Node entities;
+  attribution and provenance are Edge relationships. Causal content is not an
+  Edge: a CausalLink is a Proposition, so it can be assessed and evidenced.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+# Shared prefixes (and the prefix policy) are declared in core.yaml; each
+# module declares the ones its own terms use.
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+
+imports:
+  - linkml:types
+  - core
+  - claims
+  - genesets
+  - cell_programs
+  - mechanisms
+  - scm
+  - genetics
+  - nanopub
+  - dismech
+  - replay
+  - cfde
+  - biology

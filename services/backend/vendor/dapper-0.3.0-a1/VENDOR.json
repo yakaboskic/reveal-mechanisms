@@ -1,0 +1,27 @@
+{
+  "repository": "https://github.com/broadinstitute/dapper.git",
+  "ref": "chase/0.3.0-a1",
+  "commit": "9cd9691864c5ea29ad8b479659db0d44369c972e",
+  "version": "0.3.0-a1",
+  "purpose": "DAPPER 0.3.0-a1, the release REVEAL deposits Scientific Accounts in (reveal_backend/account_deposit.py). The account is minted with 0.2.1-a1 (vendor/dapper-0.2.1-a1) and then converted with this release's own converter (converter/migrate.py), which re-mints and verifies it; the claims repository accepts only this release. Research accounts are still authored, linted and gated with the pinned 0.2.0 release (agent-runtime/dapper-release.json). Vendored from dapper #36.",
+  "files": {
+    "schema/biology.yaml": "321874bebe53035974c2f77efc7d52bebfb8c347883aa168567ae3c32baeec9b",
+    "schema/cell_programs.yaml": "ffb01485dd682507ef09102651b7ecafdd77b4820d261bdabc1641488f4063b3",
+    "schema/cfde.yaml": "8ad3323600dffe8d96a5d0068a213d562586868d42d22aaa38dcb54f3d756fb8",
+    "schema/claims.yaml": "c69f7ab71a11d97fbc9221a515e1ecccac46e608a3aaf8442260d2c9a5774f82",
+    "schema/core.yaml": "a61ada209dba8637a37e1ec6d732e689459fcc46afead4464e0e12337cfc5a7f",
+    "schema/dapper.yaml": "cbe66896ba5c4cd630972b996d16009a3632d7efac818c6d98ec80c0b11fea39",
+    "schema/dismech.yaml": "9a1ef6bb94eeee680baaf11f3a135053beca25b59df36cc9947c8b5232289cb0",
+    "schema/genesets.yaml": "b7b907ff87d34ce00c512cbb2ca5a7910ff60c6a5d362fd8e961a2b2ac1d0724",
+    "schema/genetics.yaml": "36e08c018925b783b15255745dedd0c7b9135d7a45ff32f5c160cae0a3d65af9",
+    "schema/mechanisms.yaml": "ed749355597f957b57aed0cd9a9285f062f207feba78fc09a119945057685941",
+    "schema/nanopub.yaml": "37e92e11eeeb7f2bc75b47700bf2d6e6a7b527128af8a023b72925279af5ddc9",
+    "schema/replay.yaml": "c0beffade3dd29e51d7cad57cc6e7d0e411f3755f75e0e90b6cba733dcac2ac9",
+    "schema/scm.yaml": "b35667ccdf03be2b8f90749ce994205a2d2428fa6f01b1fed14c446476c09217",
+    "LICENSE": "a9dd59be2eaeb06d97411c7f08197c423136e8059f635ad7979264771deb529f",
+    "converter/migrate.py": "34bc982eed3f9eb797b0b730d4aaf89648eea873e01d1eeb47378e4bf946709f",
+    "identity/dapper_identity.py": "19d3e27b590ab092810c648720e2f7ece719228dc57df580da4ba2db2fb32feb",
+    "identity/test_vectors.json": "26577224eb6282c3f5b831ad68129d9c551ae808b1dddae7ea43995a88a31a31",
+    "tools/scientific_claims.py": "3e21b849e72b5a0c1954bc5163af37faadbda151f130c243ec282e641252215a"
+  }
+}

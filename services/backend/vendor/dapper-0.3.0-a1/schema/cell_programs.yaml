@@ -1,0 +1,444 @@
+id: https://broadinstitute.github.io/dapper/model/schema/cell_programs.yaml
+name: dapper_cell_programs
+title: DAPPER gene programs and cell states
+description: >-
+  Single-cell structure. `GeneProgram` is a coordinated pattern of gene
+  activity representing a biological process, e.g. a factor from
+  cNMF/NMF/Spectra/WGCNA or a curated gene module; it extends the core `Set`
+  with genes as members. `CellState` is the cellular phenotype defined by the
+  combination of `GeneProgram`s active in a cell (or cell population) at once,
+  as distinct from a cell TYPE (a Cell Ontology class), which is what lineage
+  a cell belongs to rather than what functional state it is in.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  obo: http://purl.obolibrary.org/obo/
+  schema: http://schema.org/
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  # ======================================================================
+  # BLOCK — SINGLE-CELL: GENE PROGRAM / CELL STATE. A
+  # GeneProgram is a coordinated pattern of gene activity — a factor/module
+  # inferred from expression covariance (e.g. cNMF, NMF, Spectra, WGCNA) or a
+  # curated gene module — representing a biological process a cell can turn
+  # on or off; it extends Set the same way GeneSet does, with genes as
+  # members. A CellState is the cellular phenotype defined by which
+  # GenePrograms are active in a cell (or cell population) at once —
+  # distinct from a cell TYPE (a Cell Ontology class), which is what lineage
+  # a cell belongs to rather than what state it is currently in.
+  # ======================================================================
+
+  GeneProgram:
+    is_a: Set
+    aliases:
+      - gene program
+      - gene expression program
+      - GEP
+      - metagene
+    description: >-
+      A Set whose members are genes that co-vary as a coordinated unit and
+      together carry out a biological process — a factor from matrix
+      factorization (cNMF, NMF, Spectra, WGCNA) or a curated gene module. No
+      ontology term is asserted as class_uri — none resolves to "gene
+      program" / "gene expression program" (verified against EBI OLS4) — so
+      GeneProgram grounds via `is_a: Set` (prov:Collection), the same way
+      GeneSet does. Distinct from GeneSet: a GeneSet is typically a static
+      annotation (e.g. an MSigDB term); a GeneProgram is inferred from
+      expression covariance and is usually a quantitative loading over genes,
+      not just membership. `member_weights`, when present, is that loading —
+      one number per gene in `members`, positionally paired. A very large
+      loading matrix should still reference its source file via the
+      member-manifest escape hatch `Set` already provides rather than
+      enumerate weights here.
+    attributes:
+      assay:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - obo:OBI_0000070      # assay
+        description: Assay the program was inferred from (e.g. scRNA-seq).
+      organism:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:taxonomicRange
+        description: Organism (e.g. human).
+      inference_method:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Method used to derive the program (e.g. cNMF, NMF, Spectra, WGCNA,
+          curated).
+      biological_process:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: >-
+          GO biological process CURIE(s) this program represents, e.g.
+          `obo:GO_0006629`.
+      n_genes:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        aliases:
+          - n_members
+        description: Count of unique genes in the program.
+      member_weights:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        multivalued: true
+        aliases:
+          - loadings
+          - gene_weights
+        description: >-
+          Quantitative loading/weight for each gene in `members`, positionally
+          paired and equal in length to it (`members[i]` <->
+          `member_weights[i]`) — e.g. an NMF/cNMF factor loading, or another
+          continuous per-gene activity score. Not necessarily raw expression:
+          it is whatever per-gene number the `inference_method` produces.
+          Reordering or resizing one list without the other breaks the
+          pairing.
+      quality_score:
+        range: GeneProgramQualityScore
+        inlined: true
+        mixins: [hashable]
+        description: >-
+          Assessment of this program's overall quality — a composite
+          `quality_score` value plus the `components` (stability, confounders,
+          validity) it is composited from — see GeneProgramQualityScore.
+
+  GeneProgramQualityScore:
+    aliases:
+      - gene program quality score
+      - GEP quality score
+    description: >-
+      Assessment of the overall quality of a `GeneProgram`, embedded inline on
+      its `quality_score` attribute. One number summarizing how trustworthy a
+      program is.
+    attributes:
+      quality_score:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 100
+        description: >-
+          Weighted composite of `components`: 20% Stability + 30% Confounders
+          + 50% Validity.
+      components:
+        range: GeneProgramQualityComponents
+        inlined: true
+        mixins: [hashable]
+        description: The three sub-scores `quality_score` is composited from.
+
+  GeneProgramQualityComponents:
+    description: >-
+      The three independent dimensions assessed for a `GeneProgram`'s quality,
+      nested under `GeneProgramQualityScore.components`.
+    attributes:
+      stability_score:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 100
+        description: >-
+          Did the method run correctly? Measures reproducibility of gene
+          programs across cNMF runs and random seeds. Weighted 20% into
+          `quality_score`.
+      confounder_score:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 100
+        description: >-
+          Are there technical confounders masking the biology? Measures
+          cross-dataset alignment and agreement — batch effects are one
+          example of a confounder. Weighted 30% into `quality_score`.
+      validity_score:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 100
+        description: >-
+          Is the output real biology? Evidence from hallmark pathway
+          enrichment, GWAS genetic signals, and cell-surface markers.
+          Weighted 50% into `quality_score`.
+
+  CellState:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    aliases:
+      - cellular phenotype
+      - cell type state
+    description: >-
+      A cellular phenotype defined by the combination of GenePrograms active
+      in a cell (or cell population) — e.g. "activated", "exhausted",
+      "hypoxic". Distinct from a cell TYPE (a Cell Ontology class, e.g.
+      `obo:CL_0000542`): a CellState is a functional/transcriptional state a
+      cell of a given type can transition into and out of, defined by which
+      programs are switched on — not which lineage the cell belongs to. No
+      ontology term is asserted as class_uri — no term resolving to "cell
+      state" as a generic, cross-cell-type phenotype was found (verified
+      against EBI OLS4) — so CellState grounds via `is_a: HashableNode`
+      directly. Mixes in `ProvenancedResource` so a CellState is citable and
+      attributable the same way a `GeneProgram` (via `Set`) already is.
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        description: Free-text description of the cell state.
+      cell_type:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: >-
+          Cell Ontology (CL) CURIE of the cell type this state applies to,
+          e.g. `obo:CL_0000542`.
+      organism:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:taxonomicRange
+        description: Organism (e.g. human).
+      has_program:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dapper:hasProgram
+        description: >-
+          GeneProgram id(s) active in this state. The combination of these —
+          not any single program — is what defines the state.
+      allow_hard_call:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        description: Whether this state may be manually called with high confidence despite mixed evidence.
+      biological_category:
+        is_a: literal
+        mixins: [hashable]
+        description: High-level biological category this state belongs to.
+      biological_description:
+        is_a: literal
+        mixins: [hashable]
+        description: Longer prose description of the state's biology.
+      cell_type_id:
+        is_a: literal
+        mixins: [hashable]
+        description: Ontology identifier for the cell type this state applies to.
+      cell_type_label:
+        is_a: literal
+        mixins: [hashable]
+        description: Human-readable label for the cell type.
+      curation_notes:
+        is_a: literal
+        mixins: [hashable]
+        description: Free-text curator notes on this state.
+      curation_version:
+        is_a: literal
+        mixins: [hashable]
+        description: Version of the curation applied to this state.
+      disease_context:
+        is_a: literal
+        mixins: [hashable]
+        description: Disease context this state was curated in, if any.
+      display_name:
+        is_a: literal
+        mixins: [hashable]
+        description: Human-readable name for portal display.
+      display_order:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        description: Sort order for portal display.
+      do_not_overinterpret_as:
+        is_a: literal
+        mixins: [hashable]
+        description: Caveat naming a stronger claim this state should not be read as.
+      gene_expression_caveat:
+        is_a: literal
+        mixins: [hashable]
+        description: Caveat about interpreting the underlying gene expression evidence.
+      gene_expression_followup:
+        is_a: literal
+        mixins: [hashable]
+        description: Suggested follow-up analysis for the gene expression evidence.
+      gene_expression_interpretation:
+        is_a: literal
+        mixins: [hashable]
+        description: Curator's interpretation of the gene expression evidence.
+      gene_expression_overinterpretation_warning:
+        is_a: literal
+        mixins: [hashable]
+        description: Warning against overinterpreting the gene expression evidence.
+      gene_set_description:
+        is_a: literal
+        mixins: [hashable]
+        description: Description of the gene set(s) underlying this state.
+      hard_call_notes:
+        is_a: literal
+        mixins: [hashable]
+        description: Notes justifying a hard (high-confidence) call for this state.
+      interpretation_caveat:
+        is_a: literal
+        mixins: [hashable]
+        description: Caveat qualifying the state's interpretation.
+      interpretation_status:
+        is_a: literal
+        mixins: [hashable]
+        description: Status of the curator's interpretation (e.g. provisional, confirmed).
+      is_composite_required:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        description: Whether more than one GeneProgram must be active for this state to hold.
+      is_qc:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        description: Whether this state represents a quality-control artifact rather than biology.
+      known_limitations:
+        is_a: literal
+        mixins: [hashable]
+        description: Known limitations of the evidence supporting this state.
+      manual_review_status:
+        is_a: literal
+        mixins: [hashable]
+        description: Status of manual curator review.
+      marker_panel_context:
+        is_a: literal
+        mixins: [hashable]
+        description: Marker panel this state was curated against.
+      marker_provenance_summary:
+        is_a: literal
+        mixins: [hashable]
+        description: Summary of where the defining markers came from.
+      n_markers:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        description: Count of markers used to define this state.
+      negative_checks:
+        is_a: literal
+        mixins: [hashable]
+        description: Checks performed to rule out alternative explanations.
+      portal_display_establishment:
+        is_a: literal
+        mixins: [hashable]
+        description: How firmly established this state is, as shown in the portal.
+      portal_methods_details:
+        is_a: literal
+        mixins: [hashable]
+        description: Methods details shown for this state in the portal.
+      portal_primary_badges:
+        is_a: literal
+        mixins: [hashable]
+        description: Primary badges shown for this state in the portal.
+      portal_user_summary:
+        is_a: literal
+        mixins: [hashable]
+        description: User-facing summary of this state shown in the portal.
+      portal_visibility:
+        is_a: literal
+        mixins: [hashable]
+        description: Visibility tier controlling whether this state is shown in the portal.
+      provenance_warning_count:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        description: Count of provenance warnings flagged for this state.
+      qc_sensitivity:
+        is_a: literal
+        mixins: [hashable]
+        description: Sensitivity of the QC check that flagged this state.
+      quality:
+        is_a: literal
+        mixins: [hashable]
+        description: Overall quality tier assigned to this state.
+      quality_badges:
+        is_a: literal
+        mixins: [hashable]
+        description: Quality badges shown for this state.
+      recommended_portal_label:
+        is_a: literal
+        mixins: [hashable]
+        description: Recommended short label for portal display.
+      recommended_portal_summary:
+        is_a: literal
+        mixins: [hashable]
+        description: Recommended summary text for portal display.
+      release_class:
+        is_a: literal
+        mixins: [hashable]
+        description: Release classification controlling readiness for publication.
+      required_supporting_evidence:
+        is_a: literal
+        mixins: [hashable]
+        description: Evidence required to support this state's call.
+      score_scope:
+        is_a: literal
+        mixins: [hashable]
+        description: Scope over which the state's score was computed.
+      source_gmt:
+        is_a: literal
+        mixins: [hashable]
+        description: Source .gmt file the underlying gene set was drawn from.
+      source_workbook:
+        is_a: literal
+        mixins: [hashable]
+        description: Source spreadsheet/workbook the curation was recorded in.
+      state_class:
+        is_a: literal
+        mixins: [hashable]
+        description: Classification of the state (e.g. functional, quality-control).
+      state_establishment_level:
+        is_a: literal
+        mixins: [hashable]
+        description: Confidence level at which this state is considered established.
+      state_establishment_rationale:
+        is_a: literal
+        mixins: [hashable]
+        description: Rationale for the state's establishment level.
+      state_id:
+        is_a: literal
+        mixins: [hashable]
+        description: Identifier for this state in the source curation workbook.
+      state_label:
+        is_a: literal
+        mixins: [hashable]
+        description: Short label for this state.
+      state_level_citation_ids:
+        is_a: literal
+        mixins: [hashable]
+        description: Citation identifiers supporting this state.
+      tissue_id:
+        is_a: literal
+        mixins: [hashable]
+        description: Ontology identifier for the tissue this state was observed in.
+      tissue_label:
+        is_a: literal
+        mixins: [hashable]
+        description: Human-readable label for the tissue.

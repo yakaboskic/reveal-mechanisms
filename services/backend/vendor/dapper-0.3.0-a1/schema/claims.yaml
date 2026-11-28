@@ -1,0 +1,1280 @@
+id: https://broadinstitute.github.io/dapper/model/schema/claims.yaml
+name: dapper_claims
+version: 0.3.0-a1
+title: DAPPER scientific claims
+description: >-
+  Scientific reasoning: propositions, attributed assessments and their
+  evidence, paragraph-oriented scientific accounts, and causal content
+  (CausalVariable, CausalLink, CausalGraph). Causation here is interventionist:
+  a CausalLink says that, in its contexts, intervening on the cause variable
+  would change the effect variable. core.yaml supplies
+  HashableNode, ProvenancedResource, ValueLocator, and the
+  literal/relationship and identity slot mixins. Claims stays independent
+  of any domain: a proposition, account or piece of evidence that draws on
+  explicit structure points at the abstract ExplanatoryModel. CausalGraph is
+  the general causal kind; domain modules specialize it (mechanisms.yaml's
+  MechanisticModel) and map it to resources such as DISMECH (dismech.yaml).
+license: https://creativecommons.org/licenses/by/4.0/
+default_prefix: dapper
+default_range: string
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  dismech: https://w3id.org/monarch-initiative/dismech/
+  RO: http://purl.obolibrary.org/obo/RO_
+imports:
+  - linkml:types
+  - core
+
+# SEPIO's draft source still declares an example.org default namespace.
+# Use documentation links and explicit conceptual alignment rather than assert
+# OWL equivalence to a provisional or invented SEPIO class URI.
+enums:
+  GapKindEnum:
+    description: >-
+      Kind of missing knowledge; independent of resolution or review status.
+      Values match the gap kinds of DISMECH's DiscussionKindEnum.
+    close_mappings:
+      - dismech:DiscussionKindEnum
+    permissible_values:
+      KNOWLEDGE_GAP:
+        description: Missing knowledge about the biological system or its evidence.
+      HUMAN_MODEL_MISMATCH:
+        description: An unresolved difference between human biology and an experimental or computational model.
+  EvidenceDirectionEnum:
+    description: Direction of an assessment relative to its target proposition.
+    permissible_values:
+      SUPPORTS:
+        description: The assessment favors the proposition.
+      DISPUTES:
+        description: The assessment argues against the proposition.
+      NEUTRAL:
+        description: The assessment does not favor either direction; not missing evidence.
+      MIXED:
+        description: The evidence contributes in both directions.
+      UNKNOWN:
+        description: >-
+          The direction was explicitly recorded as unknown: the evidence bears
+          on the proposition but leaves which way open, such as a link whose
+          sign the evidence does not settle.
+  ClaimScoreKindEnum:
+    description: Mathematical meaning of a reported value, independent of its magnitude.
+    permissible_values:
+      PROBABILITY:
+        description: Probability of the event specified in interpretation, in [0,1].
+      POSTERIOR_PROBABILITY:
+        description: Probability conditional on the specified data and model, in [0,1].
+      EFFECT_ESTIMATE:
+        description: Estimated effect on the scale named by metric; may be negative.
+      LOADING:
+        description: Factor loading or membership weight; not necessarily a probability.
+      SCORE:
+        description: Method-specific score whose scale is defined by interpretation.
+  PropositionKindEnum:
+    description: Scope of the content, independent of paragraph role or confidence.
+    permissible_values:
+      RESULT:
+        description: An observation, measurement, or output of a specified analysis.
+      BIOLOGICAL_INTERPRETATION:
+        description: Content about the biological system that results are used to understand.
+      UNSPECIFIED:
+        description: The scope has not been classified.
+  RelationKindEnum:
+    description: >-
+      What kind of dependence a proposition's content asserts, independent of
+      the evidence for it. Only CAUSATION carries the interventionist reading;
+      an association supported by a natural experiment is still an
+      ASSOCIATION until a proposition says more.
+    permissible_values:
+      ASSOCIATION:
+        description: >-
+          Co-variation in a population or dataset, with no claim about what
+          an intervention would do.
+      PREDICTION:
+        description: >-
+          One quantity predicts another under a stated model; predictive
+          success alone is not causal or mechanistic content.
+      MEASUREMENT:
+        description: >-
+          One quantity reads out, indicates or measures another (a marker, a
+          factor readout, an assay of a state).
+      CONSTITUTION:
+        description: >-
+          Part-whole relevance: the subject is a component or activity of the
+          mechanism that makes up the object. Parts do not cause the wholes
+          they compose.
+      CAUSATION:
+        description: >-
+          Interventionist dependence: in the proposition's contexts, some
+          intervention on the subject would change the object. General
+          (population-level) unless the proposition says otherwise.
+        close_mappings:
+          - RO:0002410
+  EffectDirectionEnum:
+    description: >-
+      How raising the cause variable changes the effect variable, for a
+      binary state, from absent to present.
+    permissible_values:
+      INCREASES:
+        description: Raising the cause raises the effect.
+        close_mappings:
+          - RO:0002304
+      DECREASES:
+        description: Raising the cause lowers the effect.
+        close_mappings:
+          - RO:0002305
+      CHANGES:
+        description: >-
+          The effect changes without a single sign (non-monotone,
+          qualitative, or sign depends on context).
+  AspectEnum:
+    description: >-
+      What about an entity a CausalVariable tracks: the kind of change an
+      intervention makes or an effect undergoes. Paired with
+      EffectDirectionEnum on a CausalLink, it says what changes and which
+      way, in the spirit of Biolink's aspect and direction qualifiers.
+    permissible_values:
+      ACTIVITY:
+        description: Functional activity (catalytic, transport, signaling, binding).
+      ABUNDANCE:
+        description: Amount present (protein or metabolite level, cell count).
+      EXPRESSION:
+        description: Transcript or gene-product expression level.
+      LOCALIZATION:
+        description: Where the entity is (subcellular compartment, tissue).
+      STABILITY:
+        description: Stability or turnover (degradation rate, half-life).
+      STRUCTURE:
+        description: Structural integrity or morphology (of a molecule, cell or tissue).
+      RATE:
+        description: Rate or extent of a process.
+      PRESENCE:
+        description: Whether a state, phenotype or disease is present.
+      SEVERITY:
+        description: Degree of a phenotype or disease when present.
+      GENOTYPE:
+        description: >-
+          Allele dosage at a genetic variant: the number of copies (0, 1 or
+          2) of a stated effect allele. Raising it means adding a copy of
+          that allele (genetics.yaml: GenotypeVariable).
+  CausalRelationEnum:
+    description: >-
+      Which kind of causal dependence a CausalLink asserts, independent of
+      its sign (effect_direction) and of its directness in a graph
+      (link_type). All are interventionist: each says what interventions on
+      the cause would do to the effect. "Prevents" is not a separate value;
+      it is a link whose effect_direction is DECREASES.
+    broad_mappings:
+      - RO:0002410
+    permissible_values:
+      CAUSES:
+        description: >-
+          In the link's contexts, changing the cause is enough to change the
+          effect; it is the main difference-maker (a monogenic loss of
+          function, for example).
+      CONTRIBUTES_TO:
+        description: >-
+          One difference-maker among several: changing the cause shifts the
+          effect's value or probability but does not settle it alone (a risk
+          variant, for example).
+      ENABLES:
+        description: >-
+          A permissive, necessary condition: without the cause the effect
+          cannot occur, but the cause does not by itself drive the effect's
+          level.
+      REGULATES:
+        description: >-
+          Graded, specific control: across a range, the effect's level
+          tracks the cause's level (a dose-response dependence).
+        close_mappings:
+          - RO:0002211
+  CausalLinkTypeEnum:
+    description: >-
+      How a CausalLink sits in one CausalGraph. A link in a graph is direct
+      relative to that graph's variables: no other variable in the graph lies
+      between cause and effect. These values say whether the graph knowingly
+      leaves intermediates out, so the same link can be DIRECT in a coarse
+      graph and INDIRECT in a finer one.
+    permissible_values:
+      DIRECT:
+        description: >-
+          Direct at this graph's granularity; the graph claims no omitted
+          intermediates.
+      INDIRECT_KNOWN_INTERMEDIATES:
+        description: >-
+          The graph omits intermediates that are known; list them in
+          `intermediates`.
+      INDIRECT_UNKNOWN_INTERMEDIATES:
+        description: The graph omits intermediates that are not known.
+      UNKNOWN:
+        description: Directness has not been determined.
+  EvidenceDesignEnum:
+    description: >-
+      How close the evidence comes to the intervention that a causal
+      proposition is about. Describes the evidence, never the proposition.
+    permissible_values:
+      EXPERIMENTAL_INTERVENTION:
+        description: >-
+          The cause was set by the investigator (knockout, knockdown, CRISPR
+          perturbation, drug exposure, randomized trial).
+      NATURAL_EXPERIMENT:
+        description: >-
+          Nature or circumstance set the cause, as-if at random (Mendelian
+          randomization, loss-of-function carriers, other quasi-experiments).
+      OBSERVATIONAL:
+        description: Co-variation observed without an intervention.
+      MECHANISTIC:
+        description: >-
+          Evidence that a mechanism linking cause and effect exists and
+          operates, rather than evidence of the dependence itself.
+      COMPUTATIONAL:
+        description: Output of a computational model or prediction method.
+  EvidenceBasisEnum:
+    description: >-
+      What a Claim's direction rests on, relative to the proposition's own
+      contexts: evidence obtained there, evidence from elsewhere, evidence
+      about neighbouring propositions only, or none. Independent of
+      direction: a link shown in another organism and a link contradicted
+      in the target tissue differ in basis, not only in sign. When evidence
+      is mixed, the basis is the strongest among the items that carry the
+      claim's direction (IN_CONTEXT, then BY_ANALOGY, then INDIRECT).
+    permissible_values:
+      IN_CONTEXT:
+        description: >-
+          Evidence on the proposition's own variables (the same cause and
+          effect), obtained in its own contexts (its organism, tissue, cell
+          type).
+      BY_ANALOGY:
+        description: >-
+          Evidence on the proposition's own variables, obtained only in other
+          contexts: another organism, a cell line, another cell type or
+          tissue. The same dependence, shown elsewhere; untested where it is
+          claimed.
+      INDIRECT:
+        description: >-
+          Evidence on other variables only (a sibling gene or subunit, a
+          different readout, an upstream or downstream link, an association),
+          from which this proposition is inferred. Changing the variable
+          makes evidence indirect; changing only the context makes it an
+          analogy.
+      UNTESTED:
+        description: >-
+          No evidence bearing on the proposition was found. Absence of
+          evidence, recorded as a finding; the direction is omitted or
+          UNKNOWN, never SUPPORTS, DISPUTES, MIXED or NEUTRAL.
+  ClaimStatusEnum:
+    description: An assessor's review status; not a change to the proposition or a hypothesis type.
+    permissible_values:
+      proposed:
+        description: Put forward but not yet reviewed.
+      canonical:
+        description: Regarded by the assessor as the accepted explanation in the stated scope.
+      alternative:
+        description: >-
+          Regarded by the assessor as a competing explanation. Which
+          hypothesis it competes with is structure, recorded on the
+          Hypothesis framing (`alternative_to`).
+      contested:
+        description: Under active dispute.
+      refuted:
+        description: Judged by the assessor to be refuted.
+      retracted:
+        description: Withdrawn by its creator.
+
+# Slots shared by several classes, declared once. Each class still carries
+# them as attributes (with its own hashability and wording); the shared
+# declaration gives each one a single URI.
+slots:
+  explanatory_model:
+    is_a: relationship
+    slot_uri: dapper:explanatory_model
+    range: ExplanatoryModel
+    description: Optional explanatory model an assessment, proposition or account draws on.
+  subject_entity:
+    is_a: relationship
+    slot_uri: dapper:subject_entity
+    range: uriorcurie
+    description: Upstream (subject) entity of a structured proposition or model.
+  proposition:
+    is_a: relationship
+    slot_uri: dapper:proposition
+    range: Proposition
+    description: The Proposition a Claim assesses or a Hypothesis frames.
+  object_entity:
+    is_a: relationship
+    slot_uri: dapper:object_entity
+    range: uriorcurie
+    description: Downstream (object) entity of a structured proposition or model.
+
+classes:
+
+  ExplanatoryModel:
+    is_a: HashableNode
+    abstract: true
+    description: >-
+      Abstract base for explicit structure that a Proposition elaborates, a
+      ScientificAccount considers, or an EvidenceItem interprets through,
+      e.g. a causal chain. It is content, not an assessment: confidence,
+      review status and evidence live on Claim. The reasoning layer refers
+      only to this class; domain modules define the concrete kinds
+      (mechanisms.yaml: MechanisticModel). Abstract, so it never appears in
+      an identifier.
+  Proposition:
+    is_a: HashableNode
+    mixins:
+      - Contextual
+    description: >-
+      The content being asserted or evaluated, independent of a particular
+      assessment, score, or execution. A text statement is required; a structured
+      subject-predicate-object form is optional. DAPPER identifiers address the
+      representation, not a guarantee of semantic equivalence between paraphrases.
+    see_also:
+      - https://sepio-framework.github.io/sepio-linkml/Proposition/
+    annotations:
+      dapper:source_standard: SEPIO LinkML Proposition (conceptual alignment)
+    attributes:
+      statement:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          Self-contained proposition text, including its scientific scope but
+          excluding a particular assessor's confidence and execution metadata.
+      subject_entity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Subject of the optional structured proposition.
+      relation:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Predicate of the optional structured proposition; does not itself assert truth.
+      relation_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: RelationKindEnum
+        slot_uri: dapper:relation_kind
+        description: >-
+          Kind of dependence the content asserts (association, prediction,
+          measurement, constitution or causation). Renderings use causal
+          language only for CAUSATION. Omission means not classified.
+      object_entity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Object of the optional structured proposition.
+      scope:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Conditions that constrain the proposition's meaning (trait, population,
+          tissue, or fitted-factor context), in words. Use `contexts` for the
+          typed ones (ancestry, trait); for a causal proposition they are the
+          range over which the dependence is claimed to hold. Input provenance
+          alone does not imply that the conclusion is restricted to the input's
+          biological context.
+      negated:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        description: >-
+          Whether the structured proposition is negated. Distinct from an
+          assessment that disputes the unnegated proposition.
+      proposition_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: PropositionKindEnum
+        description: Result or biological interpretation; independent of whether a Hypothesis frames it.
+      explanatory_model:
+        is_a: relationship
+        mixins: [hashable]
+        range: ExplanatoryModel
+        inlined: false
+        description: >-
+          Optional explanatory model (a causal graph, mechanistic model or
+          structural causal model) elaborating this proposition's content.
+    rules:
+      - preconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+        postconditions:
+          slot_conditions:
+            relation:
+              required: true
+            object_entity:
+              required: true
+      - preconditions:
+          slot_conditions:
+            relation:
+              required: true
+        postconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+            object_entity:
+              required: true
+      - preconditions:
+          slot_conditions:
+            object_entity:
+              required: true
+        postconditions:
+          slot_conditions:
+            subject_entity:
+              required: true
+            relation:
+              required: true
+
+  # ---- causal content -----------------------------------------------------
+  # Interventionist throughout: X causes Y in a context when some intervention
+  # on X would change Y there. The relata are variables, not bare entities;
+  # links are Propositions so Claims and evidence can assess each one; a
+  # graph's directness is relative to the graph's own variables. Mappings to
+  # specific resources (DISMECH) live in mechanisms.yaml and dismech.yaml.
+
+  CausalVariable:
+    is_a: HashableNode
+    description: >-
+      Something that can take different values and so can be intervened on:
+      an entity together with the aspect of it that varies (CLCN5 + activity,
+      endosomal acidification + rate), or a named state that can be present
+      or absent. The relata of a CausalLink and the nodes of a CausalGraph. A
+      bare gene or disease identifier is not a variable; say which aspect
+      varies.
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The variable in words, including where it is measured or holds.
+      entity:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dapper:entity
+        description: >-
+          Optional identifier of the entity the variable is about (gene,
+          process, cell type, phenotype, disease). Omit rather than invent one.
+      aspect:
+        is_a: literal
+        mixins: [hashable]
+        range: AspectEnum
+        slot_uri: dapper:aspect
+        description: >-
+          What about the entity varies. For a disease or phenotype, PRESENCE
+          or SEVERITY. Omission means not stated.
+
+  CausalLink:
+    is_a: Proposition
+    description: >-
+      A causal Proposition: in its contexts, some intervention on the cause
+      variable would change the effect variable, in the stated direction.
+      General (population-level) by default. Being a Proposition, a link is
+      content only; Claims assess it and EvidenceItems target it, one link at
+      a time. A link does not record its directness, which depends on the
+      graph it appears in (see CausalGraphLink). The statement must not say
+      more than the structure (no "directly" or "necessary" unless the
+      structure and contexts support it).
+    slot_usage:
+      relation:
+        description: Not used on a CausalLink; use causal_relation.
+      subject_entity:
+        description: Not used on a CausalLink; the cause variable names the entity.
+      object_entity:
+        description: Not used on a CausalLink; the effect variable names the entity.
+      relation_kind:
+        required: true
+        equals_string: CAUSATION
+        description: >-
+          Always CAUSATION for a CausalLink. Required, so a link has one
+          spelling and one identifier.
+    attributes:
+      cause:
+        is_a: relationship
+        mixins: [hashable]
+        range: CausalVariable
+        inlined: false
+        required: true
+        slot_uri: dapper:cause
+        description: The variable intervened on.
+      effect:
+        is_a: relationship
+        mixins: [hashable]
+        range: CausalVariable
+        inlined: false
+        required: true
+        slot_uri: dapper:effect
+        description: The variable whose value the intervention would change.
+      causal_relation:
+        is_a: literal
+        mixins: [hashable]
+        range: CausalRelationEnum
+        slot_uri: dapper:causal_relation
+        description: >-
+          Which kind of causal dependence the link asserts. Omission means
+          only that the cause makes some difference to the effect.
+      effect_direction:
+        is_a: literal
+        mixins: [hashable]
+        range: EffectDirectionEnum
+        slot_uri: dapper:effect_direction
+        description: >-
+          How raising the cause changes the effect. Omission means the
+          direction is not stated.
+
+  CausalGraphLink:
+    description: >-
+      A CausalLink's place in one CausalGraph: the link, and whether the
+      graph leaves intermediates out between its cause and effect. An inline
+      value with no identifier of its own; the link keeps one identifier
+      however many graphs use it.
+    attributes:
+      link:
+        is_a: relationship
+        range: CausalLink
+        required: true
+        slot_uri: dapper:link
+        description: The CausalLink this entry places in the graph.
+      link_type:
+        is_a: literal
+        range: CausalLinkTypeEnum
+        slot_uri: dapper:link_type
+        description: >-
+          Directness of the link relative to this graph's variables.
+          Omission means not recorded.
+      intermediates:
+        is_a: literal
+        multivalued: true
+        slot_uri: dapper:intermediates
+        description: >-
+          Known intermediates this graph leaves out, in words; expected when
+          link_type is INDIRECT_KNOWN_INTERMEDIATES.
+
+  CausalGraph:
+    is_a: ExplanatoryModel
+    mixins:
+      - ProvenancedResource
+      - Contextual
+    description: >-
+      A causal model as a directed graph over an explicit set of variables.
+      Each entry in `links` places a CausalLink in the graph; an edge means
+      the cause is a direct cause of the effect relative to `variables`.
+      Acyclic (a causal DAG) unless `has_feedback` declares a feedback loop,
+      so tools that need a DAG can rely on it. A graph is content, not an
+      assessment: Claims assess the Proposition that references it, or its
+      links one at a time. Domain modules specialize it (mechanisms.yaml:
+      MechanisticModel).
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        description: What the graph models, in words.
+      variables:
+        is_a: relationship
+        mixins: [hashable]
+        range: CausalVariable
+        inlined: false
+        multivalued: true
+        required: true
+        slot_uri: dapper:variables
+        description: >-
+          The variable set the graph is over. Directness is relative to it,
+          so it is explicit rather than read off the links. Every link's
+          cause and effect must be listed.
+      links:
+        is_a: literal
+        mixins: [hashable]
+        range: CausalGraphLink
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+        slot_uri: dapper:links
+        description: >-
+          The graph's edges, each a CausalLink with its directness here. A
+          link appears at most once. Order is part of identity.
+      has_feedback:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        slot_uri: dapper:has_feedback
+        description: >-
+          True when the graph contains a feedback loop (a directed cycle).
+          A cycle in a graph without it is an error.
+      scope:
+        is_a: literal
+        mixins: [hashable]
+        description: Conditions under which the graph is proposed to hold, in words.
+
+  ClaimScore:
+    is_a: HashableNode
+    description: >-
+      One explicitly typed quantitative assessment. A Claim links the score to
+      its proposition and provenance. Values are not interchangeable across
+      metrics, and a factor loading must not be relabeled as a probability.
+    attributes:
+      score_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: ClaimScoreKindEnum
+        required: true
+        description: Mathematical kind of the value.
+      value:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        required: true
+        description: Reported numeric value on the metric's scale.
+      metric:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: Exact source metric or output-column name; never inferred from the value.
+      interpretation:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          What is estimated, its scale, and (for probabilities) the event and
+          conditioning data/model. A posterior for a latent variable is not
+          automatically a probability that a biological mechanism is true.
+    rules:
+      - preconditions:
+          slot_conditions:
+            score_kind:
+              equals_string: PROBABILITY
+        postconditions:
+          slot_conditions:
+            value:
+              minimum_value: 0
+              maximum_value: 1
+      - preconditions:
+          slot_conditions:
+            score_kind:
+              equals_string: POSTERIOR_PROBABILITY
+        postconditions:
+          slot_conditions:
+            value:
+              minimum_value: 0
+              maximum_value: 1
+
+  Claim:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      An attributed assertion or assessment of a Proposition, produced by a
+      particular activity. This is DAPPER's counterpart to SEPIO Statement.
+      It may be computational, curated, or reported by an author; being a Claim
+      does not imply established truth, causality, or a mechanistic hypothesis.
+    see_also:
+      - https://sepio-framework.github.io/sepio-linkml/Statement/
+    annotations:
+      dapper:source_standard: SEPIO LinkML Statement (conceptual alignment)
+    slot_usage:
+      was_generated_by:
+        required: true
+      was_attributed_to:
+        required: true
+        minimum_cardinality: 1
+    attributes:
+      proposition:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        required: true
+        description: Identifier of the proposition being asserted or assessed.
+      statement:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Human-readable rendering of this assessment, optionally including its
+          scores. The proposition text separately captures the evaluated content.
+      direction:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceDirectionEnum
+        description: >-
+          Assessment direction, when reported. Omit for a simple assertion or
+          when the method supplies no directional judgment; do not infer it
+          by thresholding a score without a specified interpretation rule.
+      evidence_basis:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceBasisEnum
+        slot_uri: dapper:evidence_basis
+        description: >-
+          What the direction rests on relative to the proposition's
+          contexts: in-context evidence, analogy, indirect evidence, or none
+          (UNTESTED). Stated by the assessor; the evidence items' contexts
+          let a reader check it. Omission means not stated.
+      status:
+        is_a: literal
+        mixins: [hashable]
+        range: ClaimStatusEnum
+        description: Review status of this assessment, independent of proposition content.
+      has_score:
+        is_a: relationship
+        mixins: [hashable]
+        range: ClaimScore
+        inlined: false
+        multivalued: true
+        description: Scores assessing this claim's proposition, each retaining its metric and meaning.
+      source_locator:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Record key, row selector, or passage locating this assessment in the
+          output artifacts referenced by was_derived_from. Name the artifact
+          when more than one is referenced.
+      has_evidence:
+        is_a: relationship
+        mixins: [hashable]
+        range: EvidenceItem
+        inlined: false
+        multivalued: true
+        description: >-
+          Evidence uses bearing on this claim's proposition. Each evidence item's
+          target_proposition must match this proposition when supplied. Source
+          claims, rationale and assumptions describe an explicit interpretation;
+          computational input lineage remains in PROV links.
+      asserted_in:
+        is_a: relationship
+        mixins: [unhashable]
+        range: uriorcurie
+        multivalued: true
+        description: Publication back-references; excluded from claim identity to avoid cycles.
+
+  Framing:
+    is_a: HashableNode
+    abstract: true
+    mixins:
+      - ProvenancedResource
+    close_mappings:
+      - dismech:Discussion
+    description: >-
+      What a ScientificAccount sets out to address: a Question, a
+      KnowledgeGap, or a Hypothesis. An account lists one or more framings in
+      order. A framing carries no truth assessment or confidence score, and
+      accounts can share a framing while answering it differently. DISMECH
+      records the same idea as a Discussion with a kind (OPEN_QUESTION,
+      KNOWLEDGE_GAP, EMERGING_HYPOTHESIS, ...).
+    attributes:
+      text:
+        is_a: literal
+        mixins: [hashable]
+        pattern: '\S'
+        description: >-
+          The framing in natural language: the question asked, the gap, or
+          how the account frames its hypothesis. Required for Question and
+          KnowledgeGap.
+      scope:
+        is_a: literal
+        mixins: [hashable]
+        description: Biological or analytical setting that bounds this framing.
+      about_entities:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: >-
+          Identifiers of diseases, genes, mechanisms, phenotypes, or other entities
+          that this framing concerns. These supply entity context, not proposed
+          answers or evidence. Omit when unavailable; do not invent identifiers.
+
+  Question:
+    is_a: Framing
+    description: >-
+      An inquiry to be addressed, independent of a proposed answer or
+      assessment. Accounts can share the same question and propose different
+      hypotheses in response.
+    slot_usage:
+      text:
+        required: true
+        description: The inquiry expressed in natural language.
+
+  KnowledgeGap:
+    is_a: Framing
+    close_mappings:
+      - dismech:Discussion
+    description: >-
+      Knowledge identified as missing. text expresses the inquiry the gap
+      raises; gap_description states what is not yet known. Recording a gap
+      does not assess a proposed answer or imply that work has resolved it.
+      Corresponds to a DISMECH Discussion of kind KNOWLEDGE_GAP (or
+      HUMAN_MODEL_MISMATCH).
+    slot_usage:
+      text:
+        required: true
+        description: The inquiry the gap raises, in natural language.
+    attributes:
+      gap_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: GapKindEnum
+        description: Optional classification of the gap; omission means not classified.
+      gap_description:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The specific missing knowledge the gap identifies.
+      concerns:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:concerns
+        description: >-
+          Propositions whose truth is the missing knowledge, e.g. the one
+          untested CausalLink a mechanism depends on. The gap does not
+          assess them.
+
+  Hypothesis:
+    is_a: Framing
+    description: >-
+      A Proposition put forward for investigation in an account. The
+      Hypothesis only frames it: it neither asserts the proposition nor
+      changes its identity, and it carries no confidence, status or
+      evidence. Those belong on Claims that assess the proposition, and any
+      mechanistic structure on the proposition's ExplanatoryModel. Other
+      accounts may frame the same proposition differently. Optional text
+      records how this account phrases the hypothesis when that differs from
+      the proposition's statement.
+    attributes:
+      proposition:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        required: true
+        pattern: '\S'
+        description: The Proposition proposed for investigation.
+      alternative_to:
+        is_a: relationship
+        mixins: [hashable]
+        range: Hypothesis
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:alternative_to
+        description: >-
+          Hypotheses this one competes with as an explanation of the same
+          thing: if one is the whole explanation, the other is not. Each
+          proposition carries its own explanatory model, and Claims assess
+          each separately. Name the relation on the later hypothesis only;
+          identity cannot hold a cycle.
+
+  ScientificAccount:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      An attributed scientific account organized as framing, context, claims,
+      and optional closing. It is not a Claim and has no aggregate proposition
+      or score. Its framing is one or more Questions, KnowledgeGaps or
+      Hypotheses, in order; a Hypothesis proposes an existing Proposition for
+      investigation without asserting it. Membership and order do not imply
+      causation or evidential support.
+    slot_usage:
+      was_generated_by:
+        required: true
+      was_attributed_to:
+        required: true
+        minimum_cardinality: 1
+    attributes:
+      framing:
+        is_a: relationship
+        mixins: [hashable]
+        range: Framing
+        inlined: false
+        multivalued: true
+        required: true
+        minimum_cardinality: 1
+        pattern: '\S'
+        description: >-
+          Ordered, distinct Questions, KnowledgeGaps and Hypotheses this
+          account addresses. An account may, for example, pose a question and
+          propose a hypothesis in response.
+      context:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          Authored description of approach, scope and analytical model. Material
+          proposition scope must also remain on the proposition when reused.
+      assumptions:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Assumptions taken as given here, not claims assessed by this work.
+      explanatory_model:
+        is_a: relationship
+        mixins: [hashable]
+        range: ExplanatoryModel
+        inlined: false
+        description: Optional explanatory model being considered; distinct from the analytical method.
+      proposed_experiments:
+        is_a: relationship
+        mixins: [hashable]
+        range: ProposedExperiment
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:proposed_experiments
+        description: >-
+          Experiments this account proposes to test its propositions, such as
+          one that would discriminate its hypothesis from an alternative or
+          close an identified gap.
+      identified_gaps:
+        is_a: relationship
+        mixins: [hashable]
+        range: KnowledgeGap
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:identified_gaps
+        description: >-
+          KnowledgeGaps this account identifies as a result, such as the
+          critical untested link of its model. Unlike `framing`, which says
+          what the account set out to address, these are findings; a later
+          account can take one as its framing.
+      component_claims:
+        is_a: relationship
+        mixins: [hashable]
+        range: Claim
+        inlined: false
+        multivalued: true
+        required: true
+        minimum_cardinality: 1
+        description: >-
+          Ordered, distinct claim references. At least one claim appears before
+          the optional closing. Accounts do not nest in the initial profile.
+      conclusion_claims:
+        is_a: relationship
+        mixins: [hashable]
+        range: Claim
+        inlined: false
+        multivalued: true
+        description: >-
+          Ordered subset of component_claims expressed in the closing. New
+          scientific conclusions must be explicit Claims, not just closing prose.
+      closing_remarks:
+        is_a: literal
+        mixins: [hashable]
+        description: Optional editorial synthesis or limitations; does not create an additional claim.
+
+  ProposedExperiment:
+    is_a: HashableNode
+    abstract: true
+    mixins:
+      - ProvenancedResource
+      - Contextual
+    description: >-
+      An experiment that would bear on propositions, put forward rather than
+      performed: what it tests, which gaps it would close, and the system it
+      would run in (its `contexts`: organism, cell line, tissue). Content,
+      not an assessment. Abstract, like ExplanatoryModel, so the reasoning
+      layer can refer to it while scm.yaml defines the concrete kind
+      (DiscriminatingExperiment, stated with interventions and causal
+      estimands).
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The experiment in words; the protocol, controls and readouts.
+      tests:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        multivalued: true
+        required: true
+        minimum_cardinality: 1
+        slot_uri: dapper:tests
+        description: Propositions whose truth the experiment would bear on, such as a hypothesis and its alternative.
+      addresses_gaps:
+        is_a: relationship
+        mixins: [hashable]
+        range: KnowledgeGap
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:addresses_gaps
+        description: KnowledgeGaps the experiment would close.
+      evidence_design:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceDesignEnum
+        slot_uri: dapper:evidence_design
+        description: >-
+          The design the experiment's evidence would have, usually
+          EXPERIMENTAL_INTERVENTION, or NATURAL_EXPERIMENT for one that uses
+          an instrument such as genotype.
+
+  CitationOccurrence:
+    description: >-
+      An inline citation anchored in the exact saved Paragraph text. It pins an
+      already-minted scientific object and a separate registry metadata revision.
+      This value object has no independent identifier. Citation does not imply
+      evidential support or public access. Offsets count Unicode code points,
+      not UTF-16 code units or bytes.
+    attributes:
+      target_id:
+        is_a: relationship
+        range: uriorcurie
+        required: true
+        pattern: '\S'
+        description: Exact Claim, Question, or KnowledgeGap identifier.
+      citation_metadata_revision:
+        range: integer
+        required: true
+        minimum_value: 1
+        description: Immutable revision of the target's external citation metadata.
+      start:
+        range: integer
+        required: true
+        minimum_value: 0
+        description: Zero-based inclusive start offset in the saved Paragraph text.
+      end:
+        range: integer
+        required: true
+        minimum_value: 1
+        description: Exclusive end offset; greater than start and at most the text length.
+      exact_text:
+        description: Optional anchoring check; must exactly equal the text selected by start and end.
+
+  Paragraph:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+    description: >-
+      A saved textual expression of one ScientificAccount. Multiple renderings
+      can express the same account. Editing text changes this record's identity,
+      not the scientific account's identity.
+    see_also:
+      - http://purl.org/spar/doco/Paragraph
+    attributes:
+      scientific_account:
+        is_a: relationship
+        mixins: [hashable]
+        range: ScientificAccount
+        inlined: false
+        required: true
+        description: The version of the structured account expressed by this paragraph.
+      text:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: The paragraph's authored or rendered natural-language text.
+      citations:
+        is_a: literal
+        mixins: [hashable]
+        range: CitationOccurrence
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+        description: >-
+          Ordered citation occurrences in the saved text. Each pins an object and
+          metadata revision; style, numbering, and author-date labels are rendered
+          separately. Changes affect Paragraph identity, not the cited objects.
+      publication:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Publication identifier or local Publication record containing this expression.
+      location:
+        is_a: literal
+        mixins: [hashable]
+        description: Section, paragraph number, or other locator within the publication.
+      language:
+        is_a: literal
+        mixins: [hashable]
+        description: Language tag for this expression.
+
+  # ---- evidence (moved from dapper.yaml in 0.3.0-a1) -----------------------
+
+  EvidenceItem:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+      - Contextual
+    description: >-
+      Evidence used in an attributed assessment of a target proposition.
+      Its `contexts` say where the evidence was obtained (organism, cell
+      line, cell type, tissue); when they differ from the target
+      proposition's contexts, the evidence bears on it by analogy.
+      Can retain a publication passage, use source Claims, or ground directly
+      in result-file values via value_locators, with a direction, rationale,
+      and assumptions. At least one grounding (source_claims, value_locators,
+      reference, or snippet) should be present. The target is a Proposition
+      rather than the owning Claim, so Claim -> EvidenceItem -> Proposition has
+      no back-reference cycle. Reuse across Claims requires the same target and
+      interpretation.
+    close_mappings:
+      - dismech:EvidenceItem
+    see_also:
+      - https://sepio-framework.github.io/sepio-linkml/EvidenceLine/
+    annotations:
+      dapper:source_standard: DISMECH EvidenceItem and SEPIO EvidenceLine (conceptual alignment)
+    attributes:
+      source_claims:
+        is_a: relationship
+        mixins: [hashable]
+        range: Claim
+        inlined: false
+        multivalued: true
+        description: >-
+          Source assessments used as evidence; not automatically accepted as
+          true. Optional since 0.3.0-a1, so evidence read directly from a
+          result file can ground in value_locators without a synthetic
+          intermediate claim.
+      value_locators:
+        slot_uri: dapper:value_locators
+        is_a: relationship
+        mixins: [hashable]
+        range: ValueLocator
+        inlined: false
+        multivalued: true
+        description: >-
+          Exact file spans grounding this evidence at the result-file boundary;
+          the preferred grounding for evidence read directly from a result
+          file. Added in 0.3.0-a1.
+      target_proposition:
+        is_a: relationship
+        mixins: [hashable]
+        range: Proposition
+        inlined: false
+        description: Proposition to which direction and explanation apply.
+      context:
+        is_a: literal
+        mixins: [hashable]
+        description: Analytical or biological model context needed to interpret this evidence use.
+      assumptions:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Assumptions licensing this interpretation; not claims assessed by this work.
+      explanatory_model:
+        is_a: relationship
+        mixins: [hashable]
+        range: ExplanatoryModel
+        inlined: false
+        description: Optional explanatory model used in the interpretation.
+      reference:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: >-
+          The publication this evidence comes from — a Publication node id, or
+          a `PMID:` CURIE.
+        close_mappings:
+          - dismech:reference
+      reference_title:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - dismech:reference_title
+        description: Title of the referenced publication.
+      direction:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceDirectionEnum
+        description: Direction of this evidence use relative to target_proposition.
+        close_mappings:
+          - dismech:supports
+      evidence_design:
+        is_a: literal
+        mixins: [hashable]
+        range: EvidenceDesignEnum
+        slot_uri: dapper:evidence_design
+        description: >-
+          How the evidence was obtained relative to the intervention a causal
+          target proposition is about. Omission means not classified.
+      measured_variables:
+        is_a: relationship
+        mixins: [hashable]
+        range: CausalVariable
+        inlined: false
+        multivalued: true
+        slot_uri: dapper:measured_variables
+        description: >-
+          The variables this evidence itself set or measured: what was
+          intervened on or varied, and what was read out. For a causal target,
+          evidence naming the target's own cause and effect bears on it
+          directly (in its contexts, or by analogy in others); evidence that
+          names other variables (a sibling gene, another readout) bears on it
+          only indirectly. Add a CausalVariable for a variable the model lacks.
+      evidence_source:
+        is_a: literal
+        mixins: [hashable]
+        description: Where the evidence was drawn from (database, deep-research run, ...).
+        close_mappings:
+          - dismech:evidence_source
+      snippet:
+        is_a: literal
+        mixins: [hashable]
+        description: Verbatim quoted passage supporting the claim.
+        close_mappings:
+          - dismech:snippet
+      explanation:
+        is_a: literal
+        mixins: [hashable]
+        description: Curator/agent rationale for how the passage or source claims bear on the target proposition.
+        close_mappings:
+          - dismech:explanation
+      from_nanopub:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: >-
+          The nanopublication this evidence is drawn from, when the evidence is
+          itself a published, signed claim rather than a passage from a paper.
+          Following it reaches that claim's own provenance graph, and from
+          there the analysis and dataset it rests on.
+
+    rules:
+      - preconditions:
+          slot_conditions:
+            source_claims:
+              required: true
+        postconditions:
+          slot_conditions:
+            target_proposition:
+              required: true
+            direction:
+              required: true
+            explanation:
+              required: true
+            context:
+              required: true
+      # Evidence read from a file must still say what it bears on and how.
+      # Direction stays optional: a raw measurement supplies none, and DAPPER
+      # does not infer one by thresholding a value without a declared rule.
+      - preconditions:
+          slot_conditions:
+            value_locators:
+              required: true
+        postconditions:
+          slot_conditions:
+            target_proposition:
+              required: true
+            explanation:
+              required: true
+
+  HasEvidence:
+    is_a: Edge
+    description: Claim → EvidenceItem.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasEvidence)

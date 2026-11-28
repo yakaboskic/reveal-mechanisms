@@ -36,6 +36,8 @@ KINDS = {'scientific_accounts': 'account', 'claims': 'claim', 'propositions': 'p
          'evidence_items': 'evidence', 'datasets': 'dataset', 'files': 'file', 'c2m2_files': 'file',
          'activities': 'activity', 'gene_sets': 'gene_set', 'mechanisms': 'mechanism',
          'mechanistic_models': 'mechanistic_model', 'causal_steps': 'causal_step', 'organizations': 'organization',
+         # DAPPER 0.3.0-a1 accounts (deposited since the move to 0.3): the mechanism is a causal graph.
+         'causal_links': 'causal_link', 'causal_variables': 'causal_variable',
          'persons': 'person', 'software': 'software', 'traits': 'trait'}
 FIELDS = {'was_derived_from': 'prov:wasDerivedFrom', 'was_generated_by': 'prov:wasGeneratedBy',
           'used': 'prov:used', 'has_file': 'dapper:hasFile', 'had_member': 'prov:hadMember',
@@ -47,7 +49,11 @@ FIELDS = {'was_derived_from': 'prov:wasDerivedFrom', 'was_generated_by': 'prov:w
           'source_claims': 'dapper:sourceClaims', 'proposition': 'dapper:proposition',
           'has_evidence': 'dapper:hasEvidence', 'component_claims': 'dapper:componentClaims',
           'conclusion_claims': 'dapper:conclusionClaims', 'step_subject': 'dapper:stepSubject',
-          'step_object': 'dapper:stepObject', 'via_mechanism': 'dapper:viaMechanism'}
+          'step_object': 'dapper:stepObject', 'via_mechanism': 'dapper:viaMechanism',
+          # DAPPER 0.3.0-a1: an account's explanatory_model; a CausalLink's cause and effect; a CausalVariable's entity.
+          # A model's `links` are inline entries, each naming its CausalLink (`link`); _Graph reads them.
+          'explanatory_model': 'dapper:explanatory_model', 'cause': 'dapper:cause', 'effect': 'dapper:effect',
+          'entity': 'dapper:entity', 'link': 'dapper:link'}
 # Relations the trace adds (group <relation>_edges): fitted projections, a factor's fitted trait, a trait's published GWAS
 # and the portal's raw inputs of that GWAS (shown, never traversed).
 REVEAL = {'factor_projection': 'reveal:factorProjection', 'fitted_on_trait': 'reveal:fittedOnTrait',
@@ -58,7 +64,13 @@ TRAIT_ID = re.compile(r'(?:KPN\.TRAIT:|https://broadinstitute\.github\.io/kpn-da
 ORG_ROLES = {'was_attributed_to': 'attribution', 'has_creator': 'creator',
              'has_contributor': 'contributor', 'publisher': 'publisher', 'funded_by': 'funder',
              'was_associated_with': 'generation_agent'}
-ENTITY_KINDS = frozenset(('gene_set', 'mechanism', 'mechanistic_model', 'causal_step', 'file', 'dataset', 'activity'))
+ENTITY_KINDS = frozenset(('gene_set', 'mechanism', 'mechanistic_model', 'causal_step', 'causal_link', 'causal_variable',
+                          'file', 'dataset', 'activity'))
+# Relations from a mechanism to its parts and to the biological entities they name (terminal unless relevant).
+MECHANISM_RELATIONS = frozenset(('subject_entity', 'object_entity', 'mechanistic_model', 'explanatory_model', 'has_causal_step',
+                                 'step_subject', 'step_object', 'via_mechanism', 'link', 'cause', 'effect', 'entity'))
+TERMINAL_RELATIONS = frozenset(('subject_entity', 'object_entity', 'has_causal_step', 'step_subject', 'step_object',
+                                'link', 'cause', 'effect', 'entity'))
 PREDICATES = {value: key for key, value in FIELDS.items()}
 PREDICATES.update({f'dapper:{key}': key for key in FIELDS})
 PREDICATES.update({'dcterms:creator': 'has_creator', 'schema:contributor': 'has_contributor',
@@ -143,6 +155,12 @@ class _Graph:
             for field, predicate in FIELDS.items():
                 for target in _refs(node.get(field)):
                     self._edge(identity, target, predicate, field, {'source_field': field})
+            # A DAPPER 0.3 model's links: inline entries naming a CausalLink and, optionally, the Mechanism it runs via.
+            for entry in node.get('links') if isinstance(node.get('links'), list) else ():
+                if isinstance(entry, dict):
+                    for field in ('link', 'via_mechanism'):
+                        for target in _refs(entry.get(field)):
+                            self._edge(identity, target, FIELDS[field], field, {'source_field': 'links'})
         for group, rows in document.items():
             if not isinstance(rows, list) or not group.endswith('_edges'):
                 continue
@@ -380,11 +398,10 @@ class _Graph:
                     # factor. Its native lineage is sufficient when recorded.
                     self.issue('MISSING_LINEAGE', origin)
                 links += projections
-            elif kind in ('proposition', 'mechanistic_model', 'causal_step'):
-                links += self.outgoing(identity, {'subject_entity', 'object_entity', 'mechanistic_model', 'has_causal_step',
-                                                   'step_subject', 'step_object', 'via_mechanism'})
+            elif kind in ('proposition', 'mechanistic_model', 'causal_step', 'causal_link', 'causal_variable'):
+                links += self.outgoing(identity, MECHANISM_RELATIONS)
             elif kind == 'evidence':
-                links += self.outgoing(identity, {'was_derived_from', 'source_claims', 'mechanistic_model'})
+                links += self.outgoing(identity, {'was_derived_from', 'source_claims', 'mechanistic_model', 'explanatory_model'})
             elif kind == 'claim':
                 links += self.outgoing(identity, {'proposition'}) + self.evidence(identity, origin)
             # An activity whose inputs were all summarized (unlinked_inputs) already has its coverage entry; a verified capture is
@@ -395,7 +412,7 @@ class _Graph:
             for edge in links:
                 relation, target = edge['relation'], edge['object']
                 # Biological CURIEs are terminal entities, not missing datasets.
-                if relation in ('subject_entity', 'object_entity', 'has_causal_step', 'step_subject', 'step_object') and not self.relevant(target):
+                if relation in TERMINAL_RELATIONS and not self.relevant(target):
                     continue
                 if relation == 'source_claims' and self.kinds.get(target) not in ('claim', None):
                     self.issue('INVALID_SOURCE_CLAIM', origin)
@@ -413,7 +430,7 @@ class _Graph:
     def relevant(self, identity):
         return (self.kinds.get(identity) in ENTITY_KINDS or self.kinds.get(identity) == 'trait' or identity in self.conflicts
                 or bool(kpn_trait(identity))
-                or bool(re.match(r'dapper:(GeneSet|Mechanism|MechanisticModel|Dataset|File|Activity)\.', identity)))
+                or bool(re.match(r'dapper:(GeneSet|Mechanism|MechanisticModel|CausalLink|CausalVariable|Dataset|File|Activity)\.', identity)))
 
 
 def _metrics(traces):
@@ -464,7 +481,8 @@ def collect(document, account_id):
     seeds, included_claims, propositions, evidence_items = [], set(), set(), set()
     claim_annotations = defaultdict(set)
     def seed_edges(origin, claim, prop=None, evidence=None, classes=()):
-        relations = {'was_derived_from', 'source_claims', 'mechanistic_model'} if evidence else {'subject_entity', 'object_entity', 'mechanistic_model'}
+        relations = ({'was_derived_from', 'source_claims', 'mechanistic_model', 'explanatory_model'} if evidence
+                     else {'subject_entity', 'object_entity', 'mechanistic_model', 'explanatory_model'})
         for edge in graph.outgoing(origin, relations):
             if edge['relation'] in ('subject_entity', 'object_entity') and not graph.relevant(edge['object']):
                 continue
@@ -503,7 +521,7 @@ def collect(document, account_id):
             claim_annotations[claim_id].add(evidence)
             seed_edges(evidence, claim_id, prop, evidence, {'evidence_derivation'})
     # Context references can be displayed but never contribute claim incidence.
-    for edge in graph.outgoing(account_id, {'mechanistic_model', 'was_derived_from'}):
+    for edge in graph.outgoing(account_id, {'mechanistic_model', 'explanatory_model', 'was_derived_from'}):
         seeds.append({'claim_id': None, 'proposition_id': None, 'evidence_item_id': None,
                       'origin_id': account_id, 'source_field': edge['relation'], 'edge': edge,
                       'classifications': set(), 'direction': None})

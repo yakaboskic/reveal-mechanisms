@@ -514,11 +514,23 @@ def fields(document, trusted, reveal_activities):
             for key, value in node.items():
                 if key == 'id':
                     continue
-                values = value if isinstance(value, list) else [value]
-                for item in values:
-                    if not isinstance(item, str) or REFERENCE.match(item) or item in trusted:
+                for path, item in _slot_strings(key, value):
+                    if REFERENCE.match(item) or item in trusted:
                         continue
-                    found.append((group, index, key, _kind(group, key), item))
+                    found.append((group, index, path, _kind(group, path), item))
+    return found
+
+
+def _slot_strings(key, value):
+    """[(field path, string)] of a slot's value. Inline values (a DAPPER 0.3 model's `links` entries, typed contexts)
+    are read too, each string under `slot.field`: what the agent wrote there is screened like any other field."""
+    found = []
+    for item in value if isinstance(value, list) else [value]:
+        if isinstance(item, str):
+            found.append((key, item))
+        elif isinstance(item, dict):
+            for inner, inner_value in item.items():
+                found += _slot_strings(f'{key}.{inner}', inner_value)
     return found
 
 

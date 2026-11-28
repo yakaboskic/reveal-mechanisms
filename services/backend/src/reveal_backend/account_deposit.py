@@ -14,8 +14,12 @@ its text, the File, and optionally the lines it sits on.
   - a recorded or observed command that is not one plain fetch or conversion is deposited quoted
     (deposit_screen.quoted_command): text that prints the command and runs nothing if pasted into a shell;
   - everything is minted once, with DAPPER 0.2.1-a1 (the release that has ValueLocator), vendored at
-    services/backend/vendor/dapper-0.2.1-a1. DAPPER ids are the same in 0.2.0 and 0.2.1-a1, so nodes this rewrite
-    does not touch keep the ids the pinned release gave them;
+    services/backend/vendor/dapper-0.2.1-a1. DAPPER ids are the same in 0.2.0 and 0.2.1-a1;
+  - that document is then converted to DAPPER 0.3.0-a1, the release the claims repository accepts, by 0.3.0-a1's own
+    converter (converter/migrate.py, vendored at services/backend/vendor/dapper-0.3.0-a1). DAPPER owns the
+    conversion: it reshapes what 0.3 changed (CausalSteps into CausalLinks between CausalVariables, question and
+    hypothesis into framing, DISMECH fields into a CorrespondsToDismech edge), re-mints the whole document and
+    verifies it, or refuses, listing why. Nodes neither step touches keep the ids the pinned release gave them;
   - it is laid out one way (`layout`: nodes by id, edges in order), the way claims_read rebuilds it from the claims
     repository, so the account served back hashes to the account that was sent.
 
@@ -35,22 +39,32 @@ from pathlib import Path
 
 from . import source_evidence
 
+# The release the account is first minted with (it has ValueLocator, and shares 0.2.0's ids)...
 VENDOR = Path(__file__).resolve().parents[2] / 'vendor/dapper-0.2.1-a1'
-DAPPER_VERSION = '0.2.1-a1'
+MINT_VERSION = '0.2.1-a1'
+# ...and the release it is deposited in, converted by that release's converter. Deposits name it (dapper_version).
+DEPOSIT_VENDOR = Path(__file__).resolve().parents[2] / 'vendor/dapper-0.3.0-a1'
+DAPPER_VERSION = '0.3.0-a1'
+# Where each disease's DISMECH page is listed: the DisMech export REVEAL ships (data/dismech-gaps).
+DISMECH_GAPS = Path(__file__).resolve().parents[4] / 'data/dismech-gaps/2026-09-24/knowledge-gaps.jsonl.gz'
+DISMECH_PAGES = 'https://dismech.monarchinitiative.org/pages/'
 # Keys an accepted account document carries that are not DAPPER groups.
 NON_GROUPS = frozenset({'prefixes'})
 
 
 def verify_vendor():
-    """The vendored DAPPER is the recorded commit's files, byte for byte. Checked when the image is built and in tests,
-    so a deployment cannot mint with an edited or missing copy."""
-    recorded = json.loads((VENDOR / 'VENDOR.json').read_text())
-    for name, digest in recorded['files'].items():
-        if hashlib.sha256((VENDOR / name).read_bytes()).hexdigest() != digest:
-            raise RuntimeError(f'Vendored DAPPER {DAPPER_VERSION} file {name} differs from its recorded checksum')
-    if recorded['version'] != DAPPER_VERSION:
-        raise RuntimeError('Vendored DAPPER version differs from the one this module mints with')
-    return recorded
+    """Each vendored DAPPER is its recorded commit's files, byte for byte. Checked when the image is built and in
+    tests, so a deployment cannot mint or convert with an edited or missing copy. {version: its VENDOR.json}."""
+    found = {}
+    for vendor, version in ((VENDOR, MINT_VERSION), (DEPOSIT_VENDOR, DAPPER_VERSION)):
+        recorded = json.loads((vendor / 'VENDOR.json').read_text())
+        for name, digest in recorded['files'].items():
+            if hashlib.sha256((vendor / name).read_bytes()).hexdigest() != digest:
+                raise RuntimeError(f'Vendored DAPPER {version} file {name} differs from its recorded checksum')
+        if recorded['version'] != version:
+            raise RuntimeError(f'Vendored DAPPER {recorded["version"]} is not the {version} this module uses')
+        found[version] = recorded
+    return found
 
 
 class DepositError(ValueError):
@@ -92,7 +106,7 @@ def _mint_once(document):
         done = subprocess.run([sys.executable, '-I', '-B', '-c', _MINT, str(VENDOR / 'schema'), str(path)],
                               capture_output=True, text=True, timeout=120)
     if done.returncode != 0:
-        raise DepositError('DAPPER ' + DAPPER_VERSION + ' could not mint the account: ' + done.stderr.strip()[-600:])
+        raise DepositError('DAPPER ' + MINT_VERSION + ' could not mint the account: ' + done.stderr.strip()[-600:])
     result = json.loads(done.stdout)
     if 'error' in result:
         raise DepositError('The account is ' + result['error'])
@@ -140,6 +154,74 @@ def mint(document, repository_claims=()):
     if unresolved:
         raise DepositError('The account references objects it does not contain: ' + ', '.join(unresolved[:5]))
     return document, mapping
+
+
+# Runs in its own interpreter, like _MINT: the converter imports the 0.3.0-a1 identity code and checks. The checks
+# see one document, so a Claim of the claims repository that an EvidenceItem names in source_claims (resolved there by
+# the gate, box_claims.verify_references) is not a local record; that one finding is set aside for exactly those ids,
+# as mint() allows them. Every other finding refuses.
+_CONVERT = r'''
+import json, sys
+from pathlib import Path
+vendor = Path(sys.argv[1])
+sys.path[:0] = [str(vendor / 'converter')]
+import migrate
+import scientific_claims
+request = json.loads(Path(sys.argv[2]).read_bytes())
+external = {f"{claim} must resolve to Claim; found no local record" for claim in request['repository_claims']}
+check = scientific_claims.check_scientific_content
+scientific_claims.check_scientific_content = lambda index: [
+    (where, problem) for where, problem in check(index)
+    if not (where.endswith('.source_claims') and problem in external)]
+try:
+    document, ids, notes = migrate.migrate(request['document'], request['from'], dismech_pages=request['dismech_pages'])
+except migrate.Refusal as refusal:
+    print(json.dumps({'refused': refusal.problems})); raise SystemExit(0)
+print(json.dumps({'document': document, 'ids': ids, 'notes': notes, 'version': migrate.current_version()}))
+'''
+
+
+@lru_cache(maxsize=1)
+def dismech_pages():
+    """{MONDO CURIE: DISMECH page URL} for every disorder in the shipped DisMech export whose term names one page.
+    The converter needs the page for an object that names a DISMECH disease but no dismech_source_url."""
+    import gzip
+    pages = {}
+    if not DISMECH_GAPS.exists():
+        return pages
+    with gzip.open(DISMECH_GAPS, 'rt', encoding='utf-8') as lines:
+        for line in lines:
+            record = json.loads(line)
+            source = record.get('source_file') or ''
+            if record.get('source_kind') != 'disorders' or not source.startswith('kb/disorders/') or not source.endswith('.yaml'):
+                continue
+            term = record.get('disease_term')
+            curie = (term.get('term') or {}).get('id') if isinstance(term, dict) else None
+            if isinstance(curie, str):
+                pages.setdefault(curie, set()).add(DISMECH_PAGES + source[len('kb/'):-len('.yaml')] + '.html')
+    return {curie: next(iter(urls)) for curie, urls in pages.items() if len(urls) == 1}
+
+
+def convert(document, repository_claims=()):
+    """(document in DAPPER 0.3.0-a1, {0.2.1-a1 id: 0.3.0-a1 id}, notes) from a document minted with 0.2.1-a1, by the
+    vendored 0.3.0-a1 release's converter. `repository_claims` are the claims repository's Claims the account may
+    name without containing (as for mint). Raises DepositError listing every problem when it refuses."""
+    with tempfile.TemporaryDirectory(prefix='reveal-convert-') as directory:
+        path = Path(directory) / 'request.json'
+        path.write_text(json.dumps({'document': document, 'from': MINT_VERSION, 'dismech_pages': dismech_pages(),
+                                    'repository_claims': sorted(repository_claims)}, ensure_ascii=False))
+        done = subprocess.run([sys.executable, '-I', '-B', '-c', _CONVERT, str(DEPOSIT_VENDOR), str(path)],
+                              capture_output=True, text=True, timeout=300)
+    if done.returncode != 0:
+        raise DepositError(f'DAPPER {DAPPER_VERSION} could not convert the account: ' + done.stderr.strip()[-600:])
+    result = json.loads(done.stdout)
+    if 'refused' in result:
+        problems = result['refused']
+        raise DepositError(f'DAPPER {DAPPER_VERSION} refuses to convert the account ({len(problems)} problem'
+                           f'{"s" if len(problems) != 1 else ""}): ' + '; '.join(problems)[:1200])
+    if result['version'] != DAPPER_VERSION:
+        raise DepositError(f"The vendored converter converts to {result['version']}, not {DAPPER_VERSION}")
+    return result['document'], result['ids'], result['notes']
 
 
 # Who an account is attributed to when its requester is not named. DAPPER requires an agent on every Claim; this one
@@ -258,11 +340,14 @@ def deposit_document(account_document, sources_root, calls, ledger_root, *, attr
     # Only where the gate allowed them: an id resolved for source_claims does not excuse it anywhere else.
     from .box_claims import repository_references
     cited, misplaced = repository_references(document)
-    minted, mapping = mint(document, set(repository_claims) & set(cited) - set(misplaced))
+    allowed = set(repository_claims) & set(cited) - set(misplaced)
+    minted, mapping = mint(document, allowed)
+    minted, converted, notes = convert(minted, allowed)
+    mapping = {old: converted.get(new, new) for old, new in mapping.items()}
     minted = layout(minted)
     account = minted['scientific_accounts'][0]
     files = binding['files']
-    summary = {'account_id': account['id'], 'dapper_version': DAPPER_VERSION,
+    summary = {'account_id': account['id'], 'dapper_version': DAPPER_VERSION, 'conversion_notes': notes,
                'objects': sum(len(rows) for key, rows in minted.items() if not key.endswith('_edges')),
                'edges': sum(len(rows) for key, rows in minted.items() if key.endswith('_edges')),
                'claims': len(minted.get('claims', [])), 'value_locators': len(minted.get('value_locators', [])),
@@ -289,15 +374,22 @@ def layout(document):
     return laid
 
 
-@lru_cache(maxsize=1)
-def node_groups():
-    """{class name: document group} of the vendored DAPPER (its dapper_identity.DOC_GROUPS), read from the source
-    without importing it: the pinned release owns this process's DAPPER runtime."""
-    source = (VENDOR / 'schema/identity/dapper_identity.py').read_text()
+def _doc_groups(path, version):
+    source = path.read_text()
     for statement in ast.parse(source).body:
         if isinstance(statement, ast.Assign) and any(getattr(target, 'id', None) == 'DOC_GROUPS' for target in statement.targets):
             return {class_name: group for group, class_name in ast.literal_eval(statement.value).items()}
-    raise RuntimeError(f'Vendored DAPPER {DAPPER_VERSION} names no document groups')
+    raise RuntimeError(f'Vendored DAPPER {version} names no document groups')
+
+
+@lru_cache(maxsize=1)
+def node_groups():
+    """{class name: document group} of the vendored DAPPER releases (their dapper_identity.DOC_GROUPS), read from the
+    source without importing it: the pinned release owns this process's DAPPER runtime. Accounts are deposited in
+    0.3.0-a1; earlier deposits are 0.2.1-a1, so its classes (CausalStep) are read back too. No class sits in
+    different groups in the two."""
+    earlier = _doc_groups(VENDOR / 'schema/identity/dapper_identity.py', MINT_VERSION)
+    return {**earlier, **_doc_groups(DEPOSIT_VENDOR / 'identity/dapper_identity.py', DAPPER_VERSION)}
 
 
 def edge_group(class_name):

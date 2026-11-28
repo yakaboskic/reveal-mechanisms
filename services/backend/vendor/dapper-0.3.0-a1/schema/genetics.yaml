@@ -1,0 +1,251 @@
+id: https://broadinstitute.github.io/dapper/model/schema/genetics.yaml
+name: dapper_genetics
+title: DAPPER genetic variants and their effects
+description: >-
+  Genetic variants in causal and association content. A `GenotypeVariable`
+  is a CausalVariable for allele dosage at one variant (a dbSNP rsID): the
+  number of copies of a stated effect allele, so a CausalLink from it says
+  what adding a copy of that allele does. A `GeneticAssociation` is the
+  Proposition a GWAS or QTL study reports: the genotype co-varies with a
+  trait or a molecular phenotype in stated contexts (ancestry, tissue). A
+  `GeneticEffectEstimate` is the ClaimScore that reports the association's
+  size per copy of the effect allele, with its scale, standard error,
+  p-value and sample size, and how the estimate was obtained: a genome-wide
+  or candidate-gene study, alone or as a meta-analysis of several.
+
+  Association and causation stay separate. Record what a study reports as a
+  GeneticAssociation with a Claim carrying the estimate. Write a CausalLink
+  from the GenotypeVariable (genotype -> expression, genotype -> disease)
+  only when the account needs the causal step, and evidence it with the
+  association Claims (evidence_design NATURAL_EXPERIMENT), saying in the
+  evidence what licenses the causal reading (fine-mapping, colocalization,
+  allelic-expression or editing experiments). Linkage disequilibrium means
+  an associated variant may only tag the causal one.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  dbSNP: http://identifiers.org/dbsnp/
+
+imports:
+  - linkml:types
+  - core
+  - claims
+  - scm
+
+# ===========================================================================
+# ENUMS
+# ===========================================================================
+enums:
+  GeneticAssociationKindEnum:
+    description: >-
+      What co-varies with the genotype: a disease or trait, or a molecular
+      phenotype (QTL). How the study searched (genome-wide or candidate
+      gene, meta-analysis or not) is on the GeneticEffectEstimate.
+    permissible_values:
+      DISEASE_OR_TRAIT:
+        description: >-
+          Association with a disease or trait, from a genome-wide (GWAS) or
+          candidate-gene study.
+      EQTL:
+        description: Expression QTL; association with a gene's transcript level.
+      PQTL:
+        description: Protein QTL; association with a protein's abundance.
+      SQTL:
+        description: Splicing QTL; association with an isoform or splice-junction ratio.
+      CAQTL:
+        description: Chromatin-accessibility QTL.
+      MQTL:
+        description: Methylation QTL.
+      OTHER_QTL:
+        description: Another molecular QTL; say which in the statement.
+  GeneticStudyScopeEnum:
+    description: How widely the study that produced an estimate searched the genome.
+    permissible_values:
+      GENOME_WIDE:
+        description: >-
+          Variants across the genome were tested, so the estimate survived
+          genome-wide multiple testing (a GWAS, or a genome-wide QTL scan).
+      CANDIDATE_GENE:
+        description: >-
+          Only variants in a gene or region chosen beforehand were tested;
+          the estimate carries no genome-wide multiple-testing correction.
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+
+  GenotypeVariable:
+    is_a: CausalVariable
+    description: >-
+      Allele dosage at one variant: the number of copies (0, 1 or 2) of
+      `effect_allele`. Alleles are on the forward strand of the current human
+      reference assembly. A CausalLink's effect_direction from a
+      GenotypeVariable is per added copy of the effect allele, as is any
+      GeneticEffectEstimate on a proposition about it. Reporting the risk
+      allele as the effect allele keeps the direction readable.
+    slot_usage:
+      entity:
+        required: true
+        id_prefixes:
+          - dbSNP
+        pattern: '^\S+[:/]rs[0-9]+$'
+        description: The variant, as a dbSNP rsID, e.g. dbSNP:rs2066847.
+      aspect:
+        required: true
+        equals_string: GENOTYPE
+        description: Always GENOTYPE.
+    attributes:
+      effect_allele:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '^([ACGT]+|-)$'
+        slot_uri: dapper:effect_allele
+        description: >-
+          The allele whose dosage the variable counts, e.g. `T`; `-` for a
+          deletion. One of the variant's alleles.
+      other_allele:
+        is_a: literal
+        mixins: [hashable]
+        pattern: '^([ACGT]+|-)$'
+        slot_uri: dapper:other_allele
+        description: The allele it is counted against, when the variant has more than two.
+
+  GeneticAssociation:
+    is_a: Proposition
+    description: >-
+      A genotype co-varies with a trait or molecular phenotype, in the
+      proposition's contexts (an ancestry for a disease association, a tissue for a QTL).
+      An association, not a causal claim: a Claim assessing it carries the
+      study's GeneticEffectEstimate, and a CausalLink from the genotype can
+      cite that Claim as evidence.
+    slot_usage:
+      relation_kind:
+        required: true
+        equals_string: ASSOCIATION
+        description: Always ASSOCIATION for a GeneticAssociation.
+      relation:
+        description: Not used on a GeneticAssociation.
+      subject_entity:
+        description: Not used on a GeneticAssociation; the genotype names the variant.
+      object_entity:
+        description: Not used on a GeneticAssociation; the associated variable names the entity.
+    attributes:
+      genotype:
+        is_a: relationship
+        mixins: [hashable]
+        range: GenotypeVariable
+        inlined: false
+        required: true
+        slot_uri: dapper:genotype
+        description: The variant's allele dosage.
+      associated_variable:
+        is_a: relationship
+        mixins: [hashable]
+        range: CausalVariable
+        inlined: false
+        required: true
+        slot_uri: dapper:associated_variable
+        description: >-
+          What co-varies with the genotype: a disease's presence, a trait's
+          level, or a gene's expression in a tissue.
+      association_kind:
+        is_a: literal
+        mixins: [hashable]
+        range: GeneticAssociationKindEnum
+        required: true
+        slot_uri: dapper:association_kind
+        description: What co-varies with the genotype (a disease or trait, or a QTL's molecular phenotype).
+
+  GeneticEffectEstimate:
+    is_a: ClaimScore
+    description: >-
+      The size of a genetic effect or association per copy of the effect
+      allele of the GenotypeVariable in the assessed proposition. `value` is
+      the estimate (a beta, log odds ratio or normalized effect size) on
+      `effect_scale`; the sign follows the effect allele.
+    slots:
+      - effect_scale
+    slot_usage:
+      score_kind:
+        equals_string: EFFECT_ESTIMATE
+        description: Always EFFECT_ESTIMATE.
+      effect_scale:
+        required: true
+    attributes:
+      standard_error:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        slot_uri: dapper:standard_error
+        description: Standard error of the estimate, on the same scale.
+      p_value:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 1
+        slot_uri: dapper:p_value
+        description: The reported p-value.
+      sample_size:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 1
+        slot_uri: dapper:sample_size
+        description: Number of individuals (or samples) in the analysis.
+      effect_allele_frequency:
+        is_a: literal
+        mixins: [hashable]
+        range: float
+        minimum_value: 0
+        maximum_value: 1
+        slot_uri: dapper:effect_allele_frequency
+        description: Frequency of the effect allele in the analysed population.
+      study_scope:
+        is_a: literal
+        mixins: [hashable]
+        range: GeneticStudyScopeEnum
+        slot_uri: dapper:study_scope
+        description: Genome-wide or candidate-gene. Omission means not stated.
+      meta_analysis:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        slot_uri: dapper:meta_analysis
+        description: >-
+          True when the estimate combines several studies or cohorts (state
+          how many in `number_of_studies`). Omission means not stated.
+      number_of_studies:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 1
+        slot_uri: dapper:number_of_studies
+        description: Studies or cohorts combined in a meta-analysis.
+      number_of_cases:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 0
+        slot_uri: dapper:number_of_cases
+        description: Cases in a case-control analysis; `sample_size` is their total with controls when given.
+      number_of_controls:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 0
+        slot_uri: dapper:number_of_controls
+        description: Controls in a case-control analysis.

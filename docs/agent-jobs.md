@@ -234,7 +234,11 @@ What is different about such a job:
   The Bash call REVEAL matched is recorded on the Activity as `observed_command`. Nothing is guessed.
 
 After the run REVEAL applies the same gate a research account passes (pinned DAPPER release, source checks), records
-what ran, and puts the account in its deposit form, minted with DAPPER 0.2.1-a1:
+what ran, and puts the account in its deposit form, minted with DAPPER 0.2.1-a1 and then converted, by DAPPER
+0.3.0-a1's own converter, to 0.3.0-a1, the release the claims repository accepts (the deposit names it in
+`dapper_version`). The mechanism's CausalSteps become CausalLinks between CausalVariables, the account's question its
+`framing`, and DISMECH fields an edge to the disease's DISMECH page; an account the converter cannot convert faithfully
+fails the job with `VALIDATION_FAILED`, naming why:
 
 - each quote becomes a `ValueLocator`: the exact byte span of the quote in the saved file, the bytes there as text,
   and the line selector;
@@ -251,7 +255,7 @@ fails with `AGENT_EXECUTION_FAILED`.
 The job result gains an `account` block, and `response` is the agent's short report.
 
 ```json
-"account": {"account_id": "dapper:ScientificAccount.…", "dapper_version": "0.2.1-a1",
+"account": {"account_id": "dapper:ScientificAccount.…", "dapper_version": "0.3.0-a1",
   "document_sha256": "…", "document_bytes": 9120, "objects": 11, "edges": 4, "claims": 1, "value_locators": 1,
   "lint_warnings": 1,
   "requested_claims": [{"statement": "Hepatocyte-specific deletion of LEPR …", "assessed": true, "claim_ids": ["dapper:Claim.…"]}],

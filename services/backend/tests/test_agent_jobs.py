@@ -902,7 +902,7 @@ def checked_account(workflow, text='Glucose production rose in knockout mice.', 
     verdict = deposit_screen.screen(document, {'question': 'Q?', 'claims': [], 'package': {}}, papers, {sha256(text): text}, [],
                                     workflow.root, classifier=classifier)
     return {'document': {'path': 'validated/account.dapper.json', 'sha256': sha256(data), 'size_bytes': len(data)},
-            'account_id': document['scientific_accounts'][0]['id'], 'dapper_version': '0.2.1-a1', 'objects': 9, 'edges': 3, 'claims': 1,
+            'account_id': document['scientific_accounts'][0]['id'], 'dapper_version': '0.3.0-a1', 'objects': 9, 'edges': 3, 'claims': 1,
             'value_locators': 1, 'lint_warnings': 1,
             'requested_claims': [{'statement': 'A claim.', 'assessed': True, 'claim_ids': [document['claims'][0]['id']]}],
             'papers': papers, 'screen': verdict}
@@ -972,7 +972,7 @@ def test_account_commit_deposits_the_checked_bytes_once_then_stores_and_reports(
     receipt = {'status': 'deposited', 'deposit_id': 'dep_1', 'objects': 9, 'stored_differs': 0, 'unresolved_references': 0}
     send, finish, puts = commit_account_job(workflow, receipt)
     record = workflow.execution['account']
-    send.assert_called_once_with((workflow.root / record['document']['path']).read_bytes())
+    send.assert_called_once_with((workflow.root / record['document']['path']).read_bytes(), dapper_version='0.3.0-a1')
     # The receipt is recorded before anything else can fail, so a retried commit does not deposit again.
     assert workflow.execution['account_deposit'] == receipt and puts[0].args[:2] == ('execution', 'agent-job')
     kind, identity, owner, stored = puts[1].args

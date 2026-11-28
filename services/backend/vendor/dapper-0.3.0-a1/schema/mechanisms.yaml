@@ -1,0 +1,98 @@
+id: https://broadinstitute.github.io/dapper/model/schema/mechanisms.yaml
+name: dapper_mechanisms
+title: DAPPER mechanistic models
+description: >-
+  Biological mechanisms on top of the general causal classes in claims.yaml.
+  A `MechanisticModel` is a `CausalGraph` whose links can each name the
+  `Mechanism`s that carry them out. Causal meaning (variables, links,
+  directness, feedback) is defined once in claims.yaml; this module adds
+  mechanism content and records DISMECH parity as close mappings. A model
+  holds structure and scope, not an assessment: Claims assess the
+  Proposition that references it, or its links one at a time.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  dismech: https://w3id.org/monarch-initiative/dismech/
+
+imports:
+  - linkml:types
+  - core
+  - claims
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+
+  MechanisticModel:
+    is_a: CausalGraph
+    description: >-
+      A CausalGraph proposed as a biological mechanism, whose links can name
+      the Mechanisms that carry them out. Contains structure and scope, not
+      an assessment, confidence, or review status. A Proposition may
+      reference this model and Claims assess that proposition; an account
+      proposes it for investigation with a Hypothesis framing. Corresponds to
+      a DISMECH mechanistic hypothesis: one model per DISMECH hypothesis
+      group (see dismech.yaml for the projection).
+    close_mappings:
+      - dismech:MechanisticHypothesis
+    slot_usage:
+      description:
+        required: true
+        description: Description of the proposed biological structure.
+      links:
+        range: MechanisticLink
+    attributes:
+      applies_to_subtypes:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Disease subtypes to which this model applies.
+
+  MechanisticLink:
+    is_a: CausalGraphLink
+    description: >-
+      A CausalLink's place in a MechanisticModel, optionally naming the
+      Mechanisms that carry the link out. "Carried out by" is a part-whole
+      relation, not a further causal step. Together with its CausalLink it
+      corresponds to a DISMECH CausalEdge.
+    close_mappings:
+      - dismech:CausalEdge
+    attributes:
+      via_mechanism:
+        is_a: relationship
+        range: Mechanism
+        multivalued: true
+        slot_uri: dapper:via_mechanism
+        description: Mechanisms that carry out this link in this model.
+
+  Mechanism:
+    is_a: HashableNode
+    description: >-
+      A biological mechanism that carries out a causal link. Intentionally
+      thin: a name, a description and an optional GO process. Richer
+      pathophysiology (cell types, pathways, locations) can be linked from an
+      external resource with a CorrespondsTo edge (e.g. CorrespondsToDismech)
+      rather than copied here.
+    close_mappings:
+      - dismech:Mechanism
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+      biological_process:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: GO biological process CURIE(s), e.g. `obo:GO_0006629`.

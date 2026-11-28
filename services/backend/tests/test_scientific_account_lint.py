@@ -323,7 +323,8 @@ p.write_text(json.dumps(doc))
         """A scientific_account agent job end to end, offline: the agent fetched one paper as XML and one as a PDF it
         converted with pdftotext, recorded each step as an Activity and each saved file as a File, and quotes the files.
         Its draft and lint tools check that record against the files and the tool ledger; the backend's gate checks it
-        again on the pinned release, and the deposit form, minted with DAPPER 0.2.1-a1, locates every quote by byte span."""
+        again on the pinned release, and the deposit form, minted with DAPPER 0.2.1-a1 and converted to 0.3.0-a1, locates every
+        quote by byte span."""
         import os
         from types import SimpleNamespace
         from reveal_backend import acceptance, account_deposit, agent_account, box_agent, box_remote
@@ -500,7 +501,7 @@ p.write_text(json.dumps(doc))
                              [[('citation', 'PMCID:PMC3491803')], [('doi', 'doi:10.1234/jmet.2012.5')]])
             self.assertNotIn('urn:reveal', json.dumps(document)); self.assertNotIn('urn:draft', json.dumps(document))
             self.assertNotIn('persons', document); self.assertNotIn('Test Requester', data.decode())   # not named unless asked
-            self.assertEqual(document['scientific_accounts'][0]['question'], gap_id)                 # the question keeps its id
+            self.assertEqual(document['scientific_accounts'][0]['framing'], [gap_id])               # deposited in 0.3.0-a1: the question frames it, keeping its id
             self.assertEqual(document['claims'][0]['proposition'], proposition_id)                   # and so does the requester's claim
             self.assertEqual(document['propositions'], [{'id': proposition_id, 'statement': claim_text, **triple}])   # with its triple
             # REVEAL keeps a private copy of every saved source; the job result describes them and never carries the bytes.

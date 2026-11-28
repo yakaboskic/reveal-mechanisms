@@ -1,0 +1,2397 @@
+id: https://broadinstitute.github.io/dapper/model/schema/core.yaml
+name: dapper_core
+title: DAPPER core - attribution, provenance and identity
+description: >-
+  The domain-neutral core of DAPPER, the NIH Dataset Attribution and
+  Provenance Profile: the knowledge-graph skeleton (Node, HashableNode, Edge),
+  the identity axis (hashable / unhashable), citation, funding and provenance
+  (JSON-LD + DataCite + PROV-O + schema.org), GA4GH DRS object identity, DUO
+  data-use terms, RO-Crate packaging, BioCompute/IEEE-2791 workflow
+  provenance, embeddings, and versioned collections.
+
+  COLLECTIONS. `Collection` (abstract) is a Set whose members are other
+  DAPPER records, with optional versioning. `ResultCollection` is one
+  immutable version of a named collection of analysis results: Datasets of
+  result files identified by declared dimensions (`DimensionValue`,
+  `FileRole`), the claim templates that mint Claims from them, and the query
+  templates that read them. `GeneSetCollection` (genesets.yaml) also
+  specializes Collection. `ValueLocator` pins the exact bytes of one value in
+  a File, so evidence can ground in a result file.
+
+  Scientific reasoning lives in claims.yaml and each domain in its own module
+  (genesets, cell_programs, mechanisms, nanopub, dismech, replay, cfde,
+  biology);
+  dapper.yaml imports them all. A project that needs only attribution and
+  provenance can import this module alone.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+# ---------------------------------------------------------------------------
+# MIRRORING INVARIANT (NIH/OD — the profile's hard rule)
+#
+#   Mirrors (OpenAI, Anthropic, Google, Microsoft, AWS, ... regional caches)
+#   MAY cache NIH resources and MAY APPEND a `mirror_provenance` object, but
+#   they MUST NOT modify any element annotated `dapper:mirror_mutable: false`
+#   (the authoritative NIH provenance: creators, funding, publications,
+#   recommended_citation). Rewriting authoritative provenance causes drift and
+#   makes the attribution worthless. Full enforcement is a downstream validator
+#   (see README) that diffs a mirrored object against the authoritative one
+#   over the `mirror_mutable: false` closure; this schema encodes the intent
+#   via per-class / per-edge annotations.
+# ---------------------------------------------------------------------------
+comments:
+  - >-
+    Authoritative NIH provenance (creators, funding, publications,
+    recommended_citation) is annotated `dapper:mirror_mutable: false` and MUST NOT
+    be rewritten by mirrors. Mirrors may only append `mirror_provenance`
+    (MirrorProvenance / HasMirrorProvenance, annotated `dapper:append_only: true`).
+
+default_prefix: dapper
+default_range: string
+
+# PREFIX POLICY
+#   A semantic mapping is asserted here ONLY if it resolves to a defined term
+#   in a real RDF/OWL vocabulary. Several standards in this profile (DataCite kernel-4,
+#   GA4GH DRS, RO-Crate, IEEE-2791/BioCompute) are XML- or JSON-Schema specs
+#   with NO RDF vocabulary — inventing `drs:DrsObject`-style IRIs for them
+#   would produce mappings that never dereference. Those standards are instead
+#   recorded as human-facing `aliases` (the source element name) and a
+#   `dapper:source_standard` annotation. All obo/DUO/IAO CURIEs were verified
+#   against EBI OLS4; FRAPO/FaBiO/SPDX/SPAR-DataCite against their published
+#   specs.
+#   Additions: the nanopublication prefixes below were each dereferenced
+#   and read before use (`np` and `npx` and `hycl` all serve Turtle at their
+#   namespace IRI); the terms mapped in block (B) are quoted from those live
+#   ontology documents, not recalled. `ntemplate` is the Nanodash template
+#   vocabulary observed in published Knowledge Pixels nanopubs. `dismech` is
+#   the upstream DISMECH schema's own declared prefix, copied verbatim from
+#   its `prefixes:` block so cross-walk CURIEs resolve.
+prefixes:
+  # Stable vocabulary and record-identifier namespace. /ns/ resolves known
+  # vocabulary fragments (e.g. dapper:Edge) to their model documentation.
+  # Record IDs remain dapper:{ClassName}.{digest}; they are not schema terms.
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  # Documentation CURIEs identify definitions in this model, independently
+  # of their semantic class_uri/slot_uri/enum_uri and external mappings.
+  # GitHub Pages redirects the expanded URLs to their trailing-slash pages.
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  schema: http://schema.org/
+  prov: http://www.w3.org/ns/prov#
+  # --- nanopublication (verified by dereferencing each namespace) ---
+  # Nanopublication schema. Defines Nanopublication/Assertion/Provenance/
+  # PublicationInfo and the three functional hasX properties.
+  np: http://www.nanopub.org/nschema#
+  # Nanopub-X: extensions (signatures, supersedes/retracts/introduces,
+  # SoftwareAgent, nanopub types).
+  npx: http://purl.org/nanopub/x/
+  # HYCL — Hypotheses and Claims Ontology (petapico). Thin: Statement,
+  # AIDA-Sentence, claims, discusses, and statement-relation properties.
+  hycl: http://purl.org/petapico/o/hycl#
+  # Nanodash / Knowledge Pixels template vocabulary.
+  ntemplate: https://w3id.org/np/o/ntemplate/
+  # --- DISMECH cross-walk ---
+  dismech: https://w3id.org/monarch-initiative/dismech/
+  # SKOS — used for instance-level cross-walk predicates (closeMatch). Also
+  # DISMECH's own declared prefix for the same namespace.
+  skos: http://www.w3.org/2004/02/skos/core#
+  MONDO: http://purl.obolibrary.org/obo/MONDO_
+  HP: http://purl.obolibrary.org/obo/HP_
+  GO: http://purl.obolibrary.org/obo/GO_
+  CL: http://purl.obolibrary.org/obo/CL_
+  HGNC: http://identifiers.org/hgnc/
+  # HGNC.SYMBOL is declared per document (the claims repository maps it to
+  # https://identifiers.org/hgnc.symbol:), not here: the linter's canonical
+  # form is a different URI, and two expansions of one gene CURIE must not exist.
+  biolink: https://w3id.org/biolink/vocab/
+  PMID: http://identifiers.org/pubmed/
+  # SPAR DataCite Ontology (identifier-focused). NOT the kernel-4 XSD —
+  # kernel-4 defines XML elements, not RDF properties.
+  DataCite: http://purl.org/spar/datacite/
+  # FRAPO — Funding, Research Administration and Projects Ontology.
+  FRAPO: http://purl.org/cerif/frapo/
+  dcterms: http://purl.org/dc/terms/
+  dctypes: http://purl.org/dc/dcmitype/
+  dcat: http://www.w3.org/ns/dcat#
+  foaf: http://xmlns.com/foaf/0.1/
+  fabio: http://purl.org/spar/fabio/
+  spdx: http://spdx.org/rdf/terms#
+  DUO: http://purl.obolibrary.org/obo/DUO_
+  obo: http://purl.obolibrary.org/obo/
+  orcid: https://orcid.org/
+  ror: https://ror.org/
+  doi: https://doi.org/
+  rdf: http://www.w3.org/1999/02/22-rdf-syntax-ns#
+  rdfs: http://www.w3.org/2000/01/rdf-schema#
+  xsd: http://www.w3.org/2001/XMLSchema#
+
+imports:
+  - linkml:types
+
+# ===========================================================================
+# ENUMS
+# ===========================================================================
+enums:
+  ResourceTypeEnum:
+    description: DataCite-style resource type (resourceTypeGeneral) for the returned entity.
+    permissible_values:
+      dataset:
+        meaning: schema:Dataset
+      collection:
+        meaning: dctypes:Collection
+      set:
+        meaning: prov:Collection
+        description: A collection of members (e.g. a gene set); see the Set class.
+      gene_set:
+        description: >-
+          A set whose members are genes (dig.geneset). No ontology term is
+          asserted (none resolves); grounded via the Set class (prov:Collection).
+      software:
+        meaning: schema:SoftwareApplication
+      workflow:
+      model:
+      service:
+        meaning: schema:Service
+
+  CreatorRoleEnum:
+    description: The role a creator (Person/Organization) played for the dataset.
+    permissible_values:
+      principal_investigator:
+      researcher:
+      data_manager:
+      project_leader:
+      curator:
+      consortium:
+      organization:
+      division:
+      group:
+
+  ContributorRoleEnum:
+    description: >-
+      The role a contributing agent played. Values mirror the DataCite
+      kernel-4 `contributorType` enumeration. No `meaning:` CURIEs: kernel-4 is
+      an XML Schema, so these are XSD enumeration values with no RDF term to
+      point at.
+    annotations:
+      dapper:source_standard: DataCite kernel-4 contributorType
+    permissible_values:
+      data_curator:
+        description: DataCite contributorType "DataCurator".
+      hosting_institution:
+        description: DataCite contributorType "HostingInstitution".
+      data_manager:
+        description: DataCite contributorType "DataManager".
+      producer:
+        description: DataCite contributorType "Producer".
+      rights_holder:
+        description: DataCite contributorType "RightsHolder".
+      sponsor:
+        description: DataCite contributorType "Sponsor".
+      other:
+        description: DataCite contributorType "Other".
+
+  PublicationRelationshipEnum:
+    description: >-
+      How a publication relates to the dataset. Values mirror the DataCite
+      kernel-4 `relationType` enumeration (an XSD enumeration, hence no
+      `meaning:` CURIEs).
+    annotations:
+      dapper:source_standard: DataCite kernel-4 relationType
+    permissible_values:
+      is_described_by:
+        description: DataCite relationType "IsDescribedBy".
+      is_supplement_to:
+        description: DataCite relationType "IsSupplementTo".
+      is_cited_by:
+        description: DataCite relationType "IsCitedBy".
+      cites:
+        description: DataCite relationType "Cites".
+      is_referenced_by:
+        description: DataCite relationType "IsReferencedBy".
+
+  AccessLevelEnum:
+    description: Coarse access classification for the dataset.
+    permissible_values:
+      public:
+      controlled:
+      mixed:
+
+  EmbeddingDtypeEnum:
+    description: >-
+      Element type of the stored embedding vector. Names follow NumPy dtype
+      spelling; the bytes hashed into `Embedding.vector_sha256` are the row in
+      this type, little-endian, C order.
+    permissible_values:
+      float16:
+      float32:
+      float64:
+      bfloat16:
+      int8:
+
+  EmbeddingNormalizationEnum:
+    description: >-
+      Normalization applied to the stored vector after the model produced it.
+      `none` stores the model output as returned; `l2` stores the unit-length
+      vector, so a dot product is a cosine similarity.
+    permissible_values:
+      none:
+      l2:
+
+  FunderIdentifierTypeEnum:
+    description: Type of the funder identifier.
+    permissible_values:
+      crossref_funder_id:
+        description: Crossref Funder Registry ID.
+      ror:
+        description: Research Organization Registry ID.
+      grid:
+      isni:
+      other:
+
+  IdentifierTypeEnum:
+    description: Type of a dataset persistent identifier.
+    permissible_values:
+      doi:
+      handle:
+      ark:
+      accession:
+      url:
+
+  DataUsePermissionEnum:
+    description: >-
+      Primary consent permission governing use of the dataset. Values are the
+      children of DUO:0000001 "data use permission" (Data Use Ontology);
+      `meaning` CURIEs were verified against EBI OLS4.
+    permissible_values:
+      no_restriction:
+        meaning: DUO:0000004
+        description: DUO:0000004 — no restriction (NRES).
+      general_research_use:
+        meaning: DUO:0000042
+        description: >-
+          DUO:0000042 — general research use (GRU); includes health/biomedical,
+          fundamental biology, ancestry, methods, and social-sciences research.
+      population_origins_ancestry_research_only:
+        meaning: DUO:0000011
+        description: DUO:0000011 — population origins or ancestry research only (POA).
+
+  DataUseModifierEnum:
+    description: >-
+      Additional conditions attached to a data use permission. Values are the
+      children of DUO:0000017 "data use modifier"; `meaning` CURIEs were
+      verified against EBI OLS4.
+    permissible_values:
+      research_specific_restrictions:
+        meaning: DUO:0000012
+      no_general_methods_research:
+        meaning: DUO:0000015
+      genetic_studies_only:
+        meaning: DUO:0000016
+      not_for_profit_non_commercial_use_only:
+        meaning: DUO:0000018
+      publication_required:
+        meaning: DUO:0000019
+      collaboration_required:
+        meaning: DUO:0000020
+      ethics_approval_required:
+        meaning: DUO:0000021
+      geographical_restriction:
+        meaning: DUO:0000022
+      publication_moratorium:
+        meaning: DUO:0000024
+      time_limit_on_use:
+        meaning: DUO:0000025
+      user_specific_restriction:
+        meaning: DUO:0000026
+      project_specific_restriction:
+        meaning: DUO:0000027
+      institution_specific_restriction:
+        meaning: DUO:0000028
+      return_to_database_or_resource:
+        meaning: DUO:0000029
+      clinical_care_use:
+        meaning: DUO:0000043
+      population_origins_ancestry_research_prohibited:
+        meaning: DUO:0000044
+
+  ProvEdgeRoleEnum:
+    description: >-
+      Semantic role of a provenance edge, providing a home for the three
+      dig.geneset (CFDE provenance graph) edge labels — "data input",
+      "metadata input", "data output" — expressed as PROV-O predicates.
+    permissible_values:
+      data_input:
+        meaning: prov:used
+        description: An input data entity an activity used (dig.geneset "data input").
+      metadata_input:
+        meaning: prov:used
+        description: >-
+          A reference/annotation entity an activity used (dig.geneset
+          "metadata input"); same prov:used predicate, distinguished by role.
+      data_output:
+        meaning: prov:wasGeneratedBy
+        description: An entity an activity generated (dig.geneset "data output").
+
+
+# ===========================================================================
+# SLOTS — the required Dock Knowledge Graph skeleton (do not remove).
+# ===========================================================================
+slots:
+  id:
+    is_a: literal
+    identifier: true
+    slot_uri: schema:identifier
+    exact_mappings:
+      - dcterms:identifier
+    close_mappings:
+      - DataCite:hasIdentifier
+    aliases:
+      - identifier
+      - PID
+    description: >-
+      Unique identifier for a node — a CURIE shorthand or a full URI. For a
+      Dataset this is its persistent identifier (e.g. a DOI).
+    required: true
+  name:
+    is_a: literal
+    mixins: [hashable]
+    slot_uri: rdfs:label
+    exact_mappings:
+      - schema:name
+      - dcterms:title
+    aliases:
+      - title
+      - label
+    description: Human-readable name/label for a node.
+  file:
+    is_a: relationship
+    slot_uri: dapper:file
+    range: File
+    description: >-
+      A File a value object points into: the file playing a FileRole, or the
+      file whose bytes a ValueLocator addresses. Declared once here because
+      both classes carry it as an attribute; each class refines it there.
+  literal:
+    slot_uri: rdfs:literal
+    range: string
+    description: >-
+      Abstract base for scalar (data) attributes. Concrete scalar slots
+      declare `is_a: literal`.
+  contexts:
+    is_a: literal
+    mixins: [hashable]
+    range: Context
+    multivalued: true
+    inlined: true
+    inlined_as_list: true
+    slot_uri: dapper:contexts
+    description: >-
+      Typed settings a record applies to: what a Dataset represents or an
+      Activity targets, where a Proposition is claimed to hold, or where an
+      EvidenceItem's evidence was obtained. Kinds are defined in biology.yaml
+      (ancestry, trait, tissue, cell type, cell line, organism). At most one
+      context of each kind. Contexts are part of identity, including their order, so
+      list them sorted by context_type. Omit when none applies.
+  has_embedding:
+    is_a: relationship
+    mixins: [unhashable]  # inverse of Embedding.embedding_of; a derived representation never changes what a node is
+    range: Embedding
+    multivalued: true
+    inlined: false
+    slot_uri: dapper:hasEmbedding
+    inverse: embedding_of
+    description: >-
+      Embedding records computed from this node (one per embedding model or
+      text template). Available on every Node. Unhashable: attaching, replacing,
+      or removing an embedding leaves the node's identifier unchanged. The
+      forward, hashable direction is Embedding.embedding_of; if both are
+      supplied they must agree.
+  relationship:
+    slot_uri: rdf:type
+    range: uriorcurie
+    description: >-
+      Abstract base for cross-references between nodes. Concrete reference
+      slots declare `is_a: relationship` with `range: uriorcurie` and point at
+      another node's `id`.
+  # --- identity axis (DAPPER-ID-1) -----------------------------------------
+  # Orthogonal to literal/relationship above: that axis says what a slot IS,
+  # this one says whether it CONSTITUTES the instance's identity. Every
+  # attribute declares exactly one, enforced by identity/lint_identity.py.
+  hashable:
+    description: >-
+      Marks a slot as constituting the identity of its instance. Changing its
+      value changes the instance's digest and therefore its `id`.
+  unhashable:
+    description: >-
+      Marks a slot as excluded from the digest: temporal, environmental,
+      signature, mirror-observed, or a back-reference derivable from a forward
+      edge. Changing it MUST NOT change the instance's `id`.
+
+  subject:
+    slot_uri: rdf:subject
+    range: uriorcurie
+    description: The subject node of an Edge (its `id`/CURIE).
+  predicate:
+    slot_uri: rdf:predicate
+    range: uriorcurie
+    description: The predicate (relationship type) of an Edge.
+  object:
+    slot_uri: rdf:object
+    range: uriorcurie
+    description: The object node of an Edge (its `id`/CURIE).
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+
+  Context:
+    abstract: true
+    description: >-
+      A typed statement of the setting a record applies to, such as the
+      ancestry group a dataset represents or the trait an analysis targets.
+      Abstract: core says only that records can have contexts, and domain
+      modules define the kinds (biology.yaml: AncestryContext, TraitContext,
+      TissueContext, CellTypeContext, CellLineContext, OrganismContext).
+      A value object without its own identifier; it is part of the owning
+      record's identity.
+    attributes:
+      context_type:
+        designates_type: true
+        range: string
+        required: true
+        description: >-
+          The concrete Context class, e.g. `AncestryContext`. Hashed with the
+          rest of the context, so different kinds never collide.
+
+  Contextual:
+    mixin: true
+    description: Lets a record state the typed Contexts it applies to.
+    slots:
+      - contexts
+
+  # ---- Required KG skeleton base classes ---------------------------------
+  Node:
+    abstract: true
+    description: >-
+      Abstract base for all DAPPER entities (datasets, agents, awards,
+      publications, licenses, activities, mirror records, ...). Not used
+      directly.
+    slots:
+      - id
+      - name
+      - has_embedding
+
+  HashableNode:
+    is_a: Node
+    abstract: true
+    description: >-
+      A Node whose `id` is a computed content address of the form
+      `dapper:{ClassName}.{digest}` — the full LinkML class name, a dot, then a
+      GA4GH `sha512t24u` digest over the slots marked `hashable`.
+
+      The digest covers hashable slots ONLY. Timestamps, signatures, mirror
+      observations, workspace locations, and back-references are marked
+      `unhashable` so that re-running, re-signing, mirroring, or re-hosting an
+      artifact never changes what it is. See identity/README.md for the
+      DAPPER-ID-1 profile and docs/guides/trusty-identifiers.md for why this is
+      deliberately NOT a Trusty URI `RA` code.
+    annotations:
+      dapper:id_profile: DAPPER-ID-1
+
+  Edge:
+    abstract: true
+    class_uri: rdf:Statement
+    description: >-
+      Abstract base for all DAPPER attribution/provenance relationships,
+      fixed to rdf:Statement. Not used directly.
+    slots:
+      - subject
+      - predicate
+      - object
+
+  # ======================================================================
+  # NODE (entity) classes — CORE
+  # ======================================================================
+
+  # ======================================================================
+  # MIXINS — reusable slot bundles applied to more than one entity class.
+  # ======================================================================
+
+  PortalLinked:
+    mixin: true
+    description: >-
+      Mixin adding the two portal landing-page links (dcc_url / drc_url) that
+      every dig.geneset (CFDE provenance graph) node carries. Applied to Set,
+      C2M2File, and Activity.
+    attributes:
+      dcc_url:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:url
+        close_mappings:
+          - dcat:landingPage
+        aliases:
+          - dcc_url
+        annotations:
+          dapper:source_standard: CFDE dig.geneset dcc_url
+        description: URL to the source DCC portal page for this resource.
+      drc_url:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:url
+        close_mappings:
+          - dcat:landingPage
+        aliases:
+          - drc_url
+        annotations:
+          dapper:source_standard: CFDE dig.geneset drc_url
+        description: URL to the DRC (CFDE Workbench) entity/resource page.
+
+  ProvenancedResource:
+    mixin: true
+    description: >-
+      The shared attribution + funding + publication + provenance + license +
+      access + mirror slots carried by any citable resource. Applied as a mixin
+      to both `Dataset` (a set of data) and `Set` (a collection of members, e.g.
+      a gene set), so the mirroring invariant and the DataCite/PROV
+      attribution model bind identically to datasets and gene sets. Every
+      `dapper:mirror_mutable: false` slot here is authoritative NIH provenance a
+      mirror MUST NOT rewrite.
+    attributes:
+      access_level:
+        is_a: literal
+        mixins: [hashable]
+        range: AccessLevelEnum
+        slot_uri: dcterms:accessRights
+        close_mappings:
+          - schema:conditionsOfAccess
+        aliases:
+          - accessRights
+        description: Access tier for the resource (e.g. public, controlled).
+      alternate_identifier:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        slot_uri: dcterms:identifier
+        exact_mappings:
+          - DataCite:hasIdentifier
+        description: >-
+          Externally-assigned persistent identifiers for this resource — a DOI,
+          an accession, a Handle, an ARK. `id` is DAPPER's own computed content
+          address (`dapper:{ClassName}.{digest}`), which answers "what exactly
+          is this record?". A DOI answers "what does the publisher call this,
+          and how do I cite it?". Both are worth keeping, so neither displaces
+          the other. `identifier_type` names the scheme.
+        annotations:
+          dapper:source_standard: DataCite kernel-4 identifier/alternateIdentifiers
+      controlled_access:
+        is_a: literal
+        mixins: [hashable]
+        range: boolean
+        close_mappings:
+          - dcterms:accessRights
+        description: Whether obtaining this resource requires a controlled-access request/review.
+      # --- inline attribution/provenance links (each is a graph edge) ---
+      has_creator:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: schema:creator
+        exact_mappings:
+          - dcterms:creator
+        close_mappings:
+          - prov:wasAttributedTo
+        description: Authoritative creators (Person/Organization CURIEs).
+        annotations:
+          dapper:authoritative: true
+          dapper:mirror_mutable: false
+          dapper:source_standard: DataCite kernel-4 creators
+      has_contributor:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dcterms:contributor
+        description: Contributing agents (Person/Organization CURIEs), distinct from the authoritative creators.
+      funded_by:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: schema:funding
+        exact_mappings:
+          - FRAPO:isSupportedBy
+        close_mappings:
+          - schema:funder
+        aliases:
+          - funding
+          - fundingReference
+        description: Authoritative Award CURIEs supporting this resource.
+        annotations:
+          dapper:authoritative: true
+          dapper:mirror_mutable: false
+          dapper:source_standard: DataCite kernel-4 fundingReference
+      is_described_by:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dcterms:isReferencedBy
+        close_mappings:
+          - schema:subjectOf
+        aliases:
+          - IsDescribedBy
+        description: Authoritative primary Publication CURIEs.
+        annotations:
+          dapper:authoritative: true
+          dapper:mirror_mutable: false
+          dapper:source_standard: DataCite kernel-4 relatedIdentifier/IsDescribedBy
+      has_license:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dcterms:license
+        exact_mappings:
+          - schema:license
+        aliases:
+          - license
+        description: CURIE/URI of the License node.
+      was_generated_by:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: prov:wasGeneratedBy
+        description: The Activity that generated/packaged this returned result.
+      was_derived_from:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: prov:wasDerivedFrom
+        description: Upstream resource(s) (CURIEs) this one was derived from.
+      was_attributed_to:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: prov:wasAttributedTo
+        description: Agent(s) (CURIEs) this resource is attributed to.
+      has_recommended_citation:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dcterms:bibliographicCitation
+        description: The authoritative RecommendedCitation node.
+        annotations:
+          dapper:authoritative: true
+          dapper:mirror_mutable: false
+      # --- mirror (append-only; NOT authoritative) ---
+      has_mirror_provenance:
+        is_a: relationship
+        mixins: [unhashable]  # mirror-observed
+        range: uriorcurie
+        multivalued: true
+        description: >-
+          Mirror-appended provenance records. Append-only; mirrors add these
+          but must not touch authoritative fields.
+        annotations:
+          dapper:mirror_mutable: true
+          dapper:append_only: true
+
+  Dataset:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+      - Contextual
+    class_uri: schema:Dataset
+    aliases:
+      - dataset
+      - data set
+      - resource
+    exact_mappings:
+      - dcat:Dataset
+      - dctypes:Dataset
+    close_mappings:
+      - prov:Entity
+      # Cross-walk. Complementary halves of one idea: DISMECH's Dataset
+      # describes the SCIENCE (organism, data_type, sample_types, platform,
+      # and reported scientific content); this one describes the ATTRIBUTION (creators, funding,
+      # licence, DUO terms, DRS identity). Neither duplicates the other, and
+      # DISMECH's `accession` is already a CURIE, so it maps onto `id`.
+      - dismech:Dataset
+    broad_mappings:
+      - obo:IAO_0000100      # homogenous data collection ("data set")
+    description: >-
+      A dataset (or dataset-like resource) returned through an NIH MCP server.
+      The node `id` is the dataset's persistent identifier (typically a DOI).
+      Attribution/provenance links come from the ProvenancedResource mixin
+      (inline `has_*` / `*_by` relationship attributes, natural for MCP
+      responses; also reifiable as Edge instances).
+    attributes:
+      identifier_type:
+        is_a: literal
+        mixins: [hashable]
+        range: IdentifierTypeEnum
+        close_mappings:
+          - DataCite:usesIdentifierScheme
+        aliases:
+          - identifierType
+        annotations:
+          dapper:source_standard: DataCite kernel-4 identifierType
+        description: Type of the dataset's persistent identifier (e.g. doi).
+      version:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: schema:version
+        exact_mappings:
+          - dcterms:hasVersion
+        description: Dataset version string (e.g. "2.1.0").
+      resource_type:
+        is_a: literal
+        mixins: [hashable]
+        range: ResourceTypeEnum
+        slot_uri: dcterms:type
+        aliases:
+          - resourceTypeGeneral
+        annotations:
+          dapper:source_standard: DataCite kernel-4 resourceTypeGeneral
+        description: DataCite-style resource type (resourceTypeGeneral) for this dataset.
+      publication_year:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        slot_uri: schema:datePublished
+        close_mappings:
+          - dcterms:issued
+        aliases:
+          - publicationYear
+        annotations:
+          dapper:source_standard: DataCite kernel-4 publicationYear
+        description: Year the dataset was published.
+      description:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:description
+        exact_mappings:
+          - schema:description
+        aliases:
+          - abstract
+        description: Free-text description or abstract of the dataset.
+      publisher:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dcterms:publisher
+        exact_mappings:
+          - schema:publisher
+        description: CURIE/URI of the publishing Organization.
+      # attribution/funding/provenance/license/access/mirror slots come from
+      # the ProvenancedResource mixin. Dataset-specific links follow.
+      # --- additional links ---
+      location:
+        is_a: literal
+        mixins: [unhashable]
+        annotations:
+          dapper:uri_or_path: true
+        description: >-
+          Current retrieval URI or storage prefix for this dataset, such as
+          an S3 prefix containing partitioned output. This mutable location
+          does not identify an immutable version or prove file membership;
+          capture concrete files or a manifest and their checksums separately.
+      has_file:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dapper:hasFile
+        close_mappings:
+          - dcat:distribution
+          - schema:distribution
+        description: >-
+          File or C2M2File records carrying a distribution of this dataset.
+          Links the logical dataset to concrete files without requiring DRS
+          registration. An S3 prefix is a dataset location, not a single File;
+          enumerate its files or link an actual manifest when available.
+      has_data_use_term:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        broad_mappings:
+          - DUO:0000001
+          - DUO:0000017
+        close_mappings:
+          - dcterms:accessRights
+        aliases:
+          - data_use_limitations
+        description: DUO term CURIEs constraining permitted use.
+      has_drs_object:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dcat:distribution
+        close_mappings:
+          - schema:distribution
+        description: GA4GH DrsObject CURIEs (file-level identity) making up this dataset.
+      packaged_as:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - dcterms:isPartOf
+        description: CURIE of the RoCratePackage this dataset is packaged as.
+      has_workflow_provenance:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: BioComputeObject CURIEs describing the workflow(s) that produced this dataset.
+      dimension_values:
+        is_a: literal
+        mixins: [hashable]
+        range: DimensionValue
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+        description: >-
+          This Dataset's value along each of the dataset_dimensions of the
+          ResultCollection that lists it, in that order. When a dimension
+          also has a matching Context (trait, ancestry), the two must agree.
+      file_roles:
+        is_a: literal
+        mixins: [hashable]
+        range: FileRole
+        multivalued: true
+        inlined: true
+        inlined_as_list: true
+        description: >-
+          The role each of this Dataset's files plays in its ResultCollection,
+          e.g. `gene_stats`. Every role's file is also listed in has_file.
+
+  # ======================================================================
+  # SET — a collection of members (prov:Collection). Distinct from Dataset
+  # (a set of *data*, schema:Dataset). A gene set is a set of genes; protein
+  # sets, variant sets, etc. extend Set the same way GeneSet does.
+  # ======================================================================
+  Set:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource
+      - PortalLinked
+    class_uri: prov:Collection
+    close_mappings:
+      - schema:Collection
+    aliases:
+      - member set
+    description: >-
+      A collection of members — "an entity that provides a structure to some
+      constituents, which are themselves entities" (prov:Collection). Set is
+      deliberately separate from Dataset: a Dataset is a set of *data*
+      (schema:Dataset); a Set is a set of *things* (genes, proteins, variants).
+      Members are referenced via `prov:hadMember`. Set carries the same
+      attribution/provenance/mirror slots (ProvenancedResource) as Dataset, so
+      a returned set is citable and its authoritative provenance is
+      mirror-protected identically. A Set whose members are other DAPPER
+      records (gene sets, datasets) is a Collection.
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:description
+        exact_mappings:
+          - schema:description
+        aliases:
+          - abstract
+      members:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: prov:hadMember
+        aliases:
+          - hasMember
+        description: >-
+          The set's constituent members (CURIEs). Optional — a large set may
+          instead reference its member manifest (e.g. a .gmt) via a member
+          artifact rather than enumerating members inline.
+      member_type:
+        is_a: literal
+        mixins: [hashable]
+        description: The kind of member the set collects (e.g. gene, protein, variant).
+      n_members:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        close_mappings:
+          - schema:numberOfItems
+        description: Count of members in the set.
+
+
+  # ======================================================================
+  # COLLECTION — abstract (0.3.0-a1). A Set whose members are other DAPPER
+  # records, with optional versioning. GeneSetCollection (members: GeneSet)
+  # and ResultCollection (members: Dataset) specialize it.
+  # ======================================================================
+  Collection:
+    is_a: Set
+    abstract: true
+    aliases:
+      - collection
+    description: >-
+      A Set whose members are other DAPPER records rather than biological
+      entities: the GeneSets of a GeneSetCollection or the Datasets of a
+      ResultCollection. Abstract; use a subclass. Adds optional versioning:
+      collection_key names the collection across versions, version labels
+      this one, and was_revision_of points to the previous version. Each
+      version is its own immutable, content-addressed record, so changing the
+      membership makes a new version rather than editing an old one.
+    slot_usage:
+      members:
+        description: >-
+          DAPPER identifiers of the member records. Membership contributes to
+          the collection's identity; members do not point back in a hashed field,
+          so adding a record to a collection never changes the record's own id.
+    attributes:
+      collection_key:
+        is_a: literal
+        mixins: [hashable]
+        pattern: '^[a-z0-9][a-z0-9._-]*$'
+        description: >-
+          Stable short name shared by every version of the collection, e.g.
+          `pigean` or `cfde-inc`. The version's own id changes with its content;
+          this does not.
+      version:
+        is_a: literal
+        mixins: [hashable]
+        pattern: '\S'
+        slot_uri: schema:version
+        description: Version label of this version of the collection, e.g. "2026.11.0" or "v2".
+      was_revision_of:
+        is_a: relationship
+        mixins: [hashable]
+        range: Collection
+        inlined: false
+        slot_uri: prov:wasRevisionOf
+        description: >-
+          The previous version of the same collection: same class and same
+          collection_key. Omitted for the first version. Hashable, so versions
+          form a chain that cannot be rewritten.
+
+  # ======================================================================
+  # BLOCK — RESULT COLLECTIONS (0.3.0-a1). A ResultCollection (a Collection)
+  # is one immutable version of a named collection of analysis results: the
+  # Datasets of result files, the claim templates that turn their rows into
+  # Claims, and the query templates that read them. Claims never point at
+  # the collection, so publishing a new version re-addresses only the claims
+  # whose template or source file changed. See docs/guides/result-collections.md.
+  # ======================================================================
+
+  ResultCollection:
+    is_a: Collection
+    close_mappings:
+      - dcat:DatasetSeries
+    aliases:
+      - collection release
+      - claims collection
+    description: >-
+      One version of a named collection of analysis results: its member
+      Datasets of result files (each identified by the collection's
+      dataset_dimensions, such as trait and gene-set library), the claim
+      templates that mint Claims from rows of those files, the query templates
+      that read them, and the manifest file the version was built from.
+      collection_key and version are required. Claims do not reference the
+      collection: a Claim's identity depends on its template and source file,
+      not on which versions list them. A collection usually holds the results
+      of one method; see methods.
+    slot_usage:
+      collection_key:
+        required: true
+      version:
+        required: true
+        description: Version label of this release of the collection, e.g. "2026.11.0".
+      was_revision_of:
+        range: ResultCollection
+        description: The previous release of this collection (same collection_key).
+      members:
+        range: Dataset
+        inlined: false
+        required: true
+        minimum_cardinality: 1
+        description: >-
+          The Datasets in this version, each a slice of the results identified
+          by its dimension_values, with its files assigned roles by file_roles.
+      member_type:
+        ifabsent: string(dataset)
+        equals_string: dataset
+      n_members:
+        minimum_value: 1
+        description: Number of member Datasets; when supplied agrees with members.
+    attributes:
+      methods:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        multivalued: true
+        minimum_cardinality: 1
+        description: >-
+          Analysis methods whose results this version holds, named as the
+          software_name of the Activities that generated its result files (e.g.
+          PIGEAN). One method is the norm. More than one is allowed but is
+          usually an anti-pattern: scores from different methods have different
+          meanings and must not be compared, ranked or combined. Prefer one
+          collection per method and combine their claims in a ScientificAccount.
+          See docs/guides/result-collections.md.
+      dataset_dimensions:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        multivalued: true
+        minimum_cardinality: 1
+        description: >-
+          Ordered names of the dimensions that identify each Dataset in the
+          collection, e.g. [trait, library]. Every member Dataset gives exactly
+          one dimension_value for each, and no two members share all of them.
+      has_claim_template:
+        slot_uri: dapper:has_claim_template
+        is_a: relationship
+        mixins: [hashable]
+        range: File
+        inlined: false
+        multivalued: true
+        description: >-
+          Files holding the claim templates that mint Claims from rows of the
+          member Datasets' files. A minting Activity `used` the template File
+          and the result File, and each Claim it generates names that Activity
+          in was_generated_by, so a claim traces to its exact template bytes.
+      has_query_template:
+        slot_uri: dapper:has_query_template
+        is_a: relationship
+        mixins: [hashable]
+        range: File
+        inlined: false
+        multivalued: true
+        description: >-
+          Files holding query templates that read this collection (parameters,
+          a bounded plan and a runnable example), so the collection can describe
+          how to query it.
+      has_manifest_file:
+        slot_uri: dapper:has_manifest_file
+        is_a: relationship
+        mixins: [hashable]
+        range: File
+        inlined: false
+        description: >-
+          The collection manifest this version was built from, declaring
+          method-specific structure DAPPER does not model: row kinds, metrics,
+          file formats and how each file role is parsed.
+
+  DimensionValue:
+    description: >-
+      One Dataset's position along one of its collection's dimensions, e.g.
+      dimension `trait` with dimension_value `KPN.TRAIT:0000505`. A value
+      object without its own identifier; it contributes to the owning
+      Dataset's identity.
+    attributes:
+      dimension:
+        required: true
+        pattern: '^[a-z][a-z0-9_]*$'
+        description: Dimension name, one of the owning collection's dataset_dimensions.
+      dimension_value:
+        required: true
+        pattern: '\S'
+        description: >-
+          The value along that dimension, as a CURIE when one exists (a trait
+          identifier) or the source's own label otherwise (a library name).
+          Identifier schemes are the data's, not the profile's: DAPPER does not
+          normalize them.
+
+  FileRole:
+    description: >-
+      The role a File plays in a Dataset of a ResultCollection, e.g.
+      `gene_stats` or `membership`. Role names, formats and parsing rules are
+      declared in the collection manifest. A value object without its own
+      identifier; it contributes to the owning Dataset's identity.
+    attributes:
+      role:
+        required: true
+        pattern: '^[a-z][a-z0-9_]*$'
+        description: Role name declared by the collection manifest.
+      file:
+        slot_uri: dapper:file
+        is_a: relationship
+        range: File
+        inlined: false
+        required: true
+        description: The File playing the role; it must also be listed in the Dataset's has_file.
+
+
+  ValueLocator:
+    is_a: HashableNode
+    description: >-
+      A verifiable pointer to one serialized value inside a referenced File:
+      the exact byte span where the value appears, the value as read, and a
+      structured selector. Evidence can then ground directly in the result file
+      that provenance ends at: a verifier re-reads
+      file[byte_start : byte_start + byte_length] and compares it with
+      value_text, and the File's sha256 establishes which bytes those are. The
+      selector is for people and format-aware tools; the byte span is the
+      contract. Added in 0.3.0-a1.
+    attributes:
+      file:
+        slot_uri: dapper:file
+        is_a: relationship
+        mixins: [hashable]
+        range: File
+        inlined: false
+        required: true
+        description: The File whose bytes the span addresses.
+      byte_start:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        required: true
+        minimum_value: 0
+        description: 0-based offset of the first byte of the serialized value.
+      byte_length:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        required: true
+        minimum_value: 1
+        description: Number of bytes in the serialized value.
+      value_text:
+        is_a: literal
+        mixins: [hashable]
+        required: true
+        pattern: '\S'
+        description: >-
+          The span's bytes decoded as UTF-8, exactly as serialized in the file
+          (e.g. '10.5', not '10.50'). Verification is byte equality, not
+          numeric equality.
+      selector:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Structured, human-readable address of the value within the file's
+          format, e.g. 'line=1; gene=CXCR2; key=combined' for NDJSON or a
+          row/column pair for TSV. Advisory; the byte span is authoritative.
+      media_type:
+        is_a: literal
+        mixins: [hashable]
+        description: IANA media type the selector assumes, e.g. application/x-ndjson.
+
+
+  # ======================================================================
+  # BLOCK — EMBEDDINGS. An Embedding is a fixed-length numeric vector that a
+  # model computed from text derived from another node (a GeneSet's name and
+  # metadata, a collection's description, ...). The vector bytes are not
+  # inlined: they live as one row of a shared matrix File (typically one
+  # `.npy` across many collections) that the record locates with
+  # has_vector_file + vector_row, the same unhashable locator pattern as
+  # GeneSet.in_gmt_file + gmt_entry. Identity covers what was embedded, how
+  # (model, provider, dimensions, dtype, normalization, text, template,
+  # activity) and the resulting bytes (vector_sha256), so two runs that
+  # produce different floats are different embeddings, while moving the
+  # matrix or re-packing rows changes nothing.
+  # ======================================================================
+  Embedding:
+    is_a: HashableNode
+    mixins:
+      - ProvenancedResource   # was_generated_by / was_derived_from / attribution, like Set and Dataset
+    aliases:
+      - vector embedding
+      - text embedding
+    description: >-
+      A fixed-length numeric vector representing another DAPPER node, computed
+      by an embedding model from text derived from that node. `embedding_of`
+      names the represented node; the target's inverse `has_embedding` list is
+      unhashable, so embedding a node never changes the node's own identifier.
+      The vector itself is stored as a row of a shared matrix File and located
+      by `has_vector_file` plus `vector_row`; those locators are unhashable and
+      must be supplied together. `vector_sha256` binds the identifier to the
+      stored bytes; `was_generated_by` (ProvenancedResource) names the Activity
+      that ran the model.
+    attributes:
+      embedding_of:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        inlined: false
+        slot_uri: dapper:embeddingOf
+        inverse: has_embedding
+        description: >-
+          Identifier of the node this vector represents (a GeneSet,
+          GeneSetCollection, Dataset, Claim, ...). Contributes to identity: the
+          same text embedded on behalf of a different node is a different
+          embedding.
+      embedding_model:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Model identifier as published by its provider, e.g. a Hugging Face
+          repository id such as
+          `pritamdeka/BioBERT-mnli-snli-scinli-scitail-mednli-stsb`.
+      embedding_model_version:
+        is_a: literal
+        mixins: [hashable]
+        description: Model revision, tag, or commit, if known.
+      embedding_provider:
+        is_a: literal
+        mixins: [hashable]
+        description: Provider or runtime that served the model, e.g. huggingface, openai.
+      dimensions:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        minimum_value: 1
+        description: Number of elements in the vector.
+      dtype:
+        is_a: literal
+        mixins: [hashable]
+        range: EmbeddingDtypeEnum
+        description: Element type of the stored vector; the type `vector_sha256` was computed over.
+      normalization:
+        is_a: literal
+        mixins: [hashable]
+        range: EmbeddingNormalizationEnum
+        description: Normalization applied before storage.
+      embedded_text:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          The exact text given to the model. Recording it makes the embedding
+          reproducible and lets a reader judge what the vector represents.
+      text_template:
+        is_a: literal
+        mixins: [hashable]
+        description: >-
+          Versioned name of the rule that built `embedded_text` from the
+          target node, e.g. `cfde-geneset-v1`.
+      vector_sha256:
+        is_a: literal
+        mixins: [hashable]
+        pattern: '^[0-9a-f]{64}$'
+        description: >-
+          Hex SHA-256 of the vector's bytes in `dtype`, little-endian, C order.
+          Two embeddings with different values are different records even when
+          model and text agree.
+      has_vector_file:
+        is_a: relationship
+        mixins: [unhashable]  # representation locator, independent of the vector's content
+        range: File
+        inlined: false
+        slot_uri: dapper:hasVectorFile
+        description: >-
+          File holding the matrix this vector is a row of. Reference the local
+          File record by its DAPPER identifier; the File's description should
+          state the array layout (e.g. NumPy `.npy`, rows x dimensions, dtype).
+      vector_row:
+        is_a: literal
+        mixins: [unhashable]  # row selector within a representation
+        range: integer
+        minimum_value: 0
+        description: Zero-based row index of this vector within `has_vector_file`.
+    rules:
+      - preconditions:
+          slot_conditions:
+            has_vector_file:
+              required: true
+        postconditions:
+          slot_conditions:
+            vector_row:
+              required: true
+      - preconditions:
+          slot_conditions:
+            vector_row:
+              required: true
+        postconditions:
+          slot_conditions:
+            has_vector_file:
+              required: true
+
+
+  Agent:
+    mixin: true
+    class_uri: prov:Agent
+    exact_mappings:
+      - foaf:Agent
+      - dcterms:Agent
+    aliases:
+      - agent
+      - responsible party
+    description: >-
+      Mixin for a person or organization (creator, contributor, responsible
+      party). Applied to Node subclasses.
+
+  Person:
+    is_a: HashableNode
+    mixins:
+      - Agent
+    class_uri: schema:Person
+    exact_mappings:
+      - foaf:Person
+      - prov:Person
+    aliases:
+      - individual
+      - investigator
+    description: An individual person acting as a creator, contributor, or other responsible party.
+    attributes:
+      given_name:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: schema:givenName
+        exact_mappings:
+          - foaf:givenName
+        aliases:
+          - givenName
+          - first name
+        description: Given (first) name.
+      family_name:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: schema:familyName
+        exact_mappings:
+          - foaf:familyName
+        aliases:
+          - familyName
+          - surname
+          - last name
+        description: Family (last) name.
+      orcid:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:identifier
+        close_mappings:
+          - DataCite:hasIdentifier
+          - DataCite:PersonalIdentifier
+        aliases:
+          - ORCID iD
+          - nameIdentifier
+        description: ORCID iD (https://orcid.org/....).
+      affiliation:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: schema:affiliation
+        close_mappings:
+          - foaf:member
+        description: CURIE/URI of an affiliated Organization.
+      creator_role:
+        is_a: literal
+        mixins: [hashable]
+        range: CreatorRoleEnum
+        close_mappings:
+          - dcterms:creator
+        description: The role this agent played as a creator of the resource.
+      contributor_role:
+        is_a: literal
+        mixins: [hashable]
+        range: ContributorRoleEnum
+        close_mappings:
+          - dcterms:contributor
+        aliases:
+          - contributorType
+        description: The role this agent played as a contributor to the resource.
+
+  Organization:
+    is_a: HashableNode
+    mixins:
+      - Agent
+    class_uri: schema:Organization
+    exact_mappings:
+      - foaf:Organization
+      - prov:Organization
+    aliases:
+      - institution
+      - consortium
+    description: >-
+      An institution, consortium, program or other organizational agent
+      acting as a creator, contributor, or other responsible party. An
+      organization can belong to a larger one (`parent_organization`): a
+      laboratory to its institution, a data program to the ecosystem that
+      funds it (GTEx to the Common Fund Data Ecosystem). Following the
+      parents from any organization reaches the top of its hierarchy.
+    attributes:
+      parent_organization:
+        is_a: relationship
+        mixins: [hashable]
+        range: Organization
+        inlined: false
+        slot_uri: schema:parentOrganization
+        exact_mappings:
+          - schema:parentOrganization
+        description: >-
+          The larger organization this one is part of. Part of identity: a
+          sub-organization is defined by what it belongs to. Parents form a
+          hierarchy without cycles.
+      url:
+        is_a: literal
+        mixins: [hashable]
+        range: uri
+        slot_uri: schema:url
+        description: The organization's home page.
+      ror:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:identifier
+        close_mappings:
+          - DataCite:hasIdentifier
+          - DataCite:OrganizationIdentifier
+        aliases:
+          - ROR ID
+        description: ROR identifier (https://ror.org/...).
+      creator_role:
+        is_a: literal
+        mixins: [hashable]
+        range: CreatorRoleEnum
+        close_mappings:
+          - dcterms:creator
+        description: The role this agent played as a creator of the resource.
+      contributor_role:
+        is_a: literal
+        mixins: [hashable]
+        range: ContributorRoleEnum
+        close_mappings:
+          - dcterms:contributor
+        aliases:
+          - contributorType
+        description: The role this agent played as a contributor to the resource.
+
+  Award:
+    is_a: HashableNode
+    class_uri: schema:MonetaryGrant
+    exact_mappings:
+      - FRAPO:Grant
+    close_mappings:
+      - schema:Grant
+    aliases:
+      - grant
+      - award
+      - funding reference
+    description: >-
+      A grant/award that funded the dataset. Corresponds to a DataCite
+      kernel-4 `fundingReference`; RDF grounding is FRAPO (the Funding,
+      Research Administration and Projects Ontology), since kernel-4 itself is
+      an XML Schema with no RDF terms.
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+      dapper:source_standard: DataCite kernel-4 fundingReference
+    attributes:
+      funder_name:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: FRAPO:hasFundingAgency
+        close_mappings:
+          - schema:funder
+          - FRAPO:FundingAgency
+        aliases:
+          - funderName
+        description: Name of the funding agency (e.g. National Institutes of Health).
+      funder_identifier:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:identifier
+        close_mappings:
+          - DataCite:FunderIdentifier
+        aliases:
+          - funderIdentifier
+        description: Identifier for the funding agency (e.g. a Crossref Funder ID or ROR).
+      funder_identifier_type:
+        is_a: literal
+        mixins: [hashable]
+        range: FunderIdentifierTypeEnum
+        close_mappings:
+          - DataCite:usesIdentifierScheme
+        aliases:
+          - funderIdentifierType
+        description: Scheme used by `funder_identifier`.
+      award_number:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: FRAPO:hasGrantNumber
+        close_mappings:
+          - schema:identifier
+        aliases:
+          - awardNumber
+          - grant number
+        description: The grant/award number.
+      award_uri:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:url
+        aliases:
+          - awardURI
+        description: URL to the award's record (e.g. an NIH RePORTER project page).
+      award_title:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:title
+        aliases:
+          - awardTitle
+        description: Title of the funded award/project.
+      grant_administering_institute:
+        is_a: literal
+        mixins: [hashable]
+        aliases:
+          - administering IC
+        description: NIH institute/center administering the grant (e.g. NHLBI).
+
+  Publication:
+    is_a: HashableNode
+    class_uri: schema:ScholarlyArticle
+    exact_mappings:
+      - fabio:ResearchPaper
+    close_mappings:
+      - schema:CreativeWork
+      # Cross-walk. DISMECH's PublicationReference is richer on USE
+      # (which deep-research output cited it, and which claims it supports)
+      # and thinner on IDENTITY (a bare PMID). This class is the
+      # identity side; the use side belongs on the edge to the publication.
+      - dismech:PublicationReference
+      - dctypes:Text
+    aliases:
+      - paper
+      - article
+      - primary publication
+    description: A publication describing or related to the dataset.
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    attributes:
+      title:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:title
+        exact_mappings:
+          - schema:name
+        description: Title of the publication.
+      doi:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:identifier
+        close_mappings:
+          - DataCite:ResourceIdentifier
+        aliases:
+          - DOI
+        description: Digital Object Identifier for the publication.
+      pmid:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: fabio:hasPubMedId
+        aliases:
+          - PMID
+          - PubMed ID
+        description: PubMed identifier.
+      citation:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:bibliographicCitation
+        close_mappings:
+          - schema:citation
+        description: Formatted bibliographic citation for the publication.
+      relationship_type:
+        is_a: literal
+        mixins: [hashable]
+        range: PublicationRelationshipEnum
+        close_mappings:
+          - dcterms:relation
+        aliases:
+          - relationType
+        annotations:
+          dapper:source_standard: DataCite kernel-4 relationType
+        description: How this publication relates to the dataset (e.g. is_described_by).
+
+  License:
+    is_a: HashableNode
+    class_uri: dcterms:LicenseDocument
+    exact_mappings:
+      - spdx:License
+    close_mappings:
+      - schema:license
+    aliases:
+      - licence
+      - terms of use
+    description: License and usage terms for the dataset.
+    attributes:
+      url:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: schema:url
+        close_mappings:
+          - dcterms:license
+        description: URL to the license text.
+      usage_terms:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:rights
+        close_mappings:
+          - schema:usageInfo
+        aliases:
+          - usageTerms
+        description: Human-readable usage terms / obligations.
+
+  Activity:
+    is_a: HashableNode
+    mixins:
+      - PortalLinked
+      - Contextual
+    class_uri: prov:Activity
+    close_mappings:
+      - schema:Action
+      # Cross-walk. DISMECH's CurationEvent (curation_timestamp /
+      # curation_model / curation_action / curation_description) is a homegrown
+      # mini-PROV for AI-assisted curation. This PROV-O Activity subsumes it:
+      # curation_model -> an npx:SoftwareAgent attributed via the provenance
+      # graph, the rest -> generated_at_time / command / description.
+      - dismech:CurationEvent
+    aliases:
+      - process
+      - generation activity
+      - AnalysisType
+    description: >-
+      A PROV activity that generated or packaged the returned result
+      (e.g. NIH MCP Gateway dataset packaging, or a dig.geneset AnalysisType /
+      converter step). The executable-detail attributes below map the
+      dig.geneset `analysis{}` block; richer structured parameters/environment
+      can be carried by a linked BioComputeObject.
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:description
+        exact_mappings:
+          - schema:description
+      activity_type:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:type
+        description: e.g. MCPResourceSerialization.
+      command:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:command
+        annotations:
+          dapper:source_standard: dig.geneset analysis.command
+        description: The canonical (replay) command that ran this activity.
+      observed_command:
+        is_a: literal
+        mixins: [hashable]
+        annotations:
+          dapper:source_standard: dig.geneset analysis.observed_command
+        description: The original runtime command captured, if different from replay.
+      script_url:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:codeRepository
+        annotations:
+          dapper:source_standard: dig.geneset analysis.script_url
+        description: URL to the script/notebook implementing this activity.
+      repo_url:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:codeRepository
+        description: Source code repository URL.
+      code_version:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:softwareVersion
+        aliases:
+          - version
+          - git_commit
+        annotations:
+          dapper:source_standard: dig.geneset analysis.version
+        description: Version or git commit of the code that ran.
+      entrypoint:
+        is_a: literal
+        mixins: [hashable]
+        annotations:
+          dapper:source_standard: dig.geneset analysis.environment.entrypoint
+        description: CLI/module entrypoint invoked.
+      container_image:
+        is_a: literal
+        mixins: [hashable]
+        annotations:
+          dapper:source_standard: dig.geneset analysis.environment.container_image
+        description: Container image the activity ran in, if any.
+      software_name:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:SoftwareApplication
+          - prov:SoftwareAgent
+        aliases:
+          - software
+        description: Name of the software that performed the activity.
+      software_version:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:softwareVersion
+        description: Version of the software that performed the activity.
+      generated_at_time:
+        is_a: literal
+        mixins: [unhashable]  # temporal
+        range: datetime
+        slot_uri: prov:generatedAtTime
+        close_mappings:
+          - schema:dateCreated
+        aliases:
+          - generatedAtTime
+        description: When the activity ran.
+      has_lineage_step:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dcterms:hasPart
+        close_mappings:
+          - prov:hadMember
+        description: LineageStep CURIEs making up this activity's ordered provenance lineage.
+      has_agentic_workspace:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        multivalued: true
+        description: >-
+          AgenticWorkspace id(s) from which this activity can be re-run by an
+          AI agent. Complements `command` / `container_image`: those are the
+          machine replay path, this is the agentic one. Multivalued because the
+          same analysis may be reproducible in more than one workspace.
+
+
+  LineageStep:
+    is_a: HashableNode
+    close_mappings:
+      - prov:Activity
+    aliases:
+      - provenance step
+      - lineage entry
+    description: One ordered step in a dataset's provenance lineage.
+    attributes:
+      step:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        close_mappings:
+          - schema:position
+        aliases:
+          - order
+        description: Ordinal position of this step within the lineage.
+      activity:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - prov:Activity
+        description: What happened in this step.
+      responsible_party:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - prov:wasAssociatedWith
+        description: Party responsible for this step (name or CURIE).
+
+  RecommendedCitation:
+    is_a: HashableNode
+    related_mappings:
+      - dcterms:bibliographicCitation
+    aliases:
+      - citation
+      - how to cite
+    description: The recommended human-readable citation and its required elements.
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    attributes:
+      citation_text:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:bibliographicCitation
+        close_mappings:
+          - schema:citation
+        description: The recommended human-readable citation text.
+      required_elements:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Elements a compliant citation must include.
+
+  MirrorProvenance:
+    is_a: HashableNode
+    class_uri: prov:Entity
+    close_mappings:
+      - prov:Bundle
+    aliases:
+      - mirror record
+      - cache provenance
+    description: >-
+      Provenance appended by a mirror/cache. APPEND-ONLY: a mirror may add a
+      MirrorProvenance record but must never rewrite authoritative NIH
+      provenance (see the mirroring invariant at the top of this schema).
+    annotations:
+      dapper:mirror_mutable: true
+      dapper:append_only: true
+    attributes:
+      mirror_provider:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - prov:Agent
+        description: e.g. OpenAI, Anthropic, Google, Microsoft, AWS.
+      mirror_region:
+        is_a: literal
+        mixins: [hashable]
+        description: Geographic/hosting region of the mirror (e.g. us-west-1).
+      synced_from:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - prov:wasDerivedFrom
+        description: Source system the object was synced from (e.g. nih-mcp-gateway).
+      sync_time:
+        is_a: literal
+        mixins: [unhashable]  # temporal
+        range: datetime
+        close_mappings:
+          - prov:generatedAtTime
+        description: When the mirror last synced this object.
+      source_manifest_hash:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        description: sha256 of the authoritative source manifest.
+      mirror_object_hash:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        description: sha256 of the mirrored object.
+
+  # ======================================================================
+  # NODE classes — ADDITIONS
+  # (best-effort interpretation ahead of the final upstream schema)
+  # ======================================================================
+
+  DrsObject:
+    is_a: HashableNode
+    exact_mappings:
+      - dcat:Distribution
+    close_mappings:
+      - schema:DataDownload
+    aliases:
+      - DRS object
+      - drs_object
+      - file object
+    description: >-
+      GA4GH DRS object identity for a dataset file/object. GA4GH DRS is an
+      OpenAPI/JSON specification with no RDF vocabulary, so this class carries
+      no DRS class_uri — it is grounded in DCAT/schema.org instead, with the
+      DRS field names preserved as aliases. A DRS object can describe a single
+      blob or a bundle, so DrsObject remains separate from File. File links to
+      a blob representation through drs_representation; Dataset links to its
+      distributions through has_drs_object. This compact profile does not yet
+      model DRS bundle contents.
+    annotations:
+      dapper:source_standard: GA4GH DRS v1.x DrsObject
+    attributes:
+      drs_id:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:identifier
+        description: GA4GH DRS object identifier.
+      self_uri:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - dcat:accessURL
+        aliases:
+          - self_uri
+        description: The drs:// self URI.
+      size:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        slot_uri: dcat:byteSize
+        close_mappings:
+          - schema:contentSize
+        description: Size of the object in bytes.
+      checksum_sha256:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        aliases:
+          - sha256
+        description: Hex SHA-256 checksum of the object.
+      mime_type:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcat:mediaType
+        close_mappings:
+          - schema:encodingFormat
+        aliases:
+          - mediaType
+        description: MIME type of the object.
+      access_methods:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        close_mappings:
+          - dcat:accessService
+        description: Access method descriptors (e.g. s3, gs, https).
+
+  File:
+    is_a: HashableNode
+    close_mappings:
+      - prov:Entity
+      - schema:MediaObject
+    aliases:
+      - file
+      - file node
+    description: >-
+      A single file used or generated by an Activity, including local,
+      intermediate, and published artifacts. Input, intermediate, and output
+      are roles established by Used and WasGeneratedBy edges, not separate
+      file types. No C2M2 registration or DRS service is required. C2M2File
+      specializes this class with C2M2 identifiers and portal metadata.
+    attributes:
+      description:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcterms:description
+        exact_mappings:
+          - schema:description
+        description: Free-text description of the file.
+      filename:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - schema:name
+        description: The file's name.
+      md5:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        description: Base64-encoded MD5 checksum of the file.
+      sha256:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        description: Hex SHA-256 checksum of the file.
+      size_in_bytes:
+        is_a: literal
+        mixins: [hashable]
+        range: integer
+        slot_uri: dcat:byteSize
+        close_mappings:
+          - schema:contentSize
+        description: Size of the file in bytes.
+      mime_type:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: dcat:mediaType
+        close_mappings:
+          - schema:encodingFormat
+        description: MIME type of the file.
+      location:
+        is_a: literal
+        mixins: [unhashable]  # hosting/workspace location
+        annotations:
+          dapper:uri_or_path: true
+        description: >-
+          Current filesystem path, retrieval URI, or document-declared CURIE
+          (e.g. /work/intermediate.tsv or s3://bucket/intermediate.tsv).
+          Moving the file does not change its
+          DAPPER identity. This is distinct from C2M2File.local_id, which is
+          the source system's identifier and retains its hashable semantics.
+      drs_representation:
+        is_a: relationship
+        mixins: [unhashable]  # optional service registration
+        range: uriorcurie
+        multivalued: true
+        slot_uri: dapper:drsRepresentation
+        description: >-
+          DrsObject records exposing this file's bytes as a DRS blob. A bundle
+          containing the file is not a representation of this single file.
+          Registering the file with a DRS service does not change its DAPPER
+          identity. A DRS checksum must agree with the file checksum when both
+          describe the same bytes using the same algorithm and encoding.
+
+
+  DataUseTerm:
+    is_a: HashableNode
+    broad_mappings:
+      - DUO:0000001      # data use permission
+      - DUO:0000017      # data use modifier
+    aliases:
+      - data use limitation
+      - consent code
+      - DUO term
+    description: >-
+      A Data Use Ontology (DUO) term constraining permitted use of the dataset.
+      A term is either a data use permission (child of DUO:0000001) or a data
+      use modifier (child of DUO:0000017); use `permission` / `modifier`
+      accordingly. Models the `access.data_use_limitations` slot.
+    attributes:
+      duo_id:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:identifier
+        aliases:
+          - DUO ID
+        description: DUO term CURIE (e.g. DUO:0000042).
+      duo_label:
+        is_a: literal
+        mixins: [hashable]
+        slot_uri: rdfs:label
+        description: Human-readable DUO term label (e.g. "general research use").
+      permission:
+        is_a: literal
+        mixins: [hashable]
+        range: DataUsePermissionEnum
+        broad_mappings:
+          - DUO:0000001
+        description: The primary data use permission, if this term is a permission.
+      modifier:
+        is_a: literal
+        mixins: [hashable]
+        range: DataUseModifierEnum
+        broad_mappings:
+          - DUO:0000017
+        description: The data use modifier, if this term is a modifier.
+
+  RoCratePackage:
+    is_a: HashableNode
+    close_mappings:
+      - schema:Dataset
+      - dcat:Dataset
+    aliases:
+      - RO-Crate
+      - research object crate
+    description: >-
+      RO-Crate packaging descriptor for the dataset. RO-Crate expresses itself
+      in schema.org terms rather than a vocabulary of its own, so this class is
+      grounded in schema.org/DCAT.
+    annotations:
+      dapper:source_standard: RO-Crate 1.1
+    attributes:
+      conforms_to:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        slot_uri: dcterms:conformsTo
+        aliases:
+          - conformsTo
+        description: RO-Crate spec/profile the crate conforms to.
+      ro_crate_metadata_ref:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:mainEntity
+        description: Reference to the ro-crate-metadata.json descriptor.
+      root_dataset_ref:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:about
+        description: Reference to the crate's root Dataset node.
+
+  BioComputeObject:
+    is_a: HashableNode
+    close_mappings:
+      - prov:Plan
+      - schema:HowTo
+    aliases:
+      - BCO
+      - IEEE 2791 object
+    description: >-
+      Executable bioinformatics workflow provenance (BioCompute Object /
+      IEEE 2791). Domain slots reference structured 2791 domains. IEEE 2791 is
+      published as a JSON Schema (w3id.org/ieee/ieee-2791-schema redirects to
+      the IEEE GitLab schema repo), not an RDF vocabulary, so this class
+      carries no BCO class_uri; it is grounded in PROV/schema.org with the
+      2791 domain names preserved as attribute names.
+    annotations:
+      dapper:source_standard: IEEE 2791-2020 (BioCompute Object)
+    attributes:
+      bco_id:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        close_mappings:
+          - schema:identifier
+        description: Persistent identifier for the BioCompute Object.
+      bco_spec_version:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - dcterms:conformsTo
+        description: IEEE 2791 spec version this object conforms to.
+      etag:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - spdx:checksum
+        description: Checksum/etag over the BCO content.
+      provenance_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's provenance domain (contributors, review, dates).
+      usability_domain:
+        is_a: literal
+        mixins: [hashable]
+        multivalued: true
+        description: Free-text usability notes describing the workflow's purpose.
+      description_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's description domain (pipeline steps, keywords, platform).
+      execution_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's execution domain (script, software prerequisites, environment).
+      io_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's I/O domain (input and output files).
+      parametric_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's parametric domain (runtime parameters).
+      error_domain:
+        is_a: relationship
+        mixins: [hashable]
+        range: uriorcurie
+        description: Reference to the BCO's error domain (empirical/algorithmic error rates).
+
+
+  # ======================================================================
+  # EDGE (relationship) classes — reified attribution/provenance statements.
+  # Each `is_a: Edge`; slot_usage documents the expected subject/object and
+  # pins the predicate. Use these when a statement itself must be annotated
+  # (e.g. the mirror rule) or reified; the Dataset inline attributes above
+  # cover the common flat case.
+  # ======================================================================
+
+  HasCreator:
+    is_a: Edge
+    description: Dataset → Agent (authoritative creator).
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    slot_usage:
+      subject:
+        description: Dataset id.
+      predicate:
+        ifabsent: string(schema:creator)
+      object:
+        description: Person/Organization id.
+
+  HasContributor:
+    is_a: Edge
+    description: Dataset → Agent (contributor).
+    slot_usage:
+      predicate:
+        ifabsent: string(dcterms:contributor)
+
+  FundedBy:
+    is_a: Edge
+    description: Dataset → Award (authoritative funding).
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:fundedBy)
+
+  IsDescribedBy:
+    is_a: Edge
+    description: Dataset → Publication (authoritative primary publication).
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    slot_usage:
+      predicate:
+        ifabsent: string(dcterms:isReferencedBy)
+
+  WasDerivedFrom:
+    is_a: Edge
+    description: Entity (Dataset/Set/File) → source entity (Dataset/Set/File/DrsObject).
+    slot_usage:
+      predicate:
+        ifabsent: string(prov:wasDerivedFrom)
+
+  WasGeneratedBy:
+    is_a: Edge
+    description: >-
+      Dataset/Set/File → the Activity that produced it. File includes
+      C2M2File; generic intermediate files use the same provenance edge.
+    slot_usage:
+      predicate:
+        ifabsent: string(prov:wasGeneratedBy)
+
+  Used:
+    is_a: Edge
+    aliases:
+      - data input
+      - metadata input
+    description: >-
+      Activity → an input entity it used (File, including C2M2File, or Dataset/Set). Covers the
+      dig.geneset "data input" and "metadata input" edge labels; the specific
+      role is carried by `edge_role` (ProvEdgeRoleEnum).
+    slot_usage:
+      predicate:
+        ifabsent: string(prov:used)
+    attributes:
+      edge_role:
+        is_a: literal
+        mixins: [hashable]
+        range: ProvEdgeRoleEnum
+        description: Which dig.geneset edge label this reifies.
+
+  WasAttributedTo:
+    is_a: Edge
+    description: Dataset → Agent.
+    slot_usage:
+      predicate:
+        ifabsent: string(prov:wasAttributedTo)
+
+  HasLineageStep:
+    is_a: Edge
+    description: Activity → LineageStep.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasLineageStep)
+
+  HasRecommendedCitation:
+    is_a: Edge
+    description: Dataset → RecommendedCitation (authoritative).
+    annotations:
+      dapper:authoritative: true
+      dapper:mirror_mutable: false
+    slot_usage:
+      predicate:
+        ifabsent: string(dcterms:bibliographicCitation)
+
+  HasMirrorProvenance:
+    is_a: Edge
+    description: >-
+      Dataset → MirrorProvenance. APPEND-ONLY: mirrors may add this edge but
+      must not modify authoritative statements.
+    annotations:
+      dapper:mirror_mutable: true
+      dapper:append_only: true
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasMirrorProvenance)
+
+  HasEmbedding:
+    is_a: Edge
+    description: >-
+      Any Node → an Embedding computed from it. Reifies the node's
+      `has_embedding` list (the inverse of Embedding.embedding_of). This is a
+      representation relationship, not a derivation: the embedded node is not
+      upstream of anything by virtue of having been embedded.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasEmbedding)
+
+  HasDataUseTerm:
+    is_a: Edge
+    description: Dataset → DataUseTerm (DUO).
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasDataUseTerm)
+
+  HasFile:
+    is_a: Edge
+    description: Dataset -> File (including C2M2File) carrying a distribution of its data.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasFile)
+
+  HasDrsObject:
+    is_a: Edge
+    description: Dataset → DrsObject (GA4GH DRS).
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasDrsObject)
+
+  DrsRepresentation:
+    is_a: Edge
+    description: >-
+      File (including C2M2File) → a DrsObject exposing the same file bytes as a
+      DRS blob. Reifies File.drs_representation; this is an access relationship,
+      not a derivation or a dataset distribution.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:drsRepresentation)
+
+  PackagedAs:
+    is_a: Edge
+    description: Dataset → RoCratePackage.
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:packagedAs)
+
+  HasWorkflowProvenance:
+    is_a: Edge
+    description: Dataset/Activity → BioComputeObject (IEEE 2791).
+    slot_usage:
+      predicate:
+        ifabsent: string(dapper:hasWorkflowProvenance)
+
+  CorrespondsTo:
+    is_a: Edge
+    description: >-
+      Any DAPPER node → an entry in an external resource that describes the
+      same thing, such as an ontology term or a curated knowledge-base entry.
+      The object is an external IRI or CURIE, not a node in the document.
+      The default predicate is skos:closeMatch; use skos:exactMatch or
+      skos:relatedMatch when that is what holds. Edges are not part of a
+      node's identity, so adding or removing a correspondence never changes
+      the node's id. Resource-specific subclasses (dismech.yaml:
+      CorrespondsToDismech) add the fields their resource needs.
+    slot_usage:
+      subject:
+        description: DAPPER node id.
+      predicate:
+        ifabsent: string(skos:closeMatch)
+      object:
+        description: External IRI or CURIE of the corresponding entry.
+

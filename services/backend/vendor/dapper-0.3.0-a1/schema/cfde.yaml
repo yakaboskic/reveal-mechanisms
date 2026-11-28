@@ -1,0 +1,97 @@
+id: https://broadinstitute.github.io/dapper/model/schema/cfde.yaml
+name: dapper_cfde
+title: DAPPER CFDE C2M2 files
+description: >-
+  `C2M2File`: a core `File` described by CFDE C2M2 (Crosscut Metadata Model)
+  properties, as found in dig.geneset provenance graphs. Adds C2M2
+  identifiers and portal links; C2M2 field names are kept as attribute names.
+license: https://opensource.org/license/mit
+version: 0.3.0-a1
+
+default_prefix: dapper
+default_range: string
+
+prefixes:
+  dapper: https://broadinstitute.github.io/dapper/ns#
+  dapper_class: https://broadinstitute.github.io/dapper/model/reference/classes/
+  dapper_slot: https://broadinstitute.github.io/dapper/model/reference/slots/
+  dapper_enum: https://broadinstitute.github.io/dapper/model/reference/enums/
+  dapper_type: https://broadinstitute.github.io/dapper/model/reference/types/
+  linkml: https://w3id.org/linkml/
+  DataCite: http://purl.org/spar/datacite/
+  dcat: http://www.w3.org/ns/dcat#
+  schema: http://schema.org/
+
+imports:
+  - linkml:types
+  - core
+
+# ===========================================================================
+# CLASSES
+# ===========================================================================
+classes:
+  # ======================================================================
+  # BLOCK — CFDE C2M2. A File specialized with C2M2 identifiers.
+  # ======================================================================
+
+  C2M2File:
+    is_a: File
+    mixins:
+      - PortalLinked
+    exact_mappings:
+      - dcat:Distribution
+    close_mappings:
+      - schema:DataDownload
+    aliases:
+      - C2M2 file
+    description: >-
+      A File described by CFDE C2M2 (Crosscut Metadata Model) properties in a
+      dig.geneset provenance graph. Inherits generic file metadata from File;
+      adds C2M2 identifiers and portal links. C2M2 is a tabular metadata model
+      with no RDF vocabulary, so this class carries no C2M2 class_uri — it is
+      grounded in DCAT/schema.org, with the C2M2 field names preserved as
+      attribute names and dapper:source_standard annotations.
+    annotations:
+      dapper:source_standard: CFDE C2M2 file
+    slot_usage:
+      filename:
+        annotations:
+          dapper:source_standard: C2M2 filename
+      md5:
+        annotations:
+          dapper:source_standard: C2M2 md5
+      sha256:
+        annotations:
+          dapper:source_standard: dig.geneset input.files[].sha256
+      size_in_bytes:
+        annotations:
+          dapper:source_standard: C2M2 size_in_bytes
+    attributes:
+      persistent_id:
+        is_a: literal
+        mixins: [hashable]
+        close_mappings:
+          - DataCite:hasIdentifier
+        annotations:
+          dapper:source_standard: C2M2 persistent_id
+        description: C2M2 persistent identifier (UUID).
+      local_id:
+        is_a: literal
+        mixins: [hashable]
+        range: uriorcurie
+        annotations:
+          dapper:source_standard: C2M2 local_id
+        description: >-
+          Source-assigned identifier retained from a C2M2 record, represented
+          here as a URI or CURIE. Put current storage paths in inherited
+          location instead. Native C2M2 local_id suffixes require their source
+          namespace to form this reference; this profile does not model that
+          two-column key separately.
+      c2m2_uuid:
+        is_a: literal
+        mixins: [hashable]
+        aliases:
+          - _uuid
+        annotations:
+          dapper:source_standard: C2M2 _uuid
+        description: Internal C2M2 UUID for the file node.

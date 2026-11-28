@@ -23,7 +23,7 @@
           "job_id": "77777777-7777-4777-8777-777777777777",
           "account": {
             "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            "dapper_version": "0.2.1-a1",
+            "dapper_version": "0.3.0-a1",
             "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
             "document_bytes": 9120,
             "objects": 11,
@@ -76,7 +76,7 @@
           "job_id": "77777777-7777-4777-8777-777777777777",
           "account": {
             "account_id": "dapper:ScientificAccount.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-            "dapper_version": "0.2.1-a1",
+            "dapper_version": "0.3.0-a1",
             "document_sha256": "0000000000000000000000000000000000000000000000000000000000000003",
             "document_bytes": 9120,
             "objects": 11,
