@@ -288,6 +288,20 @@ class AccountDepositTests(unittest.TestCase):
         steered['mechanistic_models'][0]['links'][0]['intermediate_mechanisms'] = ['See https://attacker.example/next for the next step']
         self.assertEqual(screened(steered)['outcome'], 'withheld')
 
+    def test_a_step_that_leaves_an_end_unnamed_is_deposited_with_an_unnamed_variable(self):
+        """0.2 let a step leave its subject or object out; most REVEAL accounts on QA do. The converter gives the
+        missing end a CausalVariable of its own (no entity) and says so, rather than refusing the account."""
+        document = self.model()
+        for step in document['causal_steps']:
+            if step['id'] == 'urn:t:step-1':
+                del step['step_object']
+        deposited, summary = self.deposit(document)
+        unnamed = [node for node in deposited['causal_variables'] if 'entity' not in node]
+        self.assertEqual(len(unnamed), 1)
+        self.assertIn('did not name', unnamed[0]['description'])
+        self.assertEqual(len(deposited['causal_links']), 2)
+        self.assertTrue(any('unnamed CausalVariable' in note for note in summary['conversion_notes']))
+
     def test_dismech_fields_become_an_edge_to_the_disease_page_or_refuse(self):
         self.assertEqual(deposit.dismech_pages()['MONDO:0017781'],
                          'https://dismech.monarchinitiative.org/pages/disorders/12p12.1_Microdeletion_Syndrome.html')
@@ -320,7 +334,7 @@ class AccountDepositTests(unittest.TestCase):
 
     def test_the_release_deposited_in_is_the_recorded_commit_and_reproduces_its_own_vectors(self):
         vendor = json.loads((deposit.DEPOSIT_VENDOR / 'VENDOR.json').read_text())
-        self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.3.0-a1', '9cd9691'))
+        self.assertEqual((vendor['version'], vendor['commit'][:7]), ('0.3.0-a1', 'a9b1acb'))
         for name, digest in vendor['files'].items():
             self.assertEqual(hashlib.sha256((deposit.DEPOSIT_VENDOR / name).read_bytes()).hexdigest(), digest, name)
         program = ("import json,sys\nfrom pathlib import Path\nroot=Path(sys.argv[1])\nsys.path[:0]=[str(root/'identity')]\n"

@@ -105,19 +105,43 @@ def to_0_3_0(doc: dict, dismech_pages: dict[str, str] | None = None) -> list[str
                                                 "which aspect of it varies"}
         return variables[entity]["id"]
 
+    unnamed: list[dict] = []
+
+    def unnamed_variable(sid: str, step: dict, role: str) -> str:
+        """0.2 let a step leave its subject or object unnamed; 0.3 links variables. The missing end becomes a
+        CausalVariable of its own, with no entity, described from the step: nothing is merged or invented."""
+        what = "What this step acts on" if role == "effect" else "What drives this step"
+        known = step.get("step_subject") if role == "effect" else step.get("step_object")
+        where = ", ".join(x for x in (f"step {step['step_index']}" if "step_index" in step else "",
+                                      f"{'from' if role == 'effect' else 'to'} {known}" if known else "") if x)
+        text = (step.get("description") or "").strip()
+        unnamed.append({"id": f"{NEW}unnamed-{len(unnamed) + 1}",
+                        "description": f"{what}, which the DAPPER 0.2 step did not name"
+                                       + (f" ({where})" if where else "") + (f": {text}" if text else "")})
+        notes.append(f"{sid}: step_{'object' if role == 'effect' else 'subject'} was not named; the link's "
+                     f"{role} is an unnamed CausalVariable")
+        return unnamed[-1]["id"]
+
     links: dict[str, dict] = {}
 
-    def link(step: dict) -> dict | None:
+    def link(step: dict, subject_default: str | None = None, object_default: str | None = None) -> dict:
+        """The step's CausalLink. A missing subject or object takes the model's own endpoint when the step is the
+        model's first or last (`subject_default`, `object_default`), and is otherwise an unnamed variable."""
         sid = step["id"]
         if sid in links:
             return links[sid]
-        subject, obj = step.get("step_subject"), step.get("step_object")
-        if not subject or not obj:
-            problems.append(f"{sid}: a CausalStep needs step_subject and step_object to become a CausalLink")
-            return None
+        subject = step.get("step_subject") or subject_default
+        obj = step.get("step_object") or object_default
+        if not step.get("step_subject") and subject_default:
+            notes.append(f"{sid}: step_subject was not named; the model's subject_entity {subject_default} is its cause")
+        if not step.get("step_object") and object_default:
+            notes.append(f"{sid}: step_object was not named; the model's object_entity {object_default} is its effect")
+        cause = variable(subject) if subject else unnamed_variable(sid, step, "cause")
+        effect = variable(obj) if obj else unnamed_variable(sid, step, "effect")
         record = {"id": f"{NEW}link-{len(links) + 1}",
-                  "statement": step.get("description") or f"{subject} is causally upstream of {obj}.",
-                  "relation_kind": "CAUSATION", "cause": variable(subject), "effect": variable(obj)}
+                  "statement": step.get("description") or (f"{subject} is causally upstream of {obj}." if subject and obj
+                                                           else "A causal step converted from DAPPER 0.2."),
+                  "relation_kind": "CAUSATION", "cause": cause, "effect": effect}
         for f in DISMECH_FIELDS:  # carried to the link, then converted with every other record's
             if f in step:
                 record[f] = step[f]
@@ -141,10 +165,8 @@ def to_0_3_0(doc: dict, dismech_pages: dict[str, str] | None = None) -> list[str
             problems.append(f"{mid}: a MechanisticModel needs CausalSteps or subject_entity and object_entity")
             continue
         entries, ends = [], []
-        for s in ordered:
-            l = link(s)
-            if not l:
-                continue
+        for i, s in enumerate(ordered):
+            l = link(s, subject if i == 0 else None, obj if i == len(ordered) - 1 else None)
             entry = {"link": l["id"]}
             if s.get("causal_link_type"):
                 entry["link_type"] = s["causal_link_type"]
@@ -165,8 +187,8 @@ def to_0_3_0(doc: dict, dismech_pages: dict[str, str] | None = None) -> list[str
         if sid not in links:
             link(s)
             notes.append(f"{sid}: a CausalStep in no model became a standalone CausalLink")
-    if variables:
-        doc.setdefault("causal_variables", []).extend(variables.values())
+    if variables or unnamed:
+        doc.setdefault("causal_variables", []).extend([*variables.values(), *unnamed])
     if links:
         doc.setdefault("causal_links", []).extend(links.values())
 

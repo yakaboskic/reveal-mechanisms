@@ -1,7 +1,7 @@
 {
   "repository": "https://github.com/broadinstitute/dapper.git",
   "ref": "chase/0.3.0-a1",
-  "commit": "9cd9691864c5ea29ad8b479659db0d44369c972e",
+  "commit": "a9b1acb7f9808f96677faba1648d6deef32027c0",
   "version": "0.3.0-a1",
   "purpose": "DAPPER 0.3.0-a1, the release REVEAL deposits Scientific Accounts in (reveal_backend/account_deposit.py). The account is minted with 0.2.1-a1 (vendor/dapper-0.2.1-a1) and then converted with this release's own converter (converter/migrate.py), which re-mints and verifies it; the claims repository accepts only this release. Research accounts are still authored, linted and gated with the pinned 0.2.0 release (agent-runtime/dapper-release.json). Vendored from dapper #36.",
   "files": {
@@ -19,7 +19,7 @@
     "schema/replay.yaml": "c0beffade3dd29e51d7cad57cc6e7d0e411f3755f75e0e90b6cba733dcac2ac9",
     "schema/scm.yaml": "b35667ccdf03be2b8f90749ce994205a2d2428fa6f01b1fed14c446476c09217",
     "LICENSE": "a9dd59be2eaeb06d97411c7f08197c423136e8059f635ad7979264771deb529f",
-    "converter/migrate.py": "34bc982eed3f9eb797b0b730d4aaf89648eea873e01d1eeb47378e4bf946709f",
+    "converter/migrate.py": "58d704d778a852ef3b8f0393fe13ebdc3f2023f856f6ac424fd2557aa8fa6888",
     "identity/dapper_identity.py": "19d3e27b590ab092810c648720e2f7ece719228dc57df580da4ba2db2fb32feb",
     "identity/test_vectors.json": "26577224eb6282c3f5b831ad68129d9c551ae808b1dddae7ea43995a88a31a31",
     "tools/scientific_claims.py": "3e21b849e72b5a0c1954bc5163af37faadbda151f130c243ec282e641252215a"
